@@ -56,6 +56,9 @@ DAU_HIEU_VINH_VIEN = (
 
 def phan_loai_loi(loi: BaseException) -> bool:
     """True nếu đáng thử lại. Không rõ thì coi là tạm thời nhưng có giới hạn lần thử."""
+    if getattr(loi, "vinh_vien", False):
+        # Ví dụ `sheets.LoiHeaderSheet`: chỉ người dùng sửa bảng mới chữa được.
+        return False
     text = f"{type(loi).__name__}: {loi}".lower()
     for dau in DAU_HIEU_VINH_VIEN:
         if dau in text:
@@ -106,6 +109,9 @@ class SheetDelivery:
     last_error: str = ""
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
+    # Dòng dựng từ ảnh chụp báo cáo V2: gửi ở chế độ nghiêm ngặt (hàng tiêu đề phải đúng,
+    # sai thì dừng — xem `SheetsExporter.append`). Payload cũ giữ đường gửi cũ.
+    nghiem_ngat: bool = False
 
     @property
     def xong(self) -> bool:
@@ -228,7 +234,9 @@ class SheetDeliveryWorker:
                 return
             self._cap_nhat(key, status=DANG_GUI, attempts=lan)
             try:
-                so_dong = self.sender(viec.sheet_link, viec.header, viec.rows)
+                # Dòng đã chốt lúc xếp hàng — thử lại gửi ĐÚNG các dòng đó, không dựng lại.
+                them = {"nghiem_ngat": True} if viec.nghiem_ngat else {}
+                so_dong = self.sender(viec.sheet_link, viec.header, viec.rows, **them)
             except Exception as loi:  # noqa: BLE001
                 co_the_thu_lai = phan_loai_loi(loi)
                 mo_ta = f"{type(loi).__name__}: {loi}"[:300]

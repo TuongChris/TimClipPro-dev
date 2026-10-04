@@ -4,6 +4,7 @@
 from datetime import datetime
 from typing import Any
 
+import bao_cao_v2
 from clip_metadata import ClipMetadataResolver
 from engine import Engine, hhmmss, nhan_pham_vi
 from publication_date import format_publication_date
@@ -72,7 +73,14 @@ def dung_dong_ngang(
     *,
     resolver: ClipMetadataResolver | None = None,
 ) -> list:
-    """Dựng ĐÚNG MỘT dòng 34 phần tử từ một ScanResult. Hàm thuần, không I/O."""
+    """Dựng ĐÚNG MỘT dòng 34 phần tử từ một ScanResult. Hàm thuần, không I/O.
+
+    Kết quả mang ảnh chụp V2 (``kq.bao_cao``) → dòng dựng TỪ ẢNH CHỤP (tên sạch, link đúng
+    giây hiển thị, ngày nguyên bản, link gốc ``watch?v=``) — không tra resolver. Không có ảnh
+    chụp → luật cũ y nguyên bên dưới.
+    """
+    if getattr(kq, "bao_cao", None) is not None:
+        return bao_cao_v2.dong_ngang(kq.bao_cao)
     resolver = resolver or ClipMetadataResolver.from_mapping(clips_meta or {})
 
     loi = kq.status != "ok"

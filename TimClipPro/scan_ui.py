@@ -237,3 +237,31 @@ def csv_nguon_chung(kql: Any) -> bytes:
     """CSV utf-8-sig của kết quả lô, ô đã chặn công thức bảng tính."""
     df = pd.DataFrame(dong_bao_cao(kql), columns=HEADER_NGUON_CHUNG)
     return df.to_csv(index=False).encode("utf-8-sig")
+
+
+def giao_hang_sheets(eng: Any, ket_qua: Any, *, sheet_id: str, sheet_link: str,
+                     dang_ngang: bool) -> Optional[Any]:
+    """Việc gửi Google Sheets cho MỘT kết quả quét — dòng CHỐT ngay lúc xếp hàng.
+
+    Kết quả mang ảnh chụp báo cáo V2: dòng dựng từ ảnh chụp, giá trị nguyên văn (RAW), gửi
+    nghiêm ngặt (hàng tiêu đề sai là dừng). Kết quả cũ: luật cũ (escape công thức). Thử lại
+    sau này gửi ĐÚNG các dòng trả về ở đây — không dựng lại bằng resolver/chính sách mới.
+    ``None`` khi không có dòng nào để gửi. Không chạm Streamlit (chạy trong scan worker).
+    """
+    from sheet_delivery import SheetDelivery, khoa_giao_hang
+
+    if getattr(ket_qua, "status", "ok") != "ok":
+        return None
+    header, rows, nghiem_ngat = eng.dong_gui_sheets(
+        [ket_qua], dang_ngang=dang_ngang, an_toan_cu=True)
+    if not rows:
+        return None
+    khoa = khoa_giao_hang(sheet_id, "", "ngang" if dang_ngang else "doc",
+                          getattr(ket_qua, "job_id", None),
+                          getattr(ket_qua, "source_id", "") or "", rows)
+    return SheetDelivery(
+        delivery_key=khoa,
+        source_id=getattr(ket_qua, "source_id", "") or "",
+        source_name=getattr(ket_qua, "source_name", "") or "",
+        header=header, rows=rows, sheet_link=sheet_link, nghiem_ngat=nghiem_ngat,
+    )

@@ -55,6 +55,8 @@ def test_youtube_info_lay_du_khoa(engine, monkeypatch):
     assert ket_qua.pop("upload_date_raw") == "20260726"
     assert ket_qua.pop("publication_date_source") == "timestamp"
     assert ket_qua.pop("publication_date_confidence") == "high"
+    # Báo cáo V2: tiêu đề yt-dlp nguyên văn (rỗng khi thiếu) — khoá THÊM, các khoá cũ y nguyên.
+    assert ket_qua.pop("title_raw") == "Video"
 
     assert ket_qua == {
         "id": "abc123",

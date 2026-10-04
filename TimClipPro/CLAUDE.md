@@ -52,6 +52,7 @@ app.py (Streamlit UI)   cli.py (dòng lệnh)   ← lớp giao diện, thay đư
 | `danh_sach_video.py` | Liệt kê tên video thật của một kho (chỉ đọc, offline) rồi ghi đè lên trang tính riêng | Đổi cách kiểm kê kho / cột danh sách |
 | `app.py` | Giao diện Streamlit 6 tab | Đổi giao diện |
 | `cli.py` | Giao diện dòng lệnh, dùng chung engine | Thêm lệnh tự động hoá |
+| `bao_cao_v2.py` | THUẦN: chính sách báo cáo V2 — ảnh chụp `BaoCaoV2`, mốc/link, URL gốc `watch?v=`, ngày nguyên bản, dòng 34/16 cột + phạm vi | Đổi cách trình bày báo cáo lượt quét mới |
 | `common_original.py` | Chế độ «Một video gốc chung cho cả lô» — phần THUẦN: bằng chứng, kết luận, lập kế hoạch, báo cáo | Đổi luật kết luận / chọn nguồn chung |
 | `common_original_jobs.py` | Bộ điều phối lô nguồn chung: luồng nền, `tool.lock`, lấy thông tin trước, snapshot | Đổi cách chạy lô nguồn chung |
 
@@ -135,6 +136,23 @@ Thiết kế đầy đủ: `docs/COMMON_ORIGINAL_DESIGN.md`. Những điều KH�
 - Mỗi video tối đa 2 lượt quét; bộ điều phối luôn kết thúc. Mô phỏng 2.000 thế giới ngẫu nhiên
   trong `tests/test_nguon_chung_ke_hoach.py` khoá tính đúng/đủ.
 - Khớp vân tay không phải xác nhận quyền sở hữu — giao diện phải nói rõ điều này.
+
+## Báo cáo V2 — bất biến (docs/REPORT_POLICY_V2.md)
+
+- Chính sách báo cáo GHIM ở ranh giới job (`Engine._ban_sao_cho_job`); ảnh chụp `ScanResult.bao_cao`
+  chốt cuối lượt quét, trước `save_job`/xếp hàng Sheets. Exporter đọc chính sách TỪ KẾT QUẢ:
+  `bao_cao is None` = luật cũ y nguyên (golden, lịch sử cũ). Đừng cho dataclass mặc định V2, đừng
+  để exporter hỏi hằng hiện hành hay resolver hiện tại cho kết quả V2.
+- Ảnh chụp lưu ở bảng RIÊNG `bao_cao_job` (lịch sử phiên bản 2) — KHÔNG thêm cột vào `jobs`
+  (golden so `SELECT * FROM jobs`, bản rollback đọc theo tên cột).
+- Ngày V2 = `upload_date` NGUYÊN BẢN của yt-dlp. `youtube_info()["upload_date"]` là ngày ĐÃ quy
+  đổi — chỉ `upload_date_raw` là nguyên bản. Kho cũ chỉ có ngày quy đổi: để trống kèm lý do, không
+  đoán từ `timestamp`/tên file. Bổ sung qua mạng chỉ cho video gốc ĐÃ CHỌN, mặc định TẮT.
+- Mốc hiển thị và `t` của link là CÙNG một giây (`bao_cao_v2.giay_moc`). Không trừ 3 giây, không
+  cộng thời lượng gốc vào `end_s` (mốc kết thúc bị cắt bởi `--time-quantile` 0,05 của audfprint —
+  sửa là đổi tham số khớp, cần duyệt riêng).
+- Gửi Sheets V2: nguyên văn (RAW, không thêm `'`), nghiêm ngặt — hàng tiêu đề sai là dừng, không
+  chèn/sửa hàng 1. CSV vẫn chặn công thức ở tầng ghi.
 
 ## Kiểm thử — LÀM ƠN CHẠY TRƯỚC KHI BÁO XONG
 

@@ -28,6 +28,7 @@ from typing import Optional
 import csv
 from datetime import datetime
 
+import bao_cao_v2
 import common_original as co
 from clip_metadata import extract_youtube_id
 from engine import _mo_file_text_moi, chu_ky_chinh_sach
@@ -235,6 +236,9 @@ class CommonOriginalJobController:
                 "Không đọc được danh sách clip của kho vân tay (kho rỗng hoặc file đang bị "
                 "khoá) nên không kiểm được tên clip trùng — chưa chạy lô. Hãy thử lại.")
         self._resolver = resolver
+        # Chính sách báo cáo GHIM theo job của lô (Engine._ban_sao_cho_job) — đọc một lần ở
+        # đây; engine giả trong test không mang chính sách = luật cũ.
+        chinh_sach = str(getattr(job, "chinh_sach_bao_cao", "") or "")
         # MỘT cầu dao cho cả lô: lấy thông tin, tải, quét lại đều hỏi nó trước khi gửi request.
         phien = _phien_cua(job)
         self._phien = phien
@@ -252,10 +256,15 @@ class CommonOriginalJobController:
             so_lieu = {**co.tom_tat_so_lieu(tt), "so_lan_lay_thong_tin": so_info,
                        "thoi_gian_s": round(time.monotonic() - (self._mono_dau or 0), 3),
                        "youtube": phien.tom_tat()}
+            if chinh_sach == bao_cao_v2.CHINH_SACH_V2:
+                thong_tin = self._thong_tin_goc_v2(job, kl.khoa_hien_thi,
+                                                   cho_bo_sung=source_type == "youtube")
+            else:
+                thong_tin = self._thong_tin_goc(kl.khoa_hien_thi)
             return co.dung_ket_qua_lo(
                 tt, kl, ma_lo=ma_lo, kho_ten=dt.get("kho_ten", ""),
-                thong_tin_goc=self._thong_tin_goc(kl.khoa_hien_thi), dem_ten=dem_ten,
-                so_lieu=so_lieu, canh_bao_them=tuple(canh_bao))
+                thong_tin_goc=thong_tin, dem_ten=dem_ten,
+                so_lieu=so_lieu, canh_bao_them=tuple(canh_bao), chinh_sach_bao_cao=chinh_sach)
 
         n = len(videos)
         if self._da_huy():
@@ -345,8 +354,11 @@ class CommonOriginalJobController:
                 continue
             if ma:
                 ma_that[ma] = x
+            # `title_raw` = tiêu đề yt-dlp nguyên văn (rỗng khi thiếu); `title` của wrapper lùi
+            # về URL — không được thành «tên video».
             videos.append(co.VideoTrongLo(
-                thu_tu=len(videos) + 1, nguon=x, ma=ma, tieu_de=str(info.get("title") or ""),
+                thu_tu=len(videos) + 1, nguon=x, ma=ma,
+                tieu_de=str(info.get("title_raw", info.get("title")) or ""),
                 kenh=str(info.get("channel") or ""),
                 thoi_luong=float(info.get("duration") or 0) or None, info=info))
         if bo_offline:
@@ -421,6 +433,32 @@ class CommonOriginalJobController:
             "video_id": str(getattr(r, "video_id", "") or ""),
             "status": str(getattr(r, "status", "") or ""),
             "warnings": tuple(getattr(r, "warnings", ()) or ()),
+        }
+
+    def _thong_tin_goc_v2(self, job, khoa: Optional[co.OriginalKey], *,
+                          cho_bo_sung: bool) -> dict:
+        """Thông tin video gốc ĐƯỢC BÁO CÁO theo báo cáo V2 — chốt một lần lúc kết thúc lô.
+
+        Chỉ video gốc này (một mã) có thể được bổ sung ngày qua mạng, và chỉ khi lô quét
+        YouTube + người dùng bật (Engine.goc_bao_cao_v2 tự kiểm). Không có khoá
+        ``upload_date``: ngày kho đã quy đổi chỉ nằm ở ``ngay_kho_quy_doi`` để chẩn đoán.
+        """
+        lay = getattr(job, "goc_bao_cao_v2", None)
+        if khoa is None or not callable(lay):
+            return {}
+        try:
+            g = lay(khoa.clip, cho_bo_sung=cho_bo_sung)
+        except Exception:  # noqa: BLE001 — thiếu metadata không được làm hỏng kết luận lô
+            LOGGER.exception("event=scan.common.report_v2_original_failed clip=%s", khoa.clip)
+            return {}
+        return {
+            "chinh_sach": bao_cao_v2.CHINH_SACH_V2,
+            "title": g.tieu_de, "url": g.url, "video_id": g.video_id,
+            "ngay_dang": g.ngay_dang.gia_tri, "nguon_ngay_dang": g.ngay_dang.nguon,
+            "ly_do_thieu_ngay": g.ngay_dang.ly_do_thieu,
+            "ngay_kho_quy_doi": g.ngay_kho_quy_doi,
+            "duration": g.thoi_luong_s, "status": g.trang_thai_metadata,
+            "warnings": tuple(g.canh_bao),
         }
 
     def _ung_vien_hien_tai(self, tt: co.TrangThaiLo, kl: Optional[co.KetLuan] = None) -> dict:

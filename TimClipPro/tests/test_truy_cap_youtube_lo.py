@@ -250,6 +250,7 @@ def test_bi_mat_trong_loi_khong_vao_ghi_chu_hay_lich_su(tmp_path, monkeypatch):
 
 class _SheetsDem:
     lan_ghi = 0
+    tham_so: list = []
 
     def __init__(self, sheet=""):
         pass
@@ -257,14 +258,17 @@ class _SheetsDem:
     def san_sang(self):
         return True
 
-    def append(self, header, rows):
+    def append(self, header, rows, **kw):
+        # Cùng chữ ký với SheetsExporter.append (báo cáo V2 gửi thêm `nghiem_ngat=True`).
         type(self).lan_ghi += 1
+        type(self).tham_so.append(kw)
         return len(rows)
 
 
 @pytest.fixture()
 def sheets_dem(monkeypatch):
     _SheetsDem.lan_ghi = 0
+    _SheetsDem.tham_so = []
     monkeypatch.setattr(watch, "SheetsExporter", _SheetsDem)
     return _SheetsDem
 
@@ -300,6 +304,8 @@ def test_watch_chi_day_sheet_ket_qua_hop_le(tmp_path, monkeypatch, sheets_dem, d
                        dang_ngang=dang_ngang)
     assert sheets_dem.lan_ghi == 1, "chỉ video quét hợp lệ lên Sheets; video bị gỡ thì không"
     assert bc.nguon_co_vi_pham == 1 and not bc.chan_youtube
+    # Lượt quét mới mang ảnh chụp báo cáo V2 → Watch gửi ở chế độ nghiêm ngặt.
+    assert sheets_dem.tham_so == [{"nghiem_ngat": True}]
 
 
 def test_watch_liet_ke_kenh_bi_429_thi_khong_hoi_kenh_khac(tmp_path, monkeypatch, sheets_dem):

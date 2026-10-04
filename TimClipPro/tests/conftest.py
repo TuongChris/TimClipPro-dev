@@ -50,6 +50,20 @@ def bo_clip(tmp_path_factory):
     return {"kho": str(d), "vi_pham": str(vp), "vi_tri": vi_tri, "thoi_luong": 360.0}
 
 
+@pytest.fixture(autouse=True)
+def _giu_nguyen_path():
+    """``Engine(root=…)`` chèn ``<root>/bin`` vào PATH của CẢ tiến trình (engine.py, __init__).
+    Mỗi test một thư mục tạm thì PATH dài dần tới giới hạn 32.767 ký tự của Windows và các test
+    chạy SAU hỏng vì lý do không liên quan (gặp khi thêm bộ test báo cáo V2). Trả PATH về như cũ
+    sau mỗi test — production chỉ tạo một Engine nên không bị ảnh hưởng."""
+    cu = os.environ.get("PATH")
+    yield
+    if cu is None:
+        os.environ.pop("PATH", None)
+    else:
+        os.environ["PATH"] = cu
+
+
 @pytest.fixture()
 def engine(tmp_path):
     """Engine sạch, dữ liệu ghi vào thư mục tạm — không đụng data/ thật."""

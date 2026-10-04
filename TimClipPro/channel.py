@@ -160,6 +160,9 @@ class VideoInfo:
     duration: float
     url: str
     publication_source: str = ""   # trường metadata đã sinh ra ngày trên
+    # Ngày NGUYÊN BẢN ``upload_date`` của yt-dlp (không quy đổi múi giờ) cho báo cáo V2. Chỉ
+    # lưu thêm cạnh ``upload_date`` — không thay tên file, mã lưu trữ hay khoá vân tay.
+    upload_date_raw: str = ""
 
 
 def do_dai_media(path: str) -> float | None:
@@ -308,6 +311,9 @@ def bo_sung_video_info(v: VideoInfo, info: Mapping | None) -> VideoInfo:
         duration=thoi_luong if thoi_luong > 0 else v.duration,
         url=v.url,
         publication_source=ket_qua.source_field or v.publication_source,
+        # Đọc TRƯỚC resolver: đúng chuỗi yt-dlp trả, không đoán từ timestamp hay tên file.
+        upload_date_raw=valid_upload_date(str(info.get("upload_date") or ""))
+        or v.upload_date_raw,
     )
 
 
@@ -1207,6 +1213,9 @@ class ChannelSync:
                         "xac_nhan_tep": self._dau_xac_nhan(
                             f, do_dai, ngan_hon_youtube=v.id in self._ngan_hon_youtube),
                     }
+                    if v.upload_date_raw:
+                        # Báo cáo V2: ngày nguyên bản của yt-dlp, ghi THÊM cho entry mới tải.
+                        entry["upload_date_raw"] = v.upload_date_raw
                     # Chỉ ghi entry của video vừa tải, gộp vào bản mới nhất — không ghi
                     # đè cả file bằng bản đọc từ đầu lượt sync (audit TCP-03).
                     # Thứ tự: file đã kiểm → metadata → archive. Đứt giữa chừng thì lượt

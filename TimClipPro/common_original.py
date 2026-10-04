@@ -29,6 +29,7 @@ import statistics
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+import bao_cao_v2
 from chap_nhan_khop import BAC_PHU_CAO, danh_gia_chap_nhan
 from clip_metadata import basename_compatible, extract_youtube_id
 from engine import (
@@ -624,11 +625,14 @@ class KetQuaLo:
     videos: tuple = ()
     so_lieu: dict = field(default_factory=dict)
     gioi_han: tuple = ()                 # KHÔNG TÌM THẤY: vì sao chưa loại trừ tuyệt đối
+    # Chính sách báo cáo GHIM lúc bắt đầu lô ("" = luật cũ). V2: `thong_tin_goc` mang link
+    # ``watch?v=`` + ngày nguyên bản (``ngay_dang``) và KHÔNG có khoá ``upload_date`` cũ.
+    chinh_sach_bao_cao: str = ""
 
 
 def dung_ket_qua_lo(tt: TrangThaiLo, kl: KetLuan, *, ma_lo: str, kho_ten: str,
                     thong_tin_goc: dict, dem_ten: dict, so_lieu: Optional[dict] = None,
-                    canh_bao_them: tuple = ()) -> KetQuaLo:
+                    canh_bao_them: tuple = (), chinh_sach_bao_cao: str = "") -> KetQuaLo:
     """Đóng băng kết quả lô để hiển thị/xuất — không phụ thuộc kho đang chọn sau này."""
     khoa = kl.khoa_hien_thi
     videos = []
@@ -652,7 +656,8 @@ def dung_ket_qua_lo(tt: TrangThaiLo, kl: KetLuan, *, ma_lo: str, kho_ten: str,
         kho_ten=kho_ten, goc=khoa, la_nguon_chung=kl.trang_thai == TIM_THAY,
         so_co_mat=kl.so_co_mat, tong=kl.tong, goc_khac=kl.goc_khac,
         thong_tin_goc=dict(thong_tin_goc or {}), canh_bao=tuple(canh_bao),
-        videos=tuple(videos), so_lieu=dict(so_lieu or {}), gioi_han=tuple(kl.gioi_han))
+        videos=tuple(videos), so_lieu=dict(so_lieu or {}), gioi_han=tuple(kl.gioi_han),
+        chinh_sach_bao_cao=chinh_sach_bao_cao)
 
 
 HEADER_NGUON_CHUNG = [
@@ -692,6 +697,11 @@ def dong_bao_cao(kql: KetQuaLo, an_toan: bool = True) -> list:
     tt_goc = kql.thong_tin_goc or {}
     thoi_luong_goc = tt_goc.get("duration")
     ket = nhan_ket_luan(kql)
+    # Báo cáo V2 (chính sách ghim lúc bắt đầu lô): ngày NGUYÊN BẢN, mốc và link dùng CÙNG một
+    # giây. Lô không ghim chính sách giữ y nguyên luật cũ bên dưới.
+    la_v2 = kql.chinh_sach_bao_cao == bao_cao_v2.CHINH_SACH_V2
+    ngay_goc = (bao_cao_v2.NgayNguon(gia_tri=str(tt_goc.get("ngay_dang") or "")).hien_thi()
+                if la_v2 else format_publication_date(tt_goc.get("upload_date") or ""))
     # Giới hạn và cảnh báo của cả lô đi theo MỌI dòng: CSV là thứ được lưu lại và chuyển
     # tiếp, không được mất điều người kiểm tra cần biết (giống thông tin video gốc lặp lại).
     ghi_chu_lo = [*kql.gioi_han, *kql.canh_bao]
@@ -701,19 +711,30 @@ def dong_bao_cao(kql: KetQuaLo, an_toan: bool = True) -> list:
         rieng = v.loi.splitlines()[0][:200] if (
             v.loi and v.trang_thai in (LOI_QUET, CHUA_RO)) else ""
         ghi_chu = " | ".join(x for x in (rieng, *ghi_chu_lo) if x)
+        if m and la_v2:
+            giay = bao_cao_v2.giay_moc(m.clip_bat_dau_s)
+            bat_dau, den = bao_cao_v2.hien_thi_moc(giay), bao_cao_v2.hien_thi_moc(
+                bao_cao_v2.giay_moc(m.end_s))
+            link = bao_cao_v2.link_nhay(v.ma, v.nguon, giay)
+        elif m:
+            bat_dau, den = hhmmss(m.clip_bat_dau_s), hhmmss(m.end_s)
+            link = Engine.link_moc(v.ma, v.nguon, m.start_s)
+        else:
+            bat_dau = den = link = ""
         dong = [
             kql.ma_lo, ket,
             tt_goc.get("title") or (kql.goc.clip if kql.goc else ""),
             tt_goc.get("url") or "",
-            format_publication_date(tt_goc.get("upload_date") or ""),
+            ngay_goc,
             hhmmss(thoi_luong_goc) if isinstance(thoi_luong_goc, (int, float))
             and thoi_luong_goc > 0 else "",
             kql.goc.clip if kql.goc else "",
-            v.tieu_de or v.nguon, v.nguon, v.kenh,
+            # V2: tên nguồn đúng như YouTube trả (thiếu thì trống) — không lấy URL làm tên.
+            v.tieu_de if la_v2 else (v.tieu_de or v.nguon), v.nguon, v.kenh,
             TEN_TRANG_THAI_CAP.get(v.trang_thai, v.trang_thai),
-            hhmmss(m.clip_bat_dau_s) if m else "",
-            hhmmss(m.end_s) if m else "",
-            Engine.link_moc(v.ma, v.nguon, m.start_s) if m else "",
+            bat_dau,
+            den,
+            link,
             round(m.clip_offset_s) if m else "",
             round(m.matched_s) if m else "",
             int(m.hashes) if m else "",

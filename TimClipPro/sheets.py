@@ -44,6 +44,15 @@ _KHOA = threading.RLock()
 _CACHE: dict[tuple, _KetNoi] = {}
 
 
+class LoiHeaderSheet(RuntimeError):
+    """Trang tính có dữ liệu nhưng hàng 1 KHÔNG đúng tiêu đề công cụ (chế độ nghiêm ngặt).
+
+    Lỗi vĩnh viễn với lần gửi này: thử lại không chữa được, chỉ người dùng sửa hàng tiêu đề
+    mới chữa được — ``sheet_delivery.phan_loai_loi`` đọc ``vinh_vien`` để không thử lại.
+    """
+    vinh_vien = True
+
+
 def xoa_cache_ket_noi() -> None:
     """Buộc lần sau mở kết nối mới. Dùng khi đổi key/sheet hoặc trong test."""
     with _KHOA:
@@ -194,10 +203,17 @@ class SheetsExporter:
 
     # ---------- ghi dữ liệu ----------
 
-    def append(self, header: list, rows: list, ghi_header_neu_trong: bool = True) -> int:
+    def append(self, header: list, rows: list, ghi_header_neu_trong: bool = True, *,
+               nghiem_ngat: bool = False) -> int:
         """
         Nối thêm các dòng vào cuối trang tính. Trả về số dòng đã ghi.
         Ném exception nếu lỗi — bên gọi tự quyết định xử lý thế nào.
+
+        ``nghiem_ngat`` (báo cáo V2): hàng 1 phải là ĐÚNG tiêu đề ``header`` theo thứ tự
+        (cột người dùng tự thêm ở SAU cột cuối thì được). Bảng rỗng thật sự → ghi tiêu đề rồi
+        ghi dòng. Bảng có dữ liệu mà thiếu/sai tiêu đề → ``LoiHeaderSheet``, KHÔNG chèn/sửa
+        hàng 1 và KHÔNG append (append theo vị trí dưới tiêu đề sai là lệch cột im lặng).
+        Kiểm lại ở MỌI lần gửi — tiêu đề có thể bị sửa tay giữa hai lần.
         """
         if not rows:
             return 0
@@ -206,6 +222,15 @@ class SheetsExporter:
 
         ket_noi = self._ket_noi(len(header))
         ws = ket_noi.worksheet
+        if nghiem_ngat:
+            try:
+                self._append_nghiem_ngat(ws, header, rows)
+            except LoiHeaderSheet:
+                raise
+            except Exception:
+                self._bo_ket_noi()
+                raise
+            return len(rows)
         try:
             if ghi_header_neu_trong and not ket_noi.da_co_header:
                 tinh_trang = self._tinh_trang_header(ws, header)
@@ -336,6 +361,33 @@ class SheetsExporter:
         # Header vừa được ghi lại; nhớ để lần ``append`` sau (nếu có) khỏi đọc ô A1.
         # Đặt SAU khi cả hai lệnh thành công — đặt trước là nói dối cache.
         ket_noi.da_co_header = True
+
+    def _append_nghiem_ngat(self, ws, header: list, rows: list) -> None:
+        """Một lần gửi nghiêm ngặt: đọc hàng 1, quyết định, rồi mới ghi (RAW)."""
+        lay = getattr(ws, "get_values", None)
+        if callable(lay):
+            hang_dau = lay("A1:" + _o_cot(len(header)) + "1")
+        else:
+            hang_dau = ws.get_all_values()[:1]
+        o = [str(x).strip() for x in (hang_dau[0] if hang_dau else [])]
+        if not any(o):
+            ws.append_row([str(x) for x in header], value_input_option="RAW")
+        else:
+            mong = [str(x).strip() for x in header]
+            lech = next((i for i, ten in enumerate(mong)
+                         if i >= len(o) or o[i].casefold() != ten.casefold()), None)
+            if lech is not None:
+                thay = o[lech] if lech < len(o) else ""
+                LOGGER.warning("event=scan.sheet.header_mismatch_strict worksheet=%r cot=%d",
+                               self.worksheet, lech + 1)
+                raise LoiHeaderSheet(
+                    f"Trang tính «{self.worksheet}» đã có dữ liệu nhưng hàng tiêu đề (hàng 1) "
+                    f"không đúng {len(header)} cột của công cụ — cột {_o_cot(lech + 1)}: "
+                    f"«{thay[:40]}» thay vì «{mong[lech]}». Tool không tự chèn hay sửa hàng "
+                    "tiêu đề và không ghi tiếp để tránh lệch cột. Hãy khôi phục hàng tiêu đề "
+                    "(bảng Ngang: menu Apps Script «🩹 Khôi phục hàng tiêu đề cho KetQuaQuet»), "
+                    "hoặc chọn một trang tính trống, rồi gửi lại.")
+        ws.append_rows([[_o_sheets(v) for v in r] for r in rows], value_input_option="RAW")
 
     # Số tên cột tối thiểu phải khớp thì hàng 1 mới được coi là header. Đặt 3 để
     # một hàng DỮ LIỆU (toàn link, tên video, ngày giờ) gần như không thể đạt tới,

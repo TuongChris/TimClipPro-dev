@@ -12,7 +12,7 @@ from channel import ChannelSync
 from don_dep import don_job_quet, don_kho_dem
 from khoa import DangChayRoi, KhoaTienTrinh
 from luu_tru import doc_json_an_toan, ghi_json_an_toan
-from sheets import SheetsExporter
+from sheets import LoiHeaderSheet, SheetsExporter
 from truy_cap_youtube import PhienYouTube
 from ytdlp_chung import giai_thich_loi
 
@@ -559,21 +559,41 @@ def _thuc_hien_giam_sat(
             bao_cao.sheets_note = f"Lỗi kết nối Google Sheets: {e}"
             return None
 
-    def chuyen_dong_sheets(ds: list) -> tuple[list, list]:
+    sai_tieu_de: list = []      # hàng tiêu đề Sheet sai (báo cáo V2): thôi gửi cả lượt
+
+    def chuyen_dong_sheets(ds: list) -> tuple[list, list, bool]:
+        # Một nơi dựng dòng gửi Sheets cho app/Watch/CLI (`Engine.dong_gui_sheets`): kết quả V2
+        # gửi nguyên văn + nghiêm ngặt; kết quả cũ giữ luật cũ của Watch (không escape).
+        dung = getattr(engine, "dong_gui_sheets", None)
+        if callable(dung):
+            return dung(ds, dang_ngang=dang_ngang, an_toan_cu=False)
         if dang_ngang:
-            return bang_ngang.HEADER_NGANG, engine.to_rows_ngang(ds)
-        return engine.HEADER, engine.to_rows(ds)
+            return bang_ngang.HEADER_NGANG, engine.to_rows_ngang(ds), False
+        return engine.HEADER, engine.to_rows(ds), False
+
+    def gui(ung_dung_sheets: Any, header: list, rows: list, nghiem_ngat: bool) -> int:
+        try:
+            return ung_dung_sheets.append(
+                header, rows, **({"nghiem_ngat": True} if nghiem_ngat else {}))
+        except LoiHeaderSheet as e:
+            # Không thử tiếp từng video vào cùng một bảng sai tiêu đề: báo một lần, dừng gửi.
+            sai_tieu_de.append(str(e))
+            bao_cao.sheets_ok = False
+            bao_cao.sheets_note = str(e)
+            raise
 
     def day_tung_phan(kq: Any) -> None:
+        if sai_tieu_de:
+            return
         ung_dung_sheets = khoi_tao_sheets()
         if ung_dung_sheets is None:
             return
-        header, rows = chuyen_dong_sheets([kq])
+        header, rows, nghiem_ngat = chuyen_dong_sheets([kq])
         if not rows:
             da_day_sheets.add(id(kq))
             return
         try:
-            so_dong = ung_dung_sheets.append(header, rows)
+            so_dong = gui(ung_dung_sheets, header, rows, nghiem_ngat)
             bao_cao.sheets_so_dong += so_dong
             if so_dong > 0:
                 da_day_sheets.add(id(kq))
@@ -659,7 +679,7 @@ def _thuc_hien_giam_sat(
         except Exception as e:  # noqa: BLE001
             bao_cao.loi.append(f"Không xuất được CSV: {e}")
 
-    if sheet_link:
+    if sheet_link and not sai_tieu_de:
         try:
             ung_dung_sheets = khoi_tao_sheets()
             if ung_dung_sheets is not None:
@@ -670,12 +690,12 @@ def _thuc_hien_giam_sat(
                     else hop_le
                 )
                 if chua_day or not ghi_tung_phan:
-                    header, rows = chuyen_dong_sheets(chua_day)
+                    header, rows, nghiem_ngat = chuyen_dong_sheets(chua_day)
                     if rows or not ghi_tung_phan:
-                        bao_cao.sheets_so_dong += ung_dung_sheets.append(
-                            header,
-                            rows,
-                        )
+                        bao_cao.sheets_so_dong += gui(
+                            ung_dung_sheets, header, rows, nghiem_ngat)
+        except LoiHeaderSheet:
+            pass                       # `gui` đã ghi đúng lời hướng dẫn vào sheets_note
         except Exception as e:  # noqa: BLE001
             bao_cao.sheets_ok = False
             bao_cao.sheets_note = f"Lỗi ghi Google Sheets: {e}"

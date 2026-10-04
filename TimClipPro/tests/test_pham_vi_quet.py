@@ -249,19 +249,28 @@ def test_top1_dung_som_khong_duoc_ghi_la_da_quet_toan_video(tmp_path):
 
 
 def test_bao_cao_ngang_va_doc_mang_pham_vi_ma_khong_them_cot(tmp_path):
+    import dataclasses
+
     e, _ = _eng_top1(tmp_path)
     media = tmp_path / "q.wav"
     media.write_bytes(b"x")
     kq = e.scan_media(str(media))
     kq.source_name = "Video vi phạm"
 
-    ngang = bang_ngang.dung_dong_ngang(kq)
+    # Luật CŨ (kết quả không có ảnh chụp V2 — lịch sử/kết quả dựng tay): hậu tố trong tên.
+    cu = dataclasses.replace(kq, bao_cao=None)
+    ngang = bang_ngang.dung_dong_ngang(cu)
     assert len(ngang) == len(bang_ngang.HEADER_NGANG) == 34
     assert ngang[5].startswith("Video vi phạm") and "QUÉT MỘT PHẦN" in ngang[5]
-
-    doc = e.to_rows([kq])
+    doc = e.to_rows([cu])
     assert all(len(dong) == len(Engine.HEADER) == 16 for dong in doc)
     assert "QUÉT MỘT PHẦN" in doc[0][1]
+
+    # Lượt quét MỚI (V2): tên sạch, vẫn không thêm cột, phạm vi nằm ở ảnh chụp.
+    moi_ngang = bang_ngang.dung_dong_ngang(kq)
+    assert len(moi_ngang) == 34 and "QUÉT MỘT PHẦN" not in moi_ngang[5]
+    assert all(len(dong) == 16 and "QUÉT MỘT PHẦN" not in dong[1] for dong in e.to_rows([kq]))
+    assert kq.bao_cao.pham_vi.quet_mot_phan and "01:00:00/04:00:00" in kq.bao_cao.pham_vi.mo_ta
 
 
 def test_ho_so_markdown_ghi_ro_chua_quet_tron(tmp_path):

@@ -6,6 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
+import bao_cao_v2
 from clip_metadata import ClipMetadataResolver
 import engine
 
@@ -48,6 +49,8 @@ def dung_ho_so(
     resolver: ClipMetadataResolver | None = None,
 ) -> HoSo:
     """Dựng HoSo từ một ScanResult. Hàm thuần — không đọc/ghi file."""
+    if getattr(kq, "bao_cao", None) is not None:
+        return dung_ho_so_v2(kq.bao_cao)
     resolver = resolver or ClipMetadataResolver.from_mapping(meta or {})
 
     cac_muc = []
@@ -85,6 +88,29 @@ def dung_ho_so(
         muc=cac_muc,
         pham_vi=(engine.mo_ta_pham_vi(kq)
                  if kq.status == "ok" and kq.quet_mot_phan else ""),
+    )
+
+
+def dung_ho_so_v2(bc) -> HoSo:
+    """Hồ sơ từ ẢNH CHỤP báo cáo V2: cùng tên/link/URL gốc với mọi exporter V2."""
+    cac_muc = [MucViPham(
+        ten_clip_goc=d.goc.clip, tieu_de_goc=d.goc.tieu_de, link_goc=d.goc.url,
+        tu_hhmmss=bao_cao_v2.hien_thi_moc(d.giay_bat_dau),
+        den_hhmmss=bao_cao_v2.hien_thi_moc(d.giay_ket_thuc), link_moc=d.link,
+        do_dai_giay=round(d.matched_s), ty_le=d.ty_le, hashes=d.hashes,
+    ) for d in (bc.doan if bc.trang_thai == "ok" else ())]
+    tong_giay_vi_pham = sum(muc.do_dai_giay for muc in cac_muc)
+    thoi_luong = float(bc.thoi_luong_s or 0.0)
+    return HoSo(
+        tieu_de_vi_pham=bc.tieu_de,
+        link_vi_pham=bc.link_video,
+        thoi_luong_hhmmss=engine.hhmmss(thoi_luong),
+        ngay_lap=datetime.now().strftime("%Y-%m-%d"),
+        tong_giay_vi_pham=tong_giay_vi_pham,
+        ty_le_video=round(100 * tong_giay_vi_pham / thoi_luong, 1) if thoi_luong > 0 else 0.0,
+        muc=cac_muc,
+        pham_vi=(bc.pham_vi.mo_ta
+                 if bc.trang_thai == "ok" and bc.pham_vi.quet_mot_phan else ""),
     )
 
 

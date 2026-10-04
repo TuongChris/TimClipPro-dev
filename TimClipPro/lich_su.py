@@ -6,6 +6,9 @@ PHIÊN BẢN LƯỢC ĐỒ (``PRAGMA user_version``)
 * 0 — bản cũ: không biết video được quét bằng kho nào, quét tới đâu, theo chính sách
   nào. Chỉ cần một lượt "ok" ở BẤT KỲ kho nào là Watch của mọi kho bỏ qua video đó.
 * 1 — thêm cột kho / phiên bản kho / chính sách / phạm vi. CHỈ THÊM CỘT.
+* 2 — thêm BẢNG ``bao_cao_job`` (ảnh chụp báo cáo V2 của từng lần quét, khoá ``job_id``).
+  CHỈ THÊM BẢNG: dòng ``jobs``/``matches`` giữ nguyên cột; lần quét cũ không có dòng nào
+  trong bảng mới = báo cáo theo luật cũ (docs/REPORT_POLICY_V2.md).
 
 Nguyên tắc nâng cấp:
 
@@ -37,7 +40,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-PHIEN_BAN = 1
+PHIEN_BAN = 2
 
 # (tên cột, kiểu) thêm ở phiên bản 1. ``day_du``/``dat_muc_tieu`` để NULL ở dòng cũ:
 # NULL là "không biết", khác hẳn 0 là "biết là chưa trọn".
@@ -67,6 +70,14 @@ _CHI_MUC = (
     "CREATE INDEX IF NOT EXISTS idx_matches_job_id ON matches(job_id)",
     "CREATE INDEX IF NOT EXISTS idx_jobs_kho_source ON jobs(kho_id, source_id)",
 )
+# Phiên bản 2: ảnh chụp báo cáo V2. Bảng riêng (không phải cột trong `jobs`) để dòng lịch
+# sử cũ, mọi `SELECT * FROM jobs` và bản rollback đọc DB y như trước.
+BANG_BAO_CAO = "bao_cao_job"
+_DDL_BAO_CAO = (
+    f"""CREATE TABLE IF NOT EXISTS {BANG_BAO_CAO}(
+        job_id INTEGER PRIMARY KEY, chinh_sach TEXT NOT NULL,
+        du_lieu TEXT NOT NULL, created_at TEXT)""",
+)
 
 CHUA_RO = "Chưa rõ (lịch sử cũ — cần rà soát)"
 _LY_DO = {
@@ -93,7 +104,8 @@ def _can_nang_cap(con: sqlite3.Connection) -> bool:
     if con.execute("PRAGMA user_version").fetchone()[0] < PHIEN_BAN:
         return True
     cot = set(_cot_jobs(con))
-    return not cot or any(ten not in cot for ten, _ in COT_MOI)
+    return (not cot or any(ten not in cot for ten, _ in COT_MOI)
+            or not _co_bang(con, BANG_BAO_CAO))
 
 
 def _co_du_lieu(con: sqlite3.Connection) -> bool:
@@ -173,6 +185,8 @@ def dam_bao_luoc_do(path: str, *, sao_luu: bool = True, han_cho_s: float = 30.0)
                     con.execute(f"ALTER TABLE jobs ADD COLUMN {ten} {kieu}")
             for lenh in _CHI_MUC:
                 con.execute(lenh)
+            for lenh in _DDL_BAO_CAO:
+                con.execute(lenh)
             # Không bao giờ HẠ phiên bản: DB do bản mới hơn tạo chỉ được bổ sung cột thiếu.
             con.execute(f"PRAGMA user_version = {max(int(cu), PHIEN_BAN)}")
             con.commit()
@@ -212,6 +226,9 @@ def thong_ke(path: str) -> dict:
         so_match = (con.execute("SELECT COUNT(*) FROM matches").fetchone()[0]
                     if _co_bang(con, "matches") else 0)
         se_them = [ten for ten, _ in COT_MOI if ten not in cot]
+        co_bang_bao_cao = _co_bang(con, BANG_BAO_CAO)
+        so_bao_cao = (con.execute(f"SELECT COUNT(*) FROM {BANG_BAO_CAO}").fetchone()[0]
+                      if co_bang_bao_cao else 0)
         return {
             "ton_tai": True,
             "phien_ban": phien_ban,
@@ -219,7 +236,9 @@ def thong_ke(path: str) -> dict:
             "so_dong_chua_ro_kho": chua_ro,
             "so_match": so_match,
             "cot_se_them": se_them,
-            "can_nang_cap": phien_ban < PHIEN_BAN or bool(se_them),
+            "bang_se_them": [] if co_bang_bao_cao else [BANG_BAO_CAO],
+            "so_anh_chup_bao_cao": so_bao_cao,
+            "can_nang_cap": phien_ban < PHIEN_BAN or bool(se_them) or not co_bang_bao_cao,
         }
     finally:
         con.close()

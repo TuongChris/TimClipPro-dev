@@ -18,6 +18,7 @@ import pandas as pd
 import streamlit as st
 
 import bang_ngang
+import bao_cao_v2
 import common_original as nguon_chung
 import danh_sach_video
 import lich_su
@@ -38,10 +39,11 @@ from scan_ui import (
     csv_nguon_chung,
     df_nguon_chung,
     dong_trang_thai_youtube,
+    giao_hang_sheets,
     goi_y_quet_mot_phan,
     thong_bao_youtube_chan,
 )
-from sheet_delivery import SheetDelivery, SheetDeliveryWorker, khoa_giao_hang
+from sheet_delivery import SheetDeliveryWorker
 from channel import ChannelSync
 from sheets import SheetsExporter
 
@@ -96,8 +98,8 @@ if "scan_sheet_worker" not in st.session_state:
     # sender nhận sheet_link kèm theo công việc nên chạy được ở thread nền:
     # nó KHÔNG đọc st.session_state, nơi thread nền chỉ thấy proxy rỗng.
     st.session_state.scan_sheet_worker = SheetDeliveryWorker(
-        sender=lambda sheet_link, header, rows:
-            tao_sheets_exporter(sheet_link).append(header, rows)
+        sender=lambda sheet_link, header, rows, **kw:
+            tao_sheets_exporter(sheet_link).append(header, rows, **kw)
     )
 if "scan_controller" not in st.session_state:
     st.session_state.scan_controller = ScanJobController(
@@ -139,26 +141,15 @@ def chay_quet(nguon: list, source_type: str) -> None:
         """Chạy trong SCAN WORKER — chỉ dùng cau_hinh_quet, không chạm Streamlit."""
         if not cau_hinh_quet.auto_sheet or ket_qua.status != "ok":
             return
-        if cau_hinh_quet.dang_ngang:
-            header, rows = bang_ngang.HEADER_NGANG, eng.to_rows_ngang([ket_qua])
-        else:
-            header, rows = eng.HEADER, eng.to_rows([ket_qua])
-        if not rows:
+        # Dòng CHỐT ngay lúc xếp hàng (kết quả V2: từ ảnh chụp, nguyên văn, gửi nghiêm ngặt;
+        # kết quả cũ: luật cũ — escape công thức). Thử lại gửi đúng các dòng này.
+        viec = giao_hang_sheets(eng, ket_qua, sheet_id=cau_hinh_quet.sheet_id,
+                                sheet_link=cau_hinh_quet.sheet_link,
+                                dang_ngang=cau_hinh_quet.dang_ngang)
+        if viec is None:
             return
-        rows = [[o_bang_tinh_an_toan(o) for o in dong] for dong in rows]
-        khoa = khoa_giao_hang(
-            cau_hinh_quet.sheet_id, "",
-            "ngang" if cau_hinh_quet.dang_ngang else "doc",
-            ket_qua.job_id, ket_qua.source_id, rows,
-        )
-        scan_sheet_worker.enqueue(SheetDelivery(
-            delivery_key=khoa,
-            source_id=ket_qua.source_id or "",
-            source_name=ket_qua.source_name or "",
-            header=header, rows=rows,
-            sheet_link=cau_hinh_quet.sheet_link,
-        ))
-        scan_controller.ghi_nhan_giao_hang(index, khoa)
+        scan_sheet_worker.enqueue(viec)
+        scan_controller.ghi_nhan_giao_hang(index, viec.delivery_key)
 
     batch_id = scan_controller.start(nguon, source_type, on_result=sau_moi_video)
     job.update({
@@ -276,12 +267,8 @@ def day_len_sheets(results: list[ScanResult]) -> tuple[bool, str]:
     if not results:
         return False, "Không có dữ liệu để ghi."
 
-    if st.session_state.sheet_dang_ngang:
-        header = bang_ngang.HEADER_NGANG
-        rows = eng.to_rows_ngang(results)
-    else:
-        header = eng.HEADER
-        rows = eng.to_rows(results)
+    header, rows, nghiem_ngat = eng.dong_gui_sheets(
+        results, dang_ngang=bool(st.session_state.sheet_dang_ngang), an_toan_cu=False)
     if not rows:
         return False, "Không có dữ liệu để ghi."
 
@@ -289,7 +276,7 @@ def day_len_sheets(results: list[ScanResult]) -> tuple[bool, str]:
     if not sx.san_sang():
         return False, sx.thieu_gi()
     try:
-        n = sx.append(header, rows)
+        n = sx.append(header, rows, **({"nghiem_ngat": True} if nghiem_ngat else {}))
         return True, f"Đã ghi {n} dòng lên Google Sheets."
     except Exception as e:  # noqa: BLE001
         return False, f"Lỗi ghi Sheets: {e}"
@@ -449,6 +436,15 @@ def bang_ket_qua(results: list[ScanResult]) -> None:
                     f"- {r.source_name[:60]}: {mo_ta_pham_vi(r)}"
                     for r in mot_phan[:8]),
                 "".join(f"\n\n{x}" for x in goi_y)))
+    # Báo cáo V2: ngày đăng NGUYÊN BẢN của video gốc. Kho chỉ lưu ngày đã quy đổi thì ô ngày
+    # để trống — phải nói rõ vì sao, và cách lấy (không tự hỏi YouTube khi chưa được bật).
+    thieu_ngay = [x for r in results if getattr(r, "bao_cao", None) is not None
+                  for x in bao_cao_v2.ngay_goc_thieu(r.bao_cao)]
+    if thieu_ngay:
+        st.caption(
+            f"📅 {len(thieu_ngay)} video gốc chưa có ngày đăng nguyên bản (ô ngày để trống) — "
+            f"{thieu_ngay[0][1]}. Bật «Bổ sung ngày đăng gốc từ YouTube» ở thanh bên "
+            "(mục 🔐 Kết nối YouTube) để lượt quét sau tự lấy.")
     rows = eng.to_rows(results)
     st.dataframe(df_ket_qua(rows), width="stretch", hide_index=True)
     df_csv = pd.DataFrame(
@@ -456,6 +452,14 @@ def bang_ket_qua(results: list[ScanResult]) -> None:
         columns=eng.HEADER,
     )
     csv_bytes = df_csv.to_csv(index=False).encode("utf-8-sig")
+    # Phạm vi quét của báo cáo V2: tên video đã sạch nên phạm vi đi kèm ở file riêng.
+    bcs = [r.bao_cao for r in results if getattr(r, "bao_cao", None) is not None]
+    pham_vi_bytes = b""
+    if bcs and any(not bc.pham_vi.quet_day_du for bc in bcs):
+        pham_vi_bytes = pd.DataFrame(
+            [[o_bang_tinh_an_toan(o) for o in bao_cao_v2.dong_pham_vi(bc)] for bc in bcs],
+            columns=bao_cao_v2.HEADER_PHAM_VI,
+        ).to_csv(index=False).encode("utf-8-sig")
 
     # Tự động đẩy lên Google Sheets ngay sau khi quét xong
     if st.session_state.sheet_auto and not job.get("da_day_sheet") and rows:
@@ -482,6 +486,13 @@ def bang_ket_qua(results: list[ScanResult]) -> None:
         st.download_button("⬇️ Tải báo cáo CSV", csv_bytes,
                            file_name=f"ketqua_{time.strftime('%Y%m%d_%H%M%S')}.csv",
                            mime="text/csv", width="stretch")
+        if pham_vi_bytes:
+            st.download_button(
+                "⬇️ Tải phạm vi quét (CSV)", pham_vi_bytes,
+                file_name=f"ketqua_{time.strftime('%Y%m%d_%H%M%S')}.pham_vi.csv",
+                mime="text/csv", width="stretch", key="tai_pham_vi_quet",
+                help="Tên video trong báo cáo không còn kèm «quét một phần» — phạm vi "
+                     "thật của từng video nằm ở file này.")
     with c2:
         if st.button("💾 Lưu CSV vào thư mục ketqua\\", width="stretch"):
             st.success(f"Đã lưu: {eng.export_csv(results)}")
@@ -528,8 +539,16 @@ def hien_ket_qua_nguon_chung(kql: nguon_chung.KetQuaLo) -> None:
             st.markdown(f"### {tt_goc.get('title') or goc.clip}")
             c1, c2, c3 = st.columns(3)
             c1.markdown(f"🔗 {tt_goc.get('url') or '—'}")
-            c2.markdown("📅 Ngày đăng: "
-                        f"{format_publication_date(tt_goc.get('upload_date') or '') or '—'}")
+            if kql.chinh_sach_bao_cao == bao_cao_v2.CHINH_SACH_V2:
+                # Ngày NGUYÊN BẢN (upload_date của YouTube); thiếu thì nói vì sao.
+                ngay_goc = bao_cao_v2.NgayNguon(
+                    gia_tri=str(tt_goc.get("ngay_dang") or "")).hien_thi()
+                c2.markdown("📅 Ngày đăng: " + (
+                    ngay_goc or f"— ({tt_goc.get('ly_do_thieu_ngay') or 'chưa có'})"))
+            else:
+                c2.markdown(
+                    "📅 Ngày đăng: "
+                    f"{format_publication_date(tt_goc.get('upload_date') or '') or '—'}")
             c3.markdown("⏱️ Thời lượng: "
                         + (hhmmss(dai) if isinstance(dai, (int, float)) and dai > 0 else "—"))
             st.caption(f"Clip trong kho: `{goc.clip}` · Kho: {kql.kho_ten or kql.kho_id}")
@@ -702,6 +721,13 @@ with st.sidebar:
             c.ytdlp_sleep_max_s = st.number_input(
                 "…tối đa (giây)", 0.0, 60.0, float(c.ytdlp_sleep_max_s), 1.0,
                 help="Nghỉ ngẫu nhiên trong khoảng này. Để 0 cả hai là tắt.")
+        c.bo_sung_ngay_goc = st.checkbox(
+            "Bổ sung ngày đăng gốc từ YouTube", c.bo_sung_ngay_goc,
+            help="Báo cáo ghi ngày đăng NGUYÊN BẢN (upload_date của YouTube, không đổi múi "
+                 "giờ). Kho tạo trước bản này chỉ lưu ngày đã quy đổi nên ô ngày video gốc "
+                 "để trống. Bật thì lượt QUÉT YOUTUBE hỏi thêm cho đúng các video gốc được "
+                 "chọn còn thiếu ngày — mỗi video gốc tối đa một lần mỗi lượt, dừng ngay khi "
+                 "YouTube chặn. Thêm request là thêm nguy cơ bị coi là bot, nên mặc định tắt.")
         st.markdown("**Cookie** — chỉ cần một trong hai cách:")
         c.ytdlp_cookies_browser = st.text_input(
             "Lấy thẳng từ trình duyệt", c.ytdlp_cookies_browser,
@@ -1691,6 +1717,35 @@ with tab5:
         if pham_vi_chon != "Trọn video":
             st.warning(f"Kho: {lich_su.mo_ta_kho(job_chon)} · Phạm vi: {pham_vi_chon}. "
                        "Kết quả bên dưới chỉ nói về phần đã quét.")
+        # Báo cáo của lần quét: dựng lại TỪ ẢNH CHỤP lúc quét (báo cáo V2), không tra metadata
+        # kho hiện tại. Lần quét cũ không có ảnh chụp: lịch sử chỉ còn dữ liệu khớp.
+        bc_chon = eng.bao_cao_cua_job(chon)
+        if bc_chon is not None:
+            st.caption("📄 Báo cáo của lần quét này được chụp lúc quét (chính sách báo cáo "
+                       "V2) — tải lại luôn ra đúng tên, ngày, link như lúc quét.")
+            ngang_chon = eng.dong_bao_cao_job(chon, dang_ngang=True) or []
+            doc_chon = eng.dong_bao_cao_job(chon, dang_ngang=False) or []
+            ch1, ch2 = st.columns(2)
+            with ch1:
+                if ngang_chon:
+                    st.download_button(
+                        "⬇️ Tải báo cáo ngang (34 cột)",
+                        pd.DataFrame([[o_bang_tinh_an_toan(o) for o in d] for d in ngang_chon],
+                                     columns=bang_ngang.HEADER_NGANG)
+                        .to_csv(index=False).encode("utf-8-sig"),
+                        file_name=f"baocao_ngang_job{chon}.csv", mime="text/csv",
+                        key=f"ls_ngang_{chon}")
+            with ch2:
+                st.download_button(
+                    "⬇️ Tải báo cáo dọc (16 cột)",
+                    pd.DataFrame([[o_bang_tinh_an_toan(o) for o in d] for d in doc_chon],
+                                 columns=eng.HEADER).to_csv(index=False).encode("utf-8-sig"),
+                    file_name=f"baocao_doc_job{chon}.csv", mime="text/csv",
+                    key=f"ls_doc_{chon}")
+        else:
+            st.caption("Lần quét cũ (trước báo cáo V2): lịch sử không lưu tên, ngày đăng hay "
+                       "link video gốc nên không dựng lại được báo cáo đã xuất lúc đó — bên "
+                       "dưới chỉ là dữ liệu khớp.")
         ms = eng.job_matches(chon)
         if ms:
             df = pd.DataFrame([{

@@ -101,6 +101,12 @@ def _youtube_ids_from_url(value: object) -> set[str]:
     return ids
 
 
+def youtube_ids_from_url(value: object) -> set[str]:
+    """Mã video từ một URL YouTube THẬT (http/https, đúng host YouTube) — không đọc tên file,
+    không nhận mã trần. API công khai để báo cáo V2 dựng link mà không suy mã từ tiêu đề."""
+    return _youtube_ids_from_url(value)
+
+
 def _ids_from_value(value: object) -> set[str]:
     """Mã video từ một giá trị: mã trần, URL YouTube, hoặc tên/đường dẫn file.
 
@@ -168,6 +174,13 @@ class MetadataEntry:
     priority: int = 0
     warnings: tuple[str, ...] = ()
     origin_method: str = ""
+    # Báo cáo V2 (docs/REPORT_POLICY_V2.md): ngày đăng NGUYÊN BẢN của yt-dlp chỉ khi entry
+    # nói rõ nguồn gốc — ``upload_date_raw`` (ghi từ bản này) hoặc ``publication_date``
+    # với ``publication_date_source == "upload_date"``. Ngày đã quy đổi múi giờ KHÔNG bao
+    # giờ vào đây. ``nguon_ngay`` = ``publication_date_source`` (để báo vì sao thiếu).
+    ngay_raw: str = ""
+    nguon_ngay_raw: str = ""
+    nguon_ngay: str = ""
 
     def public_dict(self) -> dict:
         return {
@@ -207,6 +220,11 @@ class ResolvedClipMetadata:
     complete: bool
     missing_fields: tuple[str, ...]
     warnings: tuple[str, ...]
+    # Xem ``MetadataEntry.ngay_raw``. Không có nguồn gốc rõ ràng → rỗng (kể cả khi
+    # ``upload_date`` ở trên có giá trị — đó là ngày đã quy đổi hoặc chưa rõ gốc).
+    ngay_raw: str = ""
+    nguon_ngay_raw: str = ""
+    nguon_ngay: str = ""
 
     def public_dict(self) -> dict:
         return {
@@ -375,6 +393,19 @@ def source_from_mapping(
             if raw_date not in (None, "", "00000000") and not upload_date:
                 entry_warnings.append("invalid_upload_date")
 
+        # Ngày NGUYÊN BẢN cho báo cáo V2 — chỉ khi entry nói rõ nguồn gốc. Không bao giờ suy
+        # từ ``upload_date`` trần (kho dựng sau 07/08/2026 ghi ngày ĐÃ quy đổi vào cả hai
+        # khoá) hay từ tên file. Không đổi bất kỳ trường cũ nào ở trên.
+        nguon_ngay = raw_value.get("publication_date_source")
+        nguon_ngay = nguon_ngay.strip() if isinstance(nguon_ngay, str) else ""
+        ngay_raw, nguon_ngay_raw = _valid_upload_date(raw_value.get("upload_date_raw")), ""
+        if ngay_raw:
+            nguon_ngay_raw = "clips_meta.upload_date_raw"
+        elif nguon_ngay == "upload_date":
+            ngay_raw = _valid_upload_date(raw_value.get("publication_date"))
+            if ngay_raw:
+                nguon_ngay_raw = "clips_meta.publication_date(nguon=upload_date)"
+
         # `duration` của yt-dlp là `lengthSeconds` của YouTube, tức đã LÀM TRÒN độ
         # dài thật: đo trên 60 clip kho SML thì 58/60 khớp `round(media)`, và 55%
         # trong số đó cao hơn `floor(media)` đúng 1 giây. Vì trình phát hiển thị
@@ -434,6 +465,11 @@ def source_from_mapping(
             priority=priority,
             warnings=tuple(entry_warnings),
             origin_method=origin_method,
+            # Entry tự mâu thuẫn về mã video: không có ngày nguyên bản nào đáng tin.
+            ngay_raw="" if "conflicting_ids_in_entry" in entry_warnings else ngay_raw,
+            nguon_ngay_raw=("" if "conflicting_ids_in_entry" in entry_warnings
+                            else nguon_ngay_raw),
+            nguon_ngay=nguon_ngay,
         ))
         if entry_warnings:
             invalid_entries += 1
@@ -617,6 +653,10 @@ def _merge_entries(entries: Iterable[MetadataEntry]) -> tuple[MetadataEntry, tup
     warnings = list(first.warnings)
     conflicts: list[str] = list(lech_dinh_danh)
     origin_method = first.origin_method
+    # Ngày nguyên bản (báo cáo V2) đi theo entry ĐẦU TIÊN có nó — nguồn chuẩn đứng trước;
+    # snapshot không mang nguồn gốc ngày nên không bao giờ cấp ngày nguyên bản.
+    co_raw = next((entry for entry in ordered if entry.ngay_raw), None)
+    nguon_ngay = next((entry.nguon_ngay for entry in ordered if entry.nguon_ngay), "")
     for entry in ordered[1:]:
         warnings.extend(entry.warnings)
         for field in _FIELDS:
@@ -654,6 +694,9 @@ def _merge_entries(entries: Iterable[MetadataEntry]) -> tuple[MetadataEntry, tup
         priority=first.priority,
         warnings=tuple(dict.fromkeys(warnings + conflicts)),
         origin_method=origin_method,
+        ngay_raw=co_raw.ngay_raw if co_raw else "",
+        nguon_ngay_raw=co_raw.nguon_ngay_raw if co_raw else "",
+        nguon_ngay=nguon_ngay,
     ), tuple(dict.fromkeys(conflicts))
 
 
@@ -869,6 +912,9 @@ class ClipMetadataResolver:
             complete=complete,
             missing_fields=missing,
             warnings=tuple(dict.fromkeys(warnings)),
+            ngay_raw=entry.ngay_raw,
+            nguon_ngay_raw=entry.nguon_ngay_raw,
+            nguon_ngay=entry.nguon_ngay,
         )
 
     def resolve(
