@@ -264,8 +264,11 @@ def lay_sheets() -> SheetsExporter:
 
 def day_len_sheets(results: list[ScanResult]) -> tuple[bool, str]:
     """Đẩy các dòng kết quả lên Google Sheets. Trả về (ok, thông_báo)."""
+    # Kết quả có báo cáo V2 lỗi/hỏng không bao giờ được gửi (kể cả theo luật cũ) — audit P1-02.
+    results, loi_bao_cao = bao_cao_v2.tach_loi_bao_cao(results)
     if not results:
-        return False, "Không có dữ liệu để ghi."
+        return False, (bao_cao_v2.thong_bao_ket_qua_loi(loi_bao_cao) if loi_bao_cao
+                       else "Không có dữ liệu để ghi.")
 
     header, rows, nghiem_ngat = eng.dong_gui_sheets(
         results, dang_ngang=bool(st.session_state.sheet_dang_ngang), an_toan_cu=False)
@@ -277,7 +280,8 @@ def day_len_sheets(results: list[ScanResult]) -> tuple[bool, str]:
         return False, sx.thieu_gi()
     try:
         n = sx.append(header, rows, **({"nghiem_ngat": True} if nghiem_ngat else {}))
-        return True, f"Đã ghi {n} dòng lên Google Sheets."
+        return True, f"Đã ghi {n} dòng lên Google Sheets." + (
+            f" KHÔNG gửi {len(loi_bao_cao)} kết quả có báo cáo V2 lỗi." if loi_bao_cao else "")
     except Exception as e:  # noqa: BLE001
         return False, f"Lỗi ghi Sheets: {e}"
 
@@ -386,6 +390,11 @@ def df_ket_qua(rows: list) -> pd.DataFrame:
 
 def bang_ket_qua(results: list[ScanResult]) -> None:
     """Vẽ bảng kết quả + các nút xuất báo cáo và đẩy lên Google Sheets."""
+    # Báo cáo V2 lỗi/hỏng (audit P1-02): kết quả khớp đã lưu lịch sử nhưng KHÔNG được xuất hay
+    # gửi theo bất kỳ luật nào — báo rõ ở đây, rồi bảng/CSV/Sheets/hồ sơ chỉ dùng phần hợp lệ.
+    results, loi_bao_cao = bao_cao_v2.tach_loi_bao_cao(results)
+    if loi_bao_cao:
+        st.error("⛔ " + bao_cao_v2.thong_bao_ket_qua_loi(loi_bao_cao))
     matches = [
         match
         for result in results
@@ -1720,7 +1729,12 @@ with tab5:
         # Báo cáo của lần quét: dựng lại TỪ ẢNH CHỤP lúc quét (báo cáo V2), không tra metadata
         # kho hiện tại. Lần quét cũ không có ảnh chụp: lịch sử chỉ còn dữ liệu khớp.
         bc_chon = eng.bao_cao_cua_job(chon)
-        if bc_chon is not None:
+        loi_bc_chon = bao_cao_v2.la_loi_bao_cao(bc_chon)
+        if loi_bc_chon:
+            # Lần quét V2 mà báo cáo lỗi/hỏng: KHÔNG phải lần quét cũ, không có nút tải nào
+            # (audit P1-02) — dữ liệu khớp bên dưới vẫn xem được.
+            st.error("⛔ " + bc_chon.thong_bao())
+        elif bc_chon is not None:
             st.caption("📄 Báo cáo của lần quét này được chụp lúc quét (chính sách báo cáo "
                        "V2) — tải lại luôn ra đúng tên, ngày, link như lúc quét.")
             ngang_chon = eng.dong_bao_cao_job(chon, dang_ngang=True) or []
@@ -1756,9 +1770,10 @@ with tab5:
                 "Phạm vi quét": pham_vi_chon,
             } for m in ms])
             st.dataframe(df, width="stretch", hide_index=True)
-            st.download_button("⬇️ Tải CSV lần quét này",
-                               df.to_csv(index=False).encode("utf-8-sig"),
-                               file_name=f"ketqua_job{chon}.csv", mime="text/csv")
+            if not loi_bc_chon:
+                st.download_button("⬇️ Tải CSV lần quét này",
+                                   df.to_csv(index=False).encode("utf-8-sig"),
+                                   file_name=f"ketqua_job{chon}.csv", mime="text/csv")
         else:
             st.info("Lần quét này không có kết quả nào.")
         xac_nhan_xoa_lich_su = st.checkbox(

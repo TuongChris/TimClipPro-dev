@@ -38,6 +38,7 @@ import sqlite3
 import sys
 import threading
 import time
+import traceback
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -5069,29 +5070,38 @@ class Engine:
     def _chuan_bi_goc_bao_cao(self, kq: ScanResult, *, cho_bo_sung: bool) -> Optional[tuple]:
         """``({clip: GocV2}, nhật ký bổ sung)`` cho các đoạn ĐÃ CHỌN; ``None`` nếu job không
         mang chính sách V2. Tra metadata kho một lần, bổ sung ngày nguyên bản nếu được phép.
-        Không bao giờ ném lỗi ra ngoài: thiếu metadata chỉ làm trường tương ứng để trống."""
+        Không bao giờ ném lỗi ra ngoài: thiếu metadata chỉ làm trường tương ứng để trống; lỗi
+        không lường trước → ``LoiBaoCaoV2`` để `_chup_bao_cao` báo lỗi V2 tường minh (kết quả
+        khớp vẫn được lưu — audit P1-02)."""
         if self.chinh_sach_bao_cao != bao_cao_v2.CHINH_SACH_V2:
             return None
         if kq.status != "ok" or not kq.matches:
             return {}, []
         try:
-            resolver = self.clip_metadata_resolver()
-        except Exception as e:  # noqa: BLE001 — metadata hỏng không được làm mất kết quả
-            LOGGER_METADATA.warning("event=report_v2.metadata_unavailable err=%s", str(e)[:200])
-            resolver = None
-        metas: dict = {}
-        for m in kq.matches:
-            if m.clip in metas:
-                continue
             try:
-                metas[m.clip] = resolver.resolve(m.clip) if resolver is not None else None
-            except Exception:  # noqa: BLE001
-                metas[m.clip] = None
-        nhat_ky: list = []
-        bo_sung = self._bo_sung_ngay_goc(metas, cho_phep=cho_bo_sung, nhat_ky=nhat_ky)
-        goc = {clip: bao_cao_v2.goc_tu_metadata(clip, meta, bo_sung.get(clip))
-               for clip, meta in metas.items()}
-        return goc, nhat_ky
+                resolver = self.clip_metadata_resolver()
+            except Exception as e:  # noqa: BLE001 — metadata hỏng không được làm mất kết quả
+                LOGGER_METADATA.warning("event=report_v2.metadata_unavailable err=%s",
+                                        str(e)[:200])
+                resolver = None
+            metas: dict = {}
+            for m in kq.matches:
+                if m.clip in metas:
+                    continue
+                try:
+                    metas[m.clip] = resolver.resolve(m.clip) if resolver is not None else None
+                except Exception:  # noqa: BLE001
+                    metas[m.clip] = None
+            nhat_ky: list = []
+            bo_sung = self._bo_sung_ngay_goc(metas, cho_phep=cho_bo_sung, nhat_ky=nhat_ky)
+            goc = {clip: bao_cao_v2.goc_tu_metadata(clip, meta, bo_sung.get(clip))
+                   for clip, meta in metas.items()}
+            return goc, nhat_ky
+        except Exception as e:  # noqa: BLE001
+            self._ghi_loi_bao_cao("prepare_failed", kq, e)
+            return bao_cao_v2.LoiBaoCaoV2(bao_cao_v2.LOI_TAO,
+                                          chinh_sach=self.chinh_sach_bao_cao,
+                                          ngoai_le=bao_cao_v2.ten_ngoai_le(e))
 
     def goc_bao_cao_v2(self, clip: str, *, cho_bo_sung: bool) -> "bao_cao_v2.GocV2":
         """Thông tin video gốc theo báo cáo V2 cho MỘT clip — dùng cho video gốc được BÁO
@@ -5175,62 +5185,95 @@ class Engine:
             bo_nho.ket_qua[ma] = ngay
         return ngay
 
-    def _chup_bao_cao(self, kq: ScanResult, info: Optional[dict], chuan_bi: Optional[tuple],
-                      *, nguon_loai: str) -> Optional["bao_cao_v2.BaoCaoV2"]:
-        """Chốt ảnh chụp V2 của ``kq`` (giá trị, không tham chiếu). ``None`` khi job không
-        mang chính sách V2. Lỗi nội bộ không được làm mất kết quả: ghi chú rõ và để kết quả
-        dùng luật cũ — không im lặng."""
-        if self.chinh_sach_bao_cao != bao_cao_v2.CHINH_SACH_V2 or chuan_bi is None:
-            return None
-        goc, nhat_ky = chuan_bi
-        try:
-            if nguon_loai == "file":
-                tieu_de = kq.source_name or os.path.basename(kq.source_ref or "")
-                nguon_tieu_de = bao_cao_v2.NGUON_TIEU_DE_TEN_FILE if tieu_de else ""
-                ly_do_tieu_de = "" if tieu_de else "không có tên file"
-                ngay = bao_cao_v2.NgayNguon(
-                    ly_do_thieu="quét file trên máy — không có ngày đăng YouTube")
-            else:
-                tieu_de, nguon_tieu_de, ly_do_tieu_de = bao_cao_v2.tieu_de_tu_info(
-                    info, kq.source_ref or "")
-                ngay = (bao_cao_v2.ngay_tu_info(info) if info else bao_cao_v2.NgayNguon(
-                    ly_do_thieu="chưa lấy được thông tin video"))
-            return bao_cao_v2.dung_bao_cao(
-                kq, thoi_diem_quet=datetime.now().strftime(bao_cao_v2.DINH_DANG_THOI_DIEM),
-                nguon_loai=nguon_loai, tieu_de=tieu_de, nguon_tieu_de=nguon_tieu_de,
-                ly_do_thieu_tieu_de=ly_do_tieu_de, ngay_dang=ngay, goc_theo_clip=goc,
-                mo_ta_pham_vi=mo_ta_pham_vi(kq) if kq.status == "ok" else "",
-                bo_sung_ngay=nhat_ky)
-        except Exception as e:  # noqa: BLE001
-            LOGGER_SCAN.exception("event=report_v2.snapshot_failed source=%s", kq.source_id)
-            kq.note = "\n".join(x for x in (
-                kq.note, f"Không chụp được báo cáo V2 ({type(e).__name__}) — báo cáo của "
-                         "video này dùng luật cũ.") if x)
-            return None
+    @staticmethod
+    def _ghi_loi_bao_cao(su_kien: str, kq: ScanResult, e: BaseException) -> None:
+        """Nhật ký lỗi báo cáo V2: tên lớp + vị trí code, KHÔNG thông điệp thô (thông điệp có thể
+        mang URL ký/cookie từ dict yt-dlp — CLAUDE.md mục 8)."""
+        cuoi = traceback.extract_tb(e.__traceback__)[-1:] if e.__traceback__ else []
+        vi_tri = (f"{os.path.basename(cuoi[0].filename)}:{cuoi[0].lineno}:{cuoi[0].name}"
+                  if cuoi else "")
+        LOGGER_SCAN.error("event=report_v2.%s source=%s err=%s at=%s", su_kien, kq.source_id,
+                          bao_cao_v2.ten_ngoai_le(e), vi_tri)
 
-    def bao_cao_cua_job(self, job_id: int) -> Optional["bao_cao_v2.BaoCaoV2"]:
-        """Ảnh chụp V2 đã lưu cùng lần quét ``job_id``; ``None`` = bản ghi theo luật cũ.
+    def _chup_bao_cao(self, kq: ScanResult, info: Optional[dict], chuan_bi: Optional[object],
+                      *, nguon_loai: str) -> Optional[object]:
+        """Chốt ảnh chụp V2 của ``kq`` (giá trị, không tham chiếu).
+
+        ``None`` CHỈ khi job không mang chính sách V2 (luật cũ thật). Job V2 mà không dựng được
+        ảnh chụp → ``bao_cao_v2.LoiBaoCaoV2`` tường minh, KHÔNG BAO GIỜ lùi về luật cũ (audit
+        P1-02): kết quả khớp, phạm vi, lịch sử giữ nguyên; dấu lỗi được lưu cùng lần quét; mọi
+        exporter và đường gửi Sheets chặn. Ghi chú nói rõ, không im lặng.
+        """
+        if self.chinh_sach_bao_cao != bao_cao_v2.CHINH_SACH_V2:
+            return None
+        try:
+            if isinstance(chuan_bi, bao_cao_v2.LoiBaoCaoV2):
+                loi = chuan_bi                  # chuẩn bị video gốc đã hỏng (đã ghi nhật ký)
+            elif chuan_bi is None:
+                loi = bao_cao_v2.LoiBaoCaoV2(bao_cao_v2.LOI_TAO,
+                                             chinh_sach=self.chinh_sach_bao_cao)
+            else:
+                return self._dung_anh_chup(kq, info, chuan_bi, nguon_loai=nguon_loai)
+        except Exception as e:  # noqa: BLE001
+            self._ghi_loi_bao_cao("snapshot_failed", kq, e)
+            loi = bao_cao_v2.LoiBaoCaoV2(bao_cao_v2.LOI_TAO, chinh_sach=self.chinh_sach_bao_cao,
+                                         ngoai_le=bao_cao_v2.ten_ngoai_le(e))
+        kq.note = "\n".join(x for x in (
+            kq.note, "Không tạo được báo cáo V2"
+            + (f" ({loi.ngoai_le})" if loi.ngoai_le else "")
+            + " — kết quả khớp vẫn được lưu, nhưng chưa xuất báo cáo/gửi Google Sheets được; "
+              "hãy quét lại video này.") if x)
+        return loi
+
+    def _dung_anh_chup(self, kq: ScanResult, info: Optional[dict], chuan_bi: tuple,
+                       *, nguon_loai: str) -> "bao_cao_v2.BaoCaoV2":
+        """Thân dựng ảnh chụp — lỗi ở đây được `_chup_bao_cao` biến thành ``LoiBaoCaoV2``."""
+        goc, nhat_ky = chuan_bi
+        if nguon_loai == "file":
+            tieu_de = kq.source_name or os.path.basename(kq.source_ref or "")
+            nguon_tieu_de = bao_cao_v2.NGUON_TIEU_DE_TEN_FILE if tieu_de else ""
+            ly_do_tieu_de = "" if tieu_de else "không có tên file"
+            ngay = bao_cao_v2.NgayNguon(
+                ly_do_thieu="quét file trên máy — không có ngày đăng YouTube")
+        else:
+            tieu_de, nguon_tieu_de, ly_do_tieu_de = bao_cao_v2.tieu_de_tu_info(
+                info, kq.source_ref or "")
+            ngay = (bao_cao_v2.ngay_tu_info(info) if info else bao_cao_v2.NgayNguon(
+                ly_do_thieu="chưa lấy được thông tin video"))
+        return bao_cao_v2.dung_bao_cao(
+            kq, thoi_diem_quet=datetime.now().strftime(bao_cao_v2.DINH_DANG_THOI_DIEM),
+            nguon_loai=nguon_loai, tieu_de=tieu_de, nguon_tieu_de=nguon_tieu_de,
+            ly_do_thieu_tieu_de=ly_do_tieu_de, ngay_dang=ngay, goc_theo_clip=goc,
+            mo_ta_pham_vi=mo_ta_pham_vi(kq) if kq.status == "ok" else "",
+            bo_sung_ngay=nhat_ky)
+
+    def bao_cao_cua_job(self, job_id: int) -> Optional[object]:
+        """Ảnh chụp V2 đã lưu cùng lần quét ``job_id``.
+
+        * Không có dòng ``bao_cao_job`` → ``None`` = lần quét theo luật CŨ (nghĩa duy nhất).
+        * Có dòng → lần quét V2: ``BaoCaoV2`` nếu đọc được; dấu lỗi đã lưu hoặc dòng hỏng →
+          ``bao_cao_v2.LoiBaoCaoV2`` (không bao giờ ``None`` — audit P1-02).
 
         Đọc lại ĐÚNG giá trị đã chốt — không tra resolver hiện tại, nên metadata kho sửa sau
-        lần quét không làm đổi tên/ngày/URL của báo cáo cũ.
+        lần quét không làm đổi tên/ngày/URL của báo cáo cũ; ảnh chụp hỏng không được dựng lại.
         """
         with self._db() as c:
             hang = c.execute("SELECT chinh_sach, du_lieu FROM bao_cao_job WHERE job_id=?",
                              (job_id,)).fetchone()
         if hang is None:
             return None
-        try:
-            return bao_cao_v2.BaoCaoV2.from_dict(json.loads(hang["du_lieu"]))
-        except (ValueError, TypeError, KeyError) as e:
-            LOGGER_SCAN.warning("event=report_v2.snapshot_unreadable job=%s err=%s", job_id,
-                                str(e)[:160])
-            return None
+        bc = bao_cao_v2.doc_anh_chup_da_luu(hang["chinh_sach"], hang["du_lieu"])
+        if bao_cao_v2.la_loi_bao_cao(bc) and bc.loai == bao_cao_v2.LOI_HONG:
+            LOGGER_SCAN.warning("event=report_v2.snapshot_unreadable job=%s", job_id)
+        return bc
 
     def dong_bao_cao_job(self, job_id: int, *, dang_ngang: bool) -> Optional[list]:
-        """Dòng báo cáo dựng lại TỪ ẢNH CHỤP của một lần quét cũ; ``None`` nếu không có."""
+        """Dòng báo cáo dựng lại TỪ ẢNH CHỤP của một lần quét cũ; ``None`` = lần quét luật cũ.
+        Ảnh chụp lỗi/hỏng → ``bao_cao_v2.LoiXuatBaoCaoV2`` (không trả danh sách rỗng im lặng)."""
         bc = self.bao_cao_cua_job(job_id)
         if bc is None:
             return None
+        bao_cao_v2.chan_neu_loi(bc)
         if dang_ngang:
             return [bao_cao_v2.dong_ngang(bc)] if bc.trang_thai == "ok" and bc.doan else []
         return bao_cao_v2.dong_doc(bc)
@@ -5246,12 +5289,24 @@ class Engine:
         import bang_ngang
 
         ket = list(ket)
+        # Báo cáo V2 lỗi/hỏng: CHẶN cả lần gửi — không bao giờ gửi theo luật cũ hay bỏ nghiêm
+        # ngặt (audit P1-02). Nơi gọi muốn gửi phần còn lại thì tách trước (`tach_loi_bao_cao`).
+        self._chan_loi_bao_cao(ket)
         header = bang_ngang.HEADER_NGANG if dang_ngang else self.HEADER
         rows = self.to_rows_ngang(ket) if dang_ngang else self.to_rows(ket)
         co_v2 = any(getattr(kq, "bao_cao", None) is not None for kq in ket)
         if not co_v2 and an_toan_cu:
             rows = [[o_bang_tinh_an_toan(o) for o in dong] for dong in rows]
         return header, rows, co_v2
+
+    @staticmethod
+    def _chan_loi_bao_cao(ket: list) -> None:
+        """Chốt chặn của MỌI exporter/đường gửi Sheets: kết quả mang báo cáo V2 lỗi/hỏng thì ném
+        ``LoiXuatBaoCaoV2`` TRƯỚC khi mở file hay dựng dòng — không lùi về luật cũ, không để lại
+        file dở dang (audit P1-02)."""
+        _, loi = bao_cao_v2.tach_loi_bao_cao(ket)
+        if loi:
+            raise bao_cao_v2.LoiXuatBaoCaoV2(bao_cao_v2.thong_bao_ket_qua_loi(loi))
 
     def _ghi_pham_vi_canh(self, ten_file: str, ket: Iterable) -> str:
         """CSV phụ ``<tên>.pham_vi.csv`` cạnh báo cáo V2: tên video sạch, phạm vi không mất."""
@@ -5309,7 +5364,9 @@ class Engine:
             bc = getattr(kq, "bao_cao", None)
             if bc is not None:
                 # Ảnh chụp báo cáo V2 — bảng RIÊNG, cùng giao dịch với dòng lịch sử (không có
-                # lần quét nào chỉ lưu nửa). Dòng `jobs` giữ nguyên cột như bản cũ.
+                # lần quét nào chỉ lưu nửa). Dòng `jobs` giữ nguyên cột như bản cũ. Lượt V2 dựng
+                # ảnh chụp lỗi lưu DẤU LỖI (`LoiBaoCaoV2.to_dict`) ở đúng chỗ đó — khởi động lại
+                # vẫn là "V2 lỗi", không bao giờ thành lượt quét cũ (audit P1-02).
                 c.execute("INSERT INTO bao_cao_job(job_id, chinh_sach, du_lieu, created_at)"
                           " VALUES(?,?,?,?)",
                           (job_id, bc.chinh_sach,
@@ -5402,6 +5459,7 @@ class Engine:
         luật cũ y nguyên bên dưới. Chính sách đọc từ chính kết quả, không từ hằng hiện hành.
         """
         ket = list(ket)
+        self._chan_loi_bao_cao(ket)
         cu = [kq for kq in ket if getattr(kq, "bao_cao", None) is None]
         resolver = self.clip_metadata_resolver() if cu else None
         luc = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -5431,6 +5489,8 @@ class Engine:
         return rows
 
     def export_csv(self, ket: Iterable, ten_file: Optional[str] = None) -> str:
+        ket = list(ket)
+        self._chan_loi_bao_cao(ket)
         os.makedirs(self.out_dir, exist_ok=True)
         ten_file = ten_file or os.path.join(
             self.out_dir, "ketqua_" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".csv")
@@ -5452,6 +5512,8 @@ class Engine:
         """Mỗi ScanResult -> đúng 1 dòng 34 cột. Bỏ qua kết quả status != 'ok'."""
         import bang_ngang
 
+        ket = list(ket)
+        self._chan_loi_bao_cao(ket)
         ket = [kq for kq in ket if kq.status == "ok" and kq.matches]
         # Kết quả V2 không cần resolver (dựng từ ảnh chụp) — không tra kho khi không cần.
         can_resolver = any(getattr(kq, "bao_cao", None) is None for kq in ket)
@@ -5486,8 +5548,9 @@ class Engine:
 
     def export_ho_so(self, ket: Iterable, ten_file: Optional[str] = None) -> list:
         """Xuất mỗi ScanResult thành một file .md. Trả về danh sách đường dẫn đã tạo."""
-        os.makedirs(self.out_dir, exist_ok=True)
         ket = list(ket)
+        self._chan_loi_bao_cao(ket)
+        os.makedirs(self.out_dir, exist_ok=True)
         can_resolver = any(getattr(kq, "bao_cao", None) is None for kq in ket)
         resolver = self.clip_metadata_resolver() if can_resolver else None
         duong_dan_da_tao = []

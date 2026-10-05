@@ -21,6 +21,10 @@ Vòng đời (xem docs/REPORT_POLICY_V2.md)
   Sheets / xuất. Ảnh chụp chỉ chứa GIÁ TRỊ (không tham chiếu config/resolver).
 * Kết quả KHÔNG có ảnh chụp là kết quả theo luật cũ — exporter cũ giữ nguyên, không bao giờ
   tự nâng thành V2. Bản ghi lịch sử thiếu ảnh chụp cũng vậy.
+* Lượt quét V2 mà ảnh chụp KHÔNG dựng được, hoặc ảnh chụp đã lưu KHÔNG đọc được, mang
+  ``LoiBaoCaoV2`` — không bao giờ ``None`` (``None`` chỉ còn một nghĩa: luật cũ thật). Kết quả
+  khớp giữ nguyên; mọi exporter và đường gửi Sheets CHẶN (``LoiXuatBaoCaoV2``), không lùi về
+  tên/ngày/link của luật cũ (audit P1-02).
 * Xuất lại (kể cả sau khi khởi động lại app) dựng TỪ ẢNH CHỤP, không hỏi resolver hiện tại.
 
 Module THUẦN: không I/O, không mạng, không Streamlit. Escape công thức bảng tính là việc
@@ -29,8 +33,10 @@ của tầng ghi CSV; giá trị ở đây là giá trị nguồn nguyên văn.
 
 from __future__ import annotations
 
+import json
 import math
-from dataclasses import asdict, dataclass, field
+import re
+from dataclasses import asdict, dataclass, field, fields
 from typing import Any, Iterable, Mapping, Optional
 
 from clip_metadata import YOUTUBE_ID_PATTERN, valid_upload_date, youtube_ids_from_url
@@ -337,6 +343,110 @@ class BaoCaoV2:
         )
 
 
+# =====================================================================
+#  Lỗi báo cáo V2 — KHÔNG BAO GIỜ là luật cũ (audit P1-02)
+# =====================================================================
+
+LOI_TAO = "loi_tao"     # lượt quét mang chính sách V2 nhưng không dựng được ảnh chụp
+LOI_HONG = "hong"       # ảnh chụp đã lưu không đọc được (JSON hỏng, cụt, phiên bản/chính sách lạ)
+KHOA_LOI = "loi_bao_cao"
+_TRUONG_ANH_CHUP = frozenset(f.name for f in fields(BaoCaoV2))
+
+
+@dataclass(frozen=True)
+class LoiBaoCaoV2:
+    """Lượt quét THUỘC chính sách V2 mà không có ảnh chụp dùng được.
+
+    Phân biệt với ``None`` (luật cũ thật): kết quả khớp, lịch sử, phạm vi vẫn giữ, nhưng mọi
+    exporter và đường gửi Sheets phải CHẶN — không dựng bảng 34/16 cột, ngày, URL hay hậu tố tên
+    theo luật cũ. Chỉ mang TÊN LỚP ngoại lệ (không thông điệp thô, không dict yt-dlp) nên lưu
+    vào ``bao_cao_job`` an toàn; ``to_dict`` là dấu lỗi bền qua khởi động lại.
+    """
+    loai: str                           # LOI_TAO | LOI_HONG
+    chinh_sach: str = CHINH_SACH_V2
+    ngoai_le: str = ""
+
+    def to_dict(self) -> dict:
+        return {KHOA_LOI: {"loai": self.loai, "ngoai_le": self.ngoai_le}}
+
+    def thong_bao(self) -> str:
+        if self.loai == LOI_HONG:
+            dau = "Báo cáo V2 đã lưu của lượt quét này bị hỏng, không đọc được."
+        else:
+            dau = ("Báo cáo V2 của lượt quét này không tạo được"
+                   + (f" ({self.ngoai_le})" if self.ngoai_le else "") + ".")
+        return (dau + " Kết quả khớp vẫn được giữ, nhưng không thể xuất báo cáo hoặc gửi Google "
+                "Sheets cho tới khi lỗi báo cáo được xử lý — quét lại video này để có báo cáo mới.")
+
+
+class LoiXuatBaoCaoV2(RuntimeError):
+    """Đòi xuất/gửi một kết quả mang ``LoiBaoCaoV2`` — bị CHẶN, không lùi về luật cũ.
+
+    ``vinh_vien``: hàng đợi Sheets không thử lại (thử lại không chữa được ảnh chụp).
+    """
+    vinh_vien = True
+
+
+def la_loi_bao_cao(bc: Any) -> bool:
+    return isinstance(bc, LoiBaoCaoV2)
+
+
+def chan_neu_loi(bc: Any) -> None:
+    """Chốt chặn ở mọi bộ dựng dòng V2: ảnh chụp lỗi/hỏng thì ném ``LoiXuatBaoCaoV2``."""
+    if isinstance(bc, LoiBaoCaoV2):
+        raise LoiXuatBaoCaoV2(bc.thong_bao())
+
+
+def ten_ngoai_le(e: BaseException) -> str:
+    """Tên lớp ngoại lệ đã làm sạch — điều DUY NHẤT về lỗi được lưu/ghi chú."""
+    return re.sub(r"[^A-Za-z0-9_.]", "", type(e).__name__)[:80]
+
+
+def doc_anh_chup_da_luu(chinh_sach: Any, du_lieu: Any) -> "BaoCaoV2 | LoiBaoCaoV2":
+    """Đọc MỘT dòng ``bao_cao_job``. Có dòng = lượt quét V2, nên không bao giờ trả ``None``.
+
+    Đọc được → ``BaoCaoV2``; dấu lỗi đã lưu → ``LoiBaoCaoV2(LOI_TAO)``; còn lại (JSON hỏng, không
+    phải object, thiếu trường, phiên bản/chính sách lạ) → ``LoiBaoCaoV2(LOI_HONG)``. Không tái dựng
+    bằng resolver hiện tại, không đoán.
+    """
+    try:
+        d = json.loads(du_lieu)
+    except (TypeError, ValueError):
+        return LoiBaoCaoV2(LOI_HONG)
+    if chinh_sach != CHINH_SACH_V2 or not isinstance(d, dict):
+        return LoiBaoCaoV2(LOI_HONG)
+    if KHOA_LOI in d:
+        loi = d[KHOA_LOI]
+        if isinstance(loi, dict) and loi.get("loai") == LOI_TAO:
+            ten = re.sub(r"[^A-Za-z0-9_.]", "", str(loi.get("ngoai_le") or ""))[:80]
+            return LoiBaoCaoV2(LOI_TAO, ngoai_le=ten)
+        return LoiBaoCaoV2(LOI_HONG)
+    if not _TRUONG_ANH_CHUP <= d.keys():
+        return LoiBaoCaoV2(LOI_HONG)
+    try:
+        return BaoCaoV2.from_dict(d)
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return LoiBaoCaoV2(LOI_HONG)
+
+
+def tach_loi_bao_cao(ket: Iterable) -> tuple:
+    """``(hợp lệ, có báo cáo V2 lỗi)`` — giữ thứ tự; nơi gọi xuất phần hợp lệ và BÁO phần lỗi."""
+    hop_le, loi = [], []
+    for kq in ket:
+        (loi if la_loi_bao_cao(getattr(kq, "bao_cao", None)) else hop_le).append(kq)
+    return hop_le, loi
+
+
+def thong_bao_ket_qua_loi(loi: Iterable) -> str:
+    """Một câu cho giao diện / Watch / CLI: lượt quét nào bị chặn xuất vì báo cáo V2 lỗi."""
+    ten = [str(getattr(kq, "source_name", "") or getattr(kq, "source_ref", "")
+               or "(không rõ nguồn)")[:80] for kq in loi]
+    return (f"Báo cáo V2 của {len(ten)} lượt quét không tạo/đọc được: " + "; ".join(ten[:5])
+            + (" …" if len(ten) > 5 else "") + ". Kết quả khớp vẫn được giữ trong lịch sử, nhưng "
+            "không thể xuất báo cáo hoặc gửi Google Sheets cho tới khi lỗi báo cáo được xử lý — "
+            "quét lại các video này để có báo cáo mới.")
+
+
 def goc_tu_metadata(clip: str, meta: Any, ngay_bo_sung: Optional[NgayNguon] = None) -> GocV2:
     """Chốt thông tin video gốc từ một ``ResolvedClipMetadata`` (hoặc ``None``).
 
@@ -477,6 +587,7 @@ def doan_hien_thi(d: DoanV2) -> str:
 
 def dong_ngang(bc: BaoCaoV2) -> list:
     """Đúng 34 phần tử theo ``bang_ngang.HEADER_NGANG`` (hợp đồng Apps Script giữ nguyên)."""
+    chan_neu_loi(bc)
     doan = list(bc.doan[:SO_DOAN_NGANG]) if bc.trang_thai == "ok" else []
     dong = [
         bc.thoi_diem_quet, bc.kenh_link, bc.kenh_ten, bc.kenh_id, bc.link_video, bc.tieu_de,
@@ -497,6 +608,7 @@ def dong_ngang(bc: BaoCaoV2) -> list:
 
 def dong_doc(bc: BaoCaoV2) -> list:
     """Các dòng 16 cột theo ``Engine.HEADER`` (một dòng mỗi đoạn)."""
+    chan_neu_loi(bc)
     dau = [bc.thoi_diem_quet, bc.tieu_de, bc.link_video]
     if bc.trang_thai != "ok":
         return [dau + [f"(LỖI: {bc.ghi_chu})"] + [""] * 12]
@@ -524,6 +636,7 @@ def nhan_pham_vi(bc: BaoCaoV2) -> str:
 
 def dong_pham_vi(bc: BaoCaoV2) -> list:
     """Một dòng sidecar phạm vi (``HEADER_PHAM_VI``): tên video vẫn sạch, phạm vi không mất."""
+    chan_neu_loi(bc)
     vung_loi = ", ".join(f"{hien_thi_moc(giay_moc(a))}–{hien_thi_moc(giay_moc(b))}"
                          for a, b in bc.pham_vi.vung_loi)
     return [bc.link_video, bc.tieu_de, nhan_pham_vi(bc), bc.pham_vi.mo_ta,
@@ -532,6 +645,9 @@ def dong_pham_vi(bc: BaoCaoV2) -> list:
 
 
 def ngay_goc_thieu(bc: BaoCaoV2) -> list:
-    """Video gốc (đã chọn) chưa có ngày đăng nguyên bản: ``[(clip, lý do)]`` để giao diện báo."""
+    """Video gốc (đã chọn) chưa có ngày đăng nguyên bản: ``[(clip, lý do)]`` để giao diện báo.
+    Báo cáo V2 lỗi/hỏng không có video gốc nào để liệt kê (lỗi được báo riêng)."""
+    if la_loi_bao_cao(bc):
+        return []
     return [(d.goc.clip, d.goc.ngay_dang.ly_do_thieu) for d in bc.doan
             if not d.goc.ngay_dang.gia_tri]

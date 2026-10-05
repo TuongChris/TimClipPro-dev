@@ -92,7 +92,9 @@ def dung_ho_so(
 
 
 def dung_ho_so_v2(bc) -> HoSo:
-    """Hồ sơ từ ẢNH CHỤP báo cáo V2: cùng tên/link/URL gốc với mọi exporter V2."""
+    """Hồ sơ từ ẢNH CHỤP báo cáo V2: cùng tên/link/URL gốc với mọi exporter V2. Ảnh chụp
+    lỗi/hỏng (``LoiBaoCaoV2``) → ``LoiXuatBaoCaoV2``, không bao giờ lùi về hồ sơ luật cũ."""
+    bao_cao_v2.chan_neu_loi(bc)
     cac_muc = [MucViPham(
         ten_clip_goc=d.goc.clip, tieu_de_goc=d.goc.tieu_de, link_goc=d.goc.url,
         tu_hhmmss=bao_cao_v2.hien_thi_moc(d.giay_bat_dau),

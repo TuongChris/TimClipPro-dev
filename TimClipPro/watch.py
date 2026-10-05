@@ -8,6 +8,7 @@ import re
 from typing import Any, Callable, Optional
 
 import bang_ngang
+import bao_cao_v2
 from channel import ChannelSync
 from don_dep import don_job_quet, don_kho_dem
 from khoa import DangChayRoi, KhoaTienTrinh
@@ -301,6 +302,12 @@ def _mo_phien(engine: Any):
 def _la_loi_youtube(kq: Any) -> bool:
     """Kết quả hỏng vì YouTube (bị chặn, cần đăng nhập, gỡ, mạng…): không phải kết quả quét."""
     return getattr(kq, "loi_truy_cap", None) is not None
+
+
+def _la_loi_bao_cao(kq: Any) -> bool:
+    """Báo cáo V2 của lượt quét không tạo/đọc được: kết quả khớp đã lưu lịch sử, nhưng KHÔNG
+    xuất CSV/gửi Sheets theo bất kỳ luật nào (audit P1-02) — chỉ báo lỗi trong báo cáo Watch."""
+    return bao_cao_v2.la_loi_bao_cao(getattr(kq, "bao_cao", None))
 
 
 def _lister_theo_cau_hinh(engine: Any) -> Callable:
@@ -658,9 +665,15 @@ def _thuc_hien_giam_sat(
                 or ung_vien_moi.url
             )
             bao_cao.loi.append(f"{ten_nguon}: {ket_qua_quet.note}")
+        if _la_loi_bao_cao(ket_qua_quet):
+            ten_nguon = (ket_qua_quet.source_name or ung_vien_moi.tieu_de
+                         or ung_vien_moi.url)
+            bao_cao.loi.append(f"{ten_nguon}: {ket_qua_quet.bao_cao.thong_bao()}")
         # Lỗi YouTube (bị chặn, cần đăng nhập, gỡ, mạng) không phải kết quả quét: không đẩy
-        # dòng "(LỖI…)" lên Sheets — giao diện cũng chỉ đẩy kết quả `ok` (app.py).
-        if sheet_link and ghi_tung_phan and not _la_loi_youtube(ket_qua_quet):
+        # dòng "(LỖI…)" lên Sheets — giao diện cũng chỉ đẩy kết quả `ok` (app.py). Báo cáo V2
+        # lỗi/hỏng: không gửi gì (đã báo ở trên).
+        if (sheet_link and ghi_tung_phan and not _la_loi_youtube(ket_qua_quet)
+                and not _la_loi_bao_cao(ket_qua_quet)):
             day_tung_phan(ket_qua_quet)
         if dung_neu_duoc_yeu_cau(tong_can_quet - i - 1):
             break
@@ -669,12 +682,13 @@ def _thuc_hien_giam_sat(
         # Cầu dao mở ở chính video cuối: vẫn phải nói rõ lượt này đã bị YouTube chặn.
         bao_cao.chan_youtube = phien.thong_bao_dung()
 
-    if ket_qua:
+    xuat_duoc = [kq for kq in ket_qua if not _la_loi_bao_cao(kq)]
+    if xuat_duoc:
         try:
             bao_cao.csv_path = (
-                engine.export_csv_ngang(ket_qua)
+                engine.export_csv_ngang(xuat_duoc)
                 if dang_ngang
-                else engine.export_csv(ket_qua)
+                else engine.export_csv(xuat_duoc)
             )
         except Exception as e:  # noqa: BLE001
             bao_cao.loi.append(f"Không xuất được CSV: {e}")
@@ -683,7 +697,8 @@ def _thuc_hien_giam_sat(
         try:
             ung_dung_sheets = khoi_tao_sheets()
             if ung_dung_sheets is not None:
-                hop_le = [kq for kq in ket_qua if not _la_loi_youtube(kq)]
+                hop_le = [kq for kq in ket_qua
+                          if not _la_loi_youtube(kq) and not _la_loi_bao_cao(kq)]
                 chua_day = (
                     [kq for kq in hop_le if id(kq) not in da_day_sheets]
                     if ghi_tung_phan

@@ -16,6 +16,7 @@ import argparse
 import os
 import sys
 
+import bao_cao_v2
 import don_dep
 import nhat_ky
 import watch
@@ -402,7 +403,15 @@ def _main():
         for m in kq.matches:
             print(f"   • {m.clip} | {m.start_hhmmss} → {m.end_hhmmss} "
                   f"| {m.hashes} hash ({m.confidence})")
-    print("\n===> Báo cáo CSV:", eng.export_csv(ket))
+        if bao_cao_v2.la_loi_bao_cao(getattr(kq, "bao_cao", None)):
+            # Báo cáo V2 lỗi: bằng chứng khớp ở trên đã lưu lịch sử, nhưng KHÔNG vào CSV theo
+            # bất kỳ luật nào (audit P1-02).
+            print(f"   LỖI BÁO CÁO V2: {kq.bao_cao.thong_bao()}")
+    xuat_duoc, loi_bao_cao = bao_cao_v2.tach_loi_bao_cao(ket)
+    print("\n===> Báo cáo CSV:", eng.export_csv(xuat_duoc))
+    if loi_bao_cao:
+        print(f"===> KHÔNG xuất {len(loi_bao_cao)} kết quả: "
+              + bao_cao_v2.thong_bao_ket_qua_loi(loi_bao_cao))
     phien = getattr(eng, "phien_youtube_cuoi", None)
     if a.lenh == "youtube" and phien is not None:
         so = phien.tom_tat()

@@ -33,6 +33,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 import pandas as pd
 
+import bao_cao_v2
 import truy_cap_youtube as _tc
 from common_original import (
     COT_SO_NGUON_CHUNG,
@@ -246,11 +247,15 @@ def giao_hang_sheets(eng: Any, ket_qua: Any, *, sheet_id: str, sheet_link: str,
     Kết quả mang ảnh chụp báo cáo V2: dòng dựng từ ảnh chụp, giá trị nguyên văn (RAW), gửi
     nghiêm ngặt (hàng tiêu đề sai là dừng). Kết quả cũ: luật cũ (escape công thức). Thử lại
     sau này gửi ĐÚNG các dòng trả về ở đây — không dựng lại bằng resolver/chính sách mới.
-    ``None`` khi không có dòng nào để gửi. Không chạm Streamlit (chạy trong scan worker).
+    ``None`` khi không có dòng nào để gửi — kể cả khi báo cáo V2 của kết quả lỗi/hỏng: không
+    xếp hàng, không lùi về luật cũ (audit P1-02); bảng kết quả trên giao diện báo lỗi đó.
+    Không chạm Streamlit (chạy trong scan worker).
     """
     from sheet_delivery import SheetDelivery, khoa_giao_hang
 
     if getattr(ket_qua, "status", "ok") != "ok":
+        return None
+    if bao_cao_v2.la_loi_bao_cao(getattr(ket_qua, "bao_cao", None)):
         return None
     header, rows, nghiem_ngat = eng.dong_gui_sheets(
         [ket_qua], dang_ngang=dang_ngang, an_toan_cu=True)
