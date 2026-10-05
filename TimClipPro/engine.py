@@ -5361,7 +5361,10 @@ class Engine:
         return [dict(r) for r in rows]
 
     def delete_job(self, job_id: int) -> None:
+        # Ảnh chụp báo cáo V2 thuộc đúng lần quét này — xoá CÙNG giao dịch, không để mồ côi
+        # (audit P1-01). Lỗi giữa chừng: `_db` không commit nên cả ba lệnh cùng lùi lại.
         with self._db() as c:
+            c.execute("DELETE FROM bao_cao_job WHERE job_id=?", (job_id,))
             c.execute("DELETE FROM matches WHERE job_id=?", (job_id,))
             c.execute("DELETE FROM jobs WHERE id=?", (job_id,))
 
