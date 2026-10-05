@@ -143,6 +143,11 @@ Thiết kế đầy đủ: `docs/COMMON_ORIGINAL_DESIGN.md`. Những điều KH�
   chốt cuối lượt quét, trước `save_job`/xếp hàng Sheets. Exporter đọc chính sách TỪ KẾT QUẢ:
   `bao_cao is None` = luật cũ y nguyên (golden, lịch sử cũ). Đừng cho dataclass mặc định V2, đừng
   để exporter hỏi hằng hiện hành hay resolver hiện tại cho kết quả V2.
+- `None` CHỈ có nghĩa luật cũ thật. Lượt V2 dựng ảnh chụp lỗi, hay ảnh chụp đã lưu không đọc
+  được, mang `bao_cao_v2.LoiBaoCaoV2` (dấu lỗi lưu cùng lần quét) → mọi exporter/đường Sheets ném
+  `LoiXuatBaoCaoV2`; nơi gọi tách bằng `tach_loi_bao_cao` và BÁO lỗi. Đừng bao giờ «lùi về luật
+  cũ» khi V2 hỏng — đó là lỗi P1-02 của audit độc lập 05/10/2026. Xoá lần quét xoá cả `bao_cao_job`
+  cùng giao dịch (P1-01).
 - Ảnh chụp lưu ở bảng RIÊNG `bao_cao_job` (lịch sử phiên bản 2) — KHÔNG thêm cột vào `jobs`
   (golden so `SELECT * FROM jobs`, bản rollback đọc theo tên cột).
 - Ngày V2 = `upload_date` NGUYÊN BẢN của yt-dlp. `youtube_info()["upload_date"]` là ngày ĐÃ quy
@@ -152,7 +157,8 @@ Thiết kế đầy đủ: `docs/COMMON_ORIGINAL_DESIGN.md`. Những điều KH�
   cộng thời lượng gốc vào `end_s` (mốc kết thúc bị cắt bởi `--time-quantile` 0,05 của audfprint —
   sửa là đổi tham số khớp, cần duyệt riêng).
 - Gửi Sheets V2: nguyên văn (RAW, không thêm `'`), nghiêm ngặt — hàng tiêu đề sai là dừng, không
-  chèn/sửa hàng 1. CSV vẫn chặn công thức ở tầng ghi.
+  chèn/sửa hàng 1. CSV vẫn chặn công thức ở tầng ghi. Hàng 1 trống CHƯA phải bảng rỗng: dò lần hai
+  toàn trang tính, có bất kỳ ô nào là dừng, không ghi gì (P1-03).
 
 ## Kiểm thử — LÀM ƠN CHẠY TRƯỚC KHI BÁO XONG
 

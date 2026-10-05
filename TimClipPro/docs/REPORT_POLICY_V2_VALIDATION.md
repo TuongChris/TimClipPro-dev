@@ -94,3 +94,43 @@ thật — rào chắn chặn ở tầng socket).
 Xem `docs/REPORT_POLICY_V2.md` mục 9. Không gọi YouTube hay Google thật trong vòng này; bổ sung
 ngày qua mạng chỉ được kiểm bằng bản giả — cần một lượt smoke có kiểm soát (duyệt riêng) trước khi
 bật ở máy thật.
+
+## Vòng sửa sau audit độc lập (05/10/2026)
+
+Audit độc lập gói `126571f` (cây `ba9e9799`): P0 = 0, **P1 = 3** — `NO-GO FOR PRODUCTION / PAUSE
+PUBLIC PUSH`. Nhánh `fix/report-policy-v2-audit` dựng TRÊN `126571f` (ba commit gốc không đổi), chỉ
+sửa đúng ba P1; không đụng matching, `end_s`, ngưỡng, `--time-quantile`, `audfprint-master/`,
+requirements. Hợp đồng sau sửa: `docs/REPORT_POLICY_V2.md` mục 3.9, 3.10, 6, 7.
+
+**Tái hiện trước khi sửa** (bản `git archive` của `126571f`, dữ liệu tổng hợp, script ngoài repo):
+
+| P1 | Tái hiện trên `126571f` | Sau sửa |
+|---|---|---|
+| 01 — xoá lần quét | ảnh chụp trước 1 → `jobs` 0, `matches` 0, ảnh chụp **vẫn 1** | ảnh chụp 0, cùng giao dịch |
+| 02a — dựng ảnh chụp lỗi | `bao_cao=None` → tên lại nối hậu tố cũ, gửi Sheets KHÔNG nghiêm ngặt, việc Sheets vẫn được xếp hàng, ghi chú «dùng luật cũ» | `LoiBaoCaoV2(loi_tao)`; mọi exporter ném `LoiXuatBaoCaoV2`; không xếp hàng |
+| 02b — ảnh chụp lưu hỏng | dòng còn, bộ đọc trả `None` → lịch sử gọi là lần quét cũ | `LoiBaoCaoV2(hong)`, tab Lịch sử báo lỗi, không nút tải |
+| 03 — hàng 1 trống | hàng 2 có dữ liệu / ô ở cột ngoài bề rộng / ô lẻ xa → vẫn ghi tiêu đề + dòng | `LoiHeaderSheet` nêu đúng ô (A2, AJ1, AZ5), 0 thao tác ghi |
+
+Thêm một đường lỗi lộ ra khi đọc code: lỗi lúc CHUẨN BỊ video gốc (trước khi dựng ảnh chụp) làm
+sập cả lượt quét — nay cũng thành `LoiBaoCaoV2`, bằng chứng khớp được lưu.
+
+**Test mới:** `tests/test_bao_cao_v2_xoa_job.py` (P1-01: V2, cũ, không tồn tại, hai job, lỗi giữa
+giao dịch), `tests/test_bao_cao_v2_loi_anh_chup.py` (P1-02: dựng lỗi, chuẩn bị lỗi, dấu lỗi không
+mang thông điệp thô, nhật ký, mọi exporter, hàng đợi Sheets, 6 dạng ảnh chụp hỏng, khởi động lại,
+luật cũ thật, V2 bình thường, Watch, CLI, lô nguồn chung, giao diện: bảng kết quả, gửi Sheets tay,
+tab Lịch sử), `tests/test_bao_cao_v2_sheets_trong.py` (P1-03: trang giả dạng lưới ghi lại MỌI thao
+tác theo thứ tự — 5 dạng có dữ liệu, trống thật, tiêu đề đúng, tiêu đề sai, dò lỗi, hàng đợi không
+thử lại lỗi tiêu đề, thử lại hữu hạn khi dò lỗi). Test cũ cập nhật: bản giả trang tính của
+`tests/test_bao_cao_v2_sheets.py` thêm `get_all_values` (bảng trống nay được dò lần hai).
+
+**Đột biến mới (17, đều phải làm đỏ test):** bỏ `DELETE bao_cao_job`; xoá sai `job_id`; xoá ảnh chụp
+ở giao dịch riêng; lỗi dựng ảnh chụp quay lại `return None`; JSON hỏng đọc thành `None`; V2 lỗi đi bộ
+dựng dòng luật cũ; V2 lỗi vẫn xếp hàng Sheets theo luật cũ; lượt cũ thật bị coi là V2 hỏng; job không
+ghim V2 bị coi là V2 lỗi; lỗi chuẩn bị video gốc làm sập lượt quét; dấu lỗi mang thông điệp thô; Watch
+quên tách kết quả lỗi; bỏ lần dò thứ hai; chỉ dò trong bề rộng báo cáo; dò lỗi vẫn ghi; ô chỉ có dấu
+cách coi là trống; lỗi «trang có dữ liệu» thành lỗi tạm. 45 đột biến cũ chạy lại trên cây mới — 4 mẫu
+(`M03`, `M09`, `M13`, `M23`) được neo lại vì đoạn code dời chỗ khi sửa, cùng ngữ nghĩa đột biến.
+
+Kết quả các cổng (suite nhanh/chậm, AppTest, đột biến, `kiemtra.bat`, Ruff, quét bí mật…) đo trên
+đúng cây cuối được ghi trong gói audit lần 2 (ngoài repo: `00_DOC_TRUOC.md`, `AUDIT_HANDOFF.md`) —
+tài liệu trong repo không tự chứng nhận chính cây chứa nó.

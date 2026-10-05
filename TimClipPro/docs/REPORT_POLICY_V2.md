@@ -56,7 +56,8 @@ cũ, tên file/mã lưu trữ/khoá vân tay trong kho.
 3. **Xuất** — `Engine.to_rows`, `Engine.to_rows_ngang`/`bang_ngang.dung_dong_ngang`,
    `dossier.dung_ho_so`, `Engine.export_csv*`, `Engine.dong_gui_sheets` (app, Watch) đọc chính sách
    TỪ KẾT QUẢ: có ảnh chụp → dòng từ ảnh chụp (`bao_cao_v2.dong_ngang/dong_doc`), không →
-   luật cũ y nguyên. Không exporter nào hỏi hằng hiện hành hay resolver hiện tại cho kết quả V2.
+   luật cũ y nguyên, ảnh chụp lỗi/hỏng → CHẶN (mục 9). Không exporter nào hỏi hằng hiện hành hay
+   resolver hiện tại cho kết quả V2.
 4. **Lưu** — `save_job` ghi ảnh chụp vào bảng RIÊNG `bao_cao_job(job_id, chinh_sach, du_lieu,
    created_at)` trong cùng giao dịch với dòng `jobs`/`matches`. Bảng `jobs` không thêm cột.
 5. **Xuất lại sau khởi động lại** — `Engine.bao_cao_cua_job(job_id)` /
@@ -70,6 +71,27 @@ cũ, tên file/mã lưu trữ/khoá vân tay trong kho.
    trước): tắt app khi còn việc chờ là mất việc đó — kết quả đã lưu lịch sử thì tải lại được.
 8. **Quét lại một URL cũ** = một lượt quét MỚI (dòng lịch sử mới, ảnh chụp mới) — không ghi đè
    dòng cũ hay hàng Sheet cũ.
+9. **Ảnh chụp lỗi/hỏng — không bao giờ lùi về luật cũ** (sửa sau audit độc lập 05/10/2026, P1-02).
+   `ScanResult.bao_cao`/`bao_cao_cua_job` có ĐÚNG ba trạng thái: `None` = luật cũ thật (job không
+   ghim V2 / lịch sử không có dòng `bao_cao_job`); `BaoCaoV2` = V2 bình thường;
+   `bao_cao_v2.LoiBaoCaoV2` = lượt quét V2 không có ảnh chụp dùng được:
+   * `loi_tao` — dựng ảnh chụp lỗi (kể cả bước chuẩn bị video gốc). Kết quả khớp, phạm vi, chẩn
+     đoán và dòng `jobs`/`matches` giữ nguyên (quét không thành âm tính); `bao_cao_job` lưu DẤU
+     LỖI `{"loi_bao_cao": {"loai", "ngoai_le"}}` chỉ gồm tên lớp ngoại lệ (không thông điệp thô,
+     không dict yt-dlp; nhật ký cũng chỉ ghi tên lớp + vị trí code); ghi chú lượt quét nói rõ.
+   * `hong` — dòng `bao_cao_job` không đọc được (JSON hỏng, không phải object, thiếu trường,
+     phiên bản ảnh chụp hay chính sách lạ). Không dựng lại bằng resolver hiện tại.
+
+   Cả hai: mọi exporter (bảng dọc 16 / ngang 34 cột, CSV và file phạm vi, hồ sơ Markdown,
+   `dong_gui_sheets`, xuất lại từ lịch sử) ném `LoiXuatBaoCaoV2` TRƯỚC khi mở file hay dựng dòng;
+   hàng đợi Sheets không xếp việc (lỗi đó là vĩnh viễn, không thử lại); giao diện, Watch và CLI
+   bỏ kết quả đó khỏi CSV/Sheets và BÁO lỗi (phần hợp lệ của lô vẫn xuất); tab «Lịch sử» báo lỗi,
+   không có nút tải, không gọi là «lần quét cũ». Trạng thái giữ nguyên qua khởi động lại. Khắc
+   phục: quét lại video (lượt quét mới = ảnh chụp mới). Lô nguồn chung không dùng ảnh chụp từng
+   lượt — dấu V2 của lô là chính sách ĐÃ GHIM, không đổi.
+10. **Xoá một lần quét** (`Engine.delete_job`, P1-01): xoá `bao_cao_job`, `matches`, `jobs` của
+    đúng job đó trong CÙNG một giao dịch; lỗi giữa chừng thì cả ba cùng lùi lại. Lần quét khác
+    không bị đụng.
 
 ## 4. Ngày đăng nguyên bản
 
@@ -115,11 +137,17 @@ nên hàng V2 trên Sheet độc lập KHÔNG còn cho biết video chỉ quét 
   `'` — dấu đó sẽ hiện ra trong ô). CSV vẫn chặn công thức (`o_bang_tinh_an_toan`) ở tầng ghi.
   Ngày gửi bằng chuỗi `DD/MM/YYYY` (không bị diễn giải lại theo locale), số vẫn là số.
 * Gửi V2 ở chế độ **nghiêm ngặt** (`SheetsExporter.append(..., nghiem_ngat=True)`): hàng 1 phải
-  đúng tiêu đề của công cụ theo thứ tự (cột người dùng thêm SAU cột cuối thì được). Bảng rỗng
-  thật sự → ghi tiêu đề rồi ghi dòng. Có dữ liệu mà thiếu/sai tiêu đề → `LoiHeaderSheet` (lỗi
-  vĩnh viễn, không thử lại), KHÔNG chèn/sửa hàng 1, KHÔNG append (append theo vị trí dưới tiêu đề
-  sai là lệch cột). Không bao giờ `ghi_de`/clear/sort/resize/update hàng cũ. Đường gửi cũ giữ
-  nguyên hành vi cũ. Watch gặp lỗi tiêu đề thì thôi gửi cả lượt và báo một lần.
+  đúng tiêu đề của công cụ theo thứ tự (cột người dùng thêm SAU cột cuối thì được). Có dữ liệu mà
+  thiếu/sai tiêu đề → `LoiHeaderSheet` (lỗi vĩnh viễn, không thử lại), KHÔNG chèn/sửa hàng 1,
+  KHÔNG append (append theo vị trí dưới tiêu đề sai là lệch cột). Không bao giờ
+  `ghi_de`/clear/sort/resize/update hàng cũ. Đường gửi cũ giữ nguyên hành vi cũ. Watch gặp lỗi
+  tiêu đề thì thôi gửi cả lượt và báo một lần.
+* **Hàng 1 trống CHƯA phải bảng rỗng** (sửa sau audit, P1-03): hàng 1 trống trong bề rộng tiêu đề
+  → dò LẦN HAI toàn trang tính (`get_all_values`, chỉ ở nhánh này; đường chính — hàng 1 đúng tiêu
+  đề — vẫn đúng một lần đọc). Có bất kỳ ô nào mang giá trị (hàng 2 trở đi, cột ngoài bề rộng báo
+  cáo, một ô lẻ ở xa, kể cả ô chỉ có dấu cách) → `LoiHeaderSheet` nêu đúng ô, không ghi gì. Trống
+  thật → ghi tiêu đề MỘT lần rồi ghi dòng. Lần dò lỗi/hết giờ → lỗi đó được ném ra (hàng đợi thử
+  lại hữu hạn như lỗi mạng), không ghi gì. Không dùng `row_count` làm bằng chứng có dữ liệu.
 * Apps Script trong repo chỉ đọc giá trị theo tên cột — không cần sửa (fixture:
   `tests/test_bao_cao_v2_apps_script.py`); bản gắn vào Sheet thật không được đụng.
 
@@ -130,6 +158,12 @@ bao_cao_job` — sao lưu trước bằng SQLite backup API (`lichsu.db.v1_<th�
 dịch ghi, chạy lại không làm gì thêm. Không đổi dòng/cột cũ. Rollback: bản cũ ghi theo tên cột
 và kiểm `user_version < 1 or thiếu cột` — vẫn đúng trên DB v2; muốn bỏ hẳn thì khôi phục bản
 `.bak`. **Chưa áp lên production** (sẽ tự chạy ở lần mở app đầu tiên sau khi triển khai).
+
+Vòng sửa sau audit KHÔNG đổi lược đồ (`NO_NEW_SCHEMA_MIGRATION_REQUIRED`): dấu lỗi V2 nằm trong
+cột `du_lieu` sẵn có của `bao_cao_job`; có dòng = lượt quét V2, không dòng = luật cũ. Rollback về
+bản cũ sau khi đã chạy V2: bản cũ không biết `bao_cao_job` nên xoá lần quét bằng bản cũ để lại ảnh
+chụp mồ côi — vô hại vì `jobs.id` là `AUTOINCREMENT` (id không bao giờ được cấp lại cho lần quét
+khác); không có bước dọn tự động.
 
 ## 8. Mốc kết thúc — điều tra ca người dùng nêu (không đổi số)
 
@@ -156,5 +190,7 @@ và hiệu chỉnh riêng. V2 GIỮ NGUYÊN `end_s`; không đặt `end = start 
 * Ngày video gốc của kho cũ trống tới khi bật bổ sung (mạng) hoặc tải lại clip.
 * Mốc kết thúc vẫn là phân vị 95 % (mục 8) — `END_CASE_PENDING`.
 * Lịch sử trước V2 không dựng lại được báo cáo đã xuất.
+* Lượt quét có báo cáo V2 lỗi/hỏng chỉ khắc phục bằng quét lại (không có nút «dựng lại báo cáo» —
+  dựng lại bằng resolver hiện tại là đúng điều V2 cấm).
 * Hàng đợi Sheets vẫn chỉ trong bộ nhớ; nút «📊 Đẩy lên Google Sheets» bấm hai lần vẫn ghi hai lần
   (hành vi cũ, không có đối soát exactly-once).
