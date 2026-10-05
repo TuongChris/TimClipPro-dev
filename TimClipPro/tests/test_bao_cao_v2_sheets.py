@@ -29,6 +29,11 @@ class _WS:
         self.dem["get_values"] += 1
         return [self.noi_dung[0]] if self.noi_dung else []
 
+    def get_all_values(self):
+        # Hàng 1 trống → chế độ nghiêm ngặt dò lần hai toàn trang (audit P1-03).
+        self.dem["get_all_values"] += 1
+        return [list(r) for r in self.noi_dung]
+
     def append_row(self, row, value_input_option=None):
         self.dem["append_row"] += 1
         self.dem["vio"] = value_input_option
@@ -63,8 +68,8 @@ def bang(tmp_path, monkeypatch):
     xoa_cache_ket_noi()
     key = tmp_path / "google_key.json"
     key.write_text('{"client_email": "x@y.iam.gserviceaccount.com"}', encoding="utf-8")
-    dem = {k: 0 for k in ("get_values", "append_row", "append_rows", "insert_row", "update",
-                          "resize", "clear", "sort")}
+    dem = {k: 0 for k in ("get_values", "get_all_values", "append_row", "append_rows",
+                          "insert_row", "update", "resize", "clear", "sort")}
     hop = {"noi_dung": []}
 
     class _SH:

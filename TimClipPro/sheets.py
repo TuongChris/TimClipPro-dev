@@ -75,6 +75,16 @@ def _o_cot(so_cot: int) -> str:
     return ten
 
 
+def _o_dau_tien_co_gia_tri(bang) -> str:
+    """Ô (kiểu A1) đầu tiên mang giá trị trong kết quả ``get_all_values``; rỗng = trang tính
+    trống thật. Ô chỉ có dấu cách vẫn tính là có giá trị (thà dừng nhầm còn hơn ghi lẫn)."""
+    for r, hang in enumerate(bang or (), start=1):
+        for c, o in enumerate(hang or (), start=1):
+            if o is not None and str(o) != "":
+                return f"{_o_cot(c)}{r}"
+    return ""
+
+
 def _o_sheets(gia_tri):
     """Ép một ô về dạng gửi lên Google Sheets.
 
@@ -363,14 +373,35 @@ class SheetsExporter:
         ket_noi.da_co_header = True
 
     def _append_nghiem_ngat(self, ws, header: list, rows: list) -> None:
-        """Một lần gửi nghiêm ngặt: đọc hàng 1, quyết định, rồi mới ghi (RAW)."""
+        """Một lần gửi nghiêm ngặt: đọc hàng 1, quyết định, rồi mới ghi (RAW).
+
+        Hàng 1 trống (trong bề rộng tiêu đề) CHƯA chứng minh trang tính trống (audit P1-03): dữ
+        liệu cũ ở hàng 2 trở đi, ở cột ngoài bề rộng báo cáo hay một ô lẻ ở xa đều làm ``append``
+        ghi lẫn vào dữ liệu thật. Nên nhánh này dò LẦN HAI toàn trang tính (đường chính — hàng 1
+        đúng tiêu đề — vẫn chỉ một lần đọc); có bất kỳ giá trị nào → ``LoiHeaderSheet`` (vĩnh
+        viễn), không ghi gì. Lần dò lỗi/hết giờ → lỗi đó được ném ra, cũng không ghi gì.
+        """
         lay = getattr(ws, "get_values", None)
+        toan_bang = None
         if callable(lay):
             hang_dau = lay("A1:" + _o_cot(len(header)) + "1")
         else:
-            hang_dau = ws.get_all_values()[:1]
+            toan_bang = ws.get_all_values()
+            hang_dau = toan_bang[:1]
         o = [str(x).strip() for x in (hang_dau[0] if hang_dau else [])]
         if not any(o):
+            if toan_bang is None:
+                toan_bang = ws.get_all_values()
+            o_co_du_lieu = _o_dau_tien_co_gia_tri(toan_bang)
+            if o_co_du_lieu:
+                LOGGER.warning("event=scan.sheet.not_empty_strict worksheet=%r o=%s",
+                               self.worksheet, o_co_du_lieu)
+                raise LoiHeaderSheet(
+                    f"Trang tính «{self.worksheet}» có hàng 1 trống nhưng đã có dữ liệu (ô "
+                    f"{o_co_du_lieu}). Tool không tự chèn hàng tiêu đề và không ghi tiếp để tránh "
+                    "ghi lẫn vào dữ liệu cũ. Hãy khôi phục hàng tiêu đề ở hàng 1 (bảng Ngang: menu "
+                    "Apps Script «🩹 Khôi phục hàng tiêu đề cho KetQuaQuet»), hoặc chọn một trang "
+                    "tính trống, rồi gửi lại.")
             ws.append_row([str(x) for x in header], value_input_option="RAW")
         else:
             mong = [str(x).strip() for x in header]
