@@ -26,6 +26,9 @@ def cai(tmp_path, monkeypatch):
         json.dump({"state_root": state, "nguon": {"loai": "thu_muc", "duong_dan": nguon},
                    "python_goc": "", "han_cho_ranh_s": 0.3}, f)
     gia = MoiTruongGia(state)
+    import runtime_paths
+
+    runtime_paths.tao_dinh_danh(state, installation_root=goc)       # như bootstrap thật
     thay = dict(tao_moi_truong=gia.tao_moi_truong, kiem_suc_khoe=gia.kiem_suc_khoe,
                 di_chuyen=gia.di_chuyen, sao_luu=gia.sao_luu, phien_ban_db=gia.phien_ban_db)
     goi = []
@@ -130,3 +133,26 @@ def test_launcher_khong_dung_updater_cu_hay_git():
              and len(n.value) < 40}
     assert "cap_nhat" not in mod
     assert not {c for c in chuoi if c in ("git", "git.exe") or c.endswith("cap_nhat.py")}
+
+
+def test_doctor_cai_dat_lanh_dat_va_phat_hien_cay_release_bi_sua(cai, capsys):
+    _cai_ban(cai, "1.0.0")
+    capsys.readouterr()
+    assert cai["main"]("doctor") == 0
+    out = capsys.readouterr().out
+    assert "✅" in out and "1.0.0" in out and "❌" not in out
+    app = os.path.join(cai["goc"], "releases", "1.0.0", "TimClipPro", "app.py")
+    with open(app, "a", encoding="utf-8") as f:
+        f.write("# bị sửa tay\n")
+    assert cai["main"]("doctor") == 1
+    assert "❌" in capsys.readouterr().out
+
+
+def test_doctor_van_chay_khi_khoa_tin_cay_hong(cai, capsys):
+    _cai_ban(cai, "1.0.0")
+    with open(os.path.join(cai["goc"], "launcher", launcher.TEN_KHOA_TIN_CAY), "w", encoding="utf-8") as f:
+        f.write("{hỏng")
+    capsys.readouterr()
+    assert cai["main"]("doctor") == 1
+    out = capsys.readouterr().out
+    assert "khoá tin cậy" in out.lower() and "❌" in out

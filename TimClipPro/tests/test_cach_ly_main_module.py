@@ -2,7 +2,7 @@
 """Cách ly test: AppTest (Streamlit) để lại ``sys.modules['__main__']`` = module của app.py. Tiến trình con
 multiprocessing (spawn — Windows) của một test SAU đó sẽ CHẠY LẠI app.py ở cấp module → dựng Engine trên
 ``data/`` mặc định của THƯ MỤC MÃ (trên máy thật: lịch sử thật; với outbox còn có thể khởi động người gửi
-Sheets). Tái hiện 08/10/2026 (`test_audfprint_multiproc` tạo ``data/lichsu.db`` trong thư mục mã).
+Sheets). Tái hiện 07/10/2026 (`test_audfprint_multiproc` tạo ``data/lichsu.db`` trong thư mục mã).
 
 Hai test chạy theo THỨ TỰ trong file: test 1 chạy AppTest, test 2 kiểm ``__main__`` đã được trả lại.
 """

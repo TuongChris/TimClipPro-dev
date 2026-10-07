@@ -1,0 +1,11 @@
+# Môi trường RIÊNG của launcher: cryptography (xác minh chữ ký Ed25519) + requests (nguồn GitHub).
+# bootstrap.py cài bằng --require-hashes. CHƯA CÓ BĂM: thêm --hash=sha256 ở bước chuẩn bị bootstrap kit
+# có duyệt (cần mạng).
+certifi==2026.7.22
+cffi==2.1.1
+charset-normalizer==3.5.1
+cryptography==50.0.0
+idna==3.19
+pycparser==3.0
+requests==2.34.2
+urllib3==2.7.0

@@ -217,3 +217,17 @@ cũ idempotent). Engine/CLI dùng `RuntimePaths` (sửa AUD-004: CLI/Watch nay t
 | Giao diện | `ui_gui_sheets.py` + `app.py` | Bộ chọn đích cạnh nút Bắt đầu (mỗi tab quét một trạng thái riêng, có «Chỉ lưu cục bộ»), tab «📤 Gửi Google Sheets» (hàng đợi + thao tác theo trạng thái, hồ sơ, binding khoá, nhập link cũ), «Gửi thêm (thủ công)» dựng lại payload TỪ LỊCH SỬ. Bỏ nút «Đẩy lên Google Sheets» (gửi lại cả lô bằng link hiện tại — H14). |
 | Watch | `watch.py` | Phân giải đích TRƯỚC khi liệt kê/quét (lỗi cấu hình → dừng trước khi quét); gửi qua outbox bằng người gửi nền; cuối lượt chờ CÓ HẠN (`cho_gui_s`, mặc định 120 s); bỏ gửi đồng bộ và «gửi lại cả lô cuối lượt». |
 | CLI | `cli.py` | `--destination` (hồ sơ) hoặc `--sheet`/`SHEET_LINK` (nhập link cũ có kiểm soát, idempotent; hai nơi khác nhau → lỗi rõ), `--cho`; lệnh `dich` (liệt kê hồ sơ + binding khoá) và `gui` (chạy người gửi tới khi hết việc tới hạn hoặc hết `--cho` giây). Mã thoát 1 khi còn việc bị chặn vì cấu hình hoặc không rõ đã gửi. |
+
+**M3 — cổng bảo trì + cập nhật Stable + launcher + health check** (commit kế M2): `maintenance_gate.py` nối vào
+mọi loại việc (lô quét, tác vụ nền, Watch, nguồn chung, kho, CLI, MỖI lần gửi Sheets); `managed_update.py`
+(manifest ký Ed25519, chính sách Stable, giải nén an toàn, nhật ký + khôi phục mất điện 14 điểm, health,
+quay mã về last-good, cách ly, hoãn); `health_check.py`; `launcher.py`; `ui_cap_nhat.py`; cứng hoá đường cũ
+(`cap_nhat.py` chỉ tag `v<số>`, dev_mode, `.bat` H15, `kiemtra.bat` H16). Chi tiết: `docs/MANAGED_UPDATE.md`.
+Kiểm đột biến: cổng 7/7, M2+M3 21/21 bị bắt (2 đột biến sống sót lần đầu → thêm test fencing + kiểm tên zip).
+
+**M4 — bootstrap + công cụ phát hành + vận hành**: `bootstrap.py` (PC2, định danh mới, launcher + khoá tin cậy,
+`.bat`, XML lịch XEM TRƯỚC không đăng ký, cài bản đầu qua bộ cập nhật), `release_tool.py` (build từ git tree,
+ký thử, verify như PC2, publish CHỈ in lệnh, lock từ runtime đã nghiệm thu), `launcher.py doctor`, sửa hồ sơ
+đích trên UI (khoá, link/tab), `requirements-lock.txt` UTF-8 tạo lại từ runtime đã nghiệm thu (thay bản UTF-16
+lệch — H11), `launcher-lock.txt`. Mô phỏng HAI cài đặt end-to-end (`tests/test_hai_may_gia_lap.py`, -m slow).
+Hướng dẫn: `docs/HUONG_DAN_PC2.md`; pilot: `docs/KE_HOACH_PILOT_PC2.md`.

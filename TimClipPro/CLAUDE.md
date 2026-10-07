@@ -47,12 +47,19 @@ app.py (Streamlit UI)   cli.py (dòng lệnh)   ← lớp giao diện, thay đư
 | `ytdlp_chung.py` | Tuỳ chọn yt-dlp dùng chung: cookie, giãn nhịp, đường lui player client, diễn giải lỗi | Đổi bất cứ thứ gì liên quan yt-dlp |
 | `truy_cap_youtube.py` | THUẦN: phân loại lỗi YouTube, che bí mật, chẩn đoán cookie, bảng thử lại, `PhienYouTube` (cầu dao + số đo) | Đổi cách hiểu một lỗi YouTube / ngưỡng dừng |
 | `youtube_doctor.py` | `cli.py youtube-doctor`: chẩn đoán chỉ đọc (mạng chỉ khi `--network`) | Thêm mục chẩn đoán |
-| `cap_nhat.py` | Tự cập nhật từ GitHub theo tag phiên bản | Đổi cách phát hành / triển khai |
+| `cap_nhat.py` | (Đường cũ, máy legacy) tự cập nhật theo tag `v<số>`; tắt ở máy dev (`data/dev_mode`) và bản managed | Đổi cách cập nhật máy legacy |
 | `sheets.py` | Tiện ích Google Sheets (gspread + service account): kiểm tiêu đề nghiêm ngặt, ghi danh sách video | Đổi cách ghi báo cáo |
 | `runtime_paths.py` | Phân giải thư mục trạng thái: `legacy` (y như cũ) / `managed` (state root + `installation.json`, thiếu là dừng) | Đổi nơi lưu dữ liệu / cách cài đặt |
 | `sheet_destinations.py` | Hồ sơ đích Google Sheets (revision bất biến), binding khoá theo principal, ghim `DichGuiChot` | Đổi cách chọn/ghim nơi gửi |
 | `outbox.py` | Hàng đợi gửi Sheets LƯU BỀN trong `lichsu.db`, người gửi duy nhất, transport gspread | Đổi cách gửi / thử lại |
 | `ui_gui_sheets.py` | Giao diện chọn đích cạnh nút Bắt đầu + tab «📤 Gửi Google Sheets» | Đổi giao diện gửi |
+| `maintenance_gate.py` | Cổng bảo trì: lease cho mọi việc, updater rút cổng + chờ rảnh (không giết việc) | Đổi điều kiện được cập nhật |
+| `managed_update.py` | Cập nhật Stable có chữ ký (PC2): chính sách, giải nén an toàn, nhật ký, kích hoạt, quay lại | Đổi cách nhận/áp dụng bản mới |
+| `health_check.py` | Kiểm sức khoẻ một release (tiến trình riêng, chặn mạng, DB thật chỉ đọc) + migrate | Đổi điều kiện «bản mới khoẻ» |
+| `launcher.py` | Điểm vào ổn định của cài đặt managed (app/watch/cli/update/doctor) — nằm NGOÀI release | Đổi cách mở/chạy bản managed |
+| `ui_cap_nhat.py` | «ℹ️ Phiên bản và cập nhật» (chỉ đọc + hoãn) | Đổi giao diện cập nhật |
+| `bootstrap.py` | Dựng cài đặt managed MỚI cho PC2 (định danh riêng, launcher, khoá tin cậy, lịch xem trước) | Đổi quy trình cài PC2 |
+| `release_tool.py` | Phát hành Stable trên PC1: build từ git tree, ký, verify, publish (chỉ in lệnh), lock | Đổi quy trình phát hành |
 | `danh_sach_video.py` | Liệt kê tên video thật của một kho (chỉ đọc, offline) rồi ghi đè lên trang tính riêng | Đổi cách kiểm kê kho / cột danh sách |
 | `app.py` | Giao diện Streamlit 7 tab | Đổi giao diện |
 | `cli.py` | Giao diện dòng lệnh, dùng chung engine | Thêm lệnh tự động hoá |
@@ -217,7 +224,7 @@ python -c "import engine, channel, sheets; print('ok')"
 ```
 
 **Test KHÔNG BAO GIỜ được ghi vào `data/` của thư mục mã** (trên máy thật đó là lịch sử thật): luôn
-`tmp_path` + `TIMCLIP_DATA_DIR`/`TIMCLIP_OUTPUT_DIR`. Bẫy đã gặp (08/10/2026): AppTest để lại
+`tmp_path` + `TIMCLIP_DATA_DIR`/`TIMCLIP_OUTPUT_DIR`. Bẫy đã gặp (07/10/2026): AppTest để lại
 `sys.modules['__main__']` = app.py, nên tiến trình con multiprocessing (spawn) của test sau chạy lại app.py
 trên `data/` mặc định — `conftest._tra_lai_main_module` trả lại `__main__` sau mỗi test.
 

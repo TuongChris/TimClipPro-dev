@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from pathlib import Path
 
@@ -46,6 +47,10 @@ def test_man_hinh_quet_hien_tien_do_va_bang_tung_video_khi_dang_chay(tmp_path, m
 
     eng = at.session_state.eng
     urls = ["aaa", "bbb", "ccc"]
+    # Giữ video CUỐI tới khi đã chụp đủ khung hình. Không giữ thì lô có thể kết thúc GIỮA một lần
+    # at.run() (khung hình chậm hơn ~1,35 s của lô giả) → app vẽ luôn bảng kết quả từ Match giả
+    # `object()` → AttributeError trong to_rows: đỏ ngẫu nhiên theo tốc độ máy, không phải lỗi màn hình.
+    da_chup_du = threading.Event()
 
     def scan_youtube(url, progress=None, luu_lich_su=True):
         for pct, msg in ((0.05, "Đang lấy thông tin video..."),
@@ -54,6 +59,8 @@ def test_man_hinh_quet_hien_tien_do_va_bang_tung_video_khi_dang_chay(tmp_path, m
             if progress:
                 progress(pct, msg)
             time.sleep(0.15)
+        if url == urls[-1]:
+            da_chup_du.wait(60)
         return _kq(url, matches=2)
 
     eng.scan_youtube = scan_youtube
@@ -67,11 +74,15 @@ def test_man_hinh_quet_hien_tien_do_va_bang_tung_video_khi_dang_chay(tmp_path, m
 
     khung = []
     han = time.monotonic() + 60
-    while controller.running and time.monotonic() < han and len(khung) < 3:
-        at.run()
-        assert not at.exception
-        khung.append(_van_ban(at))
+    try:
+        while controller.running and time.monotonic() < han and len(khung) < 3:
+            at.run()
+            assert not at.exception
+            khung.append(_van_ban(at))
+    finally:
+        da_chup_du.set()
 
+    assert len(khung) == 3
     ghep = "\n".join(khung)
     assert "Đang quét video" in ghep
     assert "Hoàn tất" in ghep and "ETA" in ghep and "Đã chạy" in ghep

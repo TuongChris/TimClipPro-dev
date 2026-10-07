@@ -201,7 +201,19 @@ def migrate(data_dir: str) -> dict:
             "da_nang_cap": kq.get("da_nang_cap"), "sao_luu": bool(kq.get("sao_luu"))}
 
 
+def _utf8_dau_ra() -> None:
+    """stdout/stderr bị chuyển hướng (log Task Scheduler, ống dẫn) mặc định là mã ANSI (cp1252/cp1258) —
+    in tiếng Việt / ✅ sẽ sập. Chuyển sang UTF-8, lỗi thì thay ký tự (không bao giờ sập vì in)."""
+    for luong in (sys.stdout, sys.stderr):
+        try:
+            if (luong.encoding or "").lower().replace("-", "") != "utf8":
+                luong.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main(argv=None) -> int:
+    _utf8_dau_ra()
     import argparse
 
     ap = argparse.ArgumentParser(description="Kiểm tra sức khoẻ release TimClipPro")

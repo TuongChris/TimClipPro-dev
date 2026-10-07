@@ -9,6 +9,7 @@ Nằm NGOÀI mọi release: ``<installation_root>/launcher/`` (bootstrap chép v
     launcher.py watch [đối số cli]     — như trên, chạy ``cli.py watch --log …`` (cho lịch Windows)
     launcher.py cli <đối số cli>       — chạy ``cli.py`` bất kỳ (dich, gui, youtube…)
     launcher.py update status|check|prepare|apply|recover
+    launcher.py doctor                 — chẩn đoán CHỈ ĐỌC cài đặt này (không mạng, không ghi)
 
 Mã thoát: của tiến trình con (app/watch/cli); ``update``: 0 xong/không có gì, 1 lỗi, 2 bận/hoãn.
 Không mạng khi mở app/Watch: kiểm bản mới chỉ qua ``update check|prepare`` (lịch riêng, opt-in).
@@ -245,6 +246,110 @@ def ban_dang_kich_hoat(cn: mu.CapNhat) -> dict:
     return con_tro
 
 
+DAT, CANH_BAO, LOI = "✅", "⚠️", "❌"
+
+
+def doctor(goc: str) -> list:
+    """Chẩn đoán CHỈ ĐỌC: ``[(mức, mục, ghi chú)]``. Không gọi mạng, không ghi file, không khôi phục gì."""
+    kq = []
+
+    def them(muc, ten, ghi_chu=""):
+        kq.append((muc, ten, ghi_chu))
+
+    try:
+        cfg = doc_cau_hinh(goc)
+        them(DAT, "launcher.json")
+    except LoiLauncher as e:
+        them(LOI, "launcher.json", str(e))
+        return kq
+    cd = cai_dat(goc, cfg)
+    if os.path.exists(os.path.join(goc, ".git")):
+        them(LOI, "Thư mục cài đặt", "là bản clone git — cài đặt managed phải là thư mục riêng")
+    try:
+        khoa = mu.doc_khoa_tin_cay(os.path.join(goc, "launcher", TEN_KHOA_TIN_CAY))
+        them(DAT, "Khoá tin cậy", f"{len(khoa)} khoá")
+    except mu.LoiCapNhat as e:
+        khoa = None
+        them(LOI, "Khoá tin cậy", str(e))
+    import runtime_paths
+
+    ly_do = runtime_paths.kiem_duong_dan_trang_thai(cd.state_root)
+    them(LOI if ly_do else DAT, "State root", " ".join(ly_do) or cd.state_root)
+    try:
+        dd = runtime_paths.doc_dinh_danh(cd.state_root)
+        dung_goc = os.path.normcase(os.path.abspath(dd.get("installation_root", ""))) == os.path.normcase(goc)
+        them(DAT if dung_goc else LOI, "Định danh cài đặt",
+             dd["installation_id"][:8] + ("" if dung_goc else " — trỏ installation root KHÁC"))
+    except runtime_paths.LoiRuntime as e:
+        them(LOI, "Định danh cài đặt", str(e))
+    py_goc = str(cfg.get("python_goc") or "")
+    them(DAT if os.path.isfile(py_goc) else CANH_BAO, "Python gốc (tạo runtime khi cập nhật)",
+         py_goc or "chưa cấu hình")
+    try:
+        cur = mu.doc_json(cd.file_trang_thai("current.json"))
+    except mu.LoiCapNhat as e:
+        cur = None
+        them(LOI, "Con trỏ bản đang kích hoạt", str(e))
+    if not cur:
+        them(LOI, "Bản đang kích hoạt", "chưa có — chạy bootstrap / update")
+    else:
+        rel = cur.get("release", "")
+        try:
+            if khoa is None:
+                raise mu.LoiCapNhat("khoa", "không kiểm được chữ ký (khoá tin cậy hỏng)")
+            with open(os.path.join(rel, mu.TEN_MANIFEST), "rb") as f:
+                raw_m = f.read()
+            with open(os.path.join(rel, mu.TEN_CHU_KY), "rb") as f:
+                mu.kiem_chu_ky(raw_m, f.read(), khoa)
+            m = mu.doc_manifest(raw_m)
+            mu.kiem_cay_release(rel, m)
+            them(DAT, "Bản đang kích hoạt", f"{m.phien_ban} — chữ ký + cây file đúng")
+        except (OSError, mu.LoiCapNhat) as e:
+            them(LOI, "Bản đang kích hoạt", f"{cur.get('phien_ban', '?')} — {e}")
+        them(DAT if os.path.isfile(python_runtime(cur)) else LOI, "Runtime", python_runtime(cur))
+    try:
+        nk = mu.doc_json(cd.file_trang_thai("journal.json"))
+        tt = (nk or {}).get("trang_thai", "")
+        them(CANH_BAO if tt in (mu.BLOCKED, mu.WAITING_APPROVAL, mu.QUARANTINED) else DAT,
+             "Nhật ký cập nhật", f"{tt or 'trống'} {(nk or {}).get('loi', '')}".strip())
+    except mu.LoiCapNhat as e:
+        them(LOI, "Nhật ký cập nhật", str(e))
+    try:
+        cong = mg.CongBaoTri(cd.data_dir)
+        rut, dang = cong.trang_thai_rut(), cong.viec_dang_chay()
+        them(CANH_BAO if rut else DAT, "Cổng bảo trì",
+             (f"đang rút ({rut.get('chu', '')}); " if rut else "mở; ") + f"{len(dang)} việc đang chạy")
+    except Exception as e:  # noqa: BLE001 — chẩn đoán không được dừng giữa chừng
+        them(CANH_BAO, "Cổng bảo trì", type(e).__name__)
+    import shutil
+
+    ff = os.path.join(goc, "tools", "ffmpeg", "bin", "ffmpeg.exe")
+    them(DAT if (os.path.isfile(ff) or shutil.which("ffmpeg")) else CANH_BAO, "FFmpeg",
+         ff if os.path.isfile(ff) else (shutil.which("ffmpeg") or "không thấy — quét sẽ lỗi"))
+    with __import__("contextlib").suppress(OSError):
+        trong = shutil.disk_usage(cd.state_root).free / 1024 ** 3
+        them(DAT if trong >= 5 else CANH_BAO, "Dung lượng trống (ổ state)", f"{trong:.1f} GB")
+    db = os.path.join(cd.data_dir, "lichsu.db")
+    if os.path.isfile(db):
+        from urllib.parse import quote
+
+        try:
+            con = sqlite3.connect("file:" + quote(os.path.abspath(db).replace("\\", "/")) + "?mode=ro",
+                                  uri=True, timeout=10)
+            try:
+                bang = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                tt = dict(con.execute("SELECT trang_thai, COUNT(*) FROM hang_doi_gui GROUP BY trang_thai")
+                          .fetchall()) if "hang_doi_gui" in bang else {}
+            finally:
+                con.close()
+            can = tt.get("UNKNOWN_DELIVERY", 0) + tt.get("BLOCKED_CONFIG", 0)   # cần người xử lý
+            them(CANH_BAO if can else DAT, "Hàng đợi gửi Sheets",
+                 ", ".join(f"{k}: {v}" for k, v in sorted(tt.items())) or "trống")
+        except sqlite3.Error as e:
+            them(CANH_BAO, "Lịch sử", f"không đọc được ({type(e).__name__})")
+    return kq
+
+
 def _in(kq: mu.KetQua) -> int:
     print(f"[{kq.trang_thai}] {kq.thong_diep}")
     for x in kq.chi_tiet:
@@ -256,12 +361,29 @@ def _in(kq: mu.KetQua) -> int:
     return 0
 
 
+def _utf8_dau_ra() -> None:
+    """stdout/stderr bị chuyển hướng (log Task Scheduler, ống dẫn) mặc định là mã ANSI (cp1252/cp1258) —
+    in tiếng Việt / ✅ sẽ sập. Chuyển sang UTF-8, lỗi thì thay ký tự (không bao giờ sập vì in)."""
+    for luong in (sys.stdout, sys.stderr):
+        try:
+            if (luong.encoding or "").lower().replace("-", "") != "utf8":
+                luong.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main(argv=None, *, goc: Optional[str] = None, chay=subprocess.call, **thay) -> int:
+    _utf8_dau_ra()
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv:
         print(__doc__)
         return 1
     goc = goc or goc_cai_dat()
+    if argv[0] == "doctor":
+        ket = doctor(goc)
+        for muc, ten, ghi_chu in ket:
+            print(f"{muc} {ten}" + (f": {ghi_chu}" if ghi_chu else ""))
+        return 1 if any(muc == LOI for muc, _, _ in ket) else 0
     try:
         cfg = doc_cau_hinh(goc)
         cn = tao_cap_nhat(goc, cfg, **thay)

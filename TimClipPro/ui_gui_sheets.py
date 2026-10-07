@@ -371,6 +371,34 @@ def _ve_ho_so(eng) -> None:
                 if st.button("🗑 Xoá (chỉ khi chưa có việc gửi)", key="hs_xoa"):
                     if _thu(sd.xoa_dich, db, d.id):
                         st.rerun()
+            st.caption("Sửa = revision MỚI: lượt quét đang chạy và việc đã xếp hàng vẫn gửi theo đích cũ đã "
+                       "ghim; chỉ lượt sau dùng revision mới.")
+            khoa_ds = [x.ref for x in sd.ds_xac_thuc(db) if x.trang_thai == sd.TT_HOAT_DONG]
+            if khoa_ds:
+                k1, k2 = st.columns([3, 2])
+                with k1:
+                    khoa_moi = st.selectbox(
+                        "Khoá Google của hồ sơ", khoa_ds,
+                        index=khoa_ds.index(d.xac_thuc_ref) if d.xac_thuc_ref in khoa_ds else 0,
+                        key=f"hs_khoa_moi_{d.id}")
+                with k2:
+                    if st.button("Lưu khoá (revision mới)", key="hs_luu_khoa") and khoa_moi != d.xac_thuc_ref:
+                        if _thu(sd.sua_dich, db, d.id, xac_thuc_ref=khoa_moi):
+                            st.rerun()
+            link_moi = st.text_input("Link Google Sheet mới (để trống = giữ bảng/tab hiện tại)",
+                                     key=f"hs_link_moi_{d.id}")
+            tab_moi = st.text_input("Tên tab (đối chiếu ở lần gửi đầu của revision mới)",
+                                    value=d.worksheet_ten, key=f"hs_tab_moi_{d.id}")
+            if st.button("Lưu link/tab (revision mới)", key="hs_luu_dich"):
+                try:
+                    sid, gid = (sd.phan_tich_link(link_moi) if link_moi.strip()
+                                else (d.spreadsheet_id, d.worksheet_id))
+                except sd.LoiDichGui as e:
+                    st.error(str(e))
+                else:
+                    if _thu(sd.sua_dich, db, d.id, spreadsheet_id=sid, worksheet_id=gid,
+                            worksheet_ten=tab_moi.strip()):
+                        st.rerun()
             if st.button("🔎 Kiểm cấu hình (chỉ đọc — có gọi Google)", key="hs_kiem"):
                 if d.trang_thai == sd.TT_LUU_TRU:
                     st.warning("Hồ sơ đã lưu trữ.")

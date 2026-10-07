@@ -284,3 +284,29 @@ def test_gui_thu_cong_tu_lich_su_bo_qua_lan_quet_loi(tmp_path, monkeypatch):
     assert tao == 0 and bo_qua and "lỗi" in bo_qua[0]
     assert ob.ds_viec(eng.sqlite_file) == []
     _dung_nen(eng)
+
+
+def test_sua_ho_so_doi_khoa_va_link_tao_revision_moi_viec_cu_giu_ghim(tmp_path, monkeypatch):
+    """Brief §6: sửa hồ sơ (khoá Google, link/tab) = revision MỚI; việc đã ghim giữ revision cũ."""
+    at = _app(tmp_path, monkeypatch)
+    eng = at.session_state.eng
+    d, y = dich_gia(eng.sqlite_file, tmp_path, installation_id=eng.installation_id())
+    sd.dang_ky_xac_thuc(eng.sqlite_file, "khoa_phu", khoa_gia(tmp_path, ten="phu.json"))
+    with sd.ket_noi(eng.sqlite_file, ghi=True) as con:
+        vid = ob.them_viec(con, y, job_id=1, chinh_sach="v2", header=["h"] * 34, rows=[["r"] * 34])
+    at.run()
+    next(sb for sb in at.selectbox if sb.key == f"hs_khoa_moi_{d.id}").set_value("khoa_phu").run()
+    _nut(at, "Lưu khoá (revision mới)").click().run()
+    assert not at.exception
+    d2 = sd.lay_dich(eng.sqlite_file, d.id)
+    assert d2.phien_ban == 2 and d2.xac_thuc_ref == "khoa_phu"
+    moi = "https://docs.google.com/spreadsheets/d/" + "1" + "m" * 43 + "/edit#gid=77"
+    next(ti for ti in at.text_input if ti.key == f"hs_link_moi_{d.id}").set_value(moi).run()
+    next(ti for ti in at.text_input if ti.key == f"hs_tab_moi_{d.id}").set_value("Tab mới").run()
+    _nut(at, "Lưu link/tab (revision mới)").click().run()
+    assert not at.exception
+    d3 = sd.lay_dich(eng.sqlite_file, d.id)
+    assert (d3.phien_ban, d3.spreadsheet_id, d3.worksheet_id, d3.worksheet_ten) == (
+        3, "1" + "m" * 43, 77, "Tab mới")
+    v = ob.lay_viec(eng.sqlite_file, vid)
+    assert v.dich.phien_ban == 1 and v.dich.xac_thuc_ref == "mac_dinh"   # việc cũ giữ ghim
