@@ -179,6 +179,7 @@ def kiem(data_dir: str, che_do: str) -> dict:
         kq["engine_tam"] = _engine_tam()
     except Exception as e:  # noqa: BLE001
         loi.append(f"Engine trên state root tạm lỗi: {type(e).__name__}: {e}")
+    db_tam_thoi = False
     try:
         db = _doc_db_that(data_dir, lich_su.PHIEN_BAN)
         kq["db"] = db
@@ -192,8 +193,10 @@ def kiem(data_dir: str, che_do: str) -> dict:
                 loi.append("Không đọc được ảnh chụp báo cáo V2 nào bằng mã mới.")
     except Exception as e:  # noqa: BLE001
         loi.append(f"Không đọc được lịch sử (chỉ đọc): {type(e).__name__}")
-        if la_loi_tam_thoi(e):
-            kq["tam_thoi"] = True
+        db_tam_thoi = la_loi_tam_thoi(e)
+    # Tạm thời CHỈ khi CSDL bị khoá là lỗi DUY NHẤT — có lỗi tất định kèm theo thì không được 3 lượt thử.
+    if db_tam_thoi and len(loi) == 1:
+        kq["tam_thoi"] = True
     return {**kq, "ok": not loi, "loi": loi, "canh_bao": canh_bao}
 
 

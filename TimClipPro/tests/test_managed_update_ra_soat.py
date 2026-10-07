@@ -512,3 +512,24 @@ def test_cai_lan_dau_khoi_phuc_kiem_ngay_khong_cho_ranh(mt):
         cn2 = mt["tao"]()
         assert cn2.phuc_hoi() == mu.ACTIVE
     assert _hien(mt) == "1.0.0" and cn2.last_good()["phien_ban"] == "1.0.0"
+
+
+def test_ghi_bo_dem_loi_tam_thoi_hong_van_quay_ve_ban_truoc(mt, monkeypatch):
+    """Ghi bộ đếm lỗi tạm thời lỗi (đĩa đầy) KHÔNG được chặn việc quay về bản trước."""
+    _cai(mt, "1.0.0")
+    phat_hanh(mt["nguon"], "1.1.0", mt["khoa"])
+    goc = mt["gia"].kiem_suc_khoe
+
+    def kiem(m, rel, rt, che_do):
+        if che_do == "kich_hoat":
+            raise subprocess.TimeoutExpired(["health_check.py"], 600)
+        return goc(m, rel, rt, che_do)
+
+    def hong(self, phien_ban):
+        raise OSError("đĩa đầy (giả)")
+
+    monkeypatch.setattr(mu.CapNhat, "_het_luot_tam_thoi", hong)
+    cn = mt["tao"](kiem_suc_khoe=kiem)
+    assert cn.chuan_bi().trang_thai == mu.STAGED
+    kq = cn.ap_dung()
+    assert _hien(mt) == "1.0.0", kq

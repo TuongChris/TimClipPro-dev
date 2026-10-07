@@ -285,11 +285,16 @@ def ban_dang_kich_hoat(cn: mu.CapNhat) -> dict:
     except Exception as e:  # noqa: BLE001 — khôi phục lỗi không được làm sập launcher
         # Nhật ký đang GIỮA lúc kích hoạt (một updater khác đang kiểm bản mới, hoặc khôi phục lỗi dở): con trỏ
         # có thể là bản CHƯA qua health — không mở (đợi rồi mở lại). Ngoài ra: cảnh báo, mở bản đang kích hoạt.
-        if _trang_thai_nhat_ky(cn.cd) in (mu.ACTIVATING, mu.HEALTHCHECK, mu.ROLLBACK):
+        tt = _trang_thai_nhat_ky(cn.cd)
+        if tt in (mu.ACTIVATING, mu.HEALTHCHECK, mu.ROLLBACK):
             dang_chay = isinstance(e, mu.LoiCapNhat) and e.ma == mu.BAN
             raise LoiLauncher(("Đang hoàn tất một lượt cập nhật" if dang_chay else "Khôi phục cập nhật chưa xong")
                               + " — bản mới chưa được kiểm xong; đợi vài phút rồi mở lại (hoặc chạy «launcher.py "
                               "doctor» và báo chủ dự án).") from e
+        if tt is None and not _con_tro_trung_ban_da_chot(cn.cd):
+            # Nhật ký HỎNG: không biết có đang giữa lúc kích hoạt không — chỉ mở bản ĐÃ CHỐT (last_good).
+            raise LoiLauncher("Nhật ký cập nhật hỏng và bản đang trỏ chưa chắc đã qua kiểm — không mở; chạy "
+                              "«launcher.py doctor» và báo chủ dự án.") from e
         thong_diep = str(e) if isinstance(e, mu.LoiCapNhat) else (
             f"Khôi phục cập nhật lỗi không lường trước ({type(e).__name__}) — mở bản đang kích hoạt; chạy "
             "«launcher.py doctor».")
@@ -297,15 +302,35 @@ def ban_dang_kich_hoat(cn: mu.CapNhat) -> dict:
     return _kiem_con_tro(cn.hien_tai())
 
 
-def _trang_thai_nhat_ky(cd: mu.CaiDat) -> str:
-    """Trạng thái nhật ký cập nhật (đọc lỏng — hỏng/thiếu → rỗng)."""
-    nk = mu.doc_json(cd.file_trang_thai("journal.json"), bat_buoc_hop_le=False)
-    return str(nk.get("trang_thai") or "") if isinstance(nk, dict) else ""
+def _trang_thai_nhat_ky(cd: mu.CaiDat) -> Optional[str]:
+    """Trạng thái nhật ký cập nhật; chưa có → ``""``; HỎNG/không đọc được (sau vài lần thử — có thể đúng lúc
+    updater khác đang thay file) → ``None``."""
+    import time
+
+    for lan in range(3):
+        try:
+            nk = mu.doc_json(cd.file_trang_thai("journal.json"))
+        except mu.LoiCapNhat:
+            if lan < 2:
+                time.sleep(0.2)
+            continue
+        if nk is None:
+            return ""
+        return str(nk.get("trang_thai") or "") if isinstance(nk, dict) else None
+    return None
+
+
+def _con_tro_trung_ban_da_chot(cd: mu.CaiDat) -> bool:
+    cur = mu.doc_json(cd.file_trang_thai("current.json"), bat_buoc_hop_le=False)
+    lg = mu.doc_json(cd.file_trang_thai("last_good.json"), bat_buoc_hop_le=False)
+    return (isinstance(cur, dict) and isinstance(lg, dict) and bool(cur.get("manifest_sha256"))
+            and cur.get("manifest_sha256") == lg.get("manifest_sha256"))
 
 
 def _kiem_con_tro(con_tro) -> dict:
     if not con_tro:
-        raise LoiLauncher("Chưa có bản nào được kích hoạt — chạy bootstrap trước.")
+        raise LoiLauncher("Chưa có bản nào được kích hoạt — chạy CapNhat.bat để cài bản Stable (máy chưa bootstrap "
+                          "thì chạy bootstrap theo HUONG_DAN_PC2).")
     if not os.path.isfile(os.path.join(con_tro.get("release", ""), mu.TEN_DAU_RELEASE)):
         raise LoiLauncher("Bản đang kích hoạt thiếu dấu release managed — cần kiểm tay.")
     if not os.path.isfile(python_runtime(con_tro)):
@@ -506,7 +531,7 @@ def main(argv=None, *, goc: Optional[str] = None, chay=_chay_cho_con, **thay) ->
                 print(json.dumps(cn.trang_thai(), ensure_ascii=False, indent=1, default=str))
                 return 0
             if con == "recover":
-                print(f"[{cn.phuc_hoi()}] đã khôi phục theo nhật ký.")
+                print(f"Khôi phục theo nhật ký xong — trạng thái: {cn.phuc_hoi()}.")
                 return 0
             if con == "bo-cach-ly":
                 if len(argv) < 3:

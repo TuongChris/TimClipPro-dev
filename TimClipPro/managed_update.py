@@ -1232,8 +1232,11 @@ class CapNhat:
         ok, chi_tiet, tam_thoi = self._kiem(m, con_tro_moi["release"], con_tro_moi["runtime"], "kich_hoat")
         if not ok:
             # Luôn quay về NGAY (an toàn); chỉ cách ly khi lỗi tất định hoặc tạm thời đã lặp quá số lần.
-            return self._quay_lai(m, f"health check sau kích hoạt lỗi: {chi_tiet}",
-                                  cach_ly=not tam_thoi or self._het_luot_tam_thoi(m.phien_ban))
+            try:
+                cach_ly = not tam_thoi or self._het_luot_tam_thoi(m.phien_ban)
+            except Exception:  # noqa: BLE001 — không ghi được bộ đếm (đĩa…): vẫn QUAY VỀ, chưa cách ly
+                cach_ly = False
+            return self._quay_lai(m, f"health check sau kích hoạt lỗi: {chi_tiet}", cach_ly=cach_ly)
         # ACTIVE TRƯỚC last_good: chết giữa hai bước thì khôi phục (nhánh ACTIVE) bù last_good. Ngược lại
         # (last_good trước) để lại last_good = bản CHƯA chốt → quay lại sẽ "về" chính bản lỗi.
         self.nk.ghi(ACTIVE, loi="")

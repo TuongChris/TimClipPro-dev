@@ -112,8 +112,11 @@ và "kích hoạt"; chờ CÓ HẠN; quá hạn thì hoãn, không giết việc
   cổng cho một bản sẽ không được áp dụng. Chưa có `lichsu.db` (máy mới, hoặc app chưa mở lần nào —
   `phien_ban_db() is None`) KHÔNG migration gì: app tạo lược đồ bằng chính mã mới khi mở lần đầu. `release_tool.py build` để hai cờ TẮT mặc định — người
   phát hành khai `--tu-dong-an-toan --tuong-thich-nguoc` cho bản có nâng lịch sử đã đánh giá.
-* Migration lỗi (kể cả quá hạn) → cách ly bản đó, giữ bản hiện tại (không lặp «sao lưu + rút cổng +
-  migration» mỗi lần mở).
+* Migration lỗi → giữ bản hiện tại; lỗi tất định (migration chạy và báo lỗi) → cách ly ngay; lỗi có thể tạm
+  thời (quá hạn, CSDL bị khoá — chỉ khi đó là lỗi DUY NHẤT) → áp dụng lại lần sau, cách ly ở lần thứ 3 (không
+  lặp «sao lưu + rút cổng + migration» mãi).
+* Nhật ký cập nhật HỎNG lúc mở app: launcher chỉ mở khi con trỏ hiện tại trùng bản đã chốt (last_good), ngược
+  lại từ chối (có thể là bản chưa qua health).
 * Rollback chỉ quay MÃ (con trỏ) về con trỏ TRƯỚC kích hoạt ghi trong nhật ký (`con_tro_cu`; không bao giờ về
   chính bản lỗi, kể cả khi `last_good` đã trỏ sang nó) — **không bao giờ tự khôi phục DB**: việc đã gửi không
   thể quay về chờ gửi, kết quả quét sau backup không mất. Backup chỉ để khôi phục thủ công có duyệt.

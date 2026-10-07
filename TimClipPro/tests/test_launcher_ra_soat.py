@@ -354,3 +354,69 @@ def test_health_check_phan_loai_csdl_bi_khoa_la_tam_thoi():
     assert health_check.la_loi_tam_thoi(sqlite3.OperationalError("database is locked")) is True
     assert health_check.la_loi_tam_thoi(sqlite3.OperationalError("no such table: jobs")) is False
     assert health_check.la_loi_tam_thoi(ValueError("x")) is False
+
+
+# ---------------------------------------------------------------- P3 sau lượt kiểm 34a0e80
+
+def test_nhat_ky_hong_ma_con_tro_khac_ban_da_chot_thi_khong_mo(cai, capsys):
+    """Nhật ký HỎNG — không biết có đang giữa lúc kích hoạt không: chỉ mở khi con trỏ hiện tại TRÙNG bản đã
+    chốt (last_good); khác thì từ chối (có thể là bản chưa qua health)."""
+    _cai_ban(cai, "1.0.0")
+    phat_hanh(cai["nguon"], "1.1.0", cai["khoa"])
+
+    def chet(ten):
+        if ten == mu.HEALTHCHECK:
+            raise mu.MatDien(ten)
+
+    assert cai["main"]("update", "prepare") == 0
+    with pytest.raises(mu.MatDien):
+        cai["main"]("update", "apply", diem_dung=chet)
+    with open(os.path.join(cai["goc"], "update_state", "journal.json"), "w", encoding="utf-8") as f:
+        f.write("{hỏng")
+    assert cai["main"]("app") == 1 and cai["goi"] == []
+
+
+def test_nhat_ky_hong_ma_con_tro_trung_ban_da_chot_van_mo(cai, capsys):
+    _cai_ban(cai, "1.0.0")
+    with open(os.path.join(cai["goc"], "update_state", "journal.json"), "w", encoding="utf-8") as f:
+        f.write("{hỏng")
+    capsys.readouterr()
+    assert cai["main"]("app") == 0
+    assert "CẢNH BÁO" in capsys.readouterr().err
+
+
+def test_update_recover_in_trang_thai_ro_rang(cai, capsys):
+    _cai_ban(cai, "1.0.0")
+    capsys.readouterr()
+    assert cai["main"]("update", "recover") == 0
+    out = capsys.readouterr().out
+    assert "trạng thái" in out and "ACTIVE" in out
+
+
+def test_chua_co_ban_kich_hoat_huong_dan_chay_capnhat(cai, capsys):
+    """Bootstrap xong mà bản đầu chưa cài được (hoặc lỗi tạm thời lúc cài lần đầu): chạy lại bootstrap bị TỪ
+    CHỐI — hướng dẫn đúng là CapNhat.bat."""
+    capsys.readouterr()
+    assert cai["main"]("app") == 1
+    assert "CapNhat.bat" in capsys.readouterr().err
+
+
+def test_health_tam_thoi_chi_khi_csdl_khoa_la_loi_duy_nhat(tmp_path, monkeypatch):
+    """Lần health có lỗi TẤT ĐỊNH (vd. engine/thư viện hỏng) kèm CSDL bị khoá không được coi là tạm thời
+    (không được 3 lượt thử)."""
+    import health_check as hc
+
+    def khoa(*a, **k):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(hc, "_doc_db_that", khoa)
+    monkeypatch.setattr(hc, "_engine_tam", lambda: {"ok": True})
+    kq = hc.kiem(str(tmp_path / "data"), "staging")
+    assert kq["ok"] is False and kq.get("tam_thoi") is True, kq["loi"]
+
+    def hong():
+        raise RuntimeError("thư viện hỏng (giả)")
+
+    monkeypatch.setattr(hc, "_engine_tam", hong)
+    kq = hc.kiem(str(tmp_path / "data"), "staging")
+    assert kq["ok"] is False and not kq.get("tam_thoi"), kq["loi"]

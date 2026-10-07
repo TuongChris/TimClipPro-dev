@@ -262,3 +262,6 @@ này lại đang kích hoạt. P3 sửa cùng: launcher không mở bản chưa 
 ly sau 3 lần, lỗi vận chuyển khi tải manifest không cách ly (N3); chưa có lịch sử thì không migration (N4);
 `.bat` tuyệt đối khi đường dẫn không dấu (N5); cài lần đầu bị cắt ở HEALTHCHECK thì kiểm ngay (N6); doctor
 ⚠️ cho WAITING_IDLE (N7); app chỉ bảo «mở lại» khi bản mới đã qua health (N8).
+Kiểm lại riêng N1–N8 (chỉ đọc, 34a0e80): xác nhận cả 8, không P1/P2 mới. P3 còn lại sửa (M5c): nhật ký hỏng
+lúc mở → chỉ mở khi con trỏ trùng bản đã chốt; ghi bộ đếm lỗi hỏng vẫn quay về; health chỉ «tạm thời» khi CSDL
+bị khoá là lỗi duy nhất; hướng dẫn CapNhat.bat khi chưa có bản kích hoạt; `update recover` in rõ trạng thái.
