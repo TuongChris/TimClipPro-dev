@@ -109,20 +109,25 @@ và "kích hoạt"; chờ CÓ HẠN; quá hạn thì hoãn, không giết việc
 * Migration chạy bằng MÃ CỦA RELEASE MỚI (`health_check.py migrate`) khi cổng đã rút — tự động chỉ khi
   `tu_dong_an_toan` (⇒ `tuong_thich_nguoc`); không thì WAITING_APPROVAL. Schema trên máy mới hơn bản phát hành →
   BLOCKED. Cả hai được kiểm NGAY lúc `prepare` và trước khi rút cổng — không tải gói, không sao lưu, không rút
-  cổng cho một bản sẽ không được áp dụng. Máy mới chưa có `lichsu.db` (`phien_ban_db() is None`) KHÔNG phải
-  migration: tạo lược đồ bằng mã mới, không cần cờ. `release_tool.py build` để hai cờ TẮT mặc định — người
+  cổng cho một bản sẽ không được áp dụng. Chưa có `lichsu.db` (máy mới, hoặc app chưa mở lần nào —
+  `phien_ban_db() is None`) KHÔNG migration gì: app tạo lược đồ bằng chính mã mới khi mở lần đầu. `release_tool.py build` để hai cờ TẮT mặc định — người
   phát hành khai `--tu-dong-an-toan --tuong-thich-nguoc` cho bản có nâng lịch sử đã đánh giá.
 * Migration lỗi (kể cả quá hạn) → cách ly bản đó, giữ bản hiện tại (không lặp «sao lưu + rút cổng +
   migration» mỗi lần mở).
 * Rollback chỉ quay MÃ (con trỏ) về con trỏ TRƯỚC kích hoạt ghi trong nhật ký (`con_tro_cu`; không bao giờ về
   chính bản lỗi, kể cả khi `last_good` đã trỏ sang nó) — **không bao giờ tự khôi phục DB**: việc đã gửi không
   thể quay về chờ gửi, kết quả quét sau backup không mất. Backup chỉ để khôi phục thủ công có duyệt.
-* Health check KHÔNG chạy được (quá hạn, thiếu python của runtime, lỗi lạ) = KHÔNG ĐẠT → quay lại + cách ly;
-  không bao giờ thoát khỏi bộ cập nhật giữa chừng. Kết quả đọc từ dòng `TIMCLIP_HEALTH_KET_QUA {json}`; cwd ở
+* Health check KHÔNG chạy được (quá hạn, thiếu python của runtime, CSDL bị khoá, lỗi lạ) = KHÔNG ĐẠT → quay
+  lại NGAY; vì có thể chỉ tạm thời nên chỉ cách ly sau `SO_LAN_LOI_TOI_DA` (3) lần (migration bị khoá/quá hạn
+  cũng vậy). Health CHẠY và báo lỗi = tất định → cách ly ngay. Không bao giờ thoát khỏi bộ cập nhật giữa chừng. Kết quả đọc từ dòng `TIMCLIP_HEALTH_KET_QUA {json}`; cwd ở
   state root. Thứ tự chốt: nhật ký ACTIVE rồi mới `last_good` (khôi phục ở ACTIVE ghi bù last_good).
 * Cách ly: chỉ khi nội dung ĐÃ KÝ sai (chính sách manifest, zip độc hại, danh sách file, lock chưa băm/không
-  khớp), health/migration lỗi, hoặc tải/dựng runtime lỗi lặp `SO_LAN_LOI_TOI_DA` lần. Chữ ký sai / thiếu gói
-  chỉ bỏ qua lần đó (thư mục chép dở, bản đang tải lên). Bỏ cách ly: `launcher.py update bo-cach-ly X.Y.Z`.
+  khớp), health/migration báo lỗi, hoặc lỗi có thể tạm thời (tải/dựng runtime, health/migration không chạy
+  được) lặp `SO_LAN_LOI_TOI_DA` lần. Chữ ký sai / thiếu gói / lỗi vận chuyển (host, kích thước) khi tải manifest
+  chỉ bỏ qua lần đó. Bỏ cách ly: `launcher.py update bo-cach-ly X.Y.Z`.
+* Khôi phục lỗi khi nhật ký đang giữa lúc kích hoạt (kể cả một updater khác đang kiểm bản mới) → launcher KHÔNG
+  mở app (con trỏ có thể là bản chưa qua health) — đợi rồi mở lại. Cài lần đầu bị cắt ở HEALTHCHECK → lần mở sau
+  kiểm health ngay, không chờ rảnh (không có bản nào khác để bảo vệ).
 
 ## 7b. Giao diện «ℹ️ Phiên bản và cập nhật»
 
@@ -166,7 +171,8 @@ mạng, không chạy updater trong tiến trình app. Nút «⏸ Hoãn cập nh
 * WAITING_APPROVAL chưa có lệnh duyệt — bản cần migration chưa đánh giá chỉ được áp dụng qua một quy trình
   riêng có duyệt (hoặc phát hành lại với cờ đã đánh giá).
 * App đang mở chạy mã CŨ tới khi người dùng mở lại; sau khi bản mới kích hoạt, cổng của bản cũ từ chối việc
-  mới, người gửi Sheets của bản cũ NHƯỜNG quyền cho bản mới (Watch/CLI/app mới gửi tiếp) và trang hiện cảnh
-  báo nổi «đóng và mở lại».
+  mới, người gửi Sheets của bản cũ NHƯỜNG quyền cho bản mới (Watch/CLI/app mới gửi tiếp) nhưng vẫn theo dõi —
+  bản mới hỏng health, quay về bản này thì nó lấy lại quyền và gửi tiếp. Trang hiện cảnh báo nổi «đóng và mở
+  lại» khi bản mới đã qua health; đang kiểm thì báo «đang hoàn tất cập nhật».
 * Chưa kiểm trên PC2 thật (UNVERIFIED_ON_PC2); chưa gọi GitHub thật (NOT_RUN) — nguồn GitHub tự theo chuyển
   hướng, kiểm host TRƯỚC mỗi request.

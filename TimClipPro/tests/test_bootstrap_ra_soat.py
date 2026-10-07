@@ -138,3 +138,14 @@ def test_kiem_truoc_tu_choi_thu_muc_da_co_du_lieu_cap_nhat_cu(bo):
     (goc / "update_state" / "current.json").write_text("{}", encoding="utf-8")
     with pytest.raises(bs.LoiBootstrap):
         bs.kiem_truoc(str(goc), str(state), sys.executable)
+
+
+def test_duong_dan_khong_dau_bat_dung_duong_dan_tuyet_doi(bo):
+    """N5: người vận hành hay CHÉP TimClipPro.bat ra Desktop — đường dẫn không dấu thì ghi TUYỆT ĐỐI (chép đi
+    đâu cũng chạy); chỉ đường dẫn có dấu mới dùng %~dp0 (khi đó hướng dẫn dùng lối tắt)."""
+    phat_hanh(bo["nguon"], "1.0.0", bo["khoa"])
+    goc, state = bo["tmp"] / "pc2" / "goc", bo["tmp"] / "pc2" / "state"
+    kq = bs.bootstrap(str(goc), str(state), **_tham(bo, state))
+    bat = open(os.path.join(kq["goc"], "TimClipPro.bat"), encoding="ascii").read()
+    assert "%~dp0" not in bat
+    assert f'"{os.path.join(kq["goc"], "launcher", "launcher.py")}"' in bat

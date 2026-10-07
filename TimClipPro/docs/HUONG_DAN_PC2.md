@@ -48,7 +48,8 @@ Mọi dòng ✅ là ổn; ⚠️ cần xem; ❌ phải xử lý trước khi dù
 
 ## 3. Bắt đầu dùng
 
-1. Mở `D:\TimClipPro\TimClipPro.bat` (giao diện mở ở http://localhost:8501).
+1. Mở `D:\TimClipPro\TimClipPro.bat` (giao diện mở ở http://localhost:8501). Muốn mở từ Desktop: tạo LỐI TẮT
+   (chuột phải → Gửi tới → Màn hình nền) — nhất là khi thư mục cài đặt có dấu tiếng Việt.
 2. **Tạo kho vân tay mới** trên PC2 (tab kho + đồng bộ kênh) — PC2 tự dựng kho, không chép từ PC1.
 3. Tab **«📤 Gửi Google Sheets»**:
    - «Đăng ký khoá Google»: tên binding (vd. `mac_dinh`) + đường dẫn file khoá trong `secrets\`. Màn hình hiện
@@ -96,6 +97,8 @@ pilot được duyệt** (thay `<MÃ_HỒ_SƠ_ĐÍCH>`). Lịch chạy không c�
 
 1. Chạy `launcher.py doctor` — đọc các dòng ❌/⚠️.
 2. `launcher.py update status` — trạng thái cập nhật (nhật ký, bản đang kích hoạt, bản cách ly).
+   Một bản bị **cách ly** vì lỗi có thể chỉ tạm thời (máy chậm, mất mạng, ổ đầy — đã khắc phục) thì CHỈ khi chủ
+   dự án bảo: `launcher.py update bo-cach-ly X.Y.Z`, rồi chạy `CapNhat.bat` (vẫn kiểm đủ chữ ký, băm, health).
 3. Gửi chủ dự án ảnh màn hình doctor + `update status` (không gửi file khoá, cookie, `lichsu.db`).
 
 Bootstrap xong nhưng **không cài được bản đầu** (dòng cuối không phải `ACTIVE`; doctor ❌ «Bản đang kích

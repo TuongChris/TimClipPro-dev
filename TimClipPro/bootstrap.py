@@ -122,20 +122,20 @@ def _thieu_goi(nguon: dict) -> list:
 
 
 def _duong_dan_bat(goc: str, p: str) -> str:
-    """Đường dẫn viết vào ``.bat`` — cmd.exe đọc file .bat theo trang mã OEM nên CHỈ dùng ASCII: trong thư mục
-    cài đặt → ``%~dp0…`` (cmd tự mở rộng đúng, kể cả thư mục có dấu); ngoài → tuyệt đối và phải ASCII."""
+    """Đường dẫn viết vào ``.bat`` — cmd.exe đọc file .bat theo trang mã OEM nên CHỈ dùng ASCII: không dấu →
+    TUYỆT ĐỐI (chép file .bat ra Desktop vẫn chạy); có dấu mà nằm trong thư mục cài đặt → ``%~dp0…`` (cmd tự
+    mở rộng đúng — khi đó dùng LỐI TẮT thay vì chép file); có dấu mà ngoài thư mục cài đặt → từ chối."""
     p = os.path.abspath(p)
+    if p.isascii():
+        return p
     try:
         rel = os.path.relpath(p, goc)
     except ValueError:                               # khác ổ đĩa
         rel = ""
     if rel and not rel.startswith("..") and not os.path.isabs(rel):
         return "%~dp0" + rel
-    if not p.isascii():
-        raise LoiBootstrap("Python của launcher nằm NGOÀI thư mục cài đặt và đường dẫn có ký tự có dấu — bỏ "
-                           "--python-launcher (bootstrap tự tạo trong thư mục cài đặt) hoặc chọn đường dẫn "
-                           "không dấu.")
-    return p
+    raise LoiBootstrap("Python của launcher nằm NGOÀI thư mục cài đặt và đường dẫn có ký tự có dấu — bỏ "
+                       "--python-launcher (bootstrap tự tạo trong thư mục cài đặt) hoặc chọn đường dẫn không dấu.")
 
 
 def _bat(duong_dan: str, dong: list) -> None:

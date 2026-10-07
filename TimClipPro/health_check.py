@@ -192,6 +192,8 @@ def kiem(data_dir: str, che_do: str) -> dict:
                 loi.append("Không đọc được ảnh chụp báo cáo V2 nào bằng mã mới.")
     except Exception as e:  # noqa: BLE001
         loi.append(f"Không đọc được lịch sử (chỉ đọc): {type(e).__name__}")
+        if la_loi_tam_thoi(e):
+            kq["tam_thoi"] = True
     return {**kq, "ok": not loi, "loi": loi, "canh_bao": canh_bao}
 
 
@@ -215,6 +217,13 @@ def _utf8_dau_ra() -> None:
             pass
 
 
+def la_loi_tam_thoi(e: BaseException) -> bool:
+    """CSDL đang bị khoá/bận = có thể chỉ tạm thời (bộ cập nhật đếm lần, không cách ly ngay)."""
+    import sqlite3
+
+    return isinstance(e, sqlite3.OperationalError) and any(x in str(e).lower() for x in ("locked", "busy"))
+
+
 def main(argv=None) -> int:
     _utf8_dau_ra()
     import argparse
@@ -229,7 +238,7 @@ def main(argv=None) -> int:
     try:
         kq = kiem(a.data_dir, a.che_do) if a.lenh == "kiem" else migrate(a.data_dir)
     except Exception as e:  # noqa: BLE001
-        kq = {"ok": False, "loi": [f"{type(e).__name__}: {e}"]}
+        kq = {"ok": False, "loi": [f"{type(e).__name__}: {e}"], "tam_thoi": la_loi_tam_thoi(e)}
     sys.stdout.write(f"{DAU_KET_QUA} {json.dumps(kq, ensure_ascii=False)}\n")
     sys.stdout.flush()
     return 0 if kq.get("ok") else 1

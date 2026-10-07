@@ -21,8 +21,18 @@ def canh_bao_ban_cu() -> None:
     """Cảnh báo NỔI ở đầu trang khi tiến trình app này chạy bản ĐÃ BỊ THAY (bản mới đã kích hoạt): không nhận
     việc mới, đã nhường việc gửi Sheets cho bản mới — người dùng cần đóng và mở lại bằng launcher."""
     ly_do = maintenance_gate.ly_do_ban_cu()
-    if ly_do:
-        st.warning("⚠️ " + ly_do)
+    if not ly_do:
+        return
+    goc = os.environ.get("TIMCLIP_INSTALLATION_ROOT", "")
+    nk = _doc(os.path.join(goc, "update_state", "journal.json")) if goc else None
+    if isinstance(nk, dict) and nk.get("trang_thai") in (mu.WAITING_IDLE, mu.QUIESCED, mu.BACKED_UP,
+                                                         mu.MIGRATING, mu.ACTIVATING, mu.HEALTHCHECK,
+                                                         mu.ROLLBACK):
+        # Bản mới CHƯA qua health: mở lại lúc này rơi vào bản chưa kiểm (health hỏng thì phải mở lại lần nữa).
+        st.info("⏳ Đang hoàn tất cập nhật — đợi vài phút rồi hãy mở lại ứng dụng; trong lúc này cửa sổ này "
+                "không nhận việc mới.")
+        return
+    st.warning("⚠️ " + ly_do)
 
 
 def _doc(path: str):

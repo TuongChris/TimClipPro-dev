@@ -158,7 +158,9 @@ def test_chet_sau_active_truoc_last_good_thi_khoi_phuc_sua_last_good(mt, monkeyp
 
 # ---------------------------------------------------------------- B: lỗi lạ không thoát khỏi updater
 
-def test_health_sau_kich_hoat_nem_timeout_thi_quay_ve_va_cach_ly(mt):
+def test_health_sau_kich_hoat_khong_chay_duoc_quay_ve_ngay_cach_ly_sau_3_lan(mt):
+    """B + N3: health KHÔNG chạy được (timeout) → quay về bản trước NGAY (an toàn), nhưng có thể chỉ là máy
+    chậm lúc 3 giờ sáng → chỉ cách ly sau ``SO_LAN_LOI_TOI_DA`` lần; không bao giờ thoát khỏi updater."""
     _cai(mt, "1.0.0")
     phat_hanh(mt["nguon"], "1.1.0", mt["khoa"])
     goc = mt["gia"].kiem_suc_khoe
@@ -168,10 +170,14 @@ def test_health_sau_kich_hoat_nem_timeout_thi_quay_ve_va_cach_ly(mt):
             raise subprocess.TimeoutExpired(["health_check.py"], 600)
         return goc(m, rel, rt, che_do)
 
-    cn = mt["tao"](kiem_suc_khoe=kiem)
-    assert cn.chuan_bi().trang_thai == mu.STAGED
-    kq = cn.ap_dung()
-    assert kq.trang_thai == mu.QUARANTINED and _hien(mt) == "1.0.0" and "1.1.0" in cn.cach_ly()
+    for lan in range(1, mu.SO_LAN_LOI_TOI_DA + 1):
+        cn = mt["tao"](kiem_suc_khoe=kiem)
+        assert cn.chuan_bi().trang_thai == mu.STAGED, lan
+        kq = cn.ap_dung()
+        assert _hien(mt) == "1.0.0" and cn.last_good()["phien_ban"] == "1.0.0"
+        if lan < mu.SO_LAN_LOI_TOI_DA:
+            assert kq.trang_thai == mu.LOI and "1.1.0" not in cn.cach_ly(), (lan, kq)
+    assert kq.trang_thai == mu.QUARANTINED and "1.1.0" in cn.cach_ly()
 
 
 def test_khoi_phuc_khi_health_nem_oserror_khong_lam_sap(mt):
@@ -192,7 +198,8 @@ def test_khoi_phuc_khi_health_nem_oserror_khong_lam_sap(mt):
 
     cn2 = mt["tao"](kiem_suc_khoe=kiem)
     cn2.phuc_hoi()
-    assert _hien(mt) == "1.0.0" and "1.1.0" in cn2.cach_ly()
+    assert _hien(mt) == "1.0.0" and "1.1.0" not in cn2.cach_ly()           # lần 1: có thể tạm thời
+    assert cn2.nk.doc()["trang_thai"] == mu.CHECKED
 
 
 def test_tao_runtime_loi_subprocess_khong_thoat_va_cach_ly_sau_so_lan_toi_da(mt):
@@ -249,7 +256,7 @@ def test_may_moi_chua_co_lich_su_khong_can_co_migration(mt):
     assert cn.chuan_bi().trang_thai == mu.STAGED
     kq = cn.ap_dung()
     assert kq.trang_thai == mu.ACTIVE, kq
-    assert ("di_chuyen", "1.0.0") in mt["gia"].goi          # tạo lược đồ mới bằng mã mới
+    assert not [g for g in mt["gia"].goi if g[0] == "di_chuyen"]   # N4: app tự tạo lược đồ lúc mở lần đầu
 
 
 def test_can_duyet_migration_bao_ngay_luc_chuan_bi_khong_tai_khong_sao_luu(mt):
@@ -430,3 +437,78 @@ def test_don_ban_cu_con_tro_hong_khong_xoa_gi(mt):
     with pytest.raises(mu.LoiCapNhat):
         mu.don_ban_cu(mt["cd"], giu=1)
     assert all(os.path.isdir(mt["cd"].release_dir(pb)) for pb in ("1.0.0", "1.1.0", "1.2.0"))
+
+
+# ---------------------------------------------------------------- rà soát lại 908d946 (N3, N4, N6)
+
+def test_health_staging_khong_chay_duoc_cach_ly_sau_3_lan(mt):
+    _cai(mt, "1.0.0")
+    phat_hanh(mt["nguon"], "1.1.0", mt["khoa"])
+
+    def kiem(m, rel, rt, che_do):
+        raise subprocess.TimeoutExpired(["health_check.py"], 600)
+
+    for lan in range(1, mu.SO_LAN_LOI_TOI_DA):
+        kq = mt["tao"](kiem_suc_khoe=kiem).chuan_bi()
+        assert kq.trang_thai == mu.LOI and "1.1.0" not in mt["tao"]().cach_ly(), (lan, kq)
+    assert mt["tao"](kiem_suc_khoe=kiem).chuan_bi().trang_thai == mu.QUARANTINED
+    assert _hien(mt) == "1.0.0"
+
+
+def test_migration_tam_thoi_khong_cach_ly_ngay(mt):
+    _cai(mt, "1.0.0")
+    phat_hanh(mt["nguon"], "1.1.0", mt["khoa"], sua_manifest=dict(du_lieu={"lich_su": 4}))
+
+    def di_chuyen(m, rel, rt):
+        raise mu.LoiTamThoi("migration", "database is locked (giả)")
+
+    cn = mt["tao"](di_chuyen=di_chuyen)
+    assert cn.chuan_bi().trang_thai == mu.STAGED
+    kq = cn.ap_dung()
+    assert kq.trang_thai == mu.LOI and "1.1.0" not in cn.cach_ly() and _hien(mt) == "1.0.0"
+    assert cn.nk.doc()["trang_thai"] == mu.STAGED                       # lần sau áp dụng lại, không tải lại
+    for _ in range(mu.SO_LAN_LOI_TOI_DA - 1):
+        kq = mt["tao"](di_chuyen=di_chuyen).ap_dung()
+    assert kq.trang_thai == mu.QUARANTINED and "1.1.0" in mt["tao"]().cach_ly()
+
+
+@pytest.mark.parametrize("ma", ["nguon", "qua_lon"])
+def test_tai_manifest_loi_van_chuyen_khong_cach_ly(mt, ma):
+    phat_hanh(mt["nguon"], "1.0.0", mt["khoa"])
+
+    class NguonLoi(mu.NguonThuMuc):
+        def tai(self, ban, ten, dich, gioi_han):
+            raise mu.TuChoiGoi(ma, "lỗi vận chuyển (giả)")
+
+    cn = mt["tao"](nguon=NguonLoi(mt["nguon"]))
+    assert cn.chuan_bi().trang_thai == mu.KHONG_CO and "1.0.0" not in cn.cach_ly()
+    assert mt["tao"]().chuan_bi().trang_thai == mu.STAGED
+
+
+def test_ban_cai_da_co_ban_ma_chua_co_lich_su_khong_migration(mt):
+    _cai(mt, "1.0.0")
+    phat_hanh(mt["nguon"], "1.1.0", mt["khoa"], sua_manifest=dict(du_lieu={"lich_su": 4},
+                                                                migration={"tu_dong_an_toan": False}))
+    cn = mt["tao"](phien_ban_db=lambda: None)                         # app chưa mở lần nào
+    assert cn.chuan_bi().trang_thai == mu.STAGED
+    assert cn.ap_dung().trang_thai == mu.ACTIVE
+    assert not [g for g in mt["gia"].goi if g[0] == "di_chuyen"]
+
+
+def test_cai_lan_dau_khoi_phuc_kiem_ngay_khong_cho_ranh(mt):
+    """N6: cài lần đầu (không có bản trước) bị cắt ở HEALTHCHECK; lúc mở lại đã có việc chạy trên CHÍNH bản đó →
+    không chờ rảnh (không có bản nào khác để bảo vệ) — kiểm health ngay và chốt."""
+    phat_hanh(mt["nguon"], "1.0.0", mt["khoa"])
+
+    def chet(ten):
+        if ten == mu.HEALTHCHECK:
+            raise mu.MatDien(ten)
+
+    cn = mt["tao"](diem_dung=chet)
+    assert cn.chuan_bi().trang_thai == mu.STAGED
+    with pytest.raises(mu.MatDien):
+        cn.ap_dung()
+    with mg.CongBaoTri(mt["cd"].data_dir).viec("lô quét đang chạy trên bản 1.0.0"):
+        cn2 = mt["tao"]()
+        assert cn2.phuc_hoi() == mu.ACTIVE
+    assert _hien(mt) == "1.0.0" and cn2.last_good()["phien_ban"] == "1.0.0"

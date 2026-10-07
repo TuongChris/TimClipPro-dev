@@ -40,23 +40,30 @@ def _cho(dieu_kien, han_s=5.0):
     return dieu_kien()
 
 
-def test_ban_cu_nguoi_gui_nen_nhuong_quyen_va_khong_tu_khoi_dong_lai(mt, monkeypatch):
+def test_ban_cu_nhuong_quyen_roi_lay_lai_khi_quay_ve_ban_nay(mt, monkeypatch):
+    """C + N1: bản cũ NHƯỜNG quyền cho bản đang kích hoạt nhưng KHÔNG khoá chết — bản mới hỏng health, quay về
+    bản này (diễn tập quay lại của pilot) thì app đang mở gửi tiếp, không phải mở lại."""
     a = _ho_so(mt, gid=0)
-    v = _xep(mt, a, 1)
-    monkeypatch.setattr(mg, "ly_do_ban_cu", lambda *a, **k: LY_DO)       # tiến trình này = bản cũ
+    v1 = _xep(mt, a, 1)
+    tinh = {"ly_do": LY_DO}
+    monkeypatch.setattr(mg, "ly_do_ban_cu", lambda *a, **k: tinh["ly_do"])       # tiến trình này = bản cũ
     nen = ob.NguoiGuiNen(mt["db"], mt["data"], CongGia, chu_ky_s=0.05, chu_ky_gianh_s=0.05)
     nen.start()
     try:
-        assert _cho(lambda: not nen.dang_chay), "người gửi của bản cũ vẫn chạy và giữ quyền"
-        assert _tt(mt, v) == ob.PENDING                                  # bản cũ không gửi gì
+        assert _cho(lambda: bool(nen.ban_cu))
+        assert _tt(mt, v1) == ob.PENDING                                  # bản cũ không gửi gì
         moi = ob.NguoiGui(mt["db"], mt["data"], CongGia(),
                           cong_bao_tri=mg.CongBaoTri(mt["data"], kiem_them=lambda: ""))   # bản đang kích hoạt
-        assert moi.nhan_quyen()
+        assert _cho(moi.nhan_quyen)
         moi.chay_mot_vong()
         moi.tha_quyen()
-        assert _tt(mt, v) == ob.SENT
-        nen.start()                                                      # giao diện cũ rerun: không dậy lại
-        assert not nen.dang_chay
+        assert _tt(mt, v1) == ob.SENT
+        assert nen.dang_chay                                             # vẫn theo dõi, không khoá chết
+        tinh["ly_do"] = ""                                               # quay về: bản này LẠI đang kích hoạt
+        v2 = _xep(mt, a, 2)
+        nen.danh_thuc()
+        assert _cho(lambda: _tt(mt, v2) == ob.SENT), "sau khi quay về, app đang mở không gửi Sheets nữa"
+        assert not nen.ban_cu
     finally:
         nen.stop(cho_s=5)
 
@@ -98,3 +105,22 @@ def test_app_goi_canh_bao_ban_cu_o_cap_trang():
     app = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app.py"),
                encoding="utf-8").read()
     assert "\nui_cap_nhat.canh_bao_ban_cu()\n" in app.replace("\r\n", "\n")
+
+
+def test_app_dang_kiem_suc_khoe_chua_bao_mo_lai(tmp_path, monkeypatch):
+    """N8: bản mới vừa đổi con trỏ, health CHƯA xong → chưa bảo «đóng và mở lại» (mở lại lúc này rơi vào bản
+    chưa kiểm; health hỏng thì phải mở lại lần nữa) — báo đang hoàn tất cập nhật."""
+    import json
+
+    (tmp_path / "update_state").mkdir()
+    (tmp_path / "update_state" / "journal.json").write_text(json.dumps({"trang_thai": "HEALTHCHECK"}),
+                                                             encoding="utf-8")
+    monkeypatch.setenv("TIMCLIP_INSTALLATION_ROOT", str(tmp_path))
+    monkeypatch.setattr(mg, "ly_do_ban_cu", lambda *a, **k: LY_DO)
+    at = AppTest.from_function(_kich_ban_canh_bao, default_timeout=60).run()
+    assert not at.exception and not at.warning
+    assert any("hoàn tất cập nhật" in str(i.value) for i in at.info)
+    (tmp_path / "update_state" / "journal.json").write_text(json.dumps({"trang_thai": "ACTIVE"}),
+                                                             encoding="utf-8")
+    at = AppTest.from_function(_kich_ban_canh_bao, default_timeout=60).run()
+    assert any("đóng và mở lại" in str(w.value) for w in at.warning)

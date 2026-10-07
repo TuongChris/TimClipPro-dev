@@ -253,3 +253,12 @@ có mật khẩu; bootstrap từ chối thư mục trong bản clone git / có d
 dùng; `don_ban_cu` đọc con trỏ nghiêm ngặt; fsync file giải nén; GitHub kiểm host từng bước chuyển hướng;
 app vẫn mở khi bộ cập nhật không dựng được. Còn lại (giới hạn, `docs/MANAGED_UPDATE.md` §8): chưa có đường
 nâng cấp launcher, chưa có lệnh duyệt WAITING_APPROVAL, runtime pip không kiểm lại, `data/dev_mode` là opt-in.
+
+**Rà soát lại commit sửa 908d946** (chỉ đọc): A, B, D, E, F, G xác nhận đúng; C sửa chưa trọn — N1 (P2): người
+gửi của bản cũ nhường quyền rồi KHOÁ CHẾT, bản mới hỏng health quay về bản này thì app đang mở không gửi Sheets
+nữa (đúng bước diễn tập quay lại của pilot). Sửa (M5b): nhường quyền nhưng vẫn theo dõi, lấy lại quyền khi bản
+này lại đang kích hoạt. P3 sửa cùng: launcher không mở bản chưa qua health khi khôi phục lỗi giữa lúc kích hoạt
+(N2); lỗi có thể tạm thời (health/migration không chạy được, CSDL bị khoá, quá hạn) quay về ngay nhưng chỉ cách
+ly sau 3 lần, lỗi vận chuyển khi tải manifest không cách ly (N3); chưa có lịch sử thì không migration (N4);
+`.bat` tuyệt đối khi đường dẫn không dấu (N5); cài lần đầu bị cắt ở HEALTHCHECK thì kiểm ngay (N6); doctor
+⚠️ cho WAITING_IDLE (N7); app chỉ bảo «mở lại» khi bản mới đã qua health (N8).

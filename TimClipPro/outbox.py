@@ -690,8 +690,6 @@ class NguoiGuiNen:
         with self._khoa_luong:
             if self._thread is not None and self._thread.is_alive():
                 return
-            if self.ban_cu:
-                return
             self._dung.clear()
             # Đăng ký để `danh_thuc(db)` (gọi sau mỗi lần `save_job` xếp hàng) đánh thức đúng luồng này.
             with _NEN_KHOA:
@@ -730,19 +728,24 @@ class NguoiGuiNen:
                     self.nguoi_gui = NguoiGui(self.db_path, self.data_dir, self._tao_cong(),
                                               dung=self._dung)
                 cho = self.chu_ky_gianh_s
-                # Bản mới đã kích hoạt mà tiến trình (app cũ) còn mở: NHƯỜNG quyền người gửi cho bản mới
-                # và dừng hẳn — giữ quyền mà từ chối mọi việc thì Watch/CLI của bản mới không gửi được gì.
+                # Bản mới đã kích hoạt mà tiến trình (app cũ) còn mở: NHƯỜNG quyền người gửi cho bản đang
+                # kích hoạt (giữ quyền mà từ chối mọi việc thì Watch/CLI của bản mới không gửi được gì) — nhưng
+                # KHÔNG khoá chết: bản mới hỏng health → quay về bản này thì lấy lại quyền và gửi tiếp.
                 ly_do = self.nguoi_gui.cong_bao_tri.ly_do_ban_cu() if isinstance(
                     self.nguoi_gui.cong_bao_tri, maintenance_gate.CongBaoTri) else ""
                 if ly_do:
                     self._nhuong_cho_ban_moi(ly_do)
-                    break
+                    self._thuc.wait(self.chu_ky_gianh_s)
+                    self._thuc.clear()
+                    continue
+                if self.ban_cu:
+                    LOGGER.info("event=outbox.active_again — bản này lại là bản đang kích hoạt, gửi tiếp")
+                    self.ban_cu = ""
                 try:
                     if self.nguoi_gui.co_quyen or self.nguoi_gui.nhan_quyen():
                         dem = self.nguoi_gui.chay_mot_vong()
                         if dem.get("ban_cu"):
                             self._nhuong_cho_ban_moi("cổng báo bản cũ")
-                            break
                         # Còn việc vừa xử lý → vòng tiếp ngay; không thì chờ chu kỳ/đánh thức.
                         cho = 0.2 if (dem["da_gui"] or dem["thu_lai"]) else self.chu_ky_s
                     self.loi_cuoi = ""
@@ -757,12 +760,13 @@ class NguoiGuiNen:
                 self.nguoi_gui.tha_quyen()
 
     def _nhuong_cho_ban_moi(self, ly_do: str) -> None:
+        """Nhả quyền người gửi (giữa hai việc — không có việc nào đang bay) và đánh dấu; luồng vẫn chạy để
+        lấy lại quyền nếu bản này lại thành bản đang kích hoạt (quay lại sau health hỏng)."""
+        if not self.ban_cu:
+            LOGGER.warning("event=outbox.yield_to_active_release — tiến trình chạy bản đã bị thay, nhường quyền")
         self.ban_cu = ly_do or "bản cũ"
-        self.loi_cuoi = "BanCu"
-        LOGGER.warning("event=outbox.yield_to_active_release — tiến trình chạy bản đã bị thay, nhường quyền gửi")
         if self.nguoi_gui is not None:
             self.nguoi_gui.tha_quyen()
-        self._dung.set()
 
 
 _NEN: dict = {}

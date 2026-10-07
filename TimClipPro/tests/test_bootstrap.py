@@ -55,7 +55,7 @@ def test_bootstrap_dung_cai_dat_rieng_va_cai_ban_dau(bo, monkeypatch):
     dd = json.load(open(os.path.join(state, "installation.json"), encoding="utf-8"))
     assert dd["installation_id"] == kq["installation_id"] and len(dd["installation_id"]) == 32
     bat = open(os.path.join(goc, "TimClipPro.bat"), encoding="ascii").read()
-    assert f'"{sys.executable}" -E -s "%~dp0launcher\\launcher.py" app' in bat
+    assert f'"{sys.executable}" -E -s "{os.path.join(goc, "launcher", "launcher.py")}" app' in bat
     assert "cap_nhat.py" not in bat and "git" not in bat.lower()
     for p in kq["lich"]:
         goc_xml = ET.fromstring(open(p, encoding="utf-16").read().split("?>", 1)[1])

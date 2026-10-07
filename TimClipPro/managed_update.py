@@ -104,6 +104,12 @@ class TuChoiGoi(LoiCapNhat):
     """Bản phát hành/gói bị TỪ CHỐI (chữ ký, nội dung, chính sách) — không chạy mã nào của nó."""
 
 
+class LoiTamThoi(LoiCapNhat):
+    """Lỗi CÓ THỂ chỉ tạm thời: health/migration không chạy được, quá hạn, CSDL đang bị khoá. Bộ cập nhật
+    đếm lần theo phiên bản, chỉ cách ly sau ``SO_LAN_LOI_TOI_DA`` lần (máy chậm lúc 3 giờ sáng không được chặn
+    vĩnh viễn một bản tốt)."""
+
+
 class MatDien(BaseException):
     """CHỈ dùng trong kiểm thử: mô phỏng tiến trình chết ở một điểm (không bị ``except Exception`` bắt)."""
 
@@ -798,7 +804,7 @@ class CapNhat:
                 return False
             del d[phien_ban]
             ghi_json_nguyen_tu(self.cd.file_trang_thai("quarantine.json"), d)
-            for ten in ("loi_tai.json", "loi_runtime.json"):
+            for ten in ("loi_tai.json", "loi_runtime.json", "loi_tam_thoi.json"):
                 p = self.cd.file_trang_thai(ten)
                 dem = doc_json(p, mac_dinh={}, bat_buoc_hop_le=False) or {}
                 if isinstance(dem, dict) and dem.pop(phien_ban, None) is not None:
@@ -894,7 +900,7 @@ class CapNhat:
                 try:
                     m, raw_m, raw_s = self._manifest_ung_vien(ban, tam)
                 except TuChoiGoi as e:
-                    if e.ma not in ("chu_ky", "thieu_goi"):
+                    if e.ma not in ("chu_ky", "thieu_goi", "nguon", "qua_lon"):
                         self._cach_ly(ban.tag[len(TIEN_TO_TAG):], str(e))
                     bo.append(f"{ban.tag}: {e}")
                     continue
@@ -1001,7 +1007,11 @@ class CapNhat:
                 ghi_json_nguyen_tu(os.path.join(rt, TEN_SAN_SANG),
                                    {"lock_sha256": m.lock_sha256, "luc": _bay_gio()})
             self.diem_dung("RUNTIME_READY")
-            ok, chi_tiet = self._kiem(m, rel, rt, "staging")
+            ok, chi_tiet, tam_thoi = self._kiem(m, rel, rt, "staging")
+            if not ok and tam_thoi and not self._het_luot_tam_thoi(m.phien_ban):
+                self.nk.ghi(CHECKED, loi=f"Health check ở staging chưa chạy được: {chi_tiet} — sẽ thử lại.")
+                return KetQua(LOI, m.phien_ban, f"Health check chưa chạy được ({chi_tiet}) — giữ bản hiện tại, "
+                              "thử lại lần sau.")
             if not ok:
                 self._cach_ly(m.phien_ban, f"health check staging: {chi_tiet}")
                 self.nk.ghi(QUARANTINED, loi=f"Health check ở staging lỗi: {chi_tiet}")
@@ -1049,12 +1059,19 @@ class CapNhat:
             raise LoiCapNhat("runtime", f"Tạo runtime lỗi ({ly_do}) — giữ bản hiện tại.") from e
 
     def _kiem(self, m: Manifest, rel: str, rt: str, che_do: str) -> tuple:
-        """Health check; KHÔNG chạy được (timeout, thiếu python, lỗi lạ) = KHÔNG ĐẠT — không bao giờ thoát
-        khỏi bộ cập nhật giữa chừng (con trỏ có thể đang ở bản chưa kiểm)."""
+        """Health check → ``(ok, chi_tiết, tạm_thời)``. KHÔNG chạy được (timeout, thiếu python, CSDL bị khoá,
+        lỗi lạ) = KHÔNG ĐẠT nhưng ``tạm_thời`` — không bao giờ thoát khỏi bộ cập nhật giữa chừng (con trỏ có
+        thể đang ở bản chưa kiểm). Health CHẠY và báo lỗi = tất định."""
         try:
-            return self.kiem_suc_khoe(m, rel, rt, che_do)
+            ok, chi_tiet = self.kiem_suc_khoe(m, rel, rt, che_do)
+            return ok, chi_tiet, False
         except Exception as e:  # noqa: BLE001
-            return False, f"không chạy được health check ({type(e).__name__})"
+            chi_tiet = str(e) if isinstance(e, LoiCapNhat) else type(e).__name__
+            return False, f"không chạy được health check ({chi_tiet})", True
+
+    def _het_luot_tam_thoi(self, phien_ban: str) -> bool:
+        """Đếm một lần lỗi tạm thời của ``phien_ban``; ``True`` khi đã tới ``SO_LAN_LOI_TOI_DA`` (→ cách ly)."""
+        return self._dem_loi("loi_tam_thoi.json", phien_ban) >= SO_LAN_LOI_TOI_DA
 
     def _cai_release(self, goi: str, rel: str, m: Manifest, raw_m: bytes, raw_s: bytes,
                      phien: str) -> None:
@@ -1172,10 +1189,11 @@ class CapNhat:
         if db is not None and db > m.lich_su:
             self.nk.ghi(BLOCKED, loi="Lịch sử trên máy mới hơn bản phát hành (schema quá mới).")
             return KetQua(BLOCKED, m.phien_ban, "Schema dữ liệu mới hơn bản phát hành — chặn.")
-        # Máy mới (chưa có lịch sử): TẠO lược đồ bằng mã mới — luôn an toàn, không cần cờ. Có lịch sử cũ hơn:
-        # chỉ khi bản phát hành khai tự động an toàn (⇒ tương thích ngược).
-        if db is None or db < m.lich_su:
-            if db is not None and not m.tu_dong_an_toan:
+        # Chưa có lịch sử (máy mới, hoặc app chưa mở lần nào): KHÔNG migration — app tạo lược đồ bằng chính mã
+        # mới khi mở lần đầu (quay lại sau đó không để lại lược đồ "chưa khai tương thích ngược"). Có lịch sử cũ
+        # hơn: chỉ khi bản phát hành khai tự động an toàn (⇒ tương thích ngược).
+        if db is not None and db < m.lich_su:
+            if not m.tu_dong_an_toan:
                 self.nk.ghi(WAITING_APPROVAL, loi="Bản mới cần migration chưa được đánh giá tự động an "
                             "toàn — chờ duyệt.")
                 return KetQua(WAITING_APPROVAL, m.phien_ban, "Cần duyệt migration trước khi cập nhật.")
@@ -1183,11 +1201,15 @@ class CapNhat:
             self.diem_dung(MIGRATING)
             try:
                 self.di_chuyen(m, con_tro_moi["release"], con_tro_moi["runtime"])
-            except Exception as e:  # noqa: BLE001 — migration lỗi là TẤT ĐỊNH với bản này: cách ly, không
-                # lặp «sao lưu + rút cổng + migration» mỗi lần mở. Mã chưa đổi; migration tự động luôn
-                # tương thích ngược nên bản đang chạy dùng tiếp được dù migration đã đi một phần.
+            except Exception as e:  # noqa: BLE001 — mã chưa đổi; migration tự động luôn tương thích ngược nên
+                # bản đang chạy dùng tiếp được dù migration đã đi một phần.
                 ly_do = (f"migration lỗi: {e}" if isinstance(e, LoiCapNhat)
                          else f"migration lỗi ({type(e).__name__})")
+                tam_thoi = isinstance(e, LoiTamThoi) or not isinstance(e, LoiCapNhat)
+                if tam_thoi and not self._het_luot_tam_thoi(m.phien_ban):
+                    self.nk.ghi(STAGED, loi=ly_do + " — có thể tạm thời; giữ bản hiện tại, áp dụng lại lần sau.")
+                    return KetQua(LOI, m.phien_ban, f"{ly_do} — giữ bản hiện tại, thử lại lần sau.")
+                # Tất định (hoặc tạm thời lặp quá số lần): cách ly — không lặp «sao lưu + rút cổng + migration».
                 self._cach_ly(m.phien_ban, ly_do)
                 self.nk.ghi(QUARANTINED, con_tro_moi=None, loi=ly_do + " — giữ bản hiện tại.")
                 return KetQua(QUARANTINED, m.phien_ban, "Migration lỗi — đã cách ly bản mới, giữ bản hiện tại.")
@@ -1207,9 +1229,11 @@ class CapNhat:
     def _kiem_sau_kich_hoat(self, m: Manifest, con_tro_moi: dict) -> KetQua:
         self.nk.ghi(HEALTHCHECK)
         self.diem_dung(HEALTHCHECK)
-        ok, chi_tiet = self._kiem(m, con_tro_moi["release"], con_tro_moi["runtime"], "kich_hoat")
+        ok, chi_tiet, tam_thoi = self._kiem(m, con_tro_moi["release"], con_tro_moi["runtime"], "kich_hoat")
         if not ok:
-            return self._quay_lai(m, f"health check sau kích hoạt lỗi: {chi_tiet}")
+            # Luôn quay về NGAY (an toàn); chỉ cách ly khi lỗi tất định hoặc tạm thời đã lặp quá số lần.
+            return self._quay_lai(m, f"health check sau kích hoạt lỗi: {chi_tiet}",
+                                  cach_ly=not tam_thoi or self._het_luot_tam_thoi(m.phien_ban))
         # ACTIVE TRƯỚC last_good: chết giữa hai bước thì khôi phục (nhánh ACTIVE) bù last_good. Ngược lại
         # (last_good trước) để lại last_good = bản CHƯA chốt → quay lại sẽ "về" chính bản lỗi.
         self.nk.ghi(ACTIVE, loi="")
@@ -1217,12 +1241,17 @@ class CapNhat:
         ghi_json_nguyen_tu(self.cd.file_trang_thai("last_good.json"), con_tro_moi)
         return KetQua(ACTIVE, m.phien_ban, f"Đã chuyển sang bản {m.phien_ban}.")
 
-    def _quay_lai(self, m: Manifest, ly_do: str) -> KetQua:
+    def _quay_lai(self, m: Manifest, ly_do: str, *, cach_ly: bool = True) -> KetQua:
         """Quay MÃ về con trỏ TRƯỚC kích hoạt (không bao giờ về chính bản lỗi). DB KHÔNG BAO GIỜ tự khôi phục
-        (migration tự động luôn tương thích ngược) — việc đã gửi không thể quay về chờ gửi. Cách ly bản lỗi."""
-        self.nk.ghi(ROLLBACK, loi=ly_do)
+        (migration tự động luôn tương thích ngược) — việc đã gửi không thể quay về chờ gửi. ``cach_ly``: cách ly
+        bản lỗi (tất định); không thì nhật ký về CHECKED để lượt kiểm sau thử lại (lỗi có thể tạm thời)."""
+        self.nk.ghi(ROLLBACK, loi=ly_do, cach_ly_khi_quay_lai=cach_ly)
         self.diem_dung(ROLLBACK)
         self._ve_con_tro_truoc(m.sha256)
+        if not cach_ly:
+            self.nk.ghi(CHECKED, con_tro_moi=None, loi=ly_do + " — đã quay về bản trước; chưa cách ly (có thể "
+                        "tạm thời), lượt kiểm sau thử lại.")
+            return KetQua(LOI, m.phien_ban, f"Bản {m.phien_ban}: {ly_do} — đã quay về bản trước, thử lại lần sau.")
         self._cach_ly(m.phien_ban, ly_do)
         self.nk.ghi(QUARANTINED, loi=ly_do)
         return KetQua(QUARANTINED, m.phien_ban,
@@ -1270,12 +1299,17 @@ class CapNhat:
             self.nk.ghi(BLOCKED, loi="Bản ứng viên hỏng sau gián đoạn — đã về bản trước, cần kiểm tay.")
             return BLOCKED
         if tt == ROLLBACK:
-            return self._quay_lai(m, nk.get("loi") or "quay lại bị gián đoạn").trang_thai
+            return self._quay_lai(m, nk.get("loi") or "quay lại bị gián đoạn",
+                                  cach_ly=bool(nk.get("cach_ly_khi_quay_lai", True))).trang_thai
         if (self.hien_tai() or {}).get("manifest_sha256") != m.sha256:
             self.nk.ghi(STAGED, loi="Kích hoạt trước bị gián đoạn trước khi đổi bản — sẽ áp dụng lại.")
             return STAGED
+        if self._con_tro_truoc(m.sha256) is None:
+            # Cài lần đầu: không có bản nào khác để bảo vệ và mã ĐÃ là bản này (việc đang chạy cũng chạy trên
+            # nó) — kiểm health ngay, không chờ rảnh (chờ thì mỗi lần mở launcher lại chờ tới 600 s).
+            return self._kiem_sau_kich_hoat(m, con_tro_moi).trang_thai
         # Con trỏ đã sang bản mới nhưng chưa qua health: kiểm lại DƯỚI cổng rút. Không rảnh được thì về
-        # last-good (KHÔNG cách ly — bản mới chưa hề lỗi) và giữ STAGED để thử lần sau.
+        # bản trước (KHÔNG cách ly — bản mới chưa hề lỗi) và giữ STAGED để thử lần sau.
         try:
             rut = self.cong.bat_dau_rut(f"hoàn tất cập nhật {m.phien_ban}")
         except Exception:  # noqa: BLE001
@@ -1283,9 +1317,6 @@ class CapNhat:
         try:
             if rut is not None and rut.cho_ranh(self.han_cho_ranh_s, self.chu_ky_cho_s):
                 return self._kiem_sau_kich_hoat(m, con_tro_moi).trang_thai
-            if self._con_tro_truoc(m.sha256) is None:
-                # Cài lần đầu (không có bản trước): giữ con trỏ, lần mở sau kiểm lại.
-                return tt
             self._ve_con_tro_truoc(m.sha256)
             self.nk.ghi(STAGED, loi="Chưa kiểm được bản mới sau gián đoạn — tạm về bản trước.")
             return STAGED

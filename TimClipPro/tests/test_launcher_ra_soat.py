@@ -297,3 +297,60 @@ def test_mo_app_khi_bo_cap_nhat_hong_ma_cap_nhat_dang_do_thi_tu_choi(cai, capsys
     with open(os.path.join(cai["goc"], "launcher", launcher.TEN_KHOA_TIN_CAY), "w", encoding="utf-8") as f:
         f.write("{hỏng")
     assert cai["main"]("app") == 1 and cai["goi"] == []
+
+
+# ---------------------------------------------------------------- rà soát lại 908d946 (N2, N3, N7)
+
+def test_khoi_phuc_loi_giua_luc_kich_hoat_thi_khong_mo_ban_chua_kiem(cai, capsys):
+    """N2: một updater khác đang chạy (BAN) / khôi phục lỗi mà nhật ký đang giữa lúc kích hoạt → KHÔNG mở bản
+    chưa qua health; báo đợi rồi mở lại."""
+    from khoa import KhoaTienTrinh
+
+    _cai_ban(cai, "1.0.0")
+    phat_hanh(cai["nguon"], "1.1.0", cai["khoa"])
+
+    def chet(ten):
+        if ten == mu.HEALTHCHECK:
+            raise mu.MatDien(ten)
+
+    assert cai["main"]("update", "prepare") == 0
+    with pytest.raises(mu.MatDien):
+        cai["main"]("update", "apply", diem_dung=chet)
+    with KhoaTienTrinh(os.path.join(cai["goc"], "update_state", "updater.lock"), "updater khác"):
+        assert cai["main"]("app") == 1
+    assert cai["goi"] == []
+
+
+def test_doctor_dang_cho_ranh_la_canh_bao(cai, capsys):
+    _cai_ban(cai, "1.0.0")
+    mu.NhatKy(mu.CaiDat(cai["goc"], cai["state"])).ghi(mu.WAITING_IDLE)
+    capsys.readouterr()
+    cai["main"]("doctor")
+    dong = next(d for d in capsys.readouterr().out.splitlines() if "Nhật ký cập nhật" in d)
+    assert dong.startswith(launcher.CANH_BAO)
+
+
+def test_health_khong_chay_duoc_bao_loi_tam_thoi(tmp_path, monkeypatch):
+    def run(*a, **k):
+        raise subprocess.TimeoutExpired(a[0], k.get("timeout"))
+
+    monkeypatch.setattr(launcher.subprocess, "run", run)
+    ok, kq = launcher._chay_health(_cd(tmp_path), _rel(tmp_path), str(tmp_path / "rt"), ["kiem"], 1.0)
+    assert ok is False and kq.get("tam_thoi") is True
+    monkeypatch.setattr(launcher, "_chay_health", lambda *a, **k: (False, {"loi": ["x"], "tam_thoi": True}))
+    with pytest.raises(mu.LoiTamThoi):
+        launcher.kiem_suc_khoe_tien_trinh(_cd(tmp_path))(None, "", "", "staging")
+    with pytest.raises(mu.LoiTamThoi):
+        launcher.di_chuyen_tien_trinh(_cd(tmp_path))(None, "", "")
+    monkeypatch.setattr(launcher, "_chay_health", lambda *a, **k: (False, {"loi": ["migration hỏng"]}))
+    with pytest.raises(mu.LoiCapNhat) as e:
+        launcher.di_chuyen_tien_trinh(_cd(tmp_path))(None, "", "")
+    assert not isinstance(e.value, mu.LoiTamThoi)
+
+
+def test_health_check_phan_loai_csdl_bi_khoa_la_tam_thoi():
+    import health_check
+
+    assert health_check.la_loi_tam_thoi(sqlite3.OperationalError("database is locked")) is True
+    assert health_check.la_loi_tam_thoi(sqlite3.OperationalError("no such table: jobs")) is False
+    assert health_check.la_loi_tam_thoi(ValueError("x")) is False

@@ -129,9 +129,9 @@ def _chay_health(cd: mu.CaiDat, rel: str, rt: str, doi_so: list, han_s: float) -
                             *doi_so, "--data-dir", cd.data_dir], capture_output=True, text=True,
                            encoding="utf-8", errors="replace", timeout=han_s, env=env, cwd=cwd)
     except subprocess.TimeoutExpired:
-        return False, {"loi": [f"health_check quá {han_s:.0f} s (TimeoutExpired)"]}
+        return False, {"loi": [f"health_check quá {han_s:.0f} s (TimeoutExpired)"], "tam_thoi": True}
     except (OSError, subprocess.SubprocessError) as e:
-        return False, {"loi": [f"không chạy được health_check ({type(e).__name__})"]}
+        return False, {"loi": [f"không chạy được health_check ({type(e).__name__})"], "tam_thoi": True}
     kq = {}
     for dong in reversed((p.stdout or "").splitlines()):
         if dong.startswith(DAU_KET_QUA_HEALTH + " "):
@@ -147,9 +147,14 @@ def _chay_health(cd: mu.CaiDat, rel: str, rt: str, doi_so: list, han_s: float) -
 
 
 def kiem_suc_khoe_tien_trinh(cd: mu.CaiDat, *, han_s: float = 600.0):
+    """Health KHÔNG chạy được / CSDL đang bị khoá (``tam_thoi``) → ``LoiTamThoi`` (bộ cập nhật đếm lần rồi
+    mới cách ly); health chạy và báo lỗi → ``(False, chi_tiết)`` (tất định)."""
     def kiem(m, rel, rt, che_do):
         ok, kq = _chay_health(cd, rel, rt, ["kiem", "--che-do", che_do], han_s)
-        return ok, "; ".join(kq.get("loi") or []) or "ok"
+        chi_tiet = "; ".join(kq.get("loi") or []) or "ok"
+        if not ok and kq.get("tam_thoi"):
+            raise mu.LoiTamThoi("health", chi_tiet)
+        return ok, chi_tiet
     return kiem
 
 
@@ -157,7 +162,8 @@ def di_chuyen_tien_trinh(cd: mu.CaiDat, *, han_s: float = 1800.0):
     def di_chuyen(m, rel, rt):
         ok, kq = _chay_health(cd, rel, rt, ["migrate"], han_s)
         if not ok:
-            raise mu.LoiCapNhat("migration", "Migration lỗi: " + "; ".join(kq.get("loi") or []))
+            loai = mu.LoiTamThoi if kq.get("tam_thoi") else mu.LoiCapNhat
+            raise loai("migration", "Migration lỗi: " + "; ".join(kq.get("loi") or []))
     return di_chuyen
 
 
@@ -276,12 +282,25 @@ def ban_dang_kich_hoat(cn: mu.CapNhat) -> dict:
     """Khôi phục cập nhật dở rồi trả con trỏ ``current``. Nhật ký hỏng không chặn chạy bản hiện tại."""
     try:
         cn.phuc_hoi()
-    except mu.LoiCapNhat as e:
-        print(f"[CẢNH BÁO] {e}", file=sys.stderr)
-    except Exception as e:  # noqa: BLE001 — khôi phục lỗi lạ không được chặn mở bản đang kích hoạt
-        print(f"[CẢNH BÁO] Khôi phục cập nhật lỗi không lường trước ({type(e).__name__}) — mở bản đang kích "
-              "hoạt; chạy «launcher.py doctor».", file=sys.stderr)
+    except Exception as e:  # noqa: BLE001 — khôi phục lỗi không được làm sập launcher
+        # Nhật ký đang GIỮA lúc kích hoạt (một updater khác đang kiểm bản mới, hoặc khôi phục lỗi dở): con trỏ
+        # có thể là bản CHƯA qua health — không mở (đợi rồi mở lại). Ngoài ra: cảnh báo, mở bản đang kích hoạt.
+        if _trang_thai_nhat_ky(cn.cd) in (mu.ACTIVATING, mu.HEALTHCHECK, mu.ROLLBACK):
+            dang_chay = isinstance(e, mu.LoiCapNhat) and e.ma == mu.BAN
+            raise LoiLauncher(("Đang hoàn tất một lượt cập nhật" if dang_chay else "Khôi phục cập nhật chưa xong")
+                              + " — bản mới chưa được kiểm xong; đợi vài phút rồi mở lại (hoặc chạy «launcher.py "
+                              "doctor» và báo chủ dự án).") from e
+        thong_diep = str(e) if isinstance(e, mu.LoiCapNhat) else (
+            f"Khôi phục cập nhật lỗi không lường trước ({type(e).__name__}) — mở bản đang kích hoạt; chạy "
+            "«launcher.py doctor».")
+        print(f"[CẢNH BÁO] {thong_diep}", file=sys.stderr)
     return _kiem_con_tro(cn.hien_tai())
+
+
+def _trang_thai_nhat_ky(cd: mu.CaiDat) -> str:
+    """Trạng thái nhật ký cập nhật (đọc lỏng — hỏng/thiếu → rỗng)."""
+    nk = mu.doc_json(cd.file_trang_thai("journal.json"), bat_buoc_hop_le=False)
+    return str(nk.get("trang_thai") or "") if isinstance(nk, dict) else ""
 
 
 def _kiem_con_tro(con_tro) -> dict:
@@ -375,11 +394,12 @@ def doctor(goc: str) -> list:
         tt, loi = nk.get("trang_thai", ""), str(nk.get("loi") or "")
         # Trạng thái trung gian = lượt cập nhật bị cắt ngang (mất điện/bị giết): launcher sẽ khôi phục ở lần
         # chạy kế; doctor không khôi phục nên chỉ báo. Có lỗi ở lượt gần nhất → cũng cần người xem.
-        dang_do = tt in (mu.DOWNLOADING, mu.VERIFIED, mu.QUIESCED, mu.BACKED_UP, mu.MIGRATING,
-                         mu.ACTIVATING, mu.HEALTHCHECK, mu.ROLLBACK)
+        dang_do = tt in (mu.DOWNLOADING, mu.VERIFIED, mu.WAITING_IDLE, mu.QUIESCED, mu.BACKED_UP,
+                         mu.MIGRATING, mu.ACTIVATING, mu.HEALTHCHECK, mu.ROLLBACK)
         them(CANH_BAO if (tt in (mu.BLOCKED, mu.WAITING_APPROVAL, mu.QUARANTINED) or dang_do or loi)
              else DAT, "Nhật ký cập nhật",
-             " ".join(x for x in (tt or "trống", "— dở dang, lần chạy launcher kế sẽ tự khôi phục"
+             " ".join(x for x in (tt or "trống", "— đang chạy hoặc dở dang (dở dang thì lần chạy launcher kế "
+                                  "tự khôi phục)"
                                   if dang_do else "", loi) if x))
     except mu.LoiCapNhat as e:
         them(LOI, "Nhật ký cập nhật", str(e))
