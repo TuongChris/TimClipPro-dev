@@ -17,8 +17,7 @@ from pathlib import Path
 import pytest
 
 from engine import ScanResult
-from scan_jobs import ScanJobController, ScanLaunchConfig
-from sheet_delivery import SheetDelivery, SheetDeliveryWorker
+from scan_jobs import ScanJobController
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -45,7 +44,8 @@ def _chi_lay_code(duong_dan: Path) -> str:
     return " ".join(giu)
 
 
-@pytest.mark.parametrize("ten_file", ["scan_jobs.py", "sheet_delivery.py", "scan_ui.py",
+@pytest.mark.parametrize("ten_file", ["scan_jobs.py", "outbox.py", "sheet_destinations.py",
+                                      "runtime_paths.py", "scan_ui.py",
                                       "common_original.py", "common_original_jobs.py",
                                       "truy_cap_youtube.py", "youtube_doctor.py"])
 def test_module_chay_o_thread_nen_khong_cham_streamlit(ten_file):
@@ -76,24 +76,6 @@ def test_guard_bat_duoc_vi_pham_that(tmp_path):
 # ---------------------------------------------------------------------------
 # Snapshot cấu hình
 # ---------------------------------------------------------------------------
-
-def test_config_bat_bien_va_chuan_hoa_sheet_id():
-    cfg = ScanLaunchConfig(
-        auto_sheet=True,
-        sheet_link="https://docs.google.com/spreadsheets/d/ABC123xyz/edit#gid=0",
-        dang_ngang=True,
-    )
-
-    assert cfg.sheet_id == "ABC123xyz"
-    with pytest.raises(Exception):
-        cfg.auto_sheet = False       # frozen dataclass
-
-
-def test_config_rong_khong_no():
-    cfg = ScanLaunchConfig()
-    assert cfg.sheet_id == ""
-    assert cfg.auto_sheet is False
-
 
 # ---------------------------------------------------------------------------
 # Worker không chạm Streamlit
@@ -138,18 +120,15 @@ def test_callback_chay_o_thread_khac_main_va_khong_doc_session_state(engine, mon
 
     monkeypatch.setattr(st, "session_state", SessionStateCam())
 
-    # Đúng cách app.py làm: chụp cấu hình TRƯỚC, ở main thread.
-    cfg = ScanLaunchConfig(auto_sheet=True, sheet_link="sheet123", dang_ngang=True)
+    # Đúng cách app.py làm: chụp đích gửi TRƯỚC, ở main thread (giá trị bất biến), callback nền
+    # chỉ dùng giá trị đã chụp.
+    dich_da_chup = ("dich-123", "lo-1")
     da_xep = []
     thread_callback = []
 
     def sau_moi_video(index, tong, ket_qua):
         thread_callback.append(threading.current_thread().name)
-        da_xep.append(SheetDelivery(
-            delivery_key=f"k{index}", source_id=ket_qua.source_id,
-            source_name=ket_qua.source_name, header=["A"], rows=[["1"]],
-            sheet_link=cfg.sheet_link,
-        ))
+        da_xep.append((index, ket_qua.source_id, dich_da_chup))
 
     controller = ScanJobController(engine)
     controller.start(urls, "youtube", on_result=sau_moi_video)
@@ -160,26 +139,7 @@ def test_callback_chay_o_thread_khac_main_va_khong_doc_session_state(engine, mon
     assert not vi_pham, f"Thread nền đã chạm session state: {vi_pham}"
     assert len(da_xep) == 2
     assert all(t != main_thread for t in thread_callback), "Callback phải ở thread nền"
-    assert all(d.sheet_link == "sheet123" for d in da_xep)
-
-
-def test_sheet_worker_nhan_sheet_link_tu_cong_viec_khong_hoi_lai_ui():
-    """sender nhận sheet_link kèm việc nên chạy được ở thread giao hàng."""
-    nhan = []
-    worker = SheetDeliveryWorker(
-        sender=lambda sheet_link, header, rows: nhan.append(sheet_link) or len(rows)
-    )
-    worker.start()
-    worker.enqueue(SheetDelivery(
-        delivery_key="k", source_id="v", source_name="V",
-        header=["A"], rows=[["1"]], sheet_link="sheet-abc",
-    ))
-    han = time.monotonic() + 15
-    while worker.con_viec and time.monotonic() < han:
-        time.sleep(0.01)
-    worker.stop()
-
-    assert nhan == ["sheet-abc"]
+    assert all(d[2] == ("dich-123", "lo-1") for d in da_xep)
 
 
 def test_callback_no_tung_van_giu_ket_qua_va_chay_tiep(engine, monkeypatch):

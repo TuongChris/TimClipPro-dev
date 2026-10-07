@@ -2,18 +2,21 @@
 """Mô hình dữ liệu và lưu trữ danh sách nguồn YouTube cần theo dõi."""
 
 import contextlib
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 import os
 import re
+import uuid
 from typing import Any, Callable, Optional
 
-import bang_ngang
 import bao_cao_v2
+import outbox
+import runtime_paths
+import sheet_destinations as sd
 from channel import ChannelSync
 from don_dep import don_job_quet, don_kho_dem
+from engine import LoiLuuBen
 from khoa import DangChayRoi, KhoaTienTrinh
 from luu_tru import doc_json_an_toan, ghi_json_an_toan
-from sheets import LoiHeaderSheet, SheetsExporter
 from truy_cap_youtube import PhienYouTube
 from ytdlp_chung import giai_thich_loi
 
@@ -63,6 +66,9 @@ class BaoCao:
     chan_youtube: str = ""
     chua_quet_do_chan: int = 0
     youtube: dict = field(default_factory=dict)      # số đo truy cập YouTube của lượt
+    # Gửi Google Sheets qua outbox: nhãn đích đã ghim + số việc của LƯỢT NÀY theo trạng thái.
+    dich_gui: str = ""
+    gui: dict = field(default_factory=dict)
 
     def tom_tat(self) -> str:
         """Trả về bản tóm tắt nhiều dòng, tiếng Việt, để in ra console hoặc gửi email."""
@@ -77,7 +83,19 @@ class BaoCao:
         else:
             trang_thai_csv = "Không có dữ liệu để ghi"
 
-        if self.sheets_ok:
+        if self.gui and not any(self.gui.values()):
+            trang_thai_sheets = f"«{self.dich_gui}» — không có dữ liệu để gửi"
+        elif self.gui:
+            g = self.gui
+            cho = sum(g.get(t, 0) for t in (outbox.PENDING, outbox.RETRY_WAIT,
+                                             outbox.CLAIMED, outbox.SENDING))
+            trang_thai_sheets = (
+                f"«{self.dich_gui}» — đã gửi {g.get(outbox.SENT, 0)} việc "
+                f"({self.sheets_so_dong} dòng)"
+                + (f", còn chờ {cho} (đã lưu bền, sẽ tự gửi tiếp)" if cho else "")
+                + (f", bị chặn {g[outbox.BLOCKED_CONFIG]}" if g.get(outbox.BLOCKED_CONFIG) else "")
+                + (f", KHÔNG RÕ {g[outbox.UNKNOWN]}" if g.get(outbox.UNKNOWN) else ""))
+        elif self.sheets_ok:
             trang_thai_sheets = (
                 f"Đã ghi {self.sheets_so_dong} dòng"
                 if self.sheets_so_dong > 0
@@ -334,6 +352,9 @@ def chay_giam_sat(
     dang_ngang: bool = True,
     dung_lai: Any = None,
     quet_lai: bool = False,
+    y_dinh_gui: Any = None,
+    tao_cong: Optional[Callable] = None,
+    cho_gui_s: float = 120.0,
 ) -> BaoCao:
     """Chạy một lượt giám sát đầy đủ.
 
@@ -361,6 +382,9 @@ def chay_giam_sat(
                 dung_lai=dung_lai,
                 quet_lai=quet_lai,
                 phien=phien,
+                y_dinh_gui=y_dinh_gui,
+                tao_cong=tao_cong,
+                cho_gui_s=cho_gui_s,
             )
     except DangChayRoi as e:
         return BaoCao(loi=[str(e)], ban=True)
@@ -376,6 +400,9 @@ def _chay_giam_sat_da_khoa(
     dung_lai: Any = None,
     quet_lai: bool = False,
     phien: Optional[PhienYouTube] = None,
+    y_dinh_gui: Any = None,
+    tao_cong: Optional[Callable] = None,
+    cho_gui_s: float = 120.0,
 ) -> BaoCao:
     """Thực hiện lượt giám sát sau khi caller đã giữ khóa liên tiến trình."""
     bao_cao = BaoCao()
@@ -392,6 +419,9 @@ def _chay_giam_sat_da_khoa(
             dung_lai=dung_lai,
             quet_lai=quet_lai,
             phien=phien,
+            y_dinh_gui=y_dinh_gui,
+            tao_cong=tao_cong,
+            cho_gui_s=cho_gui_s,
         )
     finally:
         bao_cao.youtube = phien.tom_tat()
@@ -498,6 +528,34 @@ def _kho_khong_dung_duoc(engine: Any, wl: WatchList) -> str:
     return ""
 
 
+def _tong_ket_gui(engine: Any, nen: Any, y_dinh: Any, bao_cao: BaoCao, cho_gui_s: float,
+                  dung_lai: Any = None) -> None:
+    """Cuối lượt: chờ CÓ HẠN cho việc gửi của lượt này rồi báo đúng trạng thái. Việc chưa gửi vẫn
+    nằm bền trong hàng đợi (người gửi lượt sau / của app gửi tiếp) — không bị tính là đã gửi. Yêu cầu
+    dừng (file DUNG / Ctrl+C) thì thôi chờ ngay."""
+    db, lo = engine.sqlite_file, y_dinh.lo_id
+    tt = outbox.cho_gui_xong(db, engine.data_dir, lo, han_s=cho_gui_s, nen=nen,
+                             dung=(lambda: bool(dung_lai.can_dung())) if dung_lai is not None else None)
+    bao_cao.gui = tt
+    bao_cao.sheets_so_dong = sum(v.so_dong for v in outbox.ds_viec(
+        db, lo_id=lo, trang_thai=(outbox.SENT,)))
+    bao_cao.sheets_ok = tt[outbox.BLOCKED_CONFIG] == 0 and tt[outbox.UNKNOWN] == 0
+    if tt[outbox.BLOCKED_CONFIG]:
+        ly_do = next((v.loi for v in outbox.ds_viec(db, lo_id=lo, trang_thai=(
+            outbox.BLOCKED_CONFIG,))), "")
+        bao_cao.loi.append(f"Google Sheets: {tt[outbox.BLOCKED_CONFIG]} việc bị chặn — {ly_do}")
+    if tt[outbox.UNKNOWN]:
+        bao_cao.loi.append(
+            f"Google Sheets: {tt[outbox.UNKNOWN]} việc KHÔNG RÕ đã ghi chưa — đối soát trên Sheet "
+            "rồi xác nhận ở mục «📤 Gửi Google Sheets» (tool không tự gửi lại).")
+    cho = sum(tt[t] for t in (outbox.PENDING, outbox.RETRY_WAIT, outbox.CLAIMED, outbox.SENDING))
+    if cho:
+        bao_cao.sheets_note = (
+            f"Còn {cho} việc chờ gửi — đã lưu bền, sẽ tự gửi tiếp"
+            + ("" if nen is not None and nen.co_quyen
+               else " (người gửi của ứng dụng đang giữ quyền gửi)") + ".")
+
+
 def _thuc_hien_giam_sat(
     engine: Any,
     wl: WatchList,
@@ -509,6 +567,9 @@ def _thuc_hien_giam_sat(
     dung_lai: Any = None,
     quet_lai: bool = False,
     phien: Optional[PhienYouTube] = None,
+    y_dinh_gui: Any = None,
+    tao_cong: Optional[Callable] = None,
+    cho_gui_s: float = 120.0,
 ) -> BaoCao:
     """Quét nguồn, xuất CSV và đẩy Sheets trong một lượt giám sát.
 
@@ -529,6 +590,28 @@ def _thuc_hien_giam_sat(
         )
         return bao_cao
 
+    # Đích Google Sheets của CẢ lượt: chốt TRƯỚC khi liệt kê/quét. Đã yêu cầu gửi mà không dùng được
+    # đích → dừng lượt: video chưa quét thì lượt sau quét lại, còn quét rồi mà không gửi được thì
+    # Watch bỏ qua video đó mãi mãi (lịch sử đã ghi) — tệ hơn nhiều.
+    y_dinh = y_dinh_gui
+    if y_dinh is None and sheet_link:
+        try:
+            y_dinh = sd.y_dinh_cho_luot(
+                engine.sqlite_file, installation_id=engine.installation_id(),
+                workspace=engine.runtime.workspace,
+                khoa_mac_dinh=engine.runtime.khoa_google_mac_dinh, sheet_link=sheet_link,
+                schema_id=sd.SCHEMA_NGANG if dang_ngang else sd.SCHEMA_DOC)
+        except (sd.LoiDichGui, runtime_paths.LoiRuntime) as e:
+            bao_cao.sheets_note = f"Không dùng được đích Google Sheets: {e}"
+            bao_cao.loi.append(bao_cao.sheets_note + " — đã dừng lượt TRƯỚC khi quét.")
+            return bao_cao
+    if y_dinh is not None:
+        if not callable(getattr(engine, "ghim_y_dinh_gui", None)):
+            bao_cao.loi.append("Engine không hỗ trợ hàng đợi gửi — đã dừng lượt trước khi quét.")
+            return bao_cao
+        y_dinh = replace(y_dinh, lo_id=uuid.uuid4().hex)
+        bao_cao.dich_gui = y_dinh.dich.nhan
+
     ung_vien, loi = lay_ung_vien(wl, lister=lister, phien=phien)
     bao_cao.loi.extend(loi)
     # Lịch sử chỉ tính video đã kiểm XONG với đúng kho này (audit TCP-07).
@@ -539,77 +622,15 @@ def _thuc_hien_giam_sat(
 
     ket_qua = []
     tong_can_quet = len(can_quet)
-    ghi_tung_phan = bool(
-        getattr(engine.config, "ghi_tung_phan", True)
-    )
-    sheets = None
-    da_kiem_tra_sheets = False
-    da_day_sheets: set[int] = set()
-
-    def khoi_tao_sheets():
-        nonlocal sheets, da_kiem_tra_sheets
-        if da_kiem_tra_sheets or not sheet_link:
-            return sheets
-        da_kiem_tra_sheets = True
-        try:
-            ung_dung_sheets = SheetsExporter(sheet=sheet_link)
-            if not ung_dung_sheets.san_sang():
-                bao_cao.sheets_note = (
-                    ung_dung_sheets.thieu_gi()
-                    or "Google Sheets chưa sẵn sàng."
-                )
-                return None
-            sheets = ung_dung_sheets
-            bao_cao.sheets_ok = True
-            return sheets
-        except Exception as e:  # noqa: BLE001
-            bao_cao.sheets_note = f"Lỗi kết nối Google Sheets: {e}"
-            return None
-
-    sai_tieu_de: list = []      # hàng tiêu đề Sheet sai (báo cáo V2): thôi gửi cả lượt
-
-    def chuyen_dong_sheets(ds: list) -> tuple[list, list, bool]:
-        # Một nơi dựng dòng gửi Sheets cho app/Watch/CLI (`Engine.dong_gui_sheets`): kết quả V2
-        # gửi nguyên văn + nghiêm ngặt; kết quả cũ giữ luật cũ của Watch (không escape).
-        dung = getattr(engine, "dong_gui_sheets", None)
-        if callable(dung):
-            return dung(ds, dang_ngang=dang_ngang, an_toan_cu=False)
-        if dang_ngang:
-            return bang_ngang.HEADER_NGANG, engine.to_rows_ngang(ds), False
-        return engine.HEADER, engine.to_rows(ds), False
-
-    def gui(ung_dung_sheets: Any, header: list, rows: list, nghiem_ngat: bool) -> int:
-        try:
-            return ung_dung_sheets.append(
-                header, rows, **({"nghiem_ngat": True} if nghiem_ngat else {}))
-        except LoiHeaderSheet as e:
-            # Không thử tiếp từng video vào cùng một bảng sai tiêu đề: báo một lần, dừng gửi.
-            sai_tieu_de.append(str(e))
-            bao_cao.sheets_ok = False
-            bao_cao.sheets_note = str(e)
-            raise
-
-    def day_tung_phan(kq: Any) -> None:
-        if sai_tieu_de:
-            return
-        ung_dung_sheets = khoi_tao_sheets()
-        if ung_dung_sheets is None:
-            return
-        header, rows, nghiem_ngat = chuyen_dong_sheets([kq])
-        if not rows:
-            da_day_sheets.add(id(kq))
-            return
-        try:
-            so_dong = gui(ung_dung_sheets, header, rows, nghiem_ngat)
-            bao_cao.sheets_so_dong += so_dong
-            if so_dong > 0:
-                da_day_sheets.add(id(kq))
-        except Exception as e:  # noqa: BLE001
-            ten_nguon = kq.source_name or kq.source_ref or "(không rõ nguồn)"
-            bao_cao.loi.append(
-                f"Không ghi được kết quả từng phần lên Google Sheets "
-                f"cho {ten_nguon}: {e}"
-            )
+    # Người gửi nền của tiến trình Watch: việc gửi của từng video đi NGAY khi video đó lưu xong
+    # (cùng giao dịch với lịch sử) — quét không chờ Google. App đang giữ quyền người gửi thì app
+    # gửi giúp (cùng hàng đợi bền).
+    nen = None
+    if y_dinh is not None:
+        nen = outbox.NguoiGuiNen(engine.sqlite_file, engine.data_dir,
+                                 tao_cong or outbox.CongGspread, chu_ky_s=2.0,
+                                 chu_ky_gianh_s=5.0)
+        nen.start()
 
     def dung_neu_duoc_yeu_cau(so_con_lai: int) -> bool:
         if dung_lai is None or not dung_lai.can_dung():
@@ -620,99 +641,88 @@ def _thuc_hien_giam_sat(
         )
         return True
 
-    for i, ung_vien_moi in enumerate(can_quet):
-        if dung_neu_duoc_yeu_cau(tong_can_quet - i):
-            break
-        if phien.mo:
-            # Cầu dao mở: KHÔNG chạy tiếp hàng chục video vào đúng bức tường đó. Video còn lại
-            # không vào lịch sử/CSV/Sheets — lượt Watch sau quét lại chúng.
-            bao_cao.chua_quet_do_chan = tong_can_quet - i
-            bao_cao.chan_youtube = phien.thong_bao_dung()
-            bao_cao.loi.append(
-                f"{bao_cao.chan_youtube} Còn {tong_can_quet - i} video chưa quét.")
-            break
+    with contextlib.ExitStack() as ngu_canh:
+        if y_dinh is not None:
+            ngu_canh.enter_context(engine.ghim_y_dinh_gui(y_dinh))
+            ngu_canh.callback(nen.stop)
+        for i, ung_vien_moi in enumerate(can_quet):
+            if dung_neu_duoc_yeu_cau(tong_can_quet - i):
+                break
+            if phien.mo:
+                # Cầu dao mở: KHÔNG chạy tiếp hàng chục video vào đúng bức tường đó. Video còn lại
+                # không vào lịch sử/CSV/Sheets — lượt Watch sau quét lại chúng.
+                bao_cao.chua_quet_do_chan = tong_can_quet - i
+                bao_cao.chan_youtube = phien.thong_bao_dung()
+                bao_cao.loi.append(
+                    f"{bao_cao.chan_youtube} Còn {tong_can_quet - i} video chưa quét.")
+                break
 
-        def bao_tien_do(pct: float, msg: str, i: int = i) -> None:
-            if progress is not None:
-                progress(
-                    (i + pct) / tong_can_quet,
-                    f"[{i + 1}/{tong_can_quet}] {msg}",
+            def bao_tien_do(pct: float, msg: str, i: int = i) -> None:
+                if progress is not None:
+                    progress(
+                        (i + pct) / tong_can_quet,
+                        f"[{i + 1}/{tong_can_quet}] {msg}",
+                    )
+
+            bao_cao.quet_moi += 1
+            try:
+                ket_qua_quet = engine.scan_youtube(
+                    ung_vien_moi.url,
+                    progress=bao_tien_do,
                 )
+            except LoiLuuBen as e:
+                # Không ghi được lịch sử (đĩa đầy, DB bị giữ quá lâu): quét tiếp chỉ tốn mạng/CPU mà
+                # không lưu được gì — DỪNG lượt. Video chưa lưu thì lượt sau quét lại.
+                bao_cao.loi.append(
+                    f"{e} Đã dừng lượt: còn {tong_can_quet - i - 1} video chưa quét "
+                    "(lượt sau quét lại)."
+                )
+                break
+            except Exception as e:  # noqa: BLE001
+                phien.ghi_loi(e, "scan")
+                bao_cao.loi.append(
+                    f"Không quét được {ung_vien_moi.url}: {giai_thich_loi(e)}"
+                )
+                if dung_neu_duoc_yeu_cau(tong_can_quet - i - 1):
+                    break
+                continue
 
-        bao_cao.quet_moi += 1
-        try:
-            ket_qua_quet = engine.scan_youtube(
-                ung_vien_moi.url,
-                progress=bao_tien_do,
-            )
-        except Exception as e:  # noqa: BLE001
-            phien.ghi_loi(e, "scan")
-            bao_cao.loi.append(
-                f"Không quét được {ung_vien_moi.url}: {giai_thich_loi(e)}"
-            )
+            ket_qua.append(ket_qua_quet)
+            if ket_qua_quet.matches:
+                bao_cao.nguon_co_vi_pham += 1
+                bao_cao.tong_bang_chung += len(ket_qua_quet.matches)
+            if ket_qua_quet.status != "ok":
+                ten_nguon = (
+                    ket_qua_quet.source_name
+                    or ung_vien_moi.tieu_de
+                    or ung_vien_moi.url
+                )
+                bao_cao.loi.append(f"{ten_nguon}: {ket_qua_quet.note}")
+            if _la_loi_bao_cao(ket_qua_quet):
+                ten_nguon = (ket_qua_quet.source_name or ung_vien_moi.tieu_de
+                             or ung_vien_moi.url)
+                bao_cao.loi.append(f"{ten_nguon}: {ket_qua_quet.bao_cao.thong_bao()}")
+            # Google Sheets: `save_job` của lần quét đã xếp việc gửi vào outbox trong CÙNG giao dịch
+            # (chỉ kết quả `ok` có dòng; lỗi YouTube / báo cáo V2 lỗi không có payload gửi được).
             if dung_neu_duoc_yeu_cau(tong_can_quet - i - 1):
                 break
-            continue
 
-        ket_qua.append(ket_qua_quet)
-        if ket_qua_quet.matches:
-            bao_cao.nguon_co_vi_pham += 1
-            bao_cao.tong_bang_chung += len(ket_qua_quet.matches)
-        if ket_qua_quet.status != "ok":
-            ten_nguon = (
-                ket_qua_quet.source_name
-                or ung_vien_moi.tieu_de
-                or ung_vien_moi.url
-            )
-            bao_cao.loi.append(f"{ten_nguon}: {ket_qua_quet.note}")
-        if _la_loi_bao_cao(ket_qua_quet):
-            ten_nguon = (ket_qua_quet.source_name or ung_vien_moi.tieu_de
-                         or ung_vien_moi.url)
-            bao_cao.loi.append(f"{ten_nguon}: {ket_qua_quet.bao_cao.thong_bao()}")
-        # Lỗi YouTube (bị chặn, cần đăng nhập, gỡ, mạng) không phải kết quả quét: không đẩy
-        # dòng "(LỖI…)" lên Sheets — giao diện cũng chỉ đẩy kết quả `ok` (app.py). Báo cáo V2
-        # lỗi/hỏng: không gửi gì (đã báo ở trên).
-        if (sheet_link and ghi_tung_phan and not _la_loi_youtube(ket_qua_quet)
-                and not _la_loi_bao_cao(ket_qua_quet)):
-            day_tung_phan(ket_qua_quet)
-        if dung_neu_duoc_yeu_cau(tong_can_quet - i - 1):
-            break
+        if phien.mo and not bao_cao.chan_youtube:
+            # Cầu dao mở ở chính video cuối: vẫn phải nói rõ lượt này đã bị YouTube chặn.
+            bao_cao.chan_youtube = phien.thong_bao_dung()
 
-    if phien.mo and not bao_cao.chan_youtube:
-        # Cầu dao mở ở chính video cuối: vẫn phải nói rõ lượt này đã bị YouTube chặn.
-        bao_cao.chan_youtube = phien.thong_bao_dung()
-
-    xuat_duoc = [kq for kq in ket_qua if not _la_loi_bao_cao(kq)]
-    if xuat_duoc:
-        try:
-            bao_cao.csv_path = (
-                engine.export_csv_ngang(xuat_duoc)
-                if dang_ngang
-                else engine.export_csv(xuat_duoc)
-            )
-        except Exception as e:  # noqa: BLE001
-            bao_cao.loi.append(f"Không xuất được CSV: {e}")
-
-    if sheet_link and not sai_tieu_de:
-        try:
-            ung_dung_sheets = khoi_tao_sheets()
-            if ung_dung_sheets is not None:
-                hop_le = [kq for kq in ket_qua
-                          if not _la_loi_youtube(kq) and not _la_loi_bao_cao(kq)]
-                chua_day = (
-                    [kq for kq in hop_le if id(kq) not in da_day_sheets]
-                    if ghi_tung_phan
-                    else hop_le
+        xuat_duoc = [kq for kq in ket_qua if not _la_loi_bao_cao(kq)]
+        if xuat_duoc:
+            try:
+                bao_cao.csv_path = (
+                    engine.export_csv_ngang(xuat_duoc)
+                    if dang_ngang
+                    else engine.export_csv(xuat_duoc)
                 )
-                if chua_day or not ghi_tung_phan:
-                    header, rows, nghiem_ngat = chuyen_dong_sheets(chua_day)
-                    if rows or not ghi_tung_phan:
-                        bao_cao.sheets_so_dong += gui(
-                            ung_dung_sheets, header, rows, nghiem_ngat)
-        except LoiHeaderSheet:
-            pass                       # `gui` đã ghi đúng lời hướng dẫn vào sheets_note
-        except Exception as e:  # noqa: BLE001
-            bao_cao.sheets_ok = False
-            bao_cao.sheets_note = f"Lỗi ghi Google Sheets: {e}"
+            except Exception as e:  # noqa: BLE001
+                bao_cao.loi.append(f"Không xuất được CSV: {e}")
+
+        if y_dinh is not None:
+            _tong_ket_gui(engine, nen, y_dinh, bao_cao, cho_gui_s, dung_lai)
 
     return bao_cao

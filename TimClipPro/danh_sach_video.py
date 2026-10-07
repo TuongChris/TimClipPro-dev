@@ -615,10 +615,9 @@ def day_len_sheet(
     đồng bộ mà vẫn đẩy sẽ xoá sạch trang tính cũ và ``ghi_de`` không hoàn tác được;
     chặn sớm cũng tránh tạo một tab rỗng trên Sheet của người dùng.
 
-    CỐ Ý KHÔNG dùng ``SheetDeliveryWorker``: ``khoa_giao_hang`` băm cả nội dung
-    ``rows`` nên chạy lại khi kho chưa đổi sẽ bị BỎ QUA IM LẶNG — trái hẳn yêu cầu
-    «chạy lại thì ghi đè». Chống trùng sinh ra để chống NỐI trùng dòng; ghi đè vốn
-    đã miễn nhiễm.
+    CỐ Ý KHÔNG đi qua hàng đợi gửi (outbox): hàng đợi chống trùng để chống NỐI trùng
+    dòng kết quả quét, còn đây là GHI ĐÈ cả trang tính — chạy lại thì ghi đè, vốn đã
+    miễn nhiễm với trùng.
     """
     if not ket_qua.dong:
         return False, (f"Kho «{ket_qua.ten_kho}» không có video nào — không ghi đè "

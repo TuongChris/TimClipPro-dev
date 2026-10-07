@@ -51,6 +51,7 @@ import truy_cap_youtube
 import ytdlp_chung
 import dossier
 import lich_su
+import outbox
 import runtime_paths
 import sheet_destinations
 from chan_doan_quet import (
@@ -511,6 +512,16 @@ class ScanObjective:
 
 class Cancelled(Exception):
     """Ném ra khi người dùng bấm Dừng."""
+
+
+class LoiXoaJob(RuntimeError):
+    """Không xoá được lần quét vì việc gửi Google Sheets của nó đang bay hoặc chưa rõ đã gửi chưa."""
+
+
+class LoiLuuBen(RuntimeError):
+    """Không ghi bền được lần quét vào ``lichsu.db`` (đĩa đầy, DB khoá quá lâu, lỗi I/O…). Giao dịch đã
+    huỷ trọn: không có lịch sử, ảnh chụp hay việc gửi nào của lần quét này. Nơi gọi phải DỪNG nhận việc
+    mới và báo rõ — không bao giờ báo «đã lưu»/«đã xếp hàng gửi»."""
 
 
 class SoKhoHong(RuntimeError):
@@ -985,6 +996,9 @@ class Engine:
         # Chính sách báo cáo của job: Engine gốc KHÔNG mang chính sách nào; chỉ bản ghim cho
         # một job (`_ban_sao_cho_job`) được gắn chính sách hiện hành — đúng một lần.
         self.chinh_sach_bao_cao = ""
+        # Ý định gửi Google Sheets của MỘT lượt (lô app, lượt Watch, lệnh CLI): ghim lúc bấm Bắt đầu,
+        # `save_job` đọc từ đây để xếp hàng CÙNG giao dịch (docs/MANAGED_RUNTIME_DESIGN.md §3).
+        self._y_dinh_gui: Optional["sheet_destinations.YDinhGui"] = None
         # Ngày gốc đã bổ sung trong MỘT job / lượt Watch (mỗi mã video hỏi tối đa một lần).
         self._bo_nho_ngay_goc: Optional[_BoNhoNgayGoc] = None
         self.chan_doan_quet = ChanDoanQuet()
@@ -5013,6 +5027,7 @@ class Engine:
         on_video: Optional[Callable] = None,
         *,
         xoa_co_huy: bool = True,
+        y_dinh_gui: Optional["sheet_destinations.YDinhGui"] = None,
     ):
         """Quét lần lượt nhiều nguồn, **yield từng ScanResult ngay khi xong**.
 
@@ -5035,6 +5050,11 @@ class Engine:
         if xoa_co_huy and not getattr(self, "_la_ban_ghim", False):
             self.cancel_event.clear()
         job = self._ban_sao_cho_job()
+        # Đích gửi của lô GHIM trên bản sao của job (Engine gốc không mang): mọi video của lô xếp hàng
+        # về đúng đích đã chụp lúc bấm Bắt đầu, dù người dùng đổi lựa chọn giữa chừng.
+        y_dinh_cu = getattr(job, "_y_dinh_gui", None)
+        if y_dinh_gui is not None:
+            job._y_dinh_gui = y_dinh_gui
         # Cả batch dùng MỘT cầu dao: YouTube đòi xác minh bot / 429 / đăng nhập lặp lại thì các
         # video còn lại KHÔNG được gửi request nào (trước đây chạy tiếp tới hết batch).
         phien = job.phien_youtube_hien_tai() if source_type == "youtube" else None
@@ -5068,6 +5088,8 @@ class Engine:
                         )
                 yield ket_qua
         finally:
+            if job is self:
+                self._y_dinh_gui = y_dinh_cu
             self._nhan_ket_qua_job(job)
 
     def _ket_qua_bo_qua(self, url: str,
@@ -5368,7 +5390,7 @@ class Engine:
             "ly_do": kq.ly_do_pham_vi,
             "pham_vi_quet_s": round(float(kq.pham_vi_quet_s or 0), 3),
         }, ensure_ascii=False)
-        with self._db() as c:
+        with self._luu_ben() as c:
             cur = c.execute(
                 "INSERT INTO jobs(created_at, source_type, source_name, source_ref,"
                 " duration_s, status, n_matches, note, source_id, kho_id, kho_ten,"
@@ -5387,6 +5409,7 @@ class Engine:
                           (job_id, m.clip, m.start_s, m.end_s, m.matched_s,
                            m.clip_offset_s, m.hashes, m.confidence))
             bc = getattr(kq, "bao_cao", None)
+            da_xep_hang = self._xep_hang_gui(c, kq, job_id)
             if bc is not None:
                 # Ảnh chụp báo cáo V2 — bảng RIÊNG, cùng giao dịch với dòng lịch sử (không có
                 # lần quét nào chỉ lưu nửa). Dòng `jobs` giữ nguyên cột như bản cũ. Lượt V2 dựng
@@ -5397,7 +5420,70 @@ class Engine:
                           (job_id, bc.chinh_sach,
                            json.dumps(bc.to_dict(), ensure_ascii=False),
                            datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        if da_xep_hang:
+            outbox.danh_thuc(self.sqlite_file)      # SAU commit: người gửi nền gửi ngay
         return job_id
+
+    @contextlib.contextmanager
+    def _luu_ben(self):
+        """Giao dịch ghi lần quét: lỗi SQLite/I-O (kể cả lúc commit) → ``LoiLuuBen`` sau khi giao dịch
+        đã huỷ trọn. Thông báo chỉ nêu KIỂU lỗi + mã SQLite, không nêu đường dẫn."""
+        try:
+            with self._db() as c:
+                yield c
+        except (sqlite3.Error, OSError) as e:
+            ma = getattr(e, "sqlite_errorname", "") or ""
+            LOGGER_SCAN.error("event=history.save_failed err=%s code=%s", type(e).__name__, ma)
+            raise LoiLuuBen(
+                f"Không lưu bền được vào lịch sử ({type(e).__name__}{' ' + ma if ma else ''}) — kết "
+                "quả lần quét chưa được lưu và chưa xếp hàng gửi Google Sheets. Kiểm dung lượng ổ "
+                "đĩa hoặc chương trình khác đang giữ lichsu.db rồi quét lại.") from e
+
+    @contextlib.contextmanager
+    def ghim_y_dinh_gui(self, y_dinh: Optional["sheet_destinations.YDinhGui"]):
+        """Ghim ý định gửi cho CẢ một lượt trên Engine này (Watch/CLI: mỗi video là một job lẻ,
+        bản sao job kế thừa qua ``copy.copy``). Hết lượt thì gỡ — lượt sau không tự gửi theo."""
+        cu = getattr(self, "_y_dinh_gui", None)
+        self._y_dinh_gui = y_dinh
+        try:
+            yield y_dinh
+        finally:
+            self._y_dinh_gui = cu
+
+    def _xep_hang_gui(self, con, kq: ScanResult, job_id: int) -> bool:
+        """Chèn việc gửi của lần quét vào outbox bằng CHÍNH kết nối của ``save_job`` (một giao dịch).
+
+        Chỉ kết quả ``ok`` có dòng mới gửi (như đường giao hàng cũ). Báo cáo V2 lỗi/hỏng và kết quả
+        luật cũ → việc BLOCKED_REPORT không payload (hiện trong hàng đợi để người dùng biết, không
+        bao giờ gửi theo luật cũ — P1-02). Dựng dòng lỗi → cũng BLOCKED_REPORT: kết quả quét vẫn lưu.
+        """
+        y = getattr(self, "_y_dinh_gui", None)
+        if y is None or kq.status != "ok":
+            return False
+        bc = getattr(kq, "bao_cao", None)
+        chinh_sach = getattr(bc, "chinh_sach", "") or ""
+        viec: dict = {}
+        if bao_cao_v2.la_loi_bao_cao(bc):
+            viec = dict(header=None, rows=None, trang_thai=outbox.BLOCKED_REPORT,
+                        loi=bc.thong_bao())
+        elif bc is None:
+            viec = dict(header=None, rows=None, trang_thai=outbox.BLOCKED_REPORT,
+                        loi="Kết quả theo luật báo cáo cũ — hàng đợi gửi chỉ nhận báo cáo V2.")
+        else:
+            try:
+                header, rows, _ = self.dong_gui_sheets(
+                    [kq], dang_ngang=y.dich.schema_id == sheet_destinations.SCHEMA_NGANG,
+                    an_toan_cu=False)
+            except Exception as e:  # noqa: BLE001 — lỗi dựng dòng không được làm mất kết quả quét
+                LOGGER_SCAN.warning("event=outbox.payload_failed err=%s", type(e).__name__)
+                viec = dict(header=None, rows=None, trang_thai=outbox.BLOCKED_REPORT,
+                            loi=f"Không dựng được dòng gửi ({type(e).__name__}) — kết quả quét "
+                                "vẫn được lưu; hãy quét lại video này.")
+            else:
+                if not rows:
+                    return False
+                viec = dict(header=list(header), rows=rows)
+        return outbox.them_viec(con, y, job_id=job_id, chinh_sach=chinh_sach, **viec) is not None
 
     def list_jobs(self, limit: int = 200) -> list:
         with self._db() as c:
@@ -5443,9 +5529,31 @@ class Engine:
         return [dict(r) for r in rows]
 
     def delete_job(self, job_id: int) -> None:
-        # Ảnh chụp báo cáo V2 thuộc đúng lần quét này — xoá CÙNG giao dịch, không để mồ côi
-        # (audit P1-01). Lỗi giữa chừng: `_db` không commit nên cả ba lệnh cùng lùi lại.
-        with self._db() as c:
+        """Xoá một lần quét CÙNG mọi thứ thuộc về nó, trong MỘT giao dịch ghi (``BEGIN IMMEDIATE``
+        nên người gửi không claim chen vào giữa lúc kiểm và lúc xoá).
+
+        * Ảnh chụp báo cáo V2 — xoá cùng (audit P1-01).
+        * Việc gửi chưa gửi (chờ / chờ thử lại / bị chặn / đã huỷ) — xoá cùng: không có chuyện UI báo
+          đã xoá mà người gửi vẫn gửi sau đó.
+        * Việc đang trong tay người gửi hoặc KHÔNG RÕ đã gửi chưa — TỪ CHỐI xoá (``LoiXoaJob``): không
+          thể thu hồi một lần ghi có thể đã tới Google; người dùng đối soát/huỷ trước.
+        * Việc ĐÃ gửi — xoá lịch sử local KHÔNG xoá dòng trên Google; chỉ giữ tombstone tối thiểu
+          (đích, biên nhận, mã băm payload, thời điểm) — payload bị xoá.
+        """
+        with sheet_destinations.ket_noi(self.sqlite_file, ghi=True) as c:
+            dang_bay = c.execute(
+                "SELECT COUNT(*) FROM hang_doi_gui WHERE job_id=? AND trang_thai IN (?,?,?)",
+                (job_id, outbox.CLAIMED, outbox.SENDING, outbox.UNKNOWN)).fetchone()[0]
+            if dang_bay:
+                raise LoiXoaJob(
+                    "Lần quét này có việc gửi Google Sheets đang gửi hoặc chưa rõ đã gửi chưa — "
+                    "đối soát/huỷ ở mục «📤 Gửi Google Sheets» rồi mới xoá.")
+            c.execute("DELETE FROM hang_doi_gui WHERE job_id=? AND trang_thai IN (?,?,?,?,?)",
+                      (job_id, outbox.PENDING, outbox.RETRY_WAIT, outbox.BLOCKED_CONFIG,
+                       outbox.BLOCKED_REPORT, outbox.CANCELLED))
+            c.execute("UPDATE hang_doi_gui SET header_json=NULL, rows_json=NULL, da_xoa_job=1,"
+                      " sua_luc=? WHERE job_id=? AND trang_thai=?",
+                      (time.time(), job_id, outbox.SENT))
             c.execute("DELETE FROM bao_cao_job WHERE job_id=?", (job_id,))
             c.execute("DELETE FROM matches WHERE job_id=?", (job_id,))
             c.execute("DELETE FROM jobs WHERE id=?", (job_id,))

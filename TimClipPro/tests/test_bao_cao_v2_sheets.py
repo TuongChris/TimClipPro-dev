@@ -4,15 +4,13 @@
 * Gửi V2 ở chế độ NGHIÊM NGẶT: hàng 1 phải đúng tiêu đề của công cụ; bảng có dữ liệu mà
   thiếu/sai tiêu đề thì DỪNG và hướng dẫn — không chèn/sửa hàng 1, không append lệch cột,
   không clear/resize/update hàng cũ. Bảng rỗng thật sự mới được khởi tạo tiêu đề.
-* Payload đã xếp hàng là cố định: thử lại gửi đúng các dòng đã chốt, không dựng lại.
+* Payload đã xếp hàng là cố định — nay ở outbox lưu bền (tests/test_outbox*.py).
 * Đường gửi CŨ giữ nguyên hành vi cũ (test_sheets_session.py).
 """
 import pytest
 
 import bang_ngang
-import sheet_delivery as sd
 import sheets
-from sheet_delivery import SheetDelivery, SheetDeliveryWorker
 from sheets import SheetsExporter, xoa_cache_ket_noi
 
 HEADER = list(bang_ngang.HEADER_NGANG)
@@ -131,10 +129,6 @@ def test_bang_co_du_lieu_ma_sai_tieu_de_thi_dung_khong_sua(bang, hang_1):
     assert "hàng tiêu đề" in str(loi.value) and "không tự" in str(loi.value)
 
 
-def test_loi_tieu_de_khong_duoc_thu_lai():
-    assert sd.phan_loai_loi(sheets.LoiHeaderSheet("x")) is False
-
-
 def test_che_do_cu_van_tu_chen_tieu_de_nhu_truoc(bang):
     """Đường gửi cũ không đổi (ca «mất hàng tiêu đề» vẫn được chèn như bản trước)."""
     bang["hop"]["noi_dung"][:] = [["https://youtu.be/aaaaaaaaaaa", "46229.41"]]
@@ -145,64 +139,3 @@ def test_che_do_cu_van_tu_chen_tieu_de_nhu_truoc(bang):
 # ---------------------------------------------------------------------------
 #  Hàng đợi giao hàng
 # ---------------------------------------------------------------------------
-
-def _worker(gui):
-    return SheetDeliveryWorker(sender=gui, base_delay=0.0, sleep_fn=lambda s: None)
-
-
-def test_payload_v2_gui_nghiem_ngat_payload_cu_giu_chu_ky_cu():
-    nhan = []
-
-    def gui(link, header, rows, **kw):
-        nhan.append((header, rows, kw))
-        return len(rows)
-
-    w = _worker(gui)
-    w.enqueue(SheetDelivery("k_moi", "a", "A", HEADER, DONG, sheet_link="s", nghiem_ngat=True))
-    w.enqueue(SheetDelivery("k_cu", "b", "B", HEADER, DONG, sheet_link="s"))
-    w._giao("k_moi")
-    w._giao("k_cu")
-    assert nhan[0][2] == {"nghiem_ngat": True}
-    assert nhan[1][2] == {}
-
-
-def test_sender_cu_ba_tham_so_van_chay_voi_payload_cu():
-    def gui(link, header, rows):          # chữ ký cũ, không nhận keyword
-        return len(rows)
-
-    w = _worker(gui)
-    w.enqueue(SheetDelivery("k", "a", "A", HEADER, DONG, sheet_link="s"))
-    w._giao("k")
-    assert w.snapshot()["k"].status == sd.DA_GUI
-
-
-def test_thu_lai_gui_dung_cac_dong_da_chot():
-    lan = []
-
-    def gui(link, header, rows, **kw):
-        lan.append([list(r) for r in rows])
-        if len(lan) == 1:
-            raise RuntimeError("503 tạm thời")
-        return len(rows)
-
-    w = _worker(gui)
-    rows = [list(DONG[0])]
-    w.enqueue(SheetDelivery("k", "a", "A", HEADER, rows, sheet_link="s", nghiem_ngat=True))
-    w._giao("k")
-    assert len(lan) == 2 and lan[0] == lan[1] == [list(DONG[0])]
-    assert w.snapshot()["k"].status == sd.DA_GUI
-
-
-def test_sai_tieu_de_that_bai_ngay_khong_append_lap_lai():
-    lan = []
-
-    def gui(link, header, rows, **kw):
-        lan.append(1)
-        raise sheets.LoiHeaderSheet("Hàng tiêu đề sai — không tự sửa.")
-
-    w = _worker(gui)
-    w.enqueue(SheetDelivery("k", "a", "A", HEADER, DONG, sheet_link="s", nghiem_ngat=True))
-    w._giao("k")
-    assert lan == [1]
-    assert w.snapshot()["k"].status == sd.THAT_BAI
-    assert "tiêu đề" in w.snapshot()["k"].last_error

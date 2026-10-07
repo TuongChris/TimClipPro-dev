@@ -63,31 +63,6 @@ def doan_phase(thong_bao: str) -> Optional[str]:
 
 
 @dataclass(frozen=True)
-class ScanLaunchConfig:
-    """Ảnh chụp cấu hình lúc bấm Bắt đầu quét.
-
-    Thread nền **không có ScriptRunContext**, nên đọc ``st.session_state`` từ đó chỉ
-    nhận một proxy rỗng — đó là nguyên nhân thật của «missing ScriptRunContext» và
-    ``KeyError: sheet_link``, chứ không phải key chưa được khởi tạo. Main thread chụp
-    cấu hình một lần rồi truyền xuống; worker chỉ đọc dữ liệu Python thuần.
-
-    Bất biến còn có lợi về nghiệp vụ: đổi link Sheet giữa batch không làm batch đang
-    chạy bắn sang bảng khác.
-    """
-
-    auto_sheet: bool = False
-    sheet_link: str = ""
-    dang_ngang: bool = True
-
-    @property
-    def sheet_id(self) -> str:
-        """ID đã chuẩn hoá; dùng cho khoá idempotency."""
-        from sheets import _lay_sheet_id
-
-        return _lay_sheet_id(self.sheet_link)
-
-
-@dataclass(frozen=True)
 class VideoState:
     """Trạng thái một video trong batch. Bất biến; cập nhật bằng ``replace``."""
 
@@ -102,7 +77,7 @@ class VideoState:
     progress: float = 0.0
     message: str = ""
     error: str = ""
-    delivery_key: str = ""
+    delivery_key: str = ""          # mã việc gửi trong outbox (rỗng = không gửi)
     started_at: Optional[float] = None
     finished_at: Optional[float] = None
 
@@ -128,6 +103,10 @@ class BatchSnapshot:
     eta_seconds: Optional[float]
     message: str
     videos: tuple = ()
+    # Đích Google Sheets ĐÃ GHIM của lô (nhãn) + mã lô trong outbox; rỗng = chỉ lưu cục bộ.
+    dich_gui: str = ""
+    dich_id: str = ""
+    lo_id: str = ""
 
     @property
     def batch_progress(self) -> float:
@@ -146,9 +125,8 @@ class BatchSnapshot:
 class ScanJobController:
     """Một batch, một worker thread, snapshot bất biến cho UI."""
 
-    def __init__(self, engine, sheet_worker=None, recent_maxlen: int = 60):
+    def __init__(self, engine, recent_maxlen: int = 60):
         self.engine = engine
-        self.sheet_worker = sheet_worker
         self._lock = threading.RLock()
         self._thread: Optional[threading.Thread] = None
         self._batch_id = ""
@@ -163,6 +141,7 @@ class ScanJobController:
         self._xong_gan_day: deque = deque(maxlen=10)
         self._message = ""
         self._error = ""
+        self._y_dinh_gui = None
 
     # ---------- điều khiển ----------
 
@@ -171,7 +150,10 @@ class ScanJobController:
         nguon: list,
         source_type: str = "youtube",
         on_result: Optional[Callable] = None,
+        y_dinh_gui=None,
     ) -> str:
+        """``y_dinh_gui``: ý định gửi đã chụp lúc bấm Bắt đầu (``sheet_destinations.YDinhGui``) —
+        ghim trên bản Engine của lô, đổi lựa chọn trên giao diện giữa chừng không ảnh hưởng."""
         with self._lock:
             if self._running or (self._thread and self._thread.is_alive()):
                 raise RuntimeError("Đang có batch quét chạy; không tạo batch trùng.")
@@ -188,6 +170,7 @@ class ScanJobController:
             self._message = "Đang chuẩn bị..."
             self._started_mono = time.monotonic()
             self._finished_mono = None
+            self._y_dinh_gui = y_dinh_gui
             batch_id = self._batch_id
 
         self.engine.cancel_event.clear()
@@ -262,8 +245,10 @@ class ScanJobController:
 
             # Cờ huỷ đã được xoá ĐÚNG MỘT LẦN ở start(); scan_iter không xoá lại để một
             # cú bấm Dừng rơi vào khoảng giữa start() và lúc thread chạy không bị nuốt.
+            # Chỉ truyền khi có, để engine giả trong test giữ chữ ký cũ.
+            them = {"y_dinh_gui": self._y_dinh_gui} if self._y_dinh_gui is not None else {}
             for ket_qua in self.engine.scan_iter(
-                nguon, source_type, tien_do, on_video=sau_moi_video, xoa_co_huy=False
+                nguon, source_type, tien_do, on_video=sau_moi_video, xoa_co_huy=False, **them
             ):
                 with self._lock:
                     self._results.append(ket_qua)
@@ -375,6 +360,9 @@ class ScanJobController:
                 eta_seconds=None,
                 message=self._message,
                 videos=videos,
+                dich_gui=(self._y_dinh_gui.dich.nhan if self._y_dinh_gui is not None else ""),
+                dich_id=(self._y_dinh_gui.dich.dich_id if self._y_dinh_gui is not None else ""),
+                lo_id=(self._y_dinh_gui.lo_id if self._y_dinh_gui is not None else ""),
             )
         return replace(snapshot, eta_seconds=self._eta(len(videos) - xong - loi))
 

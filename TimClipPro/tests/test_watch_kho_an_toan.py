@@ -38,10 +38,15 @@ def _eng(tmp_path) -> Engine:
 
 class _Dem:
     def __init__(self):
+        from outbox_gia import CongGia
         self.liet_ke = 0
         self.quet = []
         self.xuat = 0
-        self.sheets = 0
+        self.cong = CongGia()                  # transport Sheets GIẢ của outbox
+
+    @property
+    def sheets(self) -> int:
+        return self.cong.lan_goi
 
 
 def _gan_dem(e, monkeypatch, dem: _Dem, video_id="vid00000001"):
@@ -58,21 +63,9 @@ def _gan_dem(e, monkeypatch, dem: _Dem, video_id="vid00000001"):
         dem.xuat += 1
         return "ket_qua.csv"
 
-    class SheetsDem:
-        def __init__(self, sheet=""):
-            pass
-
-        def san_sang(self):
-            return True
-
-        def append(self, header, rows):
-            dem.sheets += 1
-            return len(rows)
-
     monkeypatch.setattr(e, "scan_youtube", quet)
     monkeypatch.setattr(e, "export_csv_ngang", xuat)
     monkeypatch.setattr(e, "export_csv", xuat)
-    monkeypatch.setattr(watch, "SheetsExporter", SheetsDem)
     return lister
 
 
@@ -86,7 +79,8 @@ def test_khong_mo_duoc_kho_yeu_cau_thi_dung_truoc_moi_thao_tac(tmp_path, monkeyp
     lich_su = _sha(e.sqlite_file)
     wl = WatchList(muc=[MucTheoDoi("kenh", "kenh-1")], kho=ten_kho)
 
-    bc = chay_giam_sat(e, wl, lister=lister, sheet_link="sheet-gia")
+    bc = chay_giam_sat(e, wl, lister=lister, sheet_link="1" + "s" * 43,
+                       tao_cong=lambda: dem.cong)
 
     assert dem.liet_ke == 0 and dem.quet == [] and dem.xuat == 0 and dem.sheets == 0
     assert bc.quet_moi == 0 and not bc.csv_path and bc.sheets_so_dong == 0

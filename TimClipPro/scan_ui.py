@@ -33,7 +33,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 import pandas as pd
 
-import bao_cao_v2
+import outbox
 import truy_cap_youtube as _tc
 from common_original import (
     COT_SO_NGUON_CHUNG,
@@ -103,14 +103,8 @@ TEN_TRANG_THAI_QUET = {
     "running": "⏳ Đang chạy",
     "queued": "Chờ",
 }
-TEN_TRANG_THAI_SHEET = {
-    "pending": "Chờ gửi",
-    "sending": "Đang gửi",
-    "sent": "✅ Đã gửi",
-    "retrying": "Đang thử lại",
-    "failed": "❌ Lỗi",
-    "not_configured": CHUA_CO,
-}
+# Trạng thái việc gửi Google Sheets (outbox lưu bền) — cùng nhãn với tab «📤 Gửi Google Sheets».
+TEN_TRANG_THAI_SHEET = dict(outbox.NHAN_TRANG_THAI)
 
 
 GOI_Y_VUNG_LOI = "Nguồn có vùng lỗi hoặc file tải về thiếu: quét lại nguồn đó."
@@ -160,7 +154,7 @@ def _mo_ta_sheet(delivery_key: str, trang_thai_sheet: Mapping[str, Any]) -> str:
     muc = trang_thai_sheet.get(delivery_key)
     if muc is None:
         return CHUA_CO
-    trang_thai = getattr(muc, "status", "")
+    trang_thai = getattr(muc, "trang_thai", "")
     return TEN_TRANG_THAI_SHEET.get(trang_thai, str(trang_thai) or CHUA_CO)
 
 
@@ -171,7 +165,7 @@ def build_scan_status_dataframe(
     """Bảng trạng thái từng video, dtype tường minh nên Arrow không phải đoán.
 
     ``videos``: các ``scan_jobs.VideoState``.
-    ``trang_thai_sheet``: map ``delivery_key -> SheetDelivery`` (có thể rỗng).
+    ``trang_thai_sheet``: map ``mã việc gửi -> outbox.ViecGui`` (có thể rỗng).
     """
     trang_thai_sheet = trang_thai_sheet or {}
     dong = []
@@ -238,35 +232,3 @@ def csv_nguon_chung(kql: Any) -> bytes:
     """CSV utf-8-sig của kết quả lô, ô đã chặn công thức bảng tính."""
     df = pd.DataFrame(dong_bao_cao(kql), columns=HEADER_NGUON_CHUNG)
     return df.to_csv(index=False).encode("utf-8-sig")
-
-
-def giao_hang_sheets(eng: Any, ket_qua: Any, *, sheet_id: str, sheet_link: str,
-                     dang_ngang: bool) -> Optional[Any]:
-    """Việc gửi Google Sheets cho MỘT kết quả quét — dòng CHỐT ngay lúc xếp hàng.
-
-    Kết quả mang ảnh chụp báo cáo V2: dòng dựng từ ảnh chụp, giá trị nguyên văn (RAW), gửi
-    nghiêm ngặt (hàng tiêu đề sai là dừng). Kết quả cũ: luật cũ (escape công thức). Thử lại
-    sau này gửi ĐÚNG các dòng trả về ở đây — không dựng lại bằng resolver/chính sách mới.
-    ``None`` khi không có dòng nào để gửi — kể cả khi báo cáo V2 của kết quả lỗi/hỏng: không
-    xếp hàng, không lùi về luật cũ (audit P1-02); bảng kết quả trên giao diện báo lỗi đó.
-    Không chạm Streamlit (chạy trong scan worker).
-    """
-    from sheet_delivery import SheetDelivery, khoa_giao_hang
-
-    if getattr(ket_qua, "status", "ok") != "ok":
-        return None
-    if bao_cao_v2.la_loi_bao_cao(getattr(ket_qua, "bao_cao", None)):
-        return None
-    header, rows, nghiem_ngat = eng.dong_gui_sheets(
-        [ket_qua], dang_ngang=dang_ngang, an_toan_cu=True)
-    if not rows:
-        return None
-    khoa = khoa_giao_hang(sheet_id, "", "ngang" if dang_ngang else "doc",
-                          getattr(ket_qua, "job_id", None),
-                          getattr(ket_qua, "source_id", "") or "", rows)
-    return SheetDelivery(
-        delivery_key=khoa,
-        source_id=getattr(ket_qua, "source_id", "") or "",
-        source_name=getattr(ket_qua, "source_name", "") or "",
-        header=header, rows=rows, sheet_link=sheet_link, nghiem_ngat=nghiem_ngat,
-    )

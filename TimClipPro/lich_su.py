@@ -85,7 +85,8 @@ _DDL_BAO_CAO = (
 
 # Phiên bản 3: gửi Google Sheets lưu bền. Cùng FILE với lịch sử để một giao dịch chốt được cả lần
 # quét lẫn ý định gửi của nó; bảng RIÊNG nên `jobs` và mọi `SELECT * FROM jobs` không đổi.
-BANG_GUI = ("cai_dat_may", "xac_thuc_gui", "dich_gui", "dich_gui_phien_ban", "hang_doi_gui")
+BANG_GUI = ("cai_dat_may", "xac_thuc_gui", "dich_gui", "dich_gui_phien_ban", "dich_gui_tab_chot",
+            "hang_doi_gui")
 _DDL_GUI = (
     """CREATE TABLE IF NOT EXISTS cai_dat_may(
         khoa TEXT PRIMARY KEY, gia_tri TEXT NOT NULL)""",
@@ -105,6 +106,12 @@ _DDL_GUI = (
         spreadsheet_id TEXT NOT NULL, worksheet_id INTEGER, worksheet_ten TEXT NOT NULL,
         schema_id TEXT NOT NULL, xac_thuc_ref TEXT NOT NULL, tao_luc TEXT NOT NULL,
         PRIMARY KEY(dich_id, phien_ban))""",
+    # Mã tab (gid) ĐÃ CHỐT của một revision ở lần gửi THÀNH CÔNG đầu tiên — chỉ thêm, lần đầu thắng.
+    # Từ đó mọi việc của revision gửi theo mã này: tab đổi tên vẫn đúng chỗ, tab cùng tên tạo lại
+    # không bao giờ được coi là tab cũ.
+    """CREATE TABLE IF NOT EXISTS dich_gui_tab_chot(
+        dich_id TEXT NOT NULL, phien_ban INTEGER NOT NULL, worksheet_id INTEGER NOT NULL,
+        worksheet_ten TEXT NOT NULL, luc TEXT NOT NULL, PRIMARY KEY(dich_id, phien_ban))""",
     # Outbox: đích ghim (`dich_json`) + payload đã dựng (`header_json`/`rows_json`) sống trong dòng —
     # gửi lại không bao giờ dựng lại từ hồ sơ hiện tại hay quét lại.
     """CREATE TABLE IF NOT EXISTS hang_doi_gui(

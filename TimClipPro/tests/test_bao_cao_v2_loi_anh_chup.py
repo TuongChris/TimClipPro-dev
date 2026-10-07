@@ -29,14 +29,11 @@ import bao_cao_v2 as v2
 import cli
 import common_original as co
 import dossier
-import scan_ui
-import sheets
-import watch
 from engine import Engine
 from golden_quet import Dat
 from test_bao_cao_v2 import _bc, _kq_ca_that
 from test_bao_cao_v2_quet import URL, _B, _the_gioi
-from test_truy_cap_youtube_lo import _SheetsDem, _chay_lo, _eng, _ma, _quet_gia, _url
+from test_truy_cap_youtube_lo import LINK_GIA, _chay_lo, _cong_dem, _eng, _ma, _quet_gia, _url
 from watch import MucTheoDoi, WatchList, chay_giam_sat
 from ytdlp_gia import YdlKichBan
 
@@ -180,18 +177,6 @@ def test_moi_exporter_chan_va_khong_dung_luat_cu(tmp_path, monkeypatch):
     assert sinh == [], "không để lại file CSV/MD dở dang"
 
 
-def test_khong_xep_hang_sheets_cho_ket_qua_loi(tmp_path, monkeypatch):
-    e, kq, _ = _quet_loi(tmp_path, monkeypatch)
-    for ngang in (True, False):
-        assert scan_ui.giao_hang_sheets(e, kq, sheet_id="s", sheet_link="l",
-                                        dang_ngang=ngang) is None
-
-
-def test_loi_xuat_la_loi_vinh_vien_cua_hang_doi_sheets():
-    import sheet_delivery as sd
-    assert sd.phan_loai_loi(v2.LoiXuatBaoCaoV2("x")) is False
-
-
 def test_loi_khi_chuan_bi_video_goc_cung_la_loi_v2_khong_mat_ket_qua(tmp_path, monkeypatch):
     def no(*a, **k):
         raise KeyError("metadata hỏng (giả lập)")
@@ -264,43 +249,23 @@ def test_ket_qua_cu_van_xuat_luat_cu_va_tach_khoi_ket_qua_loi(tmp_path, monkeypa
         e.to_rows([cu, loi])                                 # không xuất lẫn một nửa
 
 
-def test_v2_binh_thuong_khong_doi(tmp_path, monkeypatch):
-    e, mt, hop, kb = _the_gioi(tmp_path, monkeypatch, [Dat(_B, 915.5, 300)])
-    kq = e.scan_youtube(URL)
-    assert isinstance(kq.bao_cao, v2.BaoCaoV2)
-    assert e.bao_cao_cua_job(kq.job_id) == kq.bao_cao
-    assert e.dong_bao_cao_job(kq.job_id, dang_ngang=True) == e.to_rows_ngang([kq])
-    _, rows, nghiem = e.dong_gui_sheets([kq], dang_ngang=True, an_toan_cu=False)
-    assert nghiem is True and rows == e.to_rows_ngang([kq])
-    assert scan_ui.giao_hang_sheets(e, kq, sheet_id="s", sheet_link="l",
-                                    dang_ngang=True).nghiem_ngat is True
-
-
 # ---------------------------------------------------------------------------
 #  Watch, CLI, lô nguồn chung
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("dang_ngang", [True, False])
 def test_watch_khong_xuat_khong_gui_ket_qua_loi_bao_cao(tmp_path, monkeypatch, dang_ngang):
-    ghi = []
-
-    class _Ghi(_SheetsDem):
-        def append(self, header, rows, **kw):
-            ghi.extend(rows)
-            return super().append(header, rows, **kw)
-
-    _SheetsDem.lan_ghi, _SheetsDem.tham_so = 0, []
-    monkeypatch.setattr(watch, "SheetsExporter", _Ghi)
+    cong = _cong_dem(monkeypatch, tmp_path)
     e = _eng(tmp_path, monkeypatch, YdlKichBan())
     monkeypatch.setattr(e, "scan_media", _quet_gia(e))
     _hong_dung(monkeypatch, chi_ma=_ma(2))
     wl = WatchList(muc=[MucTheoDoi("link", _url(_ma(i))) for i in (1, 2)], kho="A")
-    bc = chay_giam_sat(e, wl, sheet_link="https://docs.google.com/spreadsheets/d/x/edit",
-                       dang_ngang=dang_ngang)
-    chu = [" ".join(map(str, r)) for r in ghi]
+    bc = chay_giam_sat(e, wl, sheet_link=LINK_GIA, dang_ngang=dang_ngang)
+    chu = [" ".join(map(str, r)) for _, _, rows in cong.bang for r in rows]
     assert any(_ma(1) in c for c in chu), "video hợp lệ vẫn lên Sheets"
     assert not any(_ma(2) in c for c in chu), "video lỗi báo cáo V2 không lên Sheets"
-    assert all(kw == {"nghiem_ngat": True} for kw in _SheetsDem.tham_so)
+    import outbox
+    assert bc.gui[outbox.BLOCKED_REPORT] == 1                # lỗi V2: có trong hàng đợi, KHÔNG payload
     assert any("Báo cáo V2" in x for x in bc.loi)
     with open(bc.csv_path, encoding="utf-8-sig") as f:
         noi_dung = f.read()
@@ -351,14 +316,17 @@ def _chu(at):
 
 
 def test_giao_dien_bao_loi_v2_va_chi_gui_sheets_ket_qua_hop_le(tmp_path, monkeypatch):
+    """Gửi thêm (thủ công) qua outbox: chỉ kết quả hợp lệ thành việc gửi; payload dựng lại TỪ ẢNH
+    CHỤP đã lưu; kết quả V2 lỗi được báo, không bao giờ thành dòng gửi."""
+    import outbox
+    from outbox_gia import dich_gia
     _app(tmp_path, monkeypatch)
-    gui = []
-    monkeypatch.setattr(sheets.SheetsExporter, "san_sang", lambda self: True)
-    monkeypatch.setattr(sheets.SheetsExporter, "append",
-                        lambda self, header, rows, **kw: gui.append((rows, kw)) or len(rows))
+    at = AppTest.from_file(str(APP_PY), default_timeout=120).run()
+    eng = at.session_state.eng
+    dich_gia(eng.sqlite_file, tmp_path, installation_id=eng.installation_id())
     tot = _kq_ca_that()
     tot.bao_cao = _bc(tot)
-    at = AppTest.from_file(str(APP_PY), default_timeout=120).run()
+    tot.job_id = eng.save_job(tot, "youtube")
     at.session_state.job.update({"running": False, "kind": "scan", "results": [tot, _kq_loi()],
                                  "error": "", "da_day_sheet": True})
     at.run()
@@ -367,26 +335,30 @@ def test_giao_dien_bao_loi_v2_va_chi_gui_sheets_ket_qua_hop_le(tmp_path, monkeyp
     assert "Báo cáo V2" in loi and "Video lỗi báo cáo" in loi
     bang = next(d.value for d in at.dataframe if "Nguồn video dài" in d.value.columns)
     assert list(bang["Nguồn video dài"]) == ["Video tổng hợp thử (Phần 2)"]
-    at = next(b for b in at.button if b.label == "📊 Đẩy lên Google Sheets").click().run()
+    at = next(b for b in at.button if b.label == "📤 Tạo việc gửi").click().run()
     assert not at.exception
-    assert len(gui) == 1 and gui[0][1] == {"nghiem_ngat": True}
-    da_gui = " ".join(str(o) for dong in gui[0][0] for o in dong)
+    (viec,) = outbox.ds_viec(eng.sqlite_file)
+    assert viec.job_id == tot.job_id and viec.nguon == outbox.NGUON_THU_CONG
+    da_gui = " ".join(str(o) for dong in viec.rows for o in dong)
     assert "vidvipham01" in da_gui and "vidloi00001" not in da_gui
+    nen = outbox._NEN.get(outbox._khoa_db(eng.sqlite_file))
+    if nen is not None:
+        nen.stop()
 
 
 def test_giao_dien_lo_chi_co_ket_qua_loi_thi_khong_gui_gi(tmp_path, monkeypatch):
+    import outbox
+    from outbox_gia import dich_gia
     _app(tmp_path, monkeypatch)
-    gui = []
-    monkeypatch.setattr(sheets.SheetsExporter, "san_sang", lambda self: True)
-    monkeypatch.setattr(sheets.SheetsExporter, "append",
-                        lambda self, header, rows, **kw: gui.append(rows) or len(rows))
     at = AppTest.from_file(str(APP_PY), default_timeout=120).run()
+    eng = at.session_state.eng
+    dich_gia(eng.sqlite_file, tmp_path, installation_id=eng.installation_id())
     at.session_state.job.update({"running": False, "kind": "scan", "results": [_kq_loi()],
                                  "error": "", "da_day_sheet": True})
     at.run()
-    at = next(b for b in at.button if b.label == "📊 Đẩy lên Google Sheets").click().run()
     assert not at.exception
-    assert gui == []
+    assert not any(b.label == "📤 Tạo việc gửi" for b in at.button)
+    assert outbox.ds_viec(eng.sqlite_file) == []
     assert "Báo cáo V2" in " ".join(str(x.value) for x in at.error)
 
 

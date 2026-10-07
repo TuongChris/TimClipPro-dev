@@ -12,6 +12,7 @@ Dữ liệu KHÔNG đi đâu cả — server chỉ lắng nghe ở localhost tr�
 import os
 import threading
 import time
+import uuid
 from datetime import datetime
 
 import pandas as pd
@@ -22,30 +23,30 @@ import bao_cao_v2
 import common_original as nguon_chung
 import danh_sach_video
 import lich_su
+import outbox
 import runtime_paths
 import sheet_destinations
+import ui_gui_sheets as ui_gui
 from cau_hinh import GIA_TRI_GIAO_DIEN_MAC_DINH
 from clip_metadata import configure_metadata_logging
 import truy_cap_youtube
 import ytdlp_chung
 from common_original_jobs import TEN_PHA as TEN_PHA_NGUON_CHUNG
 from common_original_jobs import CommonOriginalJobController, xuat_csv
-from engine import Engine, ScanResult, hhmmss, mo_ta_pham_vi, o_bang_tinh_an_toan
+from engine import Engine, LoiXoaJob, ScanResult, hhmmss, mo_ta_pham_vi, o_bang_tinh_an_toan
 from fingerprint_progress import FingerprintJobController
 from khoa import DangChayRoi
 from publication_date import format_publication_date
-from scan_jobs import ScanJobController, ScanLaunchConfig
+from scan_jobs import ScanJobController
 from scan_ui import (
     build_nguon_chung_status_dataframe,
     build_scan_status_dataframe,
     csv_nguon_chung,
     df_nguon_chung,
     dong_trang_thai_youtube,
-    giao_hang_sheets,
     goi_y_quet_mot_phan,
     thong_bao_youtube_chan,
 )
-from sheet_delivery import SheetDeliveryWorker
 from channel import ChannelSync
 from sheets import SheetsExporter
 
@@ -102,19 +103,12 @@ def _dong_bo_job_van_tay() -> None:
 _dong_bo_job_van_tay()
 
 
-if "scan_sheet_worker" not in st.session_state:
-    # sender nhận sheet_link kèm theo công việc nên chạy được ở thread nền:
-    # nó KHÔNG đọc st.session_state, nơi thread nền chỉ thấy proxy rỗng.
-    st.session_state.scan_sheet_worker = SheetDeliveryWorker(
-        sender=lambda sheet_link, header, rows, **kw:
-            tao_sheets_exporter(sheet_link).append(header, rows, **kw)
-    )
 if "scan_controller" not in st.session_state:
-    st.session_state.scan_controller = ScanJobController(
-        eng, sheet_worker=st.session_state.scan_sheet_worker
-    )
-scan_sheet_worker: SheetDeliveryWorker = st.session_state.scan_sheet_worker
+    st.session_state.scan_controller = ScanJobController(eng)
 scan_controller: ScanJobController = st.session_state.scan_controller
+# Gửi Google Sheets: hàng đợi BỀN trong lichsu.db + MỘT người gửi nền mỗi tiến trình (không đọc
+# st.session_state). Còn việc chờ từ lần chạy trước (tắt app, mất điện) thì gửi tiếp ngay.
+ui_gui.dam_bao_nguoi_gui(eng)
 if "common_controller" not in st.session_state:
     st.session_state.common_controller = CommonOriginalJobController(eng)
 common_controller: CommonOriginalJobController = st.session_state.common_controller
@@ -127,42 +121,40 @@ def dang_co_tac_vu() -> bool:
                 or common_controller.running or fingerprint_controller.running)
 
 
-def chay_quet(nguon: list, source_type: str) -> None:
-    """Khởi động batch quét. Kết quả hiện ngay từng video; Sheets gửi song song."""
+def chay_quet(nguon: list, source_type: str, *, dich_id: str = "", tu_dong: bool = False,
+              tab_key: str = "") -> None:
+    """Khởi động batch quét. Kết quả hiện ngay từng video; việc gửi Sheets xếp hàng bền song song."""
     if dang_co_tac_vu():
         st.warning("Đang có tác vụ chạy; không tạo job trùng.")
         return
-    # SNAPSHOT toàn bộ cấu hình NGAY TẠI ĐÂY, trên main thread. Thread nền không
-    # có ScriptRunContext nên đọc st.session_state từ đó chỉ nhận proxy rỗng —
-    # đó chính là nguyên nhân của «missing ScriptRunContext» và KeyError sheet_link.
-    # Snapshot cũng khiến batch đang chạy không bị đổi đích khi người dùng sửa
-    # link Sheet giữa chừng; batch sau mới dùng cấu hình mới.
-    cau_hinh_quet = ScanLaunchConfig(
-        auto_sheet=bool(st.session_state.sheet_auto),
-        sheet_link=str(st.session_state.sheet_link or ""),
-        dang_ngang=bool(st.session_state.sheet_dang_ngang),
-    )
-    if cau_hinh_quet.auto_sheet:
-        scan_sheet_worker.start()
+    # Đích gửi CHỤP + GHIM ngay tại đây (main thread): thread nền không có ScriptRunContext, và
+    # đổi lựa chọn giữa lô không được làm lô đang chạy bắn sang bảng khác. Preflight cục bộ (hồ sơ,
+    # khoá) lỗi thì báo TRƯỚC khi quét.
+    lo_id = uuid.uuid4().hex
+    y_dinh, loi = ui_gui.chot_cho_lo(eng, dich_id, tu_dong, lo_id)
+    if loi:
+        st.error(loi)
+        return
+    if y_dinh is not None:
+        ui_gui.dam_bao_nguoi_gui(eng, bat_buoc=True)
+        st.session_state.dich_gui_gan_nhat = dich_id
+    db = eng.sqlite_file
 
     def sau_moi_video(index: int, tong: int, ket_qua) -> None:
-        """Chạy trong SCAN WORKER — chỉ dùng cau_hinh_quet, không chạm Streamlit."""
-        if not cau_hinh_quet.auto_sheet or ket_qua.status != "ok":
+        """Chạy trong SCAN WORKER — không chạm Streamlit. Việc gửi đã được `save_job` xếp hàng
+        trong CÙNG giao dịch với lịch sử; ở đây chỉ gắn mã việc vào dòng trạng thái."""
+        if y_dinh is None or not getattr(ket_qua, "job_id", None):
             return
-        # Dòng CHỐT ngay lúc xếp hàng (kết quả V2: từ ảnh chụp, nguyên văn, gửi nghiêm ngặt;
-        # kết quả cũ: luật cũ — escape công thức). Thử lại gửi đúng các dòng này.
-        viec = giao_hang_sheets(eng, ket_qua, sheet_id=cau_hinh_quet.sheet_id,
-                                sheet_link=cau_hinh_quet.sheet_link,
-                                dang_ngang=cau_hinh_quet.dang_ngang)
-        if viec is None:
-            return
-        scan_sheet_worker.enqueue(viec)
-        scan_controller.ghi_nhan_giao_hang(index, viec.delivery_key)
+        viec = outbox.ds_viec(db, job_id=ket_qua.job_id, lo_id=y_dinh.lo_id)
+        if viec:
+            scan_controller.ghi_nhan_giao_hang(index, viec[0].id)
 
-    batch_id = scan_controller.start(nguon, source_type, on_result=sau_moi_video)
+    batch_id = scan_controller.start(nguon, source_type, on_result=sau_moi_video,
+                                     y_dinh_gui=y_dinh)
     job.update({
         "running": True, "pct": 0.0, "msg": "Đang chuẩn bị...", "results": [],
         "error": "", "kind": "scan", "da_day_sheet": True, "scan_batch_id": batch_id,
+        "tab_quet": tab_key,
     })
     st.rerun()
 
@@ -258,40 +250,6 @@ TEN_PHASE_QUET = {
 }
 # Tên hiển thị của trạng thái quét/Sheets nằm trong scan_ui.py, cạnh builder
 # DataFrame, để bảng và schema không bao giờ lệch nhau.
-
-
-def tao_sheets_exporter(sheet_link: str) -> SheetsExporter:
-    """Hàm THUẦN — gọi được từ thread nền vì không chạm Streamlit."""
-    return SheetsExporter(sheet=sheet_link)
-
-
-def lay_sheets() -> SheetsExporter:
-    """Bản tiện dụng cho MAIN THREAD; đọc cấu hình từ session state."""
-    return tao_sheets_exporter(st.session_state.sheet_link)
-
-
-def day_len_sheets(results: list[ScanResult]) -> tuple[bool, str]:
-    """Đẩy các dòng kết quả lên Google Sheets. Trả về (ok, thông_báo)."""
-    # Kết quả có báo cáo V2 lỗi/hỏng không bao giờ được gửi (kể cả theo luật cũ) — audit P1-02.
-    results, loi_bao_cao = bao_cao_v2.tach_loi_bao_cao(results)
-    if not results:
-        return False, (bao_cao_v2.thong_bao_ket_qua_loi(loi_bao_cao) if loi_bao_cao
-                       else "Không có dữ liệu để ghi.")
-
-    header, rows, nghiem_ngat = eng.dong_gui_sheets(
-        results, dang_ngang=bool(st.session_state.sheet_dang_ngang), an_toan_cu=False)
-    if not rows:
-        return False, "Không có dữ liệu để ghi."
-
-    sx = lay_sheets()
-    if not sx.san_sang():
-        return False, sx.thieu_gi()
-    try:
-        n = sx.append(header, rows, **({"nghiem_ngat": True} if nghiem_ngat else {}))
-        return True, f"Đã ghi {n} dòng lên Google Sheets." + (
-            f" KHÔNG gửi {len(loi_bao_cao)} kết quả có báo cáo V2 lỗi." if loi_bao_cao else "")
-    except Exception as e:  # noqa: BLE001
-        return False, f"Lỗi ghi Sheets: {e}"
 
 
 def bao_cao_khong_co_ket_qua(results: list[ScanResult]) -> None:
@@ -478,27 +436,10 @@ def bang_ket_qua(results: list[ScanResult]) -> None:
             columns=bao_cao_v2.HEADER_PHAM_VI,
         ).to_csv(index=False).encode("utf-8-sig")
 
-    # Tự động đẩy lên Google Sheets ngay sau khi quét xong
-    if st.session_state.sheet_auto and not job.get("da_day_sheet") and rows:
-        ok, tb = day_len_sheets(results)
-        job["da_day_sheet"] = True
-        if ok:
-            st.success("📊 " + tb)
-        elif tb == "Không có dữ liệu để ghi.":
-            st.info("📊 " + tb)
-        elif lay_sheets().sheet_id:
-            st.warning("📊 Không đẩy được lên Sheets: " + tb)
-
     c1, c2, c3, c4 = st.columns(4)
     with c3:
-        if st.button("📊 Đẩy lên Google Sheets", width="stretch"):
-            ok, tb = day_len_sheets(results)
-            if ok:
-                st.success(tb)
-            elif tb == "Không có dữ liệu để ghi.":
-                st.info(tb)
-            else:
-                st.error(tb)
+        st.caption("📤 Gửi Google Sheets: chọn «Đích gửi» trước khi bấm Bắt đầu (tự động, lưu bền), "
+                   "hoặc gửi thêm thủ công ở mục bên dưới.")
     with c1:
         st.download_button("⬇️ Tải báo cáo CSV", csv_bytes,
                            file_name=f"ketqua_{time.strftime('%Y%m%d_%H%M%S')}.csv",
@@ -524,6 +465,7 @@ def bang_ket_qua(results: list[ScanResult]) -> None:
                     st.code("\n".join(fs))
             except Exception as e:  # noqa: BLE001
                 st.error(str(e))
+    ui_gui.nut_gui_thu_cong(eng, results, key="gui_thu_cong_lo")
 
 
 def hien_ket_qua_nguon_chung(kql: nguon_chung.KetQuaLo) -> None:
@@ -783,19 +725,11 @@ with st.sidebar:
     st.divider()
     st.subheader("📊 Google Sheets")
     with st.expander("Cấu hình", expanded=False):
+        st.caption("Đích gửi kết quả quét chọn theo từng lượt (hồ sơ đích) ở tab «📤 Gửi Google "
+                   "Sheets». Link dưới đây chỉ dùng cho «Danh sách video» và để nhập hồ sơ từ link cũ.")
         st.session_state.sheet_link = st.text_input(
             "Link Google Sheet", st.session_state.sheet_link,
             placeholder="https://docs.google.com/spreadsheets/d/...")
-        st.session_state.sheet_auto = st.checkbox(
-            "Tự động đẩy sau mỗi lần quét", st.session_state.sheet_auto)
-        lua_chon_dinh_dang = st.radio(
-            "Định dạng đẩy lên Sheets",
-            ("Ngang (khớp bảng 34 cột)", "Dọc (chi tiết, 15 cột)"),
-            index=0 if st.session_state.sheet_dang_ngang else 1,
-        )
-        st.session_state.sheet_dang_ngang = (
-            lua_chon_dinh_dang == "Ngang (khớp bảng 34 cột)"
-        )
         sx_tmp = SheetsExporter(sheet=st.session_state.sheet_link)
         em = sx_tmp.email_service_account()
         if em:
@@ -972,17 +906,12 @@ if job["running"]:
             )
 
         st.dataframe(
-            build_scan_status_dataframe(anh.videos, scan_sheet_worker.snapshot()),
+            build_scan_status_dataframe(anh.videos, ui_gui.trang_thai_viec_lo(eng, anh.lo_id)),
             width="stretch", hide_index=True, height=260,
         )
-
-        tom_tat = scan_sheet_worker.tom_tat()
-        if tom_tat["tong"]:
-            st.caption(
-                f"Google Sheets — đã gửi {tom_tat['da_gui']}, "
-                f"đang chờ {tom_tat['cho_gui']}, lỗi {tom_tat['that_bai']}. "
-                "Quét không chờ Sheets."
-            )
+        if anh.lo_id:
+            st.caption(ui_gui.mo_ta_lo(eng, anh.dich_gui, anh.lo_id))
+        ui_gui.banner_lo_dang_chay(eng, anh.dich_id, anh.dich_gui, job.get("tab_quet", ""))
         if st.button("⏹️ Dừng lại", type="secondary", disabled=anh.cancelled):
             scan_controller.cancel()
             st.warning("Đã gửi yêu cầu dừng; kết quả đã xong vẫn được giữ.")
@@ -1150,9 +1079,9 @@ if not job["running"] and (job["results"] or job["error"]):
 #  Các tab chức năng
 # =====================================================================
 
-tab0, tab1, tab2, tab3, tab4, tab5 = st.tabs(
+tab0, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
     ["📥 Đồng bộ kênh gốc", "🎬 Kho clip gốc", "📋 Danh sách video trong kho",
-     "▶️ Quét YouTube", "📁 Quét file trong máy", "📜 Lịch sử"])
+     "▶️ Quét YouTube", "📁 Quét file trong máy", "📜 Lịch sử", "📤 Gửi Google Sheets"])
 
 # ---------------------------------------------------------------- TAB 0
 with tab0:
@@ -1668,17 +1597,18 @@ with tab3:
             "Tool lấy thông tin cả lô trước, quét TRỌN video ngắn nhất làm mốc, rồi xác minh "
             "ứng viên mạnh nhất trên các video còn lại; cần thì quét bổ sung (tối đa 2 lượt "
             "mỗi video). Trong lúc chạy, Giám sát tự động và tạo kho phải chờ. Không ghi "
-            "lịch sử, chưa đẩy Google Sheets — tải CSV ở cuối."
+            "lịch sử, chưa có đích gửi Google Sheets — tải CSV ở cuối."
             + ("" if eng.config.keep_downloads else
                " ⚠️ «Giữ lại audio đã tải» đang tắt nên lượt quét lại sẽ phải tải lại."))
         if links and thieu_link:
             st.warning("Cần ít nhất 2 link khác nhau để tìm video gốc chung.")
+    dich_yt, tu_dong_yt = ui_gui.chon_dich(eng, key="quet_yt", nguon_chung=nguon_chung_bat)
     if st.button("🚀 Bắt đầu quét", type="primary",
                  disabled=not links or not env["database"] or thieu_link):
         if nguon_chung_bat:
             chay_nguon_chung(links)
         else:
-            chay_quet(links, "youtube")
+            chay_quet(links, "youtube", dich_id=dich_yt, tu_dong=tu_dong_yt, tab_key="quet_yt")
     if not env["database"]:
         st.warning("Chưa có kho vân tay — hãy làm tab «Kho clip gốc» trước.")
 
@@ -1705,9 +1635,10 @@ with tab4:
             ds_file = [dd]
         else:
             st.error("Không tìm thấy đường dẫn này.")
+    dich_file, tu_dong_file = ui_gui.chon_dich(eng, key="quet_file")
     if st.button("🚀 Bắt đầu quét", key="quet_file", type="primary",
                  disabled=not ds_file or not env["database"]):
-        chay_quet(ds_file, "file")
+        chay_quet(ds_file, "file", dich_id=dich_file, tu_dong=tu_dong_file, tab_key="quet_file")
 
 # ---------------------------------------------------------------- TAB 5
 with tab5:
@@ -1784,12 +1715,29 @@ with tab5:
                                    file_name=f"ketqua_job{chon}.csv", mime="text/csv")
         else:
             st.info("Lần quét này không có kết quả nào.")
+        viec_job = outbox.ds_viec(eng.sqlite_file, job_id=chon)
+        if viec_job:
+            st.caption("📤 Gửi Google Sheets của lần quét này: " + "; ".join(
+                f"{outbox.NHAN_TRANG_THAI[v.trang_thai]} ({v.so_dong} dòng)" for v in viec_job))
+        if not loi_bc_chon and bc_chon is not None:
+            ui_gui.nut_gui_cho_job(eng, [chon], key=f"gui_ls_{chon}")
+        # Ô xác nhận gắn ĐÚNG job đang chọn và tự bỏ tick sau khi xoá: trước đây một ô dùng chung
+        # vẫn tick sau khi xoá, chọn lần quét kế tiếp rồi bấm nữa là xoá luôn — không hỏi lại.
+        khoa_xn = f"xac_nhan_xoa_ls_{chon}"
         xac_nhan_xoa_lich_su = st.checkbox(
-            "Tôi xác nhận muốn xóa lần quét đã chọn khỏi lịch sử"
+            "Tôi xác nhận muốn xóa lần quét đã chọn khỏi lịch sử", key=khoa_xn
         )
         if st.button(
             "🗑️ Xóa lần quét này khỏi lịch sử",
             disabled=not xac_nhan_xoa_lich_su,
         ):
-            eng.delete_job(chon)
-            st.rerun()
+            try:
+                eng.delete_job(chon)
+                st.session_state.pop(khoa_xn, None)
+                st.rerun()
+            except LoiXoaJob as e:
+                st.error(str(e))
+
+# ---------------------------------------------------------------- TAB 6
+with tab6:
+    ui_gui.ve_tab(eng)

@@ -6,8 +6,11 @@ Thiết kế: docs/MANAGED_RUNTIME_DESIGN.md §2, §5. Lưu trong ``lichsu.db`` 
 
 * Hồ sơ (``dich_gui``) trỏ tới revision hiện hành; mỗi lần sửa thêm MỘT revision bất biến
   (``dich_gui_phien_ban``). Việc gửi đã ghim mang theo cả ảnh chụp revision của nó.
-* Tab định danh bằng ``worksheet_id`` (gid); tên tab chỉ là nhãn để đối chiếu. Link cũ không có gid
-  thì ``worksheet_id`` để trống — người gửi chốt gid ở lần gửi đầu (revision mới).
+* Tab định danh bằng ``worksheet_id`` (gid). Hồ sơ có gid: tên tab là nhãn ĐỐI CHIẾU — lần gửi đầu
+  của một revision mà tab mang tên khác thì chặn. Hồ sơ không gid (link cũ, luôn là «KetQuaQuet» như
+  bản cũ — gid trong link cũ bị BỎ QUA): tìm theo TÊN ở lần gửi đầu. Gid thật của lần gửi thành công đầu
+  tiên được CHỐT cho revision (``dich_gui_tab_chot``) — từ đó gửi theo mã đó, dù tab đổi tên hay có tab
+  cùng tên được tạo lại.
 * Credential binding (``xac_thuc_gui``) = đường dẫn file khoá + tài khoản dịch vụ MONG ĐỢI
   (``client_email``) + ``private_key_id`` lúc đăng ký. KHÔNG lưu khoá riêng hay token. Đổi file khoá
   sang tài khoản khác không bao giờ được chấp nhận âm thầm.
@@ -212,9 +215,12 @@ def xoa_xac_thuc(db_path: str, ref: str) -> None:
                              "khác hoặc lưu trữ hồ sơ trước.")
         for (dich_json,) in con.execute(
                 "SELECT dich_json FROM hang_doi_gui WHERE trang_thai NOT IN ('SENT','CANCELLED')"):
-            with contextlib.suppress(ValueError, TypeError, AttributeError):
-                if json.loads(dich_json).get("xac_thuc_ref") == ref:
-                    raise LoiDichGui(f"Binding «{ref}» đang được việc gửi chưa xong tham chiếu.")
+            try:
+                ref_viec = json.loads(dich_json).get("xac_thuc_ref")
+            except (ValueError, TypeError, AttributeError):
+                ref_viec = None                  # đích ghim hỏng: người gửi tự chặn việc đó
+            if ref_viec == ref:
+                raise LoiDichGui(f"Binding «{ref}» đang được việc gửi chưa xong tham chiếu.")
         con.execute("DELETE FROM xac_thuc_gui WHERE ref=?", (ref,))
 
 
@@ -235,6 +241,7 @@ class DichGui:
     worksheet_ten: str
     schema_id: str
     xac_thuc_ref: str
+    gid_da_chot: Optional[int] = None        # mã tab chốt ở lần gửi đầu của revision này (nếu có)
 
     @property
     def nhan(self) -> str:
@@ -242,8 +249,12 @@ class DichGui:
 
 
 _SQL_DICH = ("SELECT d.id, d.workspace, r.phien_ban, d.trang_thai, d.nguon, r.ten,"
-             " r.spreadsheet_id, r.worksheet_id, r.worksheet_ten, r.schema_id, r.xac_thuc_ref"
-             " FROM dich_gui d JOIN dich_gui_phien_ban r ON r.dich_id = d.id")
+             " r.spreadsheet_id, r.worksheet_id, r.worksheet_ten, r.schema_id, r.xac_thuc_ref,"
+             " c.worksheet_id AS gid_da_chot"
+             " FROM dich_gui d JOIN dich_gui_phien_ban r ON r.dich_id = d.id"
+             " LEFT JOIN dich_gui_tab_chot c ON c.dich_id = r.dich_id AND c.phien_ban = r.phien_ban"
+             " WHERE 1=1")
+_HIEN_HANH = " AND r.phien_ban = d.phien_ban"
 
 
 def _dich_tu_hang(h) -> DichGui:
@@ -252,10 +263,10 @@ def _dich_tu_hang(h) -> DichGui:
 
 def _lay_dich(con, dich_id: str, phien_ban: Optional[int] = None) -> Optional[DichGui]:
     if phien_ban is None:
-        h = con.execute(_SQL_DICH + " AND r.phien_ban = d.phien_ban WHERE d.id=?",
+        h = con.execute(_SQL_DICH + _HIEN_HANH + " AND d.id=?",
                         (dich_id,)).fetchone()
     else:
-        h = con.execute(_SQL_DICH + " WHERE d.id=? AND r.phien_ban=?",
+        h = con.execute(_SQL_DICH + " AND d.id=? AND r.phien_ban=?",
                         (dich_id, int(phien_ban))).fetchone()
     return None if h is None else _dich_tu_hang(h)
 
@@ -265,13 +276,18 @@ def lay_dich(db_path: str, dich_id: str, *, phien_ban: Optional[int] = None) -> 
         return _lay_dich(con, dich_id, phien_ban)
 
 
-def ds_dich(db_path: str, *, chi_hoat_dong: bool = False,
+def ds_dich(db_path: str, *, chi_hoat_dong: bool = False, bo_luu_tru: bool = False,
             workspace: Optional[str] = None) -> list:
-    sql = _SQL_DICH + " AND r.phien_ban = d.phien_ban WHERE 1=1"
+    """``chi_hoat_dong``: chỉ hồ sơ đang gửi; ``bo_luu_tru``: mọi hồ sơ còn dùng được cho lượt MỚI
+    (hoạt động + tạm dừng gửi — việc của hồ sơ tạm dừng vẫn xếp hàng, chỉ chưa gửi)."""
+    sql = _SQL_DICH + _HIEN_HANH
     tham = []
     if chi_hoat_dong:
         sql += " AND d.trang_thai=?"
         tham.append(TT_HOAT_DONG)
+    elif bo_luu_tru:
+        sql += " AND d.trang_thai!=?"
+        tham.append(TT_LUU_TRU)
     if workspace is not None:
         sql += " AND d.workspace=?"
         tham.append(workspace)
@@ -344,6 +360,15 @@ def sua_dich(db_path: str, dich_id: str, **thay_doi) -> DichGui:
         moi = hien.phien_ban + 1
         luc = _bay_gio()
         _ghi_revision(con, dich_id, moi, gt, luc)
+        cung_tab = all(gt[k] == getattr(hien, k)
+                       for k in ("spreadsheet_id", "worksheet_id", "worksheet_ten"))
+        if cung_tab:
+            # Cùng bảng + cùng tab: revision mới KẾ THỪA mã tab đã chốt (không tìm lại theo tên —
+            # tab cùng tên tạo lại sau đó không được coi là tab cũ).
+            con.execute("INSERT OR IGNORE INTO dich_gui_tab_chot(dich_id, phien_ban, worksheet_id,"
+                        " worksheet_ten, luc) SELECT dich_id, ?, worksheet_id, worksheet_ten, ?"
+                        " FROM dich_gui_tab_chot WHERE dich_id=? AND phien_ban=?",
+                        (moi, luc, dich_id, hien.phien_ban))
         con.execute("UPDATE dich_gui SET phien_ban=?, sua_luc=? WHERE id=?", (moi, luc, dich_id))
         return _lay_dich(con, dich_id)
 
@@ -359,11 +384,40 @@ def doi_trang_thai(db_path: str, dich_id: str, trang_thai: str) -> DichGui:
         return _lay_dich(con, dich_id)
 
 
+@dataclass(frozen=True)
+class TabDaChot:
+    worksheet_id: int
+    worksheet_ten: str              # tên tab LÚC chốt (để hiển thị/đối soát)
+
+
+def tab_da_chot(db_path: str, dich_id: str, phien_ban: int) -> Optional[TabDaChot]:
+    """Mã tab đã chốt của một revision (``None`` = revision chưa gửi thành công lần nào)."""
+    with ket_noi(db_path) as con:
+        h = con.execute("SELECT worksheet_id, worksheet_ten FROM dich_gui_tab_chot WHERE dich_id=?"
+                        " AND phien_ban=?", (dich_id, int(phien_ban))).fetchone()
+    return None if h is None else TabDaChot(int(h["worksheet_id"]), h["worksheet_ten"])
+
+
+def chot_tab(db_path: str, dich_id: str, phien_ban: int, *, worksheet_id: int,
+             worksheet_ten: str) -> TabDaChot:
+    """Sau lần gửi THÀNH CÔNG (biên nhận khớp): chốt mã tab thật cho revision — lần đầu thắng, KHÔNG tạo
+    revision, không đổi nhãn hồ sơ. Trả mã đã chốt (có thể là của lần trước)."""
+    with ket_noi(db_path, ghi=True) as con:
+        con.execute("INSERT OR IGNORE INTO dich_gui_tab_chot(dich_id, phien_ban, worksheet_id,"
+                    " worksheet_ten, luc) VALUES(?,?,?,?,?)",
+                    (dich_id, int(phien_ban), int(worksheet_id), str(worksheet_ten)[:100],
+                     _bay_gio()))
+        h = con.execute("SELECT worksheet_id, worksheet_ten FROM dich_gui_tab_chot WHERE dich_id=?"
+                        " AND phien_ban=?", (dich_id, int(phien_ban))).fetchone()
+    return TabDaChot(int(h["worksheet_id"]), h["worksheet_ten"])
+
+
 def xoa_dich(db_path: str, dich_id: str) -> None:
     """Chỉ xoá được hồ sơ CHƯA có việc gửi nào; đã có thì lưu trữ (giữ lịch sử đối soát)."""
     with ket_noi(db_path, ghi=True) as con:
         if con.execute("SELECT 1 FROM hang_doi_gui WHERE dich_id=? LIMIT 1", (dich_id,)).fetchone():
             raise LoiDichGui("Hồ sơ này đã có việc gửi — hãy lưu trữ thay vì xoá.")
+        con.execute("DELETE FROM dich_gui_tab_chot WHERE dich_id=?", (dich_id,))
         con.execute("DELETE FROM dich_gui_phien_ban WHERE dich_id=?", (dich_id,))
         con.execute("DELETE FROM dich_gui WHERE id=?", (dich_id,))
 
@@ -434,8 +488,7 @@ def chot_y_dinh(db_path: str, dich_id: str, *, installation_id: str, lo_id: str 
         d = _lay_dich(con, dich_id)
         if d is None:
             raise LoiDichGui("Không thấy hồ sơ đích đã chọn.")
-        if d.trang_thai == TT_TAM_DUNG:
-            raise LoiDichGui(f"Hồ sơ «{d.ten}» đang tạm dừng gửi — bật lại hoặc chọn «Chỉ lưu cục bộ».")
+        # Tạm dừng GỬI không chặn quét: việc của lượt mới vẫn xếp hàng bền, gửi khi bật lại.
         if d.trang_thai == TT_LUU_TRU:
             raise LoiDichGui(f"Hồ sơ «{d.ten}» đã lưu trữ — không dùng cho lượt mới.")
         xt = _lay_xac_thuc(con, d.xac_thuc_ref)
@@ -449,6 +502,29 @@ def chot_y_dinh(db_path: str, dich_id: str, *, installation_id: str, lo_id: str 
         cho_xoay_khoa=xt.cho_xoay_khoa), lo_id=lo_id)
 
 
+def y_dinh_cho_luot(db_path: str, *, installation_id: str, workspace: str, khoa_mac_dinh: str,
+                    dich_id: str = "", sheet_link: str = "", schema_id: str = SCHEMA_NGANG,
+                    lo_id: str = "") -> Optional[YDinhGui]:
+    """Đích của một lượt CLI/Watch: ``--destination`` (hồ sơ), hoặc ``--sheet`` / SHEET_LINK /
+    ``data\\giam_sat_sheet.txt`` qua nhập link cũ có kiểm soát. Cả hai cùng có mà chỉ hai nơi khác
+    nhau → lỗi rõ (không chọn ngẫu nhiên). Không có gì → ``None`` (chỉ lưu cục bộ)."""
+    if dich_id and sheet_link:
+        # Link cũ luôn nghĩa là tab «KetQuaQuet» của bảng đó (như bản cũ). Chỉ coi là CÙNG đích khi hồ
+        # sơ trỏ đúng bảng đó và đúng tab «KetQuaQuet»; còn lại là mâu thuẫn → lỗi rõ.
+        d = lay_dich(db_path, dich_id)
+        sid, _gid = phan_tich_link(sheet_link)
+        if d is None or d.spreadsheet_id != sid or d.worksheet_ten != TAB_MAC_DINH:
+            raise LoiDichGui("--destination và --sheet/SHEET_LINK chỉ tới hai đích khác nhau — "
+                             "hãy dùng một trong hai.")
+    if dich_id:
+        return chot_y_dinh(db_path, dich_id, installation_id=installation_id, lo_id=lo_id)
+    if sheet_link:
+        d = nhap_link_cu(db_path, sheet_link, schema_id=schema_id, duong_dan_khoa=khoa_mac_dinh,
+                         workspace=workspace)
+        return chot_y_dinh(db_path, d.id, installation_id=installation_id, lo_id=lo_id)
+    return None
+
+
 # ---------------------------------------------------------------------------
 #  Tương thích: --sheet / SHEET_LINK / data\giam_sat_sheet.txt
 # ---------------------------------------------------------------------------
@@ -456,24 +532,27 @@ def chot_y_dinh(db_path: str, dich_id: str, *, installation_id: str, lo_id: str 
 def nhap_link_cu(db_path: str, link: str, *, schema_id: str, duong_dan_khoa: str,
                  workspace: str, worksheet_ten: str = TAB_MAC_DINH,
                  xac_thuc_ref: str = REF_MAC_DINH) -> DichGui:
-    """Nhập một link Sheet kiểu cũ thành hồ sơ — idempotent (cùng bảng + tab + định dạng + binding
-    → cùng hồ sơ), trong MỘT giao dịch. Không lưu nguyên URL, tên hồ sơ không chứa mã bảng."""
-    sid, gid = phan_tich_link(link)
+    """Nhập một link Sheet kiểu cũ thành hồ sơ — idempotent (cùng bảng + định dạng + binding → cùng
+    hồ sơ), trong MỘT giao dịch. Không lưu nguyên URL, tên hồ sơ không chứa mã bảng.
+
+    Bản cũ LUÔN ghi vào tab tên «KetQuaQuet» (bỏ qua ``#gid=`` của link — gid đó thường là tab đầu
+    "Sheet1"). Giữ đúng nghĩa đó: hồ sơ ghim theo TÊN, gid của link bị bỏ qua; mã tab thật được chốt ở
+    lần gửi thành công đầu tiên (``chot_tab``)."""
+    sid, _gid_bo_qua = phan_tich_link(link)
     if schema_id not in SO_COT:
         raise LoiDichGui("Định dạng báo cáo phải là Ngang 34 cột hoặc Dọc 16 cột.")
     with ket_noi(db_path, ghi=True) as con:
         _dang_ky_xac_thuc(con, xac_thuc_ref, duong_dan_khoa, True)
-        sql = (_SQL_DICH + " AND r.phien_ban = d.phien_ban WHERE d.nguon=? AND d.workspace=?"
-               " AND d.trang_thai != ? AND r.spreadsheet_id=? AND r.worksheet_ten=?"
-               " AND r.schema_id=? AND r.xac_thuc_ref=?")
-        tham = [NGUON_LINK_CU, workspace, TT_LUU_TRU, sid, worksheet_ten, schema_id, xac_thuc_ref]
-        if gid is not None:
-            sql += " AND r.worksheet_id=?"
-            tham.append(gid)
-        h = con.execute(sql + " ORDER BY d.tao_luc LIMIT 1", tham).fetchone()
+        h = con.execute(
+            _SQL_DICH + _HIEN_HANH + " AND d.nguon=? AND d.workspace=?"
+            " AND d.trang_thai != ? AND r.spreadsheet_id=? AND r.worksheet_id IS NULL"
+            " AND r.worksheet_ten=? AND r.schema_id=? AND r.xac_thuc_ref=?"
+            " ORDER BY d.tao_luc LIMIT 1",
+            (NGUON_LINK_CU, workspace, TT_LUU_TRU, sid, worksheet_ten, schema_id,
+             xac_thuc_ref)).fetchone()
         if h is not None:
             return _dich_tu_hang(h)
         gt = dict(ten=f"Link cũ — {worksheet_ten} — {SCHEMA_NHAN[schema_id]}", spreadsheet_id=sid,
-                  worksheet_id=gid, worksheet_ten=worksheet_ten, schema_id=schema_id,
+                  worksheet_id=None, worksheet_ten=worksheet_ten, schema_id=schema_id,
                   xac_thuc_ref=xac_thuc_ref)
         return _tao_dich(con, gt, workspace, NGUON_LINK_CU)

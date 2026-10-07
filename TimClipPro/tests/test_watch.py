@@ -394,6 +394,27 @@ def test_mot_video_loi_khong_lam_dut_luot_quet(engine, monkeypatch, tmp_path):
     assert "mất kết nối" in bao_cao.loi[0]
 
 
+def test_loi_luu_ben_dung_ca_luot_khong_quet_tiep(engine, monkeypatch, tmp_path):
+    """Không ghi được lịch sử (đĩa đầy, DB khoá quá lâu): DỪNG lượt — quét tiếp chỉ tốn thời gian
+    mạng/CPU mà không lưu được gì, và không bao giờ báo «đã lưu»."""
+    from engine import LoiLuuBen
+
+    videos = [SimpleNamespace(id=f"x{i}", title=f"Video {i}", url=f"u{i}") for i in range(1, 4)]
+    da_goi = []
+
+    def scan_gia(url, progress=None):
+        da_goi.append(url)
+        raise LoiLuuBen("Không lưu bền được kết quả lần quét (OperationalError).")
+
+    monkeypatch.setattr(engine, "list_jobs", lambda limit: [])
+    monkeypatch.setattr(engine, "scan_youtube", scan_gia)
+    bao_cao = chay_giam_sat(engine, WatchList(muc=[MucTheoDoi("kenh", "kenh-1")]),
+                            lister=lambda url, limit: videos)
+    assert da_goi == ["u1"]
+    assert any("dừng lượt" in dong and "lưu bền" in dong for dong in bao_cao.loi)
+    assert bao_cao.csv_path == ""
+
+
 def test_chay_giam_sat_dem_bang_chung_va_bao_scanresult_loi(
     engine,
     monkeypatch,
@@ -502,92 +523,88 @@ def test_kho_khong_ton_tai_thi_dung_truoc_khi_quet(engine, monkeypatch, tmp_path
     assert any("Kho sai" in dong and "không tồn tại" in dong for dong in bao_cao.loi)
 
 
-def test_sheets_chua_san_sang_tra_ghi_chu(engine, monkeypatch):
-    class SheetsChuaSanSang:
-        def __init__(self, sheet=""):
-            self.sheet = sheet
+def _v2(url, matches=1):
+    """Kết quả quét V2 như quét thật (có ảnh chụp báo cáo) cho video ``url``."""
+    from test_bao_cao_v2 import _bc, _kq_ca_that
+    kq = _kq_ca_that(source_name=url, source_ref=url, source_id=(url + "_" * 11)[:11])
+    if not matches:
+        kq.matches, kq.so_dat_nguong = [], 0
+    kq.bao_cao = _bc(kq)
+    return kq
 
-        def san_sang(self):
-            return False
 
-        def thieu_gi(self):
-            return "Chưa có khóa Google"
+def _quet_luu(engine, da_quet=None, matches=1):
+    """Quét giả nhưng LƯU như quét thật — `save_job` là nơi xếp việc gửi (cùng giao dịch)."""
+    def quet(url, progress=None):
+        if da_quet is not None:
+            da_quet.append(url)
+        kq = _v2(url, matches=matches)
+        kq.job_id = engine.save_job(kq, "youtube")
+        return kq
+    return quet
 
-    monkeypatch.setattr("watch.SheetsExporter", SheetsChuaSanSang)
 
+def _dich(engine, tmp_path):
+    from outbox_gia import dich_gia
+    return dich_gia(engine.sqlite_file, tmp_path, installation_id=engine.installation_id())[1]
+
+
+def test_sheets_khoa_thieu_thi_dung_truoc_khi_quet(engine, monkeypatch):
+    """Đã yêu cầu gửi (link cũ) mà không có khoá Google → dừng TRƯỚC khi quét: video đã quét mà
+    không gửi được sẽ bị Watch bỏ qua mãi mãi."""
+    monkeypatch.setattr(engine, "scan_youtube",
+                        lambda url, progress=None: pytest.fail("Không được quét"))
     bao_cao = chay_giam_sat(
         engine,
-        WatchList(),
-        lister=lambda url, limit: [],
-        sheet_link="sheet-id",
+        WatchList(muc=[MucTheoDoi("kenh", "kenh-1")]),
+        lister=lambda url, limit: [SimpleNamespace(id="x1", title="Một", url="u1")],
+        sheet_link="1" + "s" * 43,
     )
+    assert bao_cao.quet_moi == 0 and bao_cao.sheets_ok is False
+    assert "Không dùng được đích Google Sheets" in bao_cao.sheets_note
+    assert any("TRƯỚC khi quét" in dong for dong in bao_cao.loi)
 
-    assert bao_cao.sheets_ok is False
-    assert bao_cao.sheets_note == "Chưa có khóa Google"
 
-
-def test_sheets_khong_co_du_lieu_thi_khong_bao_da_ghi(engine, monkeypatch):
-    class SheetsRong:
-        def __init__(self, sheet=""):
-            self.sheet = sheet
-
-        def san_sang(self):
-            return True
-
-        def append(self, header, rows):
-            assert rows == []
-            return 0
-
-    monkeypatch.setattr("watch.SheetsExporter", SheetsRong)
-
+def test_sheets_khong_co_du_lieu_thi_khong_bao_da_ghi(engine, monkeypatch, tmp_path):
+    from outbox_gia import CongGia
+    cong = CongGia()
     bao_cao = chay_giam_sat(
         engine,
         WatchList(),
         lister=lambda url, limit: [],
-        sheet_link="sheet-id",
+        y_dinh_gui=_dich(engine, tmp_path),
+        tao_cong=lambda: cong,
+        cho_gui_s=2,
     )
     tom_tat = bao_cao.tom_tat()
-
-    assert bao_cao.sheets_so_dong == 0
+    assert bao_cao.sheets_so_dong == 0 and cong.lan_goi == 0
     assert "Đã ghi" not in tom_tat
     assert "File CSV: Không có dữ liệu để ghi" in tom_tat
-    assert "Google Sheets: Không có dữ liệu để ghi" in tom_tat
+    assert "không có dữ liệu để gửi" in tom_tat
 
 
-def test_sheets_loi_thi_csv_van_duoc_tao(engine, monkeypatch, tmp_path):
-    class SheetsBiLoi:
-        def __init__(self, sheet=""):
-            self.sheet = sheet
-
-        def san_sang(self):
-            return True
-
-        def append(self, header, rows):
-            raise RuntimeError("Sheets tạm lỗi")
-
+def test_sheets_loi_tam_thi_csv_van_duoc_tao_va_viec_cho_gui_lai(engine, monkeypatch, tmp_path):
+    import outbox
+    from outbox_gia import CongGia
+    cong = CongGia()
+    cong.ke_hoach = [("truoc", outbox.ChuaGui("Sheets tạm lỗi", tam_thoi=True))] * 5
     video = SimpleNamespace(id="x1", title="Một", url="u1")
     csv_path = str(tmp_path / "ket-qua.csv")
-    monkeypatch.setattr("watch.SheetsExporter", SheetsBiLoi)
     monkeypatch.setattr(engine, "list_jobs", lambda limit: [])
-    monkeypatch.setattr(
-        engine,
-        "scan_youtube",
-        lambda url, progress=None: ScanResult(source_name=url),
-    )
+    monkeypatch.setattr(engine, "scan_youtube", _quet_luu(engine))
     monkeypatch.setattr(engine, "export_csv_ngang", lambda ket: csv_path)
-    monkeypatch.setattr(engine, "to_rows_ngang", lambda ket: [["dong"]])
-    wl = WatchList(muc=[MucTheoDoi("kenh", "kenh-1")])
-
     bao_cao = chay_giam_sat(
         engine,
-        wl,
+        WatchList(muc=[MucTheoDoi("kenh", "kenh-1")]),
         lister=lambda url, limit: [video],
-        sheet_link="sheet-id",
+        y_dinh_gui=_dich(engine, tmp_path),
+        tao_cong=lambda: cong,
+        cho_gui_s=3,
     )
-
     assert bao_cao.csv_path == csv_path
-    assert bao_cao.sheets_ok is False
-    assert "Sheets tạm lỗi" in bao_cao.sheets_note
+    assert bao_cao.gui[outbox.RETRY_WAIT] == 1 and bao_cao.sheets_so_dong == 0
+    assert bao_cao.sheets_ok is True and "chờ gửi" in bao_cao.sheets_note
+    assert not any("Google Sheets" in dong for dong in bao_cao.loi)   # chưa phải lỗi: sẽ gửi lại
 
 
 def test_chay_lai_lan_hai_khong_quet_trung(engine, monkeypatch, tmp_path):
@@ -662,205 +679,125 @@ def test_chay_giam_sat_day_sheets_theo_header_ngang(
     tmp_path,
 ):
     from bang_ngang import HEADER_NGANG
+    from outbox_gia import CongGia
 
-    da_ghi = []
+    cong = CongGia()
+    header_da_gui = []
+    goc = cong.gui
 
-    class SheetsGia:
-        def __init__(self, sheet=""):
-            self.sheet = sheet
+    def gui(chot, khoa, header, rows, truoc_khi_gui):
+        header_da_gui.append(list(header))
+        return goc(chot, khoa, header, rows, truoc_khi_gui)
 
-        def san_sang(self):
-            return True
-
-        def append(self, header, rows):
-            da_ghi.append((header, rows))
-            return len(rows)
-
+    cong.gui = gui
     video = SimpleNamespace(id="x1", title="Một", url="u1")
-    rows = [[""] * 34]
-    monkeypatch.setattr("watch.SheetsExporter", SheetsGia)
     monkeypatch.setattr(engine, "list_jobs", lambda limit: [])
-    monkeypatch.setattr(
-        engine,
-        "scan_youtube",
-        lambda url, progress=None: ScanResult(source_name=url, matches=[object()]),
-    )
+    monkeypatch.setattr(engine, "scan_youtube", _quet_luu(engine))
     monkeypatch.setattr(
         engine,
         "export_csv_ngang",
         lambda ket: str(tmp_path / "ket-qua-ngang.csv"),
     )
-    monkeypatch.setattr(engine, "to_rows_ngang", lambda ket: rows)
-    wl = WatchList(muc=[MucTheoDoi("kenh", "kenh-1")])
-
     bao_cao = chay_giam_sat(
         engine,
-        wl,
+        WatchList(muc=[MucTheoDoi("kenh", "kenh-1")]),
         lister=lambda url, limit: [video],
-        sheet_link="sheet-id",
+        y_dinh_gui=_dich(engine, tmp_path),
+        tao_cong=lambda: cong,
+        cho_gui_s=5,
     )
-
-    assert da_ghi == [(HEADER_NGANG, rows)]
-    assert bao_cao.sheets_ok is True
-    assert bao_cao.sheets_so_dong == 1
-    assert "Google Sheets: Đã ghi 1 dòng" in bao_cao.tom_tat()
+    assert header_da_gui == [HEADER_NGANG] and len(cong.bang) == 1
+    assert bao_cao.sheets_ok is True and bao_cao.sheets_so_dong == 1
+    assert "đã gửi 1 việc (1 dòng)" in bao_cao.tom_tat()
 
 
-def test_ghi_tung_phan_khong_trung_dong(engine, monkeypatch, tmp_path):
-    da_ghi = []
-
-    class SheetsGia:
-        def __init__(self, sheet=""):
-            self.sheet = sheet
-
-        def san_sang(self):
-            return True
-
-        def append(self, header, rows):
-            da_ghi.extend(rows)
-            return len(rows)
-
-    videos = [
-        SimpleNamespace(id=f"x{i}", title=f"Video {i}", url=f"u{i}")
-        for i in range(1, 3)
-    ]
-    monkeypatch.setattr("watch.SheetsExporter", SheetsGia)
+def test_moi_video_mot_viec_gui_khong_trung_dong(engine, monkeypatch, tmp_path):
+    from outbox_gia import CongGia
+    cong = CongGia()
+    videos = [SimpleNamespace(id=f"x{i}", title=f"Video {i}", url=f"u{i}") for i in range(1, 3)]
     monkeypatch.setattr(engine, "list_jobs", lambda limit: [])
-    monkeypatch.setattr(
-        engine,
-        "scan_youtube",
-        lambda url, progress=None: ScanResult(
-            source_name=url,
-            matches=[object()],
-        ),
-    )
-    monkeypatch.setattr(
-        engine,
-        "to_rows_ngang",
-        lambda ket: [[kq.source_name] for kq in ket],
-    )
-    monkeypatch.setattr(
-        engine,
-        "export_csv_ngang",
-        lambda ket: str(tmp_path / "ket-qua.csv"),
-    )
-
+    monkeypatch.setattr(engine, "scan_youtube", _quet_luu(engine))
+    monkeypatch.setattr(engine, "export_csv_ngang", lambda ket: str(tmp_path / "ket-qua.csv"))
     bao_cao = chay_giam_sat(
         engine,
         WatchList(muc=[MucTheoDoi("kenh", "kenh-1")]),
         lister=lambda url, limit: videos,
-        sheet_link="sheet-id",
+        y_dinh_gui=_dich(engine, tmp_path),
+        tao_cong=lambda: cong,
+        cho_gui_s=5,
     )
-
-    assert da_ghi == [["u1"], ["u2"]]
+    assert len(cong.bang) == 2 and cong.bang[0][2] != cong.bang[1][2]   # hai video, hai dòng khác
     assert bao_cao.sheets_so_dong == 2
 
 
-def test_ghi_tung_phan_that_bai_van_tiep_tuc(engine, monkeypatch, tmp_path):
-    so_lan_append = 0
-    da_ghi = []
+def test_gui_mo_ho_khong_gui_lai_va_quet_van_tiep_tuc(engine, monkeypatch, tmp_path):
+    """Video đầu gửi xong mà phản hồi mất → KHÔNG RÕ (không gửi lại mù); các video sau vẫn quét
+    và gửi; lượt báo lỗi để người dùng đối soát."""
+    import outbox
+    from outbox_gia import CongGia
+    cong = CongGia()
+    cong.ke_hoach = [("sau_da_ghi", outbox.KhongRo("mất phản hồi"))]
     da_quet = []
-
-    class SheetsLoiLanDau:
-        def __init__(self, sheet=""):
-            self.sheet = sheet
-
-        def san_sang(self):
-            return True
-
-        def append(self, header, rows):
-            nonlocal so_lan_append
-            so_lan_append += 1
-            if so_lan_append == 1:
-                raise RuntimeError("mạng tạm lỗi")
-            da_ghi.extend(rows)
-            return len(rows)
-
-    videos = [
-        SimpleNamespace(id=f"x{i}", title=f"Video {i}", url=f"u{i}")
-        for i in range(1, 4)
-    ]
-
-    def scan_gia(url, progress=None):
-        da_quet.append(url)
-        return ScanResult(source_name=url, matches=[object()])
-
-    monkeypatch.setattr("watch.SheetsExporter", SheetsLoiLanDau)
+    videos = [SimpleNamespace(id=f"x{i}", title=f"Video {i}", url=f"u{i}") for i in range(1, 4)]
     monkeypatch.setattr(engine, "list_jobs", lambda limit: [])
-    monkeypatch.setattr(engine, "scan_youtube", scan_gia)
-    monkeypatch.setattr(
-        engine,
-        "to_rows_ngang",
-        lambda ket: [[kq.source_name] for kq in ket],
-    )
-    monkeypatch.setattr(
-        engine,
-        "export_csv_ngang",
-        lambda ket: str(tmp_path / "ket-qua.csv"),
-    )
-
+    monkeypatch.setattr(engine, "scan_youtube", _quet_luu(engine, da_quet))
+    monkeypatch.setattr(engine, "export_csv_ngang", lambda ket: str(tmp_path / "ket-qua.csv"))
     bao_cao = chay_giam_sat(
         engine,
         WatchList(muc=[MucTheoDoi("kenh", "kenh-1")]),
         lister=lambda url, limit: videos,
-        sheet_link="sheet-id",
+        y_dinh_gui=_dich(engine, tmp_path),
+        tao_cong=lambda: cong,
+        cho_gui_s=5,
     )
-
     assert da_quet == ["u1", "u2", "u3"]
-    assert da_ghi == [["u2"], ["u3"], ["u1"]]
-    assert bao_cao.sheets_so_dong == 3
-    assert any(
-        "Không ghi được kết quả từng phần" in dong
-        and "mạng tạm lỗi" in dong
-        for dong in bao_cao.loi
-    )
+    assert len(cong.bang) == 3 and cong.lan_goi == 3            # mỗi việc đúng MỘT lần ghi
+    assert bao_cao.gui[outbox.UNKNOWN] == 1 and bao_cao.gui[outbox.SENT] == 2
+    assert bao_cao.sheets_so_dong == 2 and bao_cao.sheets_ok is False
+    assert any("KHÔNG RÕ" in dong for dong in bao_cao.loi)
 
 
-def test_tat_ghi_tung_phan_giu_mot_batch_cuoi(engine, monkeypatch, tmp_path):
-    cac_batch = []
-
-    class SheetsGia:
-        def __init__(self, sheet=""):
-            self.sheet = sheet
-
-        def san_sang(self):
-            return True
-
-        def append(self, header, rows):
-            cac_batch.append(rows)
-            return len(rows)
-
-    videos = [
-        SimpleNamespace(id=f"x{i}", title=f"Video {i}", url=f"u{i}")
-        for i in range(1, 3)
-    ]
+def test_ghi_tung_phan_khong_con_doi_cach_gui_sheets(engine, monkeypatch, tmp_path):
+    """`ghi_tung_phan=False` từng gom MỘT lô cuối lượt; outbox luôn một việc mỗi video (bền)."""
+    from outbox_gia import CongGia
+    cong = CongGia()
     engine.config.ghi_tung_phan = False
-    monkeypatch.setattr("watch.SheetsExporter", SheetsGia)
+    videos = [SimpleNamespace(id=f"x{i}", title=f"Video {i}", url=f"u{i}") for i in range(1, 3)]
     monkeypatch.setattr(engine, "list_jobs", lambda limit: [])
-    monkeypatch.setattr(
-        engine,
-        "scan_youtube",
-        lambda url, progress=None: ScanResult(
-            source_name=url,
-            matches=[object()],
-        ),
-    )
-    monkeypatch.setattr(
-        engine,
-        "to_rows_ngang",
-        lambda ket: [[kq.source_name] for kq in ket],
-    )
-    monkeypatch.setattr(
-        engine,
-        "export_csv_ngang",
-        lambda ket: str(tmp_path / "ket-qua.csv"),
-    )
-
+    monkeypatch.setattr(engine, "scan_youtube", _quet_luu(engine))
+    monkeypatch.setattr(engine, "export_csv_ngang", lambda ket: str(tmp_path / "ket-qua.csv"))
     chay_giam_sat(
         engine,
         WatchList(muc=[MucTheoDoi("kenh", "kenh-1")]),
         lister=lambda url, limit: videos,
-        sheet_link="sheet-id",
+        y_dinh_gui=_dich(engine, tmp_path),
+        tao_cong=lambda: cong,
+        cho_gui_s=5,
     )
+    assert [len(rows) for _, _, rows in cong.bang] == [1, 1]
 
-    assert cac_batch == [[["u1"], ["u2"]]]
+
+def test_app_dang_giu_quyen_gui_thi_watch_khong_gui_va_viec_van_ben(engine, monkeypatch,
+                                                                    tmp_path):
+    """Người gửi khác (app) đang giữ quyền: Watch không gửi đôi, không chờ lâu, việc vẫn PENDING."""
+    import outbox
+    from outbox_gia import CongGia
+    giu = outbox.NguoiGui(engine.sqlite_file, engine.data_dir, CongGia())
+    assert giu.nhan_quyen()
+    try:
+        cong = CongGia()
+        monkeypatch.setattr(engine, "list_jobs", lambda limit: [])
+        monkeypatch.setattr(engine, "scan_youtube", _quet_luu(engine))
+        monkeypatch.setattr(engine, "export_csv_ngang", lambda ket: str(tmp_path / "k.csv"))
+        bao_cao = chay_giam_sat(
+            engine,
+            WatchList(muc=[MucTheoDoi("kenh", "kenh-1")]),
+            lister=lambda url, limit: [SimpleNamespace(id="x1", title="Một", url="u1")],
+            y_dinh_gui=_dich(engine, tmp_path),
+            tao_cong=lambda: cong,
+            cho_gui_s=1.5,
+        )
+        assert cong.lan_goi == 0 and bao_cao.gui[outbox.PENDING] == 1
+        assert "ứng dụng đang giữ quyền" in bao_cao.sheets_note
+    finally:
+        giu.tha_quyen()

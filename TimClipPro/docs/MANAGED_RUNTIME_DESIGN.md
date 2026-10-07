@@ -63,7 +63,9 @@ cập nhật → giữ hành vi matching → dễ dùng → hiệu năng.**
    `managed` lấy MỌI thư mục trạng thái từ `RuntimePaths` (state root + installation root), release chỉ chứa
    mã. Entry point (app, CLI/Watch, health check) gọi `runtime_paths.resolve()` một lần rồi truyền rõ.
 3. **Biểu diễn profile, credential binding, job identity, outbox state?** — §5 (lược đồ v3). Định danh việc
-   gửi: `dedupe_key = sha256(installation_id | workspace | job_id | dich_id | revision | schema | nguon | lan)`.
+   gửi: `dedupe_key = sha256(nguon | installation_id | workspace | job_id | dich_id | revision | schema | rieng)`
+   — `rieng` rỗng cho việc tự động (ý định trùng không tạo dòng), là UUID mới cho mỗi lần «Gửi thêm (thủ
+   công)» (ý định MỚI có chủ đích, phải xác nhận khi lần quét đã có việc tới cùng hồ sơ).
 4. **Ai claim gửi; ai chặn nhận job khi update; thứ tự khoá?** — Người gửi duy nhất mỗi state root (khoá HĐH
    `data/hang_doi_gui.lock`), claim nguyên tử có `claim_token`. Cổng bảo trì (`data/bao_tri/`) chặn nhận
    việc mới; updater chờ hết lease. Thứ tự khoá ở §6.
@@ -173,3 +175,42 @@ minh), tạo runtime tại đường dẫn cuối, ghi `TimClipPro.bat` mới, x
 * Hai PC cùng gửi một bảng: không có dedup toàn cục; khuyến nghị mỗi lịch Watch do một máy phụ trách.
 * Không fsync được thư mục trên Windows; cam kết sống qua mất điện dựa trên `FlushFileBuffers` của file +
   thay thế nguyên tử của NTFS.
+* (M2) Việc kẹt ở `SENDING` trong một tiến trình CÒN SỐNG (ví dụ ghi biên nhận lỗi vì DB bị khoá quá 30 s)
+  chỉ thành `UNKNOWN_DELIVERY` ở lần người gửi giành quyền kế tiếp (khởi động lại app/Watch) — không bao
+  giờ tự quay về `PENDING`.
+* (M2) «Kiểm cấu hình (chỉ đọc)» chứng minh ĐỌC được bảng/tab/tiêu đề, KHÔNG chứng minh quyền ghi; lỗi
+  quyền ghi chỉ lộ ra ở lần gửi thật (Google trả 403 → `BLOCKED_CONFIG`, không ghi gì).
+* (M2) Kết quả lưu theo luật báo cáo cũ (trước V2) không được hàng đợi nhận (`BLOCKED_REPORT`) — cần quét
+  lại để có ảnh chụp V2.
+* (M2) Hành vi ĐỔI CÓ CHỦ ĐÍCH so với 6dc3f9d (ghi vào hướng dẫn vận hành):
+  - Watch có `--sheet`/SHEET_LINK mà file khoá thiếu/sai → DỪNG lượt TRƯỚC khi quét (bản cũ quét + CSV rồi
+    không gửi được, và video đó không bao giờ được gửi lại). Mã thoát 1 tới khi sửa khoá.
+  - Chỉ kết quả QUÉT XONG (`ok`) mới lên Sheets — kể cả Watch `--dang-doc` (bản cũ gửi cả dòng «(LỖI: …)»).
+  - Người dùng bản cũ bật «tự động gửi» trong app: sau nâng cấp mặc định «Chỉ lưu cục bộ» tới khi chọn hồ
+    sơ đích (không tự bật gửi vì có khoá).
+  - Không còn tự TẠO tab «KetQuaQuet» khi thiếu (bản cũ `add_worksheet`): thiếu tab → `BLOCKED_CONFIG`; tạo
+    tab là thao tác riêng của người dùng.
+* (M2) Watch giữ `tool.lock` trong lúc chờ gửi cuối lượt (tối đa `cho_gui_s`, mặc định 120 s); yêu cầu dừng
+  (file DUNG / Ctrl+C) cắt ngang lúc chờ.
+
+## 10. Trạng thái triển khai (checkpoint chi tiết: `D:\TimClipPro_ManagedRuntime\<vòng>\checkpoints\CHECKPOINT.md`)
+
+**M1 — đường dẫn runtime + lược đồ v3 + hồ sơ đích** (commit `e341a1c`): `runtime_paths.py`,
+`lich_su.PHIEN_BAN = 3` (chỉ thêm bảng; bản 6dc3f9d chạy được trên DB v3 — test chạy chính mã cũ),
+`sheet_destinations.py` (hồ sơ + revision bất biến, binding khoá theo principal, `DichGuiChot`, nhập link
+cũ idempotent). Engine/CLI dùng `RuntimePaths` (sửa AUD-004: CLI/Watch nay theo `TIMCLIP_DATA_DIR`).
+
+**M2 — outbox lưu bền + tích hợp** (commit kế tiếp `e341a1c`):
+
+| Phần | Nơi | Ghi chú |
+|---|---|---|
+| Outbox, người gửi, transport gspread | `outbox.py` | Thay `sheet_delivery.py` (đã xoá cùng test của nó; bất biến tương đương ở `tests/test_outbox*.py`). Phân loại lỗi theo KIỂU ngoại lệ; timeout (10 s, 60 s); một `append_rows` RAW (tiêu đề + dòng khi trang trống). |
+| Xếp hàng cùng giao dịch | `Engine.save_job` → `_xep_hang_gui` | Chỉ kết quả `ok`; V2 lỗi / luật cũ / dựng dòng lỗi → `BLOCKED_REPORT` không payload; không có dòng → không tạo việc. `danh_thuc` SAU commit. |
+| Ghim | `ScanJobController.start(y_dinh_gui=…)` → `scan_iter(y_dinh_gui=…)` (bản sao job); Watch/CLI: `Engine.ghim_y_dinh_gui` | Đổi chọn trên UI chỉ áp cho lượt SAU; banner «Lượt đang chạy gửi A; lựa chọn B dùng cho lượt tiếp theo». |
+| Xoá lần quét | `Engine.delete_job` | `BEGIN IMMEDIATE`; CLAIMED/SENDING/UNKNOWN → `LoiXoaJob`; SENT → tombstone; ô xác nhận gắn mã lần quét, tự bỏ chọn sau khi xoá. |
+| Kiểm cấu hình chỉ đọc | `outbox.kiem_cau_hinh` → `CongGspread.kiem`, `sheets.kiem_tieu_de_nghiem_ngat`, `SheetsExporter.kiem_tra` | Không tạo tab, không chèn tiêu đề; tab theo mã đã chốt / mã ghim (đối chiếu tên) / tên. |
+| Tab định danh | `sheet_destinations.chot_tab`/`tab_da_chot`, bảng `dich_gui_tab_chot`; `NguoiGui._tab_gui` | Mã tab chốt theo revision ở lần gửi đầu; link cũ = tab «KetQuaQuet» (bỏ gid của link); hồ sơ có gid đối chiếu tên ở lần gửi đầu. Sửa hồ sơ cùng bảng/tab → revision mới kế thừa mã đã chốt. |
+| Rà soát độc lập M2 | `tests/test_outbox_ra_soat.py` + test UI/CLI | 1 P1 + 8 P2 + 12 P3 đã kiểm trên mã; mọi phát hiện có giá trị được tái hiện bằng test ĐỎ trước khi sửa. |
+| Giao diện | `ui_gui_sheets.py` + `app.py` | Bộ chọn đích cạnh nút Bắt đầu (mỗi tab quét một trạng thái riêng, có «Chỉ lưu cục bộ»), tab «📤 Gửi Google Sheets» (hàng đợi + thao tác theo trạng thái, hồ sơ, binding khoá, nhập link cũ), «Gửi thêm (thủ công)» dựng lại payload TỪ LỊCH SỬ. Bỏ nút «Đẩy lên Google Sheets» (gửi lại cả lô bằng link hiện tại — H14). |
+| Watch | `watch.py` | Phân giải đích TRƯỚC khi liệt kê/quét (lỗi cấu hình → dừng trước khi quét); gửi qua outbox bằng người gửi nền; cuối lượt chờ CÓ HẠN (`cho_gui_s`, mặc định 120 s); bỏ gửi đồng bộ và «gửi lại cả lô cuối lượt». |
+| CLI | `cli.py` | `--destination` (hồ sơ) hoặc `--sheet`/`SHEET_LINK` (nhập link cũ có kiểm soát, idempotent; hai nơi khác nhau → lỗi rõ), `--cho`; lệnh `dich` (liệt kê hồ sơ + binding khoá) và `gui` (chạy người gửi tới khi hết việc tới hạn hoặc hết `--cho` giây). Mã thoát 1 khi còn việc bị chặn vì cấu hình hoặc không rõ đã gửi. |

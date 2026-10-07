@@ -16,19 +16,9 @@ from pathlib import Path
 import pyarrow as pa
 from streamlit.testing.v1 import AppTest
 
-from engine import ScanResult
 from scan_ui import build_scan_status_dataframe
 
 APP_PY = Path(__file__).resolve().parents[1] / "app.py"
-
-
-def _kq(vid, matches=0):
-    r = ScanResult(source_name=f"Video {vid}", source_ref=f"https://youtu.be/{vid}")
-    r.source_id = vid
-    r.matches = [object()] * matches
-    r.so_dat_nguong = matches
-    r.job_id = 1
-    return r
 
 
 def test_quet_batch_khong_sinh_canh_bao_arrow_hay_scriptruncontext(
@@ -39,59 +29,53 @@ def test_quet_batch_khong_sinh_canh_bao_arrow_hay_scriptruncontext(
     monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
 
+    import engine as engine_mod
+    import outbox
+    import ui_gui_sheets
+    from outbox_gia import CongGia, dich_gia
+    from test_bao_cao_v2 import _bc, _kq_ca_that
+
+    cong = CongGia()                      # transport Sheets GIẢ — không gửi thật
+    monkeypatch.setattr(outbox, "CongGspread", lambda: cong)
     at = AppTest.from_file(str(APP_PY), default_timeout=120).run()
     assert not at.exception
 
     # sheet_link PHẢI có sẵn ngay từ lần render đầu (cau_hinh.GIA_TRI_GIAO_DIEN_MAC_DINH).
     assert "sheet_link" in at.session_state
-    assert "sheet_auto" in at.session_state
-    assert "sheet_dang_ngang" in at.session_state
 
     monkeypatch.setattr(streamlit, "rerun", lambda *a, **k: None)
 
     eng = at.session_state.eng
-    # Bật auto Sheets để đi đúng đường đã gây lỗi, nhưng chặn mọi lần gửi thật.
-    at.session_state.sheet_auto = True
-    at.session_state.sheet_link = "https://docs.google.com/spreadsheets/d/ABC/edit"
-    da_gui = []
-    at.session_state.scan_sheet_worker.sender = (
-        lambda sheet_link, header, rows: da_gui.append(sheet_link) or len(rows)
-    )
-
+    db = eng.sqlite_file
+    dich, _ = dich_gia(db, tmp_path, installation_id=eng.installation_id())
     urls = ["aaa", "bbb", "ccc"]
 
-    def scan_youtube(url, progress=None, luu_lich_su=True):
+    def scan_youtube(self, url, progress=None, luu_lich_su=True, **kw):
         if progress:
             progress(0.5, "Đang so khớp vân tay... khúc 1/2")
         time.sleep(0.12)
-        return _kq(url, matches=2 if url != "bbb" else 0)
+        kq = _kq_ca_that(source_name=f"Video {url}", source_ref=f"https://youtu.be/{url}",
+                         source_id=(url * 4)[:11])
+        if url == "bbb":
+            kq.matches, kq.so_dat_nguong = [], 0
+        kq.bao_cao = _bc(kq)
+        kq.job_id = self.save_job(kq, "youtube")      # xếp việc gửi CÙNG giao dịch (như thật)
+        return kq
 
-    eng.scan_youtube = scan_youtube
-    eng.to_rows_ngang = lambda ket: [["x"] * 34]
-
+    monkeypatch.setattr(engine_mod.Engine, "scan_youtube", scan_youtube)
     controller = at.session_state.scan_controller
-    cfg_worker = at.session_state.scan_sheet_worker
-    cfg_worker.start()
-
-    from scan_jobs import ScanLaunchConfig
-    from sheet_delivery import SheetDelivery, khoa_giao_hang
-
-    cfg = ScanLaunchConfig(auto_sheet=True, sheet_link=at.session_state.sheet_link,
-                           dang_ngang=True)
+    # Đúng các bước của app.chay_quet: chụp + ghim đích, preflight cục bộ, người gửi nền.
+    y_dinh, loi = ui_gui_sheets.chot_cho_lo(eng, dich.id, True, "lo-thu")
+    assert loi == "" and y_dinh is not None
+    ui_gui_sheets.dam_bao_nguoi_gui(eng, bat_buoc=True)
 
     def sau_moi_video(index, tong, ket_qua):
-        rows = eng.to_rows_ngang([ket_qua])
-        khoa = khoa_giao_hang(cfg.sheet_id, "", "ngang", ket_qua.job_id,
-                              ket_qua.source_id, rows)
-        cfg_worker.enqueue(SheetDelivery(
-            delivery_key=khoa, source_id=ket_qua.source_id,
-            source_name=ket_qua.source_name, header=["h"] * 34, rows=rows,
-            sheet_link=cfg.sheet_link,
-        ))
-        controller.ghi_nhan_giao_hang(index, khoa)
+        viec = outbox.ds_viec(db, job_id=ket_qua.job_id, lo_id=y_dinh.lo_id)
+        if viec:
+            controller.ghi_nhan_giao_hang(index, viec[0].id)
 
     with caplog.at_level(logging.WARNING):
-        controller.start(urls, "youtube", on_result=sau_moi_video)
+        controller.start(urls, "youtube", on_result=sau_moi_video, y_dinh_gui=y_dinh)
         at.session_state.job.update({
             "running": True, "pct": 0.0, "msg": "", "results": [], "error": "",
             "kind": "scan", "da_day_sheet": True, "scan_batch_id": "test",
@@ -125,10 +109,19 @@ def test_quet_batch_khong_sinh_canh_bao_arrow_hay_scriptruncontext(
     assert "Serialization of dataframe to Arrow table was unsuccessful" not in ban_ghi
 
     anh = controller.snapshot()
-    assert anh.completed == 3 and anh.failed == 0
+    assert anh.completed == 3 and anh.failed == 0 and anh.lo_id == "lo-thu"
     # Bảng hiển thị cuối cùng vẫn chuyển Arrow thẳng được.
     pa.Table.from_pandas(
-        build_scan_status_dataframe(anh.videos, cfg_worker.snapshot())
+        build_scan_status_dataframe(anh.videos, ui_gui_sheets.trang_thai_viec_lo(eng, "lo-thu"))
     )
-    assert da_gui and all(s == cfg.sheet_link for s in da_gui)
-    cfg_worker.stop()
+    han = time.monotonic() + 30
+    while time.monotonic() < han and outbox.tom_tat(db, lo_id="lo-thu")[outbox.SENT] < 2:
+        time.sleep(0.1)
+    try:
+        # aaa, ccc có kết quả → 2 việc gửi tới ĐÚNG bảng đã ghim; bbb không có dòng.
+        assert outbox.tom_tat(db, lo_id="lo-thu")[outbox.SENT] == 2
+        assert {sid for sid, _, _ in cong.bang} == {dich.spreadsheet_id}
+    finally:
+        nen = outbox._NEN.get(outbox._khoa_db(db))
+        if nen is not None:
+            nen.stop()

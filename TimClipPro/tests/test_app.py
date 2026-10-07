@@ -39,15 +39,12 @@ def test_giao_dien_khong_loi_render(tmp_path, monkeypatch):
     # mất một khối cũ — đừng bỏ chúng đi.
     assert "📋 Xem danh sách video trong kho" in button_labels
     assert any(sb.label == "Chọn kho muốn liệt kê" for sb in at.selectbox)
-    dinh_dang = next(
-        radio
-        for radio in at.sidebar.radio
-        if radio.label == "Định dạng đẩy lên Sheets"
-    )
-    assert dinh_dang.value == "Ngang (khớp bảng 34 cột)"
-
-    dinh_dang.set_value("Dọc (chi tiết, 15 cột)").run()
-    assert at.session_state.sheet_dang_ngang is False
+    # Gửi Google Sheets theo HỒ SƠ ĐÍCH chọn cho từng lượt (định dạng nằm trong hồ sơ) — ô chọn
+    # gần nút Bắt đầu, tab quản lý riêng; thanh bên không còn công tắc «tự động đẩy»/định dạng.
+    assert any(sb.label == "Đích gửi" for sb in at.selectbox)
+    assert not any(r.label == "Định dạng đẩy lên Sheets" for r in at.sidebar.radio)
+    assert not any(c.label == "Tự động đẩy sau mỗi lần quét" for c in at.sidebar.checkbox)
+    assert any("Gửi Google Sheets" in (x.value or "") for x in at.subheader)
 
 
 def _du_lieu_hai_kho(tmp_path, monkeypatch):

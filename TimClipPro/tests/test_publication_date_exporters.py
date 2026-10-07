@@ -111,6 +111,9 @@ CHO_PHEP_EPOCH = {
     # truy_cap_youtube.py: thời điểm SỬA FILE cookie trên máy này (chẩn đoán cookie cũ hay
     # mới) — giờ treo tường của máy, không phải ngày đăng video.
     "truy_cap_youtube.py",
+    # ui_gui_sheets.py: cột «Cập nhật» của hàng đợi gửi Google Sheets — giờ treo tường của sự kiện
+    # cục bộ (việc gửi vừa đổi trạng thái), không phải ngày đăng video.
+    "ui_gui_sheets.py",
 }
 CHO_PHEP_TIMEDELTA_DAYS = {
     # nhat_ky.py: cửa sổ giữ log N ngày, không liên quan ngày đăng video.

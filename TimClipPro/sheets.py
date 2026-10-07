@@ -50,7 +50,8 @@ class LoiHeaderSheet(RuntimeError):
     """Trang tính có dữ liệu nhưng hàng 1 KHÔNG đúng tiêu đề công cụ (chế độ nghiêm ngặt).
 
     Lỗi vĩnh viễn với lần gửi này: thử lại không chữa được, chỉ người dùng sửa hàng tiêu đề
-    mới chữa được — ``sheet_delivery.phan_loai_loi`` đọc ``vinh_vien`` để không thử lại.
+    mới chữa được — outbox đổi lỗi này thành việc BLOCKED_CONFIG (``outbox.phan_loai_loi``), không
+    thử lại tới khi người dùng sửa bảng rồi bấm «Thử gửi lại».
     """
     vinh_vien = True
 
@@ -109,6 +110,55 @@ def _o_sheets(gia_tri):
     return str(gia_tri)
 
 
+def kiem_tieu_de_nghiem_ngat(ws, header: list, ten_tab: str) -> bool:
+    """Kiểm hàng tiêu đề NGHIÊM NGẶT — CHỈ ĐỌC, dùng chung cho đường gửi cũ và outbox.
+
+    Trả ``True`` khi trang tính TRỐNG THẬT (người gọi ghi tiêu đề trước dòng), ``False`` khi hàng 1
+    đúng ``header`` theo thứ tự (cột người dùng thêm SAU cột cuối thì được). Hàng 1 trống (trong bề
+    rộng tiêu đề) CHƯA chứng minh trang tính trống (audit P1-03): dữ liệu cũ ở hàng 2 trở đi, ở cột
+    ngoài bề rộng báo cáo hay một ô lẻ ở xa đều làm ``append`` ghi lẫn vào dữ liệu thật. Nên nhánh này
+    dò LẦN HAI toàn trang tính (đường chính — hàng 1 đúng tiêu đề — vẫn chỉ một lần đọc); có bất kỳ
+    giá trị nào → ``LoiHeaderSheet`` (vĩnh viễn). Lần dò lỗi/hết giờ → lỗi đó được ném ra nguyên.
+    """
+    lay = getattr(ws, "get_values", None)
+    toan_bang = None
+    if callable(lay):
+        hang_dau = lay("A1:" + _o_cot(len(header)) + "1")
+    else:
+        toan_bang = ws.get_all_values()
+        hang_dau = toan_bang[:1]
+    o = [str(x).strip() for x in (hang_dau[0] if hang_dau else [])]
+    if not any(o):
+        if toan_bang is None:
+            toan_bang = ws.get_all_values()
+        o_co_du_lieu = _o_dau_tien_co_gia_tri(toan_bang)
+        if o_co_du_lieu:
+            LOGGER.warning("event=scan.sheet.not_empty_strict worksheet=%r o=%s",
+                           ten_tab, o_co_du_lieu)
+            raise LoiHeaderSheet(
+                f"Trang tính «{ten_tab}» có hàng 1 trống nhưng đã có dữ liệu (ô "
+                f"{o_co_du_lieu}). Tool không tự chèn hàng tiêu đề và không ghi tiếp để tránh "
+                "ghi lẫn vào dữ liệu cũ. Hãy khôi phục hàng tiêu đề ở hàng 1 (bảng Ngang: menu "
+                "Apps Script «🩹 Khôi phục hàng tiêu đề cho KetQuaQuet»), hoặc chọn một trang "
+                "tính trống, rồi gửi lại.")
+        return True
+    mong = [str(x).strip() for x in header]
+    lech = next((i for i, ten in enumerate(mong)
+                 if i >= len(o) or o[i].casefold() != ten.casefold()), None)
+    if lech is not None:
+        thay = o[lech] if lech < len(o) else ""
+        LOGGER.warning("event=scan.sheet.header_mismatch_strict worksheet=%r cot=%d",
+                       ten_tab, lech + 1)
+        raise LoiHeaderSheet(
+            f"Trang tính «{ten_tab}» đã có dữ liệu nhưng hàng tiêu đề (hàng 1) "
+            f"không đúng {len(header)} cột của công cụ — cột {_o_cot(lech + 1)}: "
+            f"«{thay[:40]}» thay vì «{mong[lech]}». Tool không tự chèn hay sửa hàng "
+            "tiêu đề và không ghi tiếp để tránh lệch cột. Hãy khôi phục hàng tiêu đề "
+            "(bảng Ngang: menu Apps Script «🩹 Khôi phục hàng tiêu đề cho KetQuaQuet»), "
+            "hoặc chọn một trang tính trống, rồi gửi lại.")
+    return False
+
+
 class SheetsExporter:
     """Đẩy dữ liệu lên Google Sheets. Tự vô hiệu hóa êm nếu chưa cấu hình."""
 
@@ -165,14 +215,17 @@ class SheetsExporter:
         return (os.path.normcase(os.path.abspath(self.key_path)), moc,
                 self.sheet_id, self.worksheet)
 
-    def _mo_worksheet(self, so_cot: int = 12):
-        """Mở worksheet MỚI. Không dùng cache — dành cho «Kiểm tra kết nối»."""
+    def _mo_worksheet(self, so_cot: int = 12, *, tao_neu_thieu: bool = True):
+        """Mở worksheet MỚI. Không dùng cache. ``tao_neu_thieu=False`` (kiểm tra kết nối): CHỈ ĐỌC —
+        thiếu tab thì ném ``WorksheetNotFound`` chứ không tự tạo."""
         import gspread
         gc = gspread.service_account(filename=self.key_path)
         sh = gc.open_by_key(self.sheet_id)
         try:
             return sh.worksheet(self.worksheet)
         except gspread.WorksheetNotFound:
+            if not tao_neu_thieu:
+                raise
             return sh.add_worksheet(title=self.worksheet, rows=1000, cols=max(so_cot, 12))
 
     def _ket_noi(self, so_cot: int = 12) -> _KetNoi:
@@ -198,13 +251,19 @@ class SheetsExporter:
             _CACHE.pop(self._khoa_cache(), None)
 
     def kiem_tra(self) -> tuple:
-        """Trả về (thành_công, thông_báo). Dùng cho nút «Kiểm tra kết nối»."""
+        """Trả về (thành_công, thông_báo). Dùng cho nút «Kiểm tra kết nối» — CHỈ ĐỌC: không tạo tab,
+        không ghi gì; đọc được chưa chứng minh có quyền ghi."""
+        import gspread
+
         if not self.san_sang():
             return False, self.thieu_gi()
         try:
-            ws = self._mo_worksheet()
-            return True, (f"OK — đã kết nối bảng «{ws.spreadsheet.title}», "
-                          f"trang tính «{ws.title}».")
+            ws = self._mo_worksheet(tao_neu_thieu=False)
+            return True, (f"OK — đọc được bảng «{ws.spreadsheet.title}», "
+                          f"trang tính «{ws.title}» (kiểm chỉ đọc, chưa xác minh quyền ghi).")
+        except gspread.WorksheetNotFound:
+            return False, (f"Bảng chưa có trang tính «{self.worksheet}» — tool không tự tạo khi "
+                           "kiểm tra; tạo tab đó trong Google Sheets nếu cần.")
         except Exception as e:  # noqa: BLE001
             goi_y = ""
             if "PERMISSION_DENIED" in str(e) or "403" in str(e):
@@ -282,7 +341,8 @@ class SheetsExporter:
         except Exception:
             # Kết nối có thể đã hỏng (token/socket). Bỏ cache để lần sau mở lại,
             # nhưng KHÔNG tự thử lại append: một lần ghi có thể đã tới Google rồi,
-            # thử lại ở đây sẽ tạo dòng trùng. Việc thử lại là của SheetDeliveryWorker.
+            # thử lại ở đây sẽ tạo dòng trùng. Gửi kết quả quét đi qua outbox lưu bền (mơ hồ →
+            # UNKNOWN_DELIVERY, không gửi lại mù).
             self._bo_ket_noi()
             raise
         return len(rows)
@@ -375,51 +435,10 @@ class SheetsExporter:
         ket_noi.da_co_header = True
 
     def _append_nghiem_ngat(self, ws, header: list, rows: list) -> None:
-        """Một lần gửi nghiêm ngặt: đọc hàng 1, quyết định, rồi mới ghi (RAW).
-
-        Hàng 1 trống (trong bề rộng tiêu đề) CHƯA chứng minh trang tính trống (audit P1-03): dữ
-        liệu cũ ở hàng 2 trở đi, ở cột ngoài bề rộng báo cáo hay một ô lẻ ở xa đều làm ``append``
-        ghi lẫn vào dữ liệu thật. Nên nhánh này dò LẦN HAI toàn trang tính (đường chính — hàng 1
-        đúng tiêu đề — vẫn chỉ một lần đọc); có bất kỳ giá trị nào → ``LoiHeaderSheet`` (vĩnh
-        viễn), không ghi gì. Lần dò lỗi/hết giờ → lỗi đó được ném ra, cũng không ghi gì.
-        """
-        lay = getattr(ws, "get_values", None)
-        toan_bang = None
-        if callable(lay):
-            hang_dau = lay("A1:" + _o_cot(len(header)) + "1")
-        else:
-            toan_bang = ws.get_all_values()
-            hang_dau = toan_bang[:1]
-        o = [str(x).strip() for x in (hang_dau[0] if hang_dau else [])]
-        if not any(o):
-            if toan_bang is None:
-                toan_bang = ws.get_all_values()
-            o_co_du_lieu = _o_dau_tien_co_gia_tri(toan_bang)
-            if o_co_du_lieu:
-                LOGGER.warning("event=scan.sheet.not_empty_strict worksheet=%r o=%s",
-                               self.worksheet, o_co_du_lieu)
-                raise LoiHeaderSheet(
-                    f"Trang tính «{self.worksheet}» có hàng 1 trống nhưng đã có dữ liệu (ô "
-                    f"{o_co_du_lieu}). Tool không tự chèn hàng tiêu đề và không ghi tiếp để tránh "
-                    "ghi lẫn vào dữ liệu cũ. Hãy khôi phục hàng tiêu đề ở hàng 1 (bảng Ngang: menu "
-                    "Apps Script «🩹 Khôi phục hàng tiêu đề cho KetQuaQuet»), hoặc chọn một trang "
-                    "tính trống, rồi gửi lại.")
+        """Một lần gửi nghiêm ngặt: kiểm hàng 1 (``kiem_tieu_de_nghiem_ngat``, CHỈ ĐỌC), quyết định,
+        rồi mới ghi (RAW). Trang tính trống thật → ghi tiêu đề MỘT lần rồi ghi dòng."""
+        if kiem_tieu_de_nghiem_ngat(ws, header, self.worksheet):
             ws.append_row([str(x) for x in header], value_input_option="RAW")
-        else:
-            mong = [str(x).strip() for x in header]
-            lech = next((i for i, ten in enumerate(mong)
-                         if i >= len(o) or o[i].casefold() != ten.casefold()), None)
-            if lech is not None:
-                thay = o[lech] if lech < len(o) else ""
-                LOGGER.warning("event=scan.sheet.header_mismatch_strict worksheet=%r cot=%d",
-                               self.worksheet, lech + 1)
-                raise LoiHeaderSheet(
-                    f"Trang tính «{self.worksheet}» đã có dữ liệu nhưng hàng tiêu đề (hàng 1) "
-                    f"không đúng {len(header)} cột của công cụ — cột {_o_cot(lech + 1)}: "
-                    f"«{thay[:40]}» thay vì «{mong[lech]}». Tool không tự chèn hay sửa hàng "
-                    "tiêu đề và không ghi tiếp để tránh lệch cột. Hãy khôi phục hàng tiêu đề "
-                    "(bảng Ngang: menu Apps Script «🩹 Khôi phục hàng tiêu đề cho KetQuaQuet»), "
-                    "hoặc chọn một trang tính trống, rồi gửi lại.")
         ws.append_rows([[_o_sheets(v) for v in r] for r in rows], value_input_option="RAW")
 
     # Số tên cột tối thiểu phải khớp thì hàng 1 mới được coi là header. Đặt 3 để

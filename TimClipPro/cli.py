@@ -13,12 +13,16 @@ Hữu ích khi bạn muốn chạy tự động theo lịch (Task Scheduler) mà
   python cli.py watch
 """
 import argparse
+import contextlib
 import os
 import sys
+import uuid
 
 import bao_cao_v2
 import don_dep
+import lich_su
 import nhat_ky
+import outbox
 import runtime_paths
 import sheet_destinations
 import watch
@@ -26,7 +30,7 @@ from channel import ChannelSync
 from clip_metadata import configure_metadata_logging
 from dung_lai import YeuCauDung
 from khoa import DangChayRoi
-from engine import (Engine, SoKhoHong, liet_ke_media, mo_ta_pham_vi,
+from engine import (Engine, LoiLuuBen, SoKhoHong, liet_ke_media, mo_ta_pham_vi,
                     thu_muc_data_mac_dinh)
 from truy_cap_youtube import LoiTruyCapYouTube
 from ytdlp_chung import CauHinhMang
@@ -62,10 +66,67 @@ def _file_dung_mac_dinh() -> str:
     return os.path.join(runtime_paths.resolve().data_dir, "DUNG")
 
 
+def _y_dinh_lenh(eng: Engine, a, *, lo_id: str = ""):
+    """Ý định gửi của một lệnh CLI từ --destination (+ --sheet nếu có, phải khớp nhau)."""
+    return sheet_destinations.y_dinh_cho_luot(
+        eng.sqlite_file, installation_id=eng.installation_id(),
+        workspace=eng.runtime.workspace, khoa_mac_dinh=eng.runtime.khoa_google_mac_dinh,
+        dich_id=getattr(a, "destination", "") or "", sheet_link=a.sheet,
+        schema_id=(sheet_destinations.SCHEMA_DOC if a.dang_doc
+                   else sheet_destinations.SCHEMA_NGANG), lo_id=lo_id)
+
+
+def _in_tong_ket_gui(tt: dict, so_dong: int = -1) -> int:
+    """In số việc gửi theo trạng thái; trả mã thoát (1 nếu có việc bị chặn / không rõ)."""
+    cho = sum(tt[t] for t in (outbox.PENDING, outbox.RETRY_WAIT, outbox.CLAIMED, outbox.SENDING))
+    print(f"===> Google Sheets: đã gửi {tt[outbox.SENT]} việc"
+          + (f" ({so_dong} dòng)" if so_dong >= 0 else "")
+          + f", còn chờ {cho}, bị chặn {tt[outbox.BLOCKED_CONFIG] + tt[outbox.BLOCKED_REPORT]},"
+          f" không rõ {tt[outbox.UNKNOWN]}.")
+    if cho:
+        print("     Việc còn chờ đã lưu bền — lần chạy sau (hoặc ứng dụng) gửi tiếp.")
+    if tt[outbox.UNKNOWN]:
+        print("     Việc KHÔNG RÕ: đối soát trên Sheet rồi xác nhận trong ứng dụng "
+              "(mục «📤 Gửi Google Sheets»); tool không tự gửi lại.")
+    return 1 if (tt[outbox.BLOCKED_CONFIG] or tt[outbox.UNKNOWN]) else 0
+
+
+def _lenh_dich_va_gui(a) -> None:
+    """`dich`: liệt kê hồ sơ đích + binding khoá; `gui`: chạy người gửi tới khi hết việc tới hạn
+    (hoặc hết --cho giây). Không dựng Engine (khỏi nạp kho)."""
+    rt = runtime_paths.resolve()
+    db = os.path.join(rt.data_dir, "lichsu.db")
+    lich_su.dam_bao_luoc_do(db)
+    sheet_destinations.dinh_danh_may(db, mong_doi=rt.installation_id)
+    if a.lenh == "dich":
+        ds = sheet_destinations.ds_dich(db)
+        if not ds:
+            print("Chưa có hồ sơ đích nào — tạo trong ứng dụng, mục «📤 Gửi Google Sheets».")
+        for d in ds:
+            print(f"{d.id}  [{d.trang_thai}]  {d.nhan}  (revision {d.phien_ban}, "
+                  f"tab id {d.worksheet_id if d.worksheet_id is not None else 'chưa chốt'})")
+        for x in sheet_destinations.ds_xac_thuc(db):
+            print(f"binding «{x.ref}» → {x.principal} [{x.trang_thai}]")
+        return
+    da_gui_truoc = outbox.tom_tat(db)[outbox.SENT]
+    tt = outbox.cho_gui_xong(db, rt.data_dir, None, han_s=max(0.0, a.cho))
+    cho = sum(tt[t] for t in (outbox.PENDING, outbox.RETRY_WAIT, outbox.CLAIMED, outbox.SENDING))
+    print(f"===> Lượt này đã gửi {tt[outbox.SENT] - da_gui_truoc} việc. Hàng đợi còn: chờ {cho}, "
+          f"bị chặn {tt[outbox.BLOCKED_CONFIG] + tt[outbox.BLOCKED_REPORT]}, "
+          f"không rõ {tt[outbox.UNKNOWN]}.")
+    if tt[outbox.BLOCKED_CONFIG] or tt[outbox.UNKNOWN]:
+        print("     Còn việc CẦN XỬ LÝ (bị chặn vì cấu hình / không rõ đã gửi) — xem mục «📤 Gửi Google "
+              "Sheets» trong ứng dụng; tool không tự gửi lại việc không rõ.")
+        raise SystemExit(1)
+    raise SystemExit(0)
+
+
 def _chay_lenh_watch(a, eng: Engine) -> None:
     """Chạy nhánh watch; caller chịu trách nhiệm mở và đóng nhật ký."""
     watchlist_path = a.file or "watchlist.json"
     wl = watch.doc_watchlist(watchlist_path)
+    # Đích gửi chốt TRƯỚC khi đăng ký tín hiệu dừng: hồ sơ sai là lỗi cấu hình ngay, không để lại gì.
+    y_dinh_lenh = _y_dinh_lenh(eng, a) if (wl.muc and getattr(a, "destination", "")) else None
     dung_lai = YeuCauDung(
         eng,
         os.path.join(eng.data_dir, "DUNG"),
@@ -100,12 +161,17 @@ def _chay_lenh_watch(a, eng: Engine) -> None:
         wl.gioi_han_moi_lan = a.gioi_han
     # Chỉ truyền khi bật, để lời gọi mặc định giữ đúng chữ ký cũ.
     them = {"quet_lai": True} if getattr(a, "quet_lai", False) else {}
+    sheet_link = a.sheet
+    if y_dinh_lenh is not None:
+        # Hồ sơ đích tường minh. Có cả --sheet mà chỉ chỗ khác → lỗi rõ (y_dinh_cho_luot).
+        them["y_dinh_gui"] = y_dinh_lenh
+        sheet_link = ""
     try:
         bc = watch.chay_giam_sat(
             eng,
             wl,
             in_tien_do,
-            sheet_link=a.sheet,
+            sheet_link=sheet_link,
             dang_ngang=not a.dang_doc,
             dung_lai=dung_lai,
             **them,
@@ -141,6 +207,10 @@ def main():
         # Cấu hình runtime/đích gửi sai: dừng rõ ràng, không đoán đường dẫn, không traceback.
         print(f"\nLỖI CẤU HÌNH: {e}", file=sys.stderr)
         raise SystemExit(1) from None
+    except LoiLuuBen as e:
+        # Không ghi được lịch sử: lần quét chưa lưu, chưa xếp hàng gửi — báo rõ, không traceback.
+        print(f"\nLỖI LƯU BỀN: {e}", file=sys.stderr)
+        raise SystemExit(1) from None
     except LoiTruyCapYouTube as e:
         # Lỗi vận hành ĐÃ PHÂN LOẠI (liệt kê kênh bị chặn, link không phải video…): câu tiếng
         # Việt, không traceback. Bị chặn truy cập → mã 3; còn lại (link sai, video gỡ) → mã 1.
@@ -167,6 +237,8 @@ def _main():
             "dondep",
             "dung",
             "youtube-doctor",
+            "dich",
+            "gui",
         ],
     )
     ap.add_argument("muc", nargs="*", help="Thư mục / link / đường dẫn file")
@@ -184,6 +256,18 @@ def _main():
     )
     ap.add_argument("--limit", type=int, help="Chỉ lấy N video mới nhất")
     ap.add_argument("--sheet", default="", help="Link Google Sheet cho lệnh watch")
+    ap.add_argument(
+        "--destination",
+        default="",
+        help=("Mã hồ sơ đích Google Sheets cho youtube/file/watch — xem danh sách bằng: "
+              "python cli.py dich"),
+    )
+    ap.add_argument(
+        "--cho",
+        type=float,
+        default=60.0,
+        help="Số giây tối đa chờ gửi Google Sheets (lệnh gui, youtube/file có --destination)",
+    )
     ap.add_argument(
         "--gioi-han",
         type=int,
@@ -228,6 +312,10 @@ def _main():
         import youtube_doctor
 
         raise SystemExit(youtube_doctor.chay(thu_muc_data_mac_dinh(), url_mang=a.network))
+
+    if a.lenh in ("dich", "gui"):
+        _lenh_dich_va_gui(a)
+        return
 
     if a.lenh == "dung":
         file_dung = _file_dung_mac_dinh()
@@ -358,6 +446,11 @@ def _main():
             print(f"⚠️ {canh_bao}")
         return
 
+    y_dinh = None
+    if getattr(a, "destination", ""):
+        y_dinh = _y_dinh_lenh(eng, a, lo_id=uuid.uuid4().hex)
+    ghim = eng.ghim_y_dinh_gui(y_dinh) if y_dinh is not None else contextlib.nullcontext()
+
     if a.lenh == "youtube":
         nguon = list(a.muc)
         if a.file:
@@ -366,14 +459,16 @@ def _main():
                           if x.strip() and not x.strip().startswith("#")]
         if not nguon:
             ap.error("Chưa có link nào. Dùng --file links.txt hoặc liệt kê link trực tiếp.")
-        ket = eng.scan_many(nguon, "youtube", in_tien_do)
+        with ghim:
+            ket = eng.scan_many(nguon, "youtube", in_tien_do)
     else:
         nguon = []
         for m in a.muc:
             nguon += liet_ke_media(m) if os.path.isdir(m) else [m]
         if not nguon:
             ap.error("Không tìm thấy file nào để quét.")
-        ket = eng.scan_many(nguon, "file", in_tien_do)
+        with ghim:
+            ket = eng.scan_many(nguon, "file", in_tien_do)
 
     print("\n" + "=" * 78)
     for kq in ket:
@@ -416,6 +511,14 @@ def _main():
     if loi_bao_cao:
         print(f"===> KHÔNG xuất {len(loi_bao_cao)} kết quả: "
               + bao_cao_v2.thong_bao_ket_qua_loi(loi_bao_cao))
+    ma_gui = 0
+    if y_dinh is not None:
+        print(f"===> Đích Google Sheets: {y_dinh.dich.nhan}")
+        tt = outbox.cho_gui_xong(eng.sqlite_file, eng.data_dir, y_dinh.lo_id,
+                                 han_s=max(0.0, a.cho))
+        so_dong = sum(v.so_dong for v in outbox.ds_viec(
+            eng.sqlite_file, lo_id=y_dinh.lo_id, trang_thai=(outbox.SENT,)))
+        ma_gui = _in_tong_ket_gui(tt, so_dong)
     phien = getattr(eng, "phien_youtube_cuoi", None)
     if a.lenh == "youtube" and phien is not None:
         so = phien.tom_tat()
@@ -423,6 +526,8 @@ def _main():
               f"{so['metadata_requests']} lần lấy thông tin, {so['download_attempts']} lượt tải, "
               f"{so['retries']} lần thử lại, {so['skipped_by_breaker']} video chưa quét.")
         _thoat_neu_youtube_chan(phien.thong_bao_dung())
+    if ma_gui:
+        raise SystemExit(ma_gui)
 
 
 if __name__ == "__main__":

@@ -9,7 +9,9 @@ import pytest
 
 from scan_jobs import QUET_CHO, QUET_DANG_CHAY, QUET_LOI, QUET_XONG, VideoState
 from scan_ui import CHUA_CO, COT, build_scan_status_dataframe
-from sheet_delivery import CHO_GUI, DA_GUI, THAT_BAI, SheetDelivery
+from types import SimpleNamespace
+
+import outbox
 
 
 def _video(index, trang_thai, matches=None, key=""):
@@ -21,10 +23,8 @@ def _video(index, trang_thai, matches=None, key=""):
 
 
 def _giao(key, trang_thai):
-    return SheetDelivery(
-        delivery_key=key, source_id="v", source_name="V",
-        header=["A"], rows=[["1"]], status=trang_thai,
-    )
+    """Việc gửi của outbox — bảng chỉ đọc ``trang_thai``."""
+    return SimpleNamespace(id=key, trang_thai=trang_thai)
 
 
 # Đủ mọi tổ hợp trạng thái mà UI thực sự gặp trong một batch.
@@ -37,9 +37,9 @@ VIDEOS = [
     _video(6, QUET_CHO),                            # matches=None
 ]
 SHEETS = {
-    "k1": _giao("k1", DA_GUI),
-    "k2": _giao("k2", CHO_GUI),
-    "k3": _giao("k3", THAT_BAI),
+    "k1": _giao("k1", outbox.SENT),
+    "k2": _giao("k2", outbox.PENDING),
+    "k3": _giao("k3", outbox.UNKNOWN),
 }
 
 
@@ -77,9 +77,9 @@ def test_cot_sheets_hien_dung_trang_thai_giao_hang():
     khung = build_scan_status_dataframe(VIDEOS, SHEETS)
     sheets = list(khung["Sheets"])
 
-    assert sheets[0] == "✅ Đã gửi"
-    assert sheets[1] == "Chờ gửi"
-    assert sheets[2] == "❌ Lỗi"
+    assert sheets[0] == outbox.NHAN_TRANG_THAI[outbox.SENT]
+    assert sheets[1] == outbox.NHAN_TRANG_THAI[outbox.PENDING]
+    assert sheets[2] == outbox.NHAN_TRANG_THAI[outbox.UNKNOWN]
     assert sheets[3] == CHUA_CO, "Video chưa xếp hàng Sheets thì để trống rõ ràng"
 
 

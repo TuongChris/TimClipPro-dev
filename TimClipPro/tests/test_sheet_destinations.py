@@ -142,12 +142,14 @@ def test_chot_y_dinh_la_chuoi_json_bat_bien_va_giu_revision(co_khoa):
     assert y.dich.to_json() == sd.DichGuiChot.from_json(y.dich.to_json()).to_json()
 
 
-def test_luu_tru_va_tam_dung_chan_luot_moi(co_khoa):
+def test_luu_tru_chan_luot_moi_tam_dung_gui_thi_khong(co_khoa):
+    """Tạm dừng GỬI không chặn quét: lượt mới vẫn ghim được (việc xếp hàng chờ). Lưu trữ thì chặn."""
     a = _tao(co_khoa)
     sd.doi_trang_thai(co_khoa, a.id, sd.TT_TAM_DUNG)
-    with pytest.raises(sd.LoiDichGui, match="tạm dừng"):
-        sd.chot_y_dinh(co_khoa, a.id, installation_id="f" * 32)
+    assert sd.chot_y_dinh(co_khoa, a.id, installation_id="f" * 32).dich.dich_id == a.id
+    assert [d.id for d in sd.ds_dich(co_khoa, bo_luu_tru=True)] == [a.id]
     sd.doi_trang_thai(co_khoa, a.id, sd.TT_LUU_TRU)
+    assert sd.ds_dich(co_khoa, bo_luu_tru=True) == []
     with pytest.raises(sd.LoiDichGui, match="lưu trữ"):
         sd.chot_y_dinh(co_khoa, a.id, installation_id="f" * 32)
     assert [d.id for d in sd.ds_dich(co_khoa, chi_hoat_dong=True)] == []

@@ -303,27 +303,6 @@ def test_csv_ban_cu_khong_sinh_file_phu(tmp_path, monkeypatch):
     assert not os.path.exists(os.path.splitext(f)[0] + ".pham_vi.csv")
 
 
-def test_giao_hang_sheets_v2_chot_dong_nguyen_van_nghiem_ngat(tmp_path, monkeypatch):
-    """Việc gửi Sheets của giao diện (scan_ui.giao_hang_sheets): dòng chốt lúc xếp hàng."""
-    from scan_ui import giao_hang_sheets
-
-    info = {**INFO, "title": "-tên bắt đầu bằng gạch", "title_raw": "-tên bắt đầu bằng gạch"}
-    e, mt, hop, kb = _the_gioi(tmp_path, monkeypatch, [Dat(_B, 915.5, 300)], info=info)
-    kq = e.scan_youtube(URL)
-    viec = giao_hang_sheets(e, kq, sheet_id="abc", sheet_link="s", dang_ngang=True)
-    assert viec.nghiem_ngat is True and viec.header == bang_ngang.HEADER_NGANG
-    assert viec.rows[0][5] == "-tên bắt đầu bằng gạch"          # RAW: không thêm dấu '
-    assert viec.rows[0][8].endswith("?t=915")
-    da_chot = [list(r) for r in viec.rows]
-    hop["resolver"] = ClipMetadataResolver.from_mapping({})      # kho đổi sau khi xếp hàng
-    assert viec.rows == da_chot
-    cu = giao_hang_sheets(e, dataclasses.replace(kq, bao_cao=None), sheet_id="abc",
-                          sheet_link="s", dang_ngang=True)
-    assert cu.nghiem_ngat is False and cu.rows[0][5].startswith("'-tên")
-    assert giao_hang_sheets(e, dataclasses.replace(kq, status="error"), sheet_id="abc",
-                            sheet_link="s", dang_ngang=True) is None
-
-
 def test_youtube_info_khong_co_tieu_de_thi_title_raw_rong(engine, monkeypatch):
     import yt_dlp
     from test_engine_meta import _YoutubeDLGia

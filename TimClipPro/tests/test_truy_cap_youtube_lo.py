@@ -14,7 +14,6 @@ import yt_dlp
 
 import common_original as co
 import truy_cap_youtube as t
-import watch
 from common_original_jobs import CommonOriginalJobController
 from engine import Engine, Match, ScanResult, chu_ky_chinh_sach
 from kho_gia import ghi_kho
@@ -248,29 +247,23 @@ def test_bi_mat_trong_loi_khong_vao_ghi_chu_hay_lich_su(tmp_path, monkeypatch):
 #  Watch
 # =====================================================================
 
-class _SheetsDem:
-    lan_ghi = 0
-    tham_so: list = []
+# Mã bảng GIẢ (link cũ dạng ID trần) — Watch nhập thành hồ sơ đích rồi gửi qua outbox.
+LINK_GIA = "1" + "w" * 43
 
-    def __init__(self, sheet=""):
-        pass
 
-    def san_sang(self):
-        return True
-
-    def append(self, header, rows, **kw):
-        # Cùng chữ ký với SheetsExporter.append (báo cáo V2 gửi thêm `nghiem_ngat=True`).
-        type(self).lan_ghi += 1
-        type(self).tham_so.append(kw)
-        return len(rows)
+def _cong_dem(monkeypatch, tmp_path):
+    """Transport Sheets GIẢ cho outbox + khoá dịch vụ GIẢ ở chỗ mặc định của Engine(root=tmp_path)."""
+    import outbox
+    from outbox_gia import CongGia, khoa_gia
+    cong = CongGia()
+    khoa_gia(tmp_path, ten="google_key.json")
+    monkeypatch.setattr(outbox, "CongGspread", lambda: cong)
+    return cong
 
 
 @pytest.fixture()
-def sheets_dem(monkeypatch):
-    _SheetsDem.lan_ghi = 0
-    _SheetsDem.tham_so = []
-    monkeypatch.setattr(watch, "SheetsExporter", _SheetsDem)
-    return _SheetsDem
+def sheets_dem(monkeypatch, tmp_path):
+    return _cong_dem(monkeypatch, tmp_path)
 
 
 # Dạng NGANG (mặc định, `GiamSat.bat`) vốn bỏ qua kết quả lỗi khi dựng dòng (`to_rows_ngang`);
@@ -282,13 +275,12 @@ def test_watch_50_link_dang_nhap_lien_tiep_thi_dung_khong_ghi_sheet(tmp_path, mo
     e = _eng(tmp_path, monkeypatch, ydl)
     wl = WatchList(muc=[MucTheoDoi("link", _url(_ma(i))) for i in range(50)], kho="A",
                    gioi_han_moi_lan=50)
-    bc = chay_giam_sat(e, wl, sheet_link="https://docs.google.com/spreadsheets/d/x/edit",
-                       dang_ngang=dang_ngang)
+    bc = chay_giam_sat(e, wl, sheet_link=LINK_GIA, dang_ngang=dang_ngang)
     nguong = t.NGUONG_MO[t.AUTH_REQUIRED]
     assert ydl.dem("info") == nguong, "không tiếp tục 40+ video sau khi cầu dao mở"
     assert bc.quet_moi == nguong and bc.chua_quet_do_chan == 50 - nguong
     assert "Đã dừng yêu cầu mới tới YouTube" in bc.chan_youtube
-    assert sheets_dem.lan_ghi == 0, "lỗi truy cập không bao giờ thành dòng trên Sheets"
+    assert sheets_dem.lan_goi == 0, "lỗi truy cập không bao giờ thành dòng trên Sheets"
     assert e.ids_da_quet() == set(), "video chưa kiểm không được tính là đã quét"
     assert len(e.list_jobs()) == nguong
     assert str(50 - nguong) in bc.tom_tat()
@@ -300,12 +292,11 @@ def test_watch_chi_day_sheet_ket_qua_hop_le(tmp_path, monkeypatch, sheets_dem, d
     e = _eng(tmp_path, monkeypatch, ydl)
     monkeypatch.setattr(e, "scan_media", _quet_gia(e))
     wl = WatchList(muc=[MucTheoDoi("link", _url(_ma(i))) for i in (1, 2)], kho="A")
-    bc = chay_giam_sat(e, wl, sheet_link="https://docs.google.com/spreadsheets/d/x/edit",
-                       dang_ngang=dang_ngang)
-    assert sheets_dem.lan_ghi == 1, "chỉ video quét hợp lệ lên Sheets; video bị gỡ thì không"
+    bc = chay_giam_sat(e, wl, sheet_link=LINK_GIA, dang_ngang=dang_ngang)
+    assert len(sheets_dem.bang) == 1, "chỉ video quét hợp lệ lên Sheets; video bị gỡ thì không"
     assert bc.nguon_co_vi_pham == 1 and not bc.chan_youtube
-    # Lượt quét mới mang ảnh chụp báo cáo V2 → Watch gửi ở chế độ nghiêm ngặt.
-    assert sheets_dem.tham_so == [{"nghiem_ngat": True}]
+    # Lượt quét mới mang ảnh chụp báo cáo V2 → payload RAW dựng từ ảnh chụp, gửi nghiêm ngặt.
+    assert bc.sheets_ok is True and bc.sheets_so_dong == len(sheets_dem.bang[0][2])
 
 
 def test_watch_liet_ke_kenh_bi_429_thi_khong_hoi_kenh_khac(tmp_path, monkeypatch, sheets_dem):

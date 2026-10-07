@@ -13,9 +13,7 @@ import re
 import pytest
 
 import bang_ngang
-import sheet_delivery as sd
 import sheets
-from sheet_delivery import SheetDelivery, SheetDeliveryWorker
 from sheets import SheetsExporter, xoa_cache_ket_noi
 
 HEADER = list(bang_ngang.HEADER_NGANG)
@@ -155,31 +153,4 @@ def test_do_lan_hai_loi_thi_khong_ghi_gi(sx):
     ws, exporter = sx([], loi_do=ConnectionError("timeout (giả lập)"))
     with pytest.raises(ConnectionError):
         exporter.append(HEADER, DONG, nghiem_ngat=True)
-    assert _ghi(ws) == []
-
-
-def _worker_that(exporter):
-    def gui(link, header, rows, **kw):
-        return exporter.append(header, rows, **kw)
-    return SheetDeliveryWorker(sender=gui, base_delay=0.0, sleep_fn=lambda s: None)
-
-
-def test_hang_doi_khong_thu_lai_loi_tieu_de_cua_trang_co_du_lieu(sx):
-    ws, exporter = sx([[], CU])
-    w = _worker_that(exporter)
-    w.enqueue(SheetDelivery("k", "a", "A", HEADER, DONG, sheet_link="s", nghiem_ngat=True))
-    w._giao("k")
-    viec = w.snapshot()["k"]
-    assert viec.status == sd.THAT_BAI and viec.attempts == 1, "lỗi tiêu đề là lỗi vĩnh viễn"
-    assert ws.ops.count(("get_all_values",)) == 1
-    assert _ghi(ws) == []
-
-
-def test_hang_doi_thu_lai_huu_han_khi_do_loi_moi_lan_deu_khong_ghi(sx):
-    ws, exporter = sx([], loi_do=RuntimeError("503 tạm thời (giả lập)"))
-    w = _worker_that(exporter)
-    w.enqueue(SheetDelivery("k", "a", "A", HEADER, DONG, sheet_link="s", nghiem_ngat=True))
-    w._giao("k")
-    viec = w.snapshot()["k"]
-    assert viec.status == sd.THAT_BAI and viec.attempts == w.max_attempts
     assert _ghi(ws) == []

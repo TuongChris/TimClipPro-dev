@@ -48,9 +48,13 @@ app.py (Streamlit UI)   cli.py (dòng lệnh)   ← lớp giao diện, thay đư
 | `truy_cap_youtube.py` | THUẦN: phân loại lỗi YouTube, che bí mật, chẩn đoán cookie, bảng thử lại, `PhienYouTube` (cầu dao + số đo) | Đổi cách hiểu một lỗi YouTube / ngưỡng dừng |
 | `youtube_doctor.py` | `cli.py youtube-doctor`: chẩn đoán chỉ đọc (mạng chỉ khi `--network`) | Thêm mục chẩn đoán |
 | `cap_nhat.py` | Tự cập nhật từ GitHub theo tag phiên bản | Đổi cách phát hành / triển khai |
-| `sheets.py` | Đẩy kết quả lên Google Sheets (gspread + service account) | Đổi cách ghi báo cáo |
+| `sheets.py` | Tiện ích Google Sheets (gspread + service account): kiểm tiêu đề nghiêm ngặt, ghi danh sách video | Đổi cách ghi báo cáo |
+| `runtime_paths.py` | Phân giải thư mục trạng thái: `legacy` (y như cũ) / `managed` (state root + `installation.json`, thiếu là dừng) | Đổi nơi lưu dữ liệu / cách cài đặt |
+| `sheet_destinations.py` | Hồ sơ đích Google Sheets (revision bất biến), binding khoá theo principal, ghim `DichGuiChot` | Đổi cách chọn/ghim nơi gửi |
+| `outbox.py` | Hàng đợi gửi Sheets LƯU BỀN trong `lichsu.db`, người gửi duy nhất, transport gspread | Đổi cách gửi / thử lại |
+| `ui_gui_sheets.py` | Giao diện chọn đích cạnh nút Bắt đầu + tab «📤 Gửi Google Sheets» | Đổi giao diện gửi |
 | `danh_sach_video.py` | Liệt kê tên video thật của một kho (chỉ đọc, offline) rồi ghi đè lên trang tính riêng | Đổi cách kiểm kê kho / cột danh sách |
-| `app.py` | Giao diện Streamlit 6 tab | Đổi giao diện |
+| `app.py` | Giao diện Streamlit 7 tab | Đổi giao diện |
 | `cli.py` | Giao diện dòng lệnh, dùng chung engine | Thêm lệnh tự động hoá |
 | `bao_cao_v2.py` | THUẦN: chính sách báo cáo V2 — ảnh chụp `BaoCaoV2`, mốc/link, URL gốc `watch?v=`, ngày nguyên bản, dòng 34/16 cột + phạm vi | Đổi cách trình bày báo cáo lượt quét mới |
 | `common_original.py` | Chế độ «Một video gốc chung cho cả lô» — phần THUẦN: bằng chứng, kết luận, lập kế hoạch, báo cáo | Đổi luật kết luận / chọn nguồn chung |
@@ -90,6 +94,43 @@ app.py (Streamlit UI)   cli.py (dòng lệnh)   ← lớp giao diện, thay đư
   đang chạy để thông báo bận có ích cho người dùng.
 - Nếu sau này thật sự cần nhiều khoá, phải quy định và tuân thủ một thứ tự lấy khoá cố định
   trên toàn dự án. Không được lấy các khoá theo thứ tự tùy ý vì sẽ tạo kẹt chéo.
+- Thứ tự đã quy định (`docs/MANAGED_RUNTIME_DESIGN.md` §6): cổng bảo trì → lease của việc →
+  `data/tool.lock` → khoá JSON `.timclip.lock` → `data/hang_doi_gui.lock` (quyền người gửi Sheets)
+  → giao dịch SQLite. Trong giao dịch ghi SQLite: không chờ khoá HĐH, không gọi mạng.
+
+## Hàng đợi gửi Google Sheets (outbox) — bất biến
+
+Thiết kế: `docs/MANAGED_RUNTIME_DESIGN.md` §5, §10. Những điều KHÔNG được phá:
+
+- Việc gửi chèn trong CÙNG giao dịch `save_job` (`_xep_hang_gui`), payload tuần tự hoá ngay lúc đó.
+  Không có đường gửi Sheets nào khác cho kết quả quét — đừng thêm lại «gửi đồng bộ» hay «gửi lại cả
+  lô bằng link hiện tại» (H14).
+- Đích GHIM theo lượt: `DichGuiChot` (JSON chuẩn hoá của revision hồ sơ + tab ID + schema + binding
+  khoá + workspace) lưu trong từng dòng; người gửi, thử lại, khởi động lại chỉ đọc bản ghim đó, không
+  bao giờ đọc hồ sơ/lựa chọn HIỆN TẠI. Sửa hồ sơ = revision mới; xoá hồ sơ còn việc bị chặn.
+- `SENDING` commit TRƯỚC request ghi. Không bao giờ tự quay `SENDING` → `PENDING`; khởi động lại thì
+  `SENDING` → `UNKNOWN_DELIVERY`. Chỉ lỗi CHỨNG MINH chưa ghi (trước dispatch, không mở được kết nối,
+  HTTP 4xx trừ 408) mới thử lại/chặn; phân loại theo KIỂU ngoại lệ (`outbox.phan_loai_loi`), đừng so
+  chuỗi message. `UNKNOWN_DELIVERY` chỉ người dùng xử lý (đã có trên Sheet / gửi lại chấp nhận trùng).
+- Một người gửi mỗi state root (`data/hang_doi_gui.lock`); mọi cập nhật sau claim có điều kiện
+  `claim_token`. `SENT` chỉ khi biên nhận khớp bảng + số dòng + tab.
+- «Kiểm cấu hình» CHỈ ĐỌC: không tạo tab, không chèn tiêu đề; tab định danh bằng ID (gid).
+- Mã tab CHỐT theo revision ở lần gửi thành công ĐẦU (`dich_gui_tab_chot`, lần đầu thắng); từ đó gửi theo
+  mã đó (tab đổi tên vẫn đúng chỗ; tab cùng tên tạo lại không bao giờ là tab cũ). Đừng đọc hồ sơ HIỆN TẠI
+  để chọn tab. Link cũ (`--sheet`, SHEET_LINK, `giam_sat_sheet.txt`) LUÔN là tab tên «KetQuaQuet» như bản
+  cũ — gid trong link cũ bị bỏ qua (thường là tab đầu "Sheet1"). Hồ sơ có gid: tên tab là nhãn đối chiếu,
+  lần gửi đầu mà tab mang tên khác thì chặn (dán nhầm link tab).
+- Phân loại lỗi: `gspread.open_by_key` gặp HTTP 403 ném `PermissionError` (là `OSError`!) — lỗi CẤU HÌNH
+  (chưa chia sẻ bảng), phải xét TRƯỚC nhánh mạng. `RefreshError` theo cờ `retryable`. Không suy "chưa
+  gửi" từ `__context__`/`__cause__`.
+- Tạm dừng hồ sơ = tạm dừng GỬI: lượt mới vẫn ghim được, việc xếp hàng chờ. Lưu trữ = không nhận lượt mới
+  (việc đã ghim vẫn gửi). Một hồ sơ tạm dừng/nhóm đang hoãn không được chiếm suất của vòng gửi (lọc trong
+  SQL; hoãn nhóm lưu vào `thu_lai_sau`).
+- Dừng người gửi = không nhận việc mới + CHỜ việc đang bay xong (`NguoiGuiNen.HAN_DUNG_S`); thoát giữa lúc
+  request đang bay biến việc thành KHÔNG RÕ.
+- Kết quả V2 lỗi / luật cũ → `BLOCKED_REPORT` không payload — không bao giờ gửi theo luật cũ.
+- Hồ sơ không chứa khoá riêng/token; binding đổi principal là bị chặn, không rơi về khoá mặc định.
+  Thông báo lỗi không chứa nội dung file khoá hay nguyên URL bảng.
 
 ## Ý nghĩa các trường thời gian trong Match
 

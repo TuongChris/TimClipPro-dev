@@ -14,7 +14,8 @@ import pytest
 
 import lich_su
 
-BANG_V3 = {"cai_dat_may", "xac_thuc_gui", "dich_gui", "dich_gui_phien_ban", "hang_doi_gui"}
+BANG_V3 = {"cai_dat_may", "xac_thuc_gui", "dich_gui", "dich_gui_phien_ban", "dich_gui_tab_chot",
+           "hang_doi_gui"}
 
 
 def _db_v2(path):
