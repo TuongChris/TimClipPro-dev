@@ -1237,8 +1237,9 @@ class CapNhat:
             except Exception:  # noqa: BLE001 — không ghi được bộ đếm (đĩa…): vẫn QUAY VỀ, chưa cách ly
                 cach_ly = False
             return self._quay_lai(m, f"health check sau kích hoạt lỗi: {chi_tiet}", cach_ly=cach_ly)
-        # ACTIVE TRƯỚC last_good: chết giữa hai bước thì khôi phục (nhánh ACTIVE) bù last_good. Ngược lại
-        # (last_good trước) để lại last_good = bản CHƯA chốt → quay lại sẽ "về" chính bản lỗi.
+        # ACTIVE TRƯỚC last_good: last_good chỉ trỏ bản mà nhật ký ĐÃ ghi bền ACTIVE — chết giữa hai bước thì
+        # khôi phục (nhánh ACTIVE) ghi bù last_good, không rút cổng kiểm lại health. Quay lại KHÔNG dựa vào thứ
+        # tự này: ``_con_tro_truoc`` không bao giờ trả về chính ứng viên.
         self.nk.ghi(ACTIVE, loi="")
         self.diem_dung(ACTIVE)
         ghi_json_nguyen_tu(self.cd.file_trang_thai("last_good.json"), con_tro_moi)

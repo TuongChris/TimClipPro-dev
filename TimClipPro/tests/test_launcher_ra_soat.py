@@ -224,7 +224,12 @@ def test_ctrl_c_o_cua_so_launcher_khong_giet_ung_dung(monkeypatch):
     tao = []
     monkeypatch.setattr(launcher.subprocess, "Popen", lambda argv, **kw: tao.append(PopenGia(argv, **kw))
                         or tao[-1])
-    assert launcher._chay_cho_con(["python", "app.py"], env={}) == 0
+    try:
+        rc = launcher._chay_cho_con(["python", "app.py"], env={})
+    except KeyboardInterrupt:
+        # Lọt ra thì pytest coi là người dùng NGẮT cả phiên (mã 2, không có dòng FAILED) — báo đúng test này.
+        pytest.fail("Ctrl+C lọt khỏi launcher: launcher thôi chờ app (và có thể đã giết app)")
+    assert rc == 0
     assert tao[0].lan == 2 and not tao[0].da_giet
     import inspect
 

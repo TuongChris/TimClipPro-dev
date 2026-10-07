@@ -533,3 +533,40 @@ def test_ghi_bo_dem_loi_tam_thoi_hong_van_quay_ve_ban_truoc(mt, monkeypatch):
     assert cn.chuan_bi().trang_thai == mu.STAGED
     kq = cn.ap_dung()
     assert _hien(mt) == "1.0.0", kq
+
+
+# ---------------------------------------------------------------- kiểm đột biến trên dfdce2e: mã đã đúng, test
+# này ĐỎ dưới đột biến «ghi last_good trước ACTIVE» (test kết quả an toàn ở mục A vẫn xanh khi đảo thứ tự vì
+# quay lại không dựa vào last_good — ``_con_tro_truoc``)
+
+def test_last_good_chi_tro_ban_moi_khi_nhat_ky_da_ghi_ben_active(mt, monkeypatch):
+    """last_good chỉ trỏ bản mới SAU KHI nhật ký đã ghi bền ACTIVE (bản đã chốt). Mất điện ngay sau khi ghi
+    last_good → lần mở sau không rút cổng, không kiểm lại health; bản mới vẫn ACTIVE, không bị cách ly."""
+    _cai(mt, "1.0.0")
+    phat_hanh(mt["nguon"], "1.1.0", mt["khoa"])
+    ghi_goc = mu.ghi_json_nguyen_tu
+    nk_luc_ghi = []
+
+    def la_last_good_moi(path, obj):
+        return path.endswith("last_good.json") and isinstance(obj, dict) and obj.get("phien_ban") == "1.1.0"
+
+    def ghi(path, obj):
+        if la_last_good_moi(path, obj):
+            nk = mu.doc_json(mt["cd"].file_trang_thai("journal.json")) or {}
+            nk_luc_ghi.append(nk.get("trang_thai"))
+        ghi_goc(path, obj)
+        if la_last_good_moi(path, obj):
+            raise mu.MatDien("ngay sau khi ghi last_good")
+
+    monkeypatch.setattr(mu, "ghi_json_nguyen_tu", ghi)
+    cn = mt["tao"]()
+    assert cn.chuan_bi().trang_thai == mu.STAGED
+    with pytest.raises(mu.MatDien):
+        cn.ap_dung()
+    monkeypatch.setattr(mu, "ghi_json_nguyen_tu", ghi_goc)
+    assert nk_luc_ghi == [mu.ACTIVE], nk_luc_ghi
+    truoc = _so(mt, "kiem_suc_khoe")
+    cn2 = mt["tao"]()
+    assert cn2.phuc_hoi() == mu.ACTIVE
+    assert _so(mt, "kiem_suc_khoe") == truoc, "khôi phục kiểm lại health của bản đã chốt"
+    assert _hien(mt) == "1.1.0" and cn2.last_good()["phien_ban"] == "1.1.0" and not cn2.cach_ly()

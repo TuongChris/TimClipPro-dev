@@ -79,8 +79,9 @@ kiểm tay (không bao giờ "đặt lại về mặc định"); bản current v
 | STAGED | không làm gì (release/runtime được KIỂM LẠI trước khi dùng) |
 | WAITING_IDLE / QUIESCED / BACKED_UP / MIGRATING | cổng đã tự mở (khoá rút nhả theo tiến trình); con trỏ chưa đổi; migration là một giao dịch SQLite và tương thích ngược → STAGED, áp dụng lại khi rảnh |
 | ACTIVATING (con trỏ chưa đổi) | STAGED |
-| con trỏ đã đổi / HEALTHCHECK | rút cổng, chạy lại health: đạt → ACTIVE; lỗi → quay mã về last_good + cách ly; không rảnh được → tạm về last_good, giữ STAGED |
-| ROLLBACK | hoàn tất quay lại + cách ly |
+| con trỏ đã đổi / HEALTHCHECK | rút cổng, chạy lại health: đạt → ACTIVE; lỗi → quay mã về con trỏ TRƯỚC (`con_tro_cu` của nhật ký, không bao giờ chính bản lỗi) — lỗi tất định cách ly ngay, lỗi có thể tạm thời cách ly ở lần thứ 3; không rảnh được → tạm về con trỏ trước (không cách ly), giữ STAGED; cài lần đầu (không có bản trước) → kiểm health ngay |
+| ROLLBACK | hoàn tất quay lại; cách ly theo quyết định đã ghi trong nhật ký (`cach_ly_khi_quay_lai`) |
+| ACTIVE (chưa kịp ghi last_good) | ghi bù last_good — không kiểm lại health (last_good chỉ trỏ bản nhật ký đã ghi ACTIVE) |
 
 Kiểm thử: mất điện mô phỏng ở 14 điểm (`test_mat_dien_tung_diem_khoi_phuc_xac_dinh`) và giữa lúc ghi con trỏ.
 

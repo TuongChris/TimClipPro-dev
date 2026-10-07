@@ -265,3 +265,9 @@ ly sau 3 lần, lỗi vận chuyển khi tải manifest không cách ly (N3); ch
 Kiểm lại riêng N1–N8 (chỉ đọc, 34a0e80): xác nhận cả 8, không P1/P2 mới. P3 còn lại sửa (M5c): nhật ký hỏng
 lúc mở → chỉ mở khi con trỏ trùng bản đã chốt; ghi bộ đếm lỗi hỏng vẫn quay về; health chỉ «tạm thời» khi CSDL
 bị khoá là lỗi duy nhất; hướng dẫn CapNhat.bat khi chưa có bản kích hoạt; `update recover` in rõ trạng thái.
+Kiểm đột biến toàn bộ (62) trên dfdce2e: 58 bị bắt; 4 sống sót — 2 do kế hoạch gộp lấy nhầm bản cũ (tên test đổi
+ở M5a; mục fencing lấy bản M3 chưa sửa, bản chạy lại M3 đã bắt), 1 do test Ctrl+C để `KeyboardInterrupt` lọt ra
+(pytest ngắt CẢ phiên thay vì báo đúng test hỏng), 1 «ghi last_good trước ACTIVE» tương đương VỀ AN TOÀN sau M5b
+(quay lại không còn dựa vào thứ tự ghi). Sửa (M5d — chỉ test, chú thích, tài liệu): test Ctrl+C báo đúng test; test
+khoá bất biến «last_good chỉ trỏ bản mới khi nhật ký đã ghi bền ACTIVE»; chú thích `_kiem_sau_kich_hoat` và bảng
+khôi phục `MANAGED_UPDATE.md` §5 khớp mã.
