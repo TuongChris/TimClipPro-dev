@@ -216,6 +216,11 @@ python -m pytest -m slow
 python -c "import engine, channel, sheets; print('ok')"
 ```
 
+**Test KHÔNG BAO GIỜ được ghi vào `data/` của thư mục mã** (trên máy thật đó là lịch sử thật): luôn
+`tmp_path` + `TIMCLIP_DATA_DIR`/`TIMCLIP_OUTPUT_DIR`. Bẫy đã gặp (08/10/2026): AppTest để lại
+`sys.modules['__main__']` = app.py, nên tiến trình con multiprocessing (spawn) của test sau chạy lại app.py
+trên `data/` mặc định — `conftest._tra_lai_main_module` trả lại `__main__` sau mỗi test.
+
 **Nếu tôi nhờ thêm tính năng, hãy tự viết test nhỏ để tự kiểm chứng trước khi báo cáo,
 đừng chỉ nói "đã xong".** Với thay đổi liên quan chất lượng khớp, hãy tạo dữ liệu giả lập
 (chèn 1 clip vào file dài ở mốc đã biết) rồi kiểm tra vị trí trả về có đúng không.

@@ -17,6 +17,8 @@ from collections import deque
 from dataclasses import dataclass, replace
 from typing import Callable, Optional
 
+import maintenance_gate
+
 LOGGER = logging.getLogger("scan.job")
 
 # Phase phản ánh đúng những gì engine thực sự làm (xem Engine.scan_youtube/scan_media).
@@ -157,6 +159,9 @@ class ScanJobController:
         with self._lock:
             if self._running or (self._thread and self._thread.is_alive()):
                 raise RuntimeError("Đang có batch quét chạy; không tạo batch trùng.")
+            # Vào cổng bảo trì TRƯỚC khi đổi trạng thái: đang cập nhật → `DangBaoTri` (một dạng "bận"),
+            # lô chưa bắt đầu gì. Lease giữ suốt lô, trả ở luồng nền khi lô kết thúc.
+            lease = maintenance_gate.nhan_viec_cua(self.engine, f"lô quét ({source_type})")
             self._batch_id = uuid.uuid4().hex
             self._videos = [
                 VideoState(index=i, nguon=str(x)) for i, x in enumerate(nguon, 1)
@@ -180,7 +185,7 @@ class ScanJobController:
         )
         self._thread = threading.Thread(
             target=self._chay,
-            args=(list(nguon), source_type, on_result),
+            args=(list(nguon), source_type, on_result, lease),
             name=f"scan-{batch_id[:8]}",
             daemon=True,
         )
@@ -213,7 +218,15 @@ class ScanJobController:
             except (queue.Empty, queue.Full):
                 pass
 
-    def _chay(self, nguon: list, source_type: str, on_result: Optional[Callable]) -> None:
+    def _chay(self, nguon: list, source_type: str, on_result: Optional[Callable],
+              lease=None) -> None:
+        try:
+            self._chay_trong_cong(nguon, source_type, on_result)
+        finally:
+            if lease is not None:
+                lease.tra()
+
+    def _chay_trong_cong(self, nguon: list, source_type: str, on_result: Optional[Callable]) -> None:
         try:
             def tien_do(pct: float, msg: str) -> None:
                 # Engine gắn tiền tố "[i/n] " ở scan_iter; bóc ra để biết video nào.

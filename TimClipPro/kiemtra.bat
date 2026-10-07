@@ -54,6 +54,11 @@ set "LOI=1"
 :buoc_3
 echo.
 echo ===== 3/3: Giao dien co render loi khong =====
+REM AppTest chay app THAT: phai tro du lieu vao thu muc TAM - tren data\ that no se nang cap lich su
+REM va co the khoi dong nguoi gui Google Sheets that neu con viec cho gui (H16).
+set "KIEMTRA_TAM=%TEMP%\timclip_kiemtra_%RANDOM%%RANDOM%"
+set "TIMCLIP_DATA_DIR=%KIEMTRA_TAM%\data"
+set "TIMCLIP_OUTPUT_DIR=%KIEMTRA_TAM%\ketqua"
 %PY% -c "import sys; from streamlit.testing.v1 import AppTest; at=AppTest.from_file('app.py',default_timeout=120).run(); e=[str(x.value) for x in at.exception]; print('  [OK] Giao dien sach' if not e else '  [X] LOI GIAO DIEN: '+str(e)); sys.exit(1 if e else 0)"
 if errorlevel 1 goto :ui_hong
 goto :tong_ket

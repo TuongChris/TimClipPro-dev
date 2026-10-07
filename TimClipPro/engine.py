@@ -51,6 +51,7 @@ import truy_cap_youtube
 import ytdlp_chung
 import dossier
 import lich_su
+import maintenance_gate
 import outbox
 import runtime_paths
 import sheet_destinations
@@ -1332,7 +1333,7 @@ class Engine:
         chạy khi build/Watch/sửa metadata đang dùng kho (audit TCP-01). Bận thì ném
         ``DangChayRoi`` để giao diện báo rõ, không xoá gì.
         """
-        with KhoaTienTrinh(os.path.join(self.data_dir, "tool.lock"), f"xoá kho «{ten}»"):
+        with self.khoa_tac_vu(f"xoá kho «{ten}»"):
             d = self._doc_khos()
             kho = next((k for k in d["danh_sach"] if k["ten"] == ten), None)
             if not kho:
@@ -2214,10 +2215,7 @@ class Engine:
         """Tạo/merge snapshot từ dữ liệu local; mặc định dry-run và không gọi mạng."""
         if dry_run:
             return self._khoi_phuc_metadata_offline_da_khoa(dry_run=True)
-        with KhoaTienTrinh(
-            os.path.join(self.data_dir, "tool.lock"),
-            "khôi phục metadata offline",
-        ):
+        with self.khoa_tac_vu("khôi phục metadata offline"):
             return self._khoi_phuc_metadata_offline_da_khoa(dry_run=False)
 
     def _cap_nhat_snapshot_sau_build(self, mode: str) -> list[str]:
@@ -2282,10 +2280,7 @@ class Engine:
                     "duration": info.get("duration"),
                 }
 
-        with KhoaTienTrinh(
-            os.path.join(self.data_dir, "tool.lock"),
-            "vá metadata thiếu từ YouTube",
-        ):
+        with self.khoa_tac_vu("vá metadata thiếu từ YouTube"):
             snapshot_path = self._metadata_snapshot_path()
             source = load_metadata_strict(
                 snapshot_path,
@@ -2488,10 +2483,7 @@ class Engine:
         # sau đó không được chạm tới job này (audit TCP-01).
         job = self._ban_sao_cho_job()
         try:
-            with KhoaTienTrinh(
-                os.path.join(self.data_dir, "tool.lock"),
-                "dựng kho vân tay",
-            ):
+            with self.khoa_tac_vu("dựng kho vân tay"):
                 return job._build_database_da_khoa(
                     thumuc,
                     mode=mode,
@@ -5423,6 +5415,22 @@ class Engine:
         if da_xep_hang:
             outbox.danh_thuc(self.sqlite_file)      # SAU commit: người gửi nền gửi ngay
         return job_id
+
+    @property
+    def cong_bao_tri(self) -> "maintenance_gate.CongBaoTri":
+        """Cổng bảo trì của state root này (``data/bao_tri``) — mọi việc nặng vào cổng trước khi chạy."""
+        cong = getattr(self, "_cong_bao_tri", None)
+        if cong is None or cong.data_dir != self.data_dir:
+            cong = maintenance_gate.CongBaoTri(self.data_dir)
+            self._cong_bao_tri = cong
+        return cong
+
+    @contextlib.contextmanager
+    def khoa_tac_vu(self, ten: str):
+        """Lease cổng bảo trì RỒI ``data/tool.lock`` — đúng thứ tự khoá toàn dự án
+        (docs/MANAGED_RUNTIME_DESIGN.md §6). Đang bảo trì / đang bận → ``DangChayRoi`` (chưa làm gì)."""
+        with self.cong_bao_tri.viec(ten), KhoaTienTrinh(os.path.join(self.data_dir, "tool.lock"), ten):
+            yield
 
     @contextlib.contextmanager
     def _luu_ben(self):

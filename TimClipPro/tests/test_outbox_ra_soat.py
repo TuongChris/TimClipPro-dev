@@ -340,3 +340,20 @@ def test_thoat_tien_trinh_dung_moi_nguoi_gui_nen(mt):
     assert nen.dang_chay
     ob._dung_tat_ca_khi_thoat()
     assert not nen.dang_chay and ob._NEN.get(ob._khoa_db(mt["db"])) is None
+
+
+def test_chot_cua_chu_cu_khong_ghi_de_ket_qua_cua_chu_moi(mt):
+    """Fencing: người gửi cũ (token cũ) chốt muộn sau khi việc đã được claim lại → không ghi gì."""
+    a = _ho_so(mt, gid=0)
+    v = _xep(mt, a, 1)
+    ng = _ng(mt, CongGia())
+    t1 = ng._claim(v, 1_000_000.0)
+    con = sqlite3.connect(mt["db"])                     # mô phỏng: chủ mới phục hồi + claim lại
+    con.execute("UPDATE hang_doi_gui SET trang_thai=?, claim_token='' WHERE id=?", (ob.PENDING, v))
+    con.commit()
+    con.close()
+    t2 = ng._claim(v, 1_000_000.0)
+    assert t1 and t2 and t1 != t2
+    assert ng._chot(v, t1, ob.SENT, bien_nhan="{}") is False
+    viec = ob.lay_viec(mt["db"], v)
+    assert viec.trang_thai == ob.CLAIMED

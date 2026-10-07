@@ -23,9 +23,11 @@ import bao_cao_v2
 import common_original as nguon_chung
 import danh_sach_video
 import lich_su
+import maintenance_gate
 import outbox
 import runtime_paths
 import sheet_destinations
+import ui_cap_nhat
 import ui_gui_sheets as ui_gui
 from cau_hinh import GIA_TRI_GIAO_DIEN_MAC_DINH
 from clip_metadata import configure_metadata_logging
@@ -149,8 +151,12 @@ def chay_quet(nguon: list, source_type: str, *, dich_id: str = "", tu_dong: bool
         if viec:
             scan_controller.ghi_nhan_giao_hang(index, viec[0].id)
 
-    batch_id = scan_controller.start(nguon, source_type, on_result=sau_moi_video,
-                                     y_dinh_gui=y_dinh)
+    try:
+        batch_id = scan_controller.start(nguon, source_type, on_result=sau_moi_video,
+                                         y_dinh_gui=y_dinh)
+    except DangChayRoi as e:                   # đang cập nhật / bản cũ: chưa bắt đầu gì
+        st.error(f"Chưa bắt đầu: {e}")
+        return
     job.update({
         "running": True, "pct": 0.0, "msg": "Đang chuẩn bị...", "results": [],
         "error": "", "kind": "scan", "da_day_sheet": True, "scan_batch_id": batch_id,
@@ -177,7 +183,13 @@ def chay_nguon_chung(nguon: list) -> None:
 
 
 def chay_nen(kind: str, ham, *args, **kwargs):
-    """Chạy một tác vụ dài trong luồng nền để giao diện không bị đơ và nút Dừng vẫn bấm được."""
+    """Chạy một tác vụ dài trong luồng nền để giao diện không bị đơ và nút Dừng vẫn bấm được.
+    Vào cổng bảo trì TRƯỚC (đang cập nhật → báo, không chạy); lease trả khi tác vụ xong."""
+    try:
+        lease = maintenance_gate.nhan_viec_cua(eng, f"tác vụ nền «{kind}»")
+    except DangChayRoi as e:
+        st.error(f"Chưa chạy được: {e}")
+        return
     job.update({"running": True, "pct": 0.0, "msg": "Đang khởi động...",
                 "results": [], "error": "", "kind": kind, "da_day_sheet": False})
     eng.cancel_event.clear()
@@ -191,6 +203,8 @@ def chay_nen(kind: str, ham, *args, **kwargs):
         except Exception as e:  # noqa: BLE001
             job["error"] = str(e)
         finally:
+            if lease is not None:
+                lease.tra()
             job["running"] = False
 
     t = threading.Thread(target=target, daemon=True)
@@ -551,6 +565,9 @@ with st.sidebar:
         st.success(thong_bao_cau_hinh)
     for canh_bao in eng.canh_bao_khoi_dong:
         st.warning(canh_bao)
+
+    with st.expander("ℹ️ Phiên bản và cập nhật", expanded=False):
+        ui_cap_nhat.ve_phien_ban(eng)
 
     st.subheader("Tình trạng hệ thống")
     env = eng.check_env()

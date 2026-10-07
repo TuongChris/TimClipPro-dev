@@ -42,11 +42,20 @@ REM
 REM Da cap nhat thi THOAT ngay, bo qua luot giam sat nay: git checkout co the vua thay
 REM chinh file .bat dang chay, ma cmd doc file theo vi tri byte -> chay tiep se loan.
 REM Task Scheduler se goi lai theo lich va luot sau chay bang ma moi.
-%PY% cap_nhat.py
-if errorlevel 11 %PY% -m pip install -r requirements.txt
-if errorlevel 10 (
-    echo [%date% %time%] Da cap nhat ban moi - bo qua luot nay, luot sau chay ma moi.
-    exit /b 0
+REM Ca chuoi nam TRON trong mot khoi ( ) - cmd nap ca khoi truoc khi chay (xem ChayTool.bat).
+(
+    %PY% cap_nhat.py
+    if errorlevel 10 (
+        if errorlevel 11 (
+            %PY% -m pip install -r requirements.txt
+            if errorlevel 1 (
+                echo [%date% %time%] [LOI] Cai lai thu vien that bai - bo qua luot nay.
+                exit /b 1
+            )
+        )
+        echo [%date% %time%] Da cap nhat ban moi - bo qua luot nay, luot sau chay ma moi.
+        exit /b 0
+    )
 )
 
 echo [%date% %time%] Bat dau giam sat voi %WL%

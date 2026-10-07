@@ -40,6 +40,7 @@ import uuid
 from dataclasses import dataclass, replace
 from typing import Callable, Optional
 
+import maintenance_gate
 import sheet_destinations as sd
 from khoa import DangChayRoi, KhoaTienTrinh
 
@@ -394,10 +395,14 @@ class NguoiGui:
 
     def __init__(self, db_path: str, data_dir: str, cong, *, dong_ho: Callable = time.time,
                  so_lan_toi_da: int = SO_LAN_THU_TOI_DA, moi_vong: int = 20,
-                 dung: Optional[threading.Event] = None):
+                 dung: Optional[threading.Event] = None, cong_bao_tri=None):
         self.db_path = db_path
         self.data_dir = data_dir
         self.cong = cong
+        # Mỗi lần gửi giữ một lease của cổng bảo trì: updater đang rút → không claim việc mới; việc đang
+        # bay → updater chờ nó xong (không đổi mã giữa một request).
+        self.cong_bao_tri = (cong_bao_tri if cong_bao_tri is not None
+                             else maintenance_gate.CongBaoTri(data_dir))
         self.dong_ho = dong_ho
         self.so_lan_toi_da = max(1, int(so_lan_toi_da))
         self.moi_vong = max(1, int(moi_vong))
@@ -479,7 +484,15 @@ class NguoiGui:
             if nhom is not None and nhom in bi_chan_vong:
                 dem["bo_qua"] += 1
                 continue
-            ket = self._xu_ly(h["id"], nhom, bay_gio)
+            try:
+                lease = self.cong_bao_tri.nhan_viec("gửi Google Sheets")
+            except (DangChayRoi, maintenance_gate.LoiCong):
+                dem["tam_dung"] = 1                  # đang bảo trì / bản cũ: chưa claim gì
+                break
+            try:
+                ket = self._xu_ly(h["id"], nhom, bay_gio)
+            finally:
+                lease.tra()
             dem[ket] = dem.get(ket, 0) + 1
             if ket == "bi_chan" and nhom is not None:
                 bi_chan_vong.add(nhom)

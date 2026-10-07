@@ -51,6 +51,18 @@ def bo_clip(tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
+def _tra_lai_main_module():
+    """AppTest (Streamlit) để lại ``sys.modules['__main__']`` = module của app.py. Tiến trình con
+    multiprocessing (spawn — Windows) của test SAU sẽ chạy lại app.py ở cấp module → dựng Engine trên
+    ``data/`` mặc định của THƯ MỤC MÃ (máy thật: lịch sử thật, có thể khởi động người gửi Sheets).
+    Trả lại ``__main__`` gốc sau mỗi test (tests/test_cach_ly_main_module.py)."""
+    goc = sys.modules.get("__main__")
+    yield
+    if goc is not None and sys.modules.get("__main__") is not goc:
+        sys.modules["__main__"] = goc
+
+
+@pytest.fixture(autouse=True)
 def _giu_nguyen_path():
     """``Engine(root=…)`` chèn ``<root>/bin`` vào PATH của CẢ tiến trình (engine.py, __init__).
     Mỗi test một thư mục tạm thì PATH dài dần tới giới hạn 32.767 ký tự của Windows và các test

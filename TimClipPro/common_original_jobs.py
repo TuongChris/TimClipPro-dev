@@ -30,6 +30,7 @@ from datetime import datetime
 
 import bao_cao_v2
 import common_original as co
+import maintenance_gate
 from clip_metadata import extract_youtube_id
 from engine import _mo_file_text_moi, chu_ky_chinh_sach
 from khoa import DangChayRoi, KhoaTienTrinh
@@ -188,8 +189,9 @@ class CommonOriginalJobController:
 
     def _chay(self, ma_lo: str, nguon: list, source_type: str) -> None:
         try:
-            with KhoaTienTrinh(os.path.join(self.engine.data_dir, "tool.lock"),
-                               "quét nguồn chung cả lô"):
+            with maintenance_gate.vao_cong_cua(self.engine, "lô nguồn chung"), \
+                    KhoaTienTrinh(os.path.join(self.engine.data_dir, "tool.lock"),
+                                  "quét nguồn chung cả lô"):
                 with self.engine.phien_job() as job:
                     ket = self._chay_da_khoa(job, ma_lo, nguon, source_type)
             with self._lock:

@@ -114,6 +114,10 @@ CHO_PHEP_EPOCH = {
     # ui_gui_sheets.py: cột «Cập nhật» của hàng đợi gửi Google Sheets — giờ treo tường của sự kiện
     # cục bộ (việc gửi vừa đổi trạng thái), không phải ngày đăng video.
     "ui_gui_sheets.py",
+    # managed_update.py, ui_cap_nhat.py: hạn «hoãn áp dụng cập nhật» do người dùng đặt — giờ treo tường
+    # của máy này, không phải ngày đăng video.
+    "managed_update.py",
+    "ui_cap_nhat.py",
 }
 CHO_PHEP_TIMEDELTA_DAYS = {
     # nhat_ky.py: cửa sổ giữ log N ngày, không liên quan ngày đăng video.

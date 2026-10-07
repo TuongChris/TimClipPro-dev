@@ -150,6 +150,9 @@ thử"). Tạm dừng toàn bộ / tạm dừng một hồ sơ: người gửi b
 5. `data/hang_doi_gui.lock` — quyền làm người gửi (dài hạn trong tiến trình gửi).
 6. Giao dịch SQLite — trong cùng; KHÔNG chờ khoá HĐH và KHÔNG gọi mạng khi đang mở giao dịch ghi.
 
+Ngoại lệ có chủ đích: người gửi giữ (5) suốt đời tiến trình nhưng lấy lease (2) cho TỪNG lần gửi. Không thể
+kẹt chéo vì mutex của cổng không bao giờ chờ khoá khác khi đang giữ, và lease là file mới không ai tranh.
+
 ## 7. Cập nhật Stable (PC2) — xem `docs/MANAGED_UPDATE.md` khi hoàn tất M3
 
 Manifest JSON (khoá sắp xếp, UTF-8) gồm: `dinh_dang`, `ung_dung`, `kenh`, `phien_ban`, `commit`, `tree`,

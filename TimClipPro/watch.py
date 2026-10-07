@@ -9,6 +9,7 @@ import uuid
 from typing import Any, Callable, Optional
 
 import bao_cao_v2
+import maintenance_gate
 import outbox
 import runtime_paths
 import sheet_destinations as sd
@@ -368,7 +369,7 @@ def chay_giam_sat(
     if lister is None:
         lister = _lister_theo_cau_hinh(engine)
     try:
-        with KhoaTienTrinh(
+        with maintenance_gate.vao_cong_cua(engine, "lượt giám sát"), KhoaTienTrinh(
             os.path.join(engine.data_dir, "tool.lock"),
             "giám sát",
         ), _mo_phien(engine) as phien:

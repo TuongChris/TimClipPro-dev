@@ -21,6 +21,7 @@ import uuid
 import bao_cao_v2
 import don_dep
 import lich_su
+import maintenance_gate
 import nhat_ky
 import outbox
 import runtime_paths
@@ -416,7 +417,8 @@ def _main():
         cs = ChannelSync(a.kho,
                          player_clients=list(eng.config.ytdlp_player_clients),
                          cau_hinh_mang=eng.cau_hinh_mang())
-        r = cs.sync(a.muc[0], a.limit, in_tien_do)
+        with maintenance_gate.vao_cong_cua(eng, "đồng bộ kênh"):
+            r = cs.sync(a.muc[0], a.limit, in_tien_do)
         trang_thai = "ĐÃ DỪNG" if r.get("da_huy") else "XONG"
         print(f"\n{trang_thai}: tải mới {r['moi']} video, "
               f"bỏ qua {r['bo_qua']} video đã có.")
@@ -459,7 +461,7 @@ def _main():
                           if x.strip() and not x.strip().startswith("#")]
         if not nguon:
             ap.error("Chưa có link nào. Dùng --file links.txt hoặc liệt kê link trực tiếp.")
-        with ghim:
+        with maintenance_gate.vao_cong_cua(eng, "quét YouTube (dòng lệnh)"), ghim:
             ket = eng.scan_many(nguon, "youtube", in_tien_do)
     else:
         nguon = []
@@ -467,7 +469,7 @@ def _main():
             nguon += liet_ke_media(m) if os.path.isdir(m) else [m]
         if not nguon:
             ap.error("Không tìm thấy file nào để quét.")
-        with ghim:
+        with maintenance_gate.vao_cong_cua(eng, "quét file (dòng lệnh)"), ghim:
             ket = eng.scan_many(nguon, "file", in_tien_do)
 
     print("\n" + "=" * 78)

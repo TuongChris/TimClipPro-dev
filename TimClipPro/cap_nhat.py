@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -124,12 +125,40 @@ def ban_hien_tai(repo: str) -> str:
     return ra if ok else "(không rõ)"
 
 
+_TAG_V = re.compile(r"^v(\d+(?:\.\d+)*)$")
+
+
 def ban_moi_nhat(repo: str) -> str:
-    """Tag mới nhất đã biết ở local. Gọi `lay_tag_moi()` trước để có dữ liệu mới."""
-    ok, ra = _git(["tag", "--sort=-v:refname"], repo)
+    """Tag ``v<số>`` mới nhất (so theo SỐ: v10 > v2.10) đã biết ở local. Gọi `lay_tag_moi()` trước.
+
+    CHỈ tag ``v<số>``: tag ``stable-…`` của kênh managed (PC2, launcher), bản thử ``…-rc1``, ``latest``…
+    không bao giờ được updater cũ chọn — trước đây nó lấy tag lớn nhất bất kể tên (H10)."""
+    ok, ra = _git(["tag", "--list"], repo)
     if not ok or not ra:
         return ""
-    return ra.splitlines()[0].strip()
+    hop_le = []
+    for dong in ra.splitlines():
+        m = _TAG_V.match(dong.strip())
+        if m:
+            hop_le.append((tuple(int(x) for x in m.group(1).split(".")), dong.strip()))
+    return max(hop_le)[1] if hop_le else ""
+
+
+def ly_do_khong_tu_cap_nhat(goc: str) -> str:
+    """Updater cũ KHÔNG được chạy ở: bản cài managed (launcher + bản Stable đã ký lo cập nhật) và máy
+    phát triển (dấu ``data/dev_mode`` hoặc ``TIMCLIP_DEV_MODE=1``) — checkout tag ở đó là phá chỗ làm."""
+    goc = os.path.abspath(goc)
+    if os.environ.get("TIMCLIP_RUNTIME_MODE") == "managed" or os.path.isfile(
+            os.path.join(os.path.dirname(goc), "MANAGED_RELEASE.json")):
+        return ("Đây là bản cài do launcher quản lý — cập nhật bằng launcher (bản Stable đã ký), không "
+                "dùng updater cũ.")
+    dau = [os.path.join(goc, "data", "dev_mode")]
+    if os.environ.get("TIMCLIP_DATA_DIR"):
+        dau.append(os.path.join(os.environ["TIMCLIP_DATA_DIR"], "dev_mode"))
+    if os.environ.get("TIMCLIP_DEV_MODE") == "1" or any(os.path.isfile(p) for p in dau):
+        return ("Đây là máy phát triển (dev_mode) — updater không tự checkout/cập nhật; cập nhật mã bằng "
+                "git như bình thường.")
+    return ""
 
 
 def lay_tag_moi(repo: str) -> tuple:
@@ -168,6 +197,10 @@ def _requirements_doi(repo: str, tu: str, den: str) -> bool:
 def cap_nhat(goc: str = GOC, ban_muon: str = "", chi_kiem_tra: bool = False) -> KetQua:
     """Kiểm tra và (nếu cần) chuyển sang bản mới. KHÔNG BAO GIỜ ném lỗi ra ngoài."""
     kq = KetQua()
+
+    ly_do = ly_do_khong_tu_cap_nhat(goc)
+    if ly_do:
+        return kq.bao(ly_do)
 
     repo = thu_muc_repo(goc)
     if not repo:

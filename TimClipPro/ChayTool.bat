@@ -27,12 +27,23 @@ REM
 REM Vi sao phai khoi dong lai: git checkout co the thay chinh file .bat nay, ma cmd
 REM doc file lenh theo vi tri byte trong luc chay -> doi giua chung la chay loan.
 REM Da cap nhat thi mo lai chinh minh roi thoat, khong chay tiep bang noi dung cu.
+REM Ca chuoi cap nhat nam TRON trong khoi ( ): cmd nap ca khoi vao bo nho truoc khi chay, nen
+REM checkout doi file .bat nay giua chung khong lam cmd doc nham byte cua file moi.
+REM Ma 11 = da doi ban VA can cai lai thu vien: cai xong (pip loi thi dung) roi VAN mo lai. Khong
+REM duoc kiem "if errorlevel 10" SAU pip: pip thanh cong dat ERRORLEVEL=0 (loi H15 cu).
 if not "%~1"=="--da-cap-nhat" (
     echo.
     echo   Dang kiem tra ban moi...
     %PY% cap_nhat.py
-    if errorlevel 11 %PY% -m pip install -r requirements.txt
     if errorlevel 10 (
+        if errorlevel 11 (
+            %PY% -m pip install -r requirements.txt
+            if errorlevel 1 (
+                echo   [LOI] Cai lai thu vien that bai - khong mo tool bang thu vien cu. Chay cai_dat.bat.
+                pause
+                exit /b 1
+            )
+        )
         echo   Da cap nhat - dang mo lai...
         start "" "%~f0" --da-cap-nhat
         exit /b 0

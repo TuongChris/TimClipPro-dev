@@ -213,14 +213,15 @@ def test_ma_thoat_phan_biet_ba_truong_hop():
 
 
 def test_bat_kiem_errorlevel_theo_thu_tu_giam_dan():
-    """`if errorlevel 10` đúng cả khi mã là 11, nên phải kiểm 11 TRƯỚC 10."""
+    """`if errorlevel 10` đúng cả khi mã là 11 → nhánh mã 11 (cài lại thư viện) nằm TRONG khối mã ≥ 10,
+    để sau pip vẫn tới đúng hành động của mã 10. Kiểu phẳng cũ (11 trước 10 ở hai dòng riêng) để pip xoá
+    ERRORLEVEL nên mã 11 không khởi động lại / không bỏ lượt (H15)."""
     for ten in ("ChayTool.bat", "ChayMayPhu.bat"):
-        noi_dung = open(os.path.join(GOC_DU_AN, ten), encoding="utf-8",
-                        errors="replace").read()
-        vi_tri_11 = noi_dung.find("errorlevel 11")
-        vi_tri_10 = noi_dung.find("errorlevel 10")
-        assert vi_tri_11 != -1 and vi_tri_10 != -1, f"{ten} thiếu bước cập nhật"
-        assert vi_tri_11 < vi_tri_10, f"{ten}: phải kiểm errorlevel 11 trước 10"
+        d = [x.strip().lower() for x in open(os.path.join(GOC_DU_AN, ten), encoding="utf-8",
+                                             errors="replace").read().splitlines()]
+        assert "if errorlevel 10 (" in d and "if errorlevel 11 (" in d, f"{ten} thiếu bước cập nhật"
+        i10, i11 = d.index("if errorlevel 10 ("), d.index("if errorlevel 11 (")
+        assert i10 < i11 and ")" not in d[i10 + 1:i11], f"{ten}: nhánh mã 11 phải nằm trong khối mã 10"
 
 
 def test_bao_cai_lai_khi_requirements_doi(repo, khong_fetch):
