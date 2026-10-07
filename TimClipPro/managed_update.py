@@ -342,6 +342,7 @@ class NguonGitHub:
         url = f"https://api.github.com/repos/{self.repo}/releases?per_page=30"
         r = self._phien().get(url, timeout=self.THOI_GIAN_CHO,
                               headers={"Accept": "application/vnd.github+json"})
+        self._kiem_host(getattr(r, "url", url) or url)
         r.raise_for_status()
         kq = []
         for x in r.json() if isinstance(r.json(), list) else []:
@@ -353,15 +354,31 @@ class NguonGitHub:
                                   tham_chieu=json.dumps(assets)))
         return kq
 
+    SO_LAN_CHUYEN_HUONG = 5
+
     def tai(self, ban: BanPhatHanh, ten: str, dich: str, gioi_han: int) -> None:
+        """Tải một asset, TỰ theo chuyển hướng: kiểm host TRƯỚC mỗi request (để requests tự theo thì request
+        tới host lạ đã đi rồi mới biết)."""
+        from urllib.parse import urljoin
+
         url = json.loads(ban.tham_chieu or "{}").get(ten)
         if not url:
             raise LoiCapNhat("tai", f"Bản phát hành thiếu asset «{ten}».")
-        self._kiem_host(url)
-        with self._phien().get(url, timeout=self.THOI_GIAN_CHO, stream=True,
-                               allow_redirects=True) as r:
+        hien = url
+        for _ in range(self.SO_LAN_CHUYEN_HUONG + 1):
+            self._kiem_host(hien)
+            r = self._phien().get(hien, timeout=self.THOI_GIAN_CHO, stream=True, allow_redirects=False)
+            if getattr(r, "status_code", 200) in (301, 302, 303, 307, 308):
+                hien = urljoin(hien, (getattr(r, "headers", None) or {}).get("Location", ""))
+                with contextlib.suppress(Exception):
+                    r.close()
+                continue
+            break
+        else:
+            raise LoiCapNhat("tai", "Quá nhiều lần chuyển hướng khi tải bản phát hành.")
+        with r:
             for h in [*getattr(r, "history", []), r]:
-                self._kiem_host(getattr(h, "url", url))
+                self._kiem_host(getattr(h, "url", hien))
             r.raise_for_status()
             da = 0
             with open(dich, "wb") as fo:
@@ -482,6 +499,8 @@ def giai_nen_an_toan(zip_path: str, dich: str, *, gioi_han_tong: int = GIOI_HAN_
                             fo.write(khoi)
                         else:
                             ghi(fo, khoi)
+                    fo.flush()
+                    os.fsync(fo.fileno())                # file bền TRƯỚC dấu sẵn sàng (fsync) của release
         except BaseException:
             shutil.rmtree(dich, ignore_errors=True)
             raise
@@ -540,9 +559,16 @@ def kiem_cay_release(thu_muc: str, m: Manifest) -> None:
 #  Ghi nguyên tử, bố cục cài đặt, nhật ký
 # ---------------------------------------------------------------------------
 
+SO_LAN_THU_THAY_FILE = 10
+
+
 def ghi_json_nguyen_tu(path: str, obj) -> None:
     """File tạm CÙNG thư mục → flush → fsync → os.replace (MoveFileEx thay thế nguyên tử trên NTFS).
-    Windows không fsync được thư mục — giới hạn đã ghi trong tài liệu."""
+    Windows không fsync được thư mục — giới hạn đã ghi trong tài liệu.
+
+    Windows: ``os.replace`` bị từ chối (``PermissionError``) khi tiến trình khác ĐANG MỞ file đích để đọc
+    (Python mở file không kèm FILE_SHARE_DELETE) — giao diện/doctor/``update status`` đọc các file này vài
+    mili-giây mỗi lần. Thử lại có hạn (~2,75 s) thay vì để lỗi cắt ngang một bước cập nhật."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tam = f"{path}.tmp-{uuid.uuid4().hex[:8]}"
     try:
@@ -550,7 +576,14 @@ def ghi_json_nguyen_tu(path: str, obj) -> None:
             json.dump(obj, f, ensure_ascii=False, indent=1, sort_keys=True)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tam, path)
+        for lan in range(SO_LAN_THU_THAY_FILE):
+            try:
+                os.replace(tam, path)
+                break
+            except PermissionError:
+                if lan == SO_LAN_THU_THAY_FILE - 1:
+                    raise
+                time.sleep(0.05 * (lan + 1))
     except BaseException:
         with contextlib.suppress(OSError):
             os.remove(tam)
@@ -755,12 +788,70 @@ class CapNhat:
         d[phien_ban] = {"ly_do": ly_do[:300], "luc": _bay_gio()}
         ghi_json_nguyen_tu(self.cd.file_trang_thai("quarantine.json"), d)
 
-    def _dem_loi_tai(self, phien_ban: str) -> int:
-        p = self.cd.file_trang_thai("loi_tai.json")
+    def bo_cach_ly(self, phien_ban: str) -> bool:
+        """Người vận hành đã khắc phục nguyên nhân (vd. mạng, Python gốc) → bỏ cách ly MỘT phiên bản và xoá
+        bộ đếm lỗi của nó; lần chuẩn bị sau xét lại từ đầu (vẫn đủ chữ ký/băm/health). ``False``: không bị
+        cách ly."""
+        with self._giu_quyen():
+            d = self.cach_ly()
+            if phien_ban not in d:
+                return False
+            del d[phien_ban]
+            ghi_json_nguyen_tu(self.cd.file_trang_thai("quarantine.json"), d)
+            for ten in ("loi_tai.json", "loi_runtime.json"):
+                p = self.cd.file_trang_thai(ten)
+                dem = doc_json(p, mac_dinh={}, bat_buoc_hop_le=False) or {}
+                if isinstance(dem, dict) and dem.pop(phien_ban, None) is not None:
+                    ghi_json_nguyen_tu(p, dem)
+            return True
+
+    def _dem_loi(self, ten_file: str, phien_ban: str) -> int:
+        p = self.cd.file_trang_thai(ten_file)
         d = doc_json(p, mac_dinh={}, bat_buoc_hop_le=False) or {}
         d[phien_ban] = int(d.get(phien_ban, 0)) + 1
         ghi_json_nguyen_tu(p, d)
         return d[phien_ban]
+
+    def _dem_loi_tai(self, phien_ban: str) -> int:
+        return self._dem_loi("loi_tai.json", phien_ban)
+
+    def _runtime_dang_dung(self, rt: str) -> bool:
+        """Runtime đang được con trỏ ``current``/``last_good`` dùng (nhiều release cùng lock dùng CHUNG một
+        runtime). Con trỏ hỏng → ``LoiCapNhat`` (không đoán, không xoá gì)."""
+        p = os.path.normcase(os.path.abspath(rt))
+        for con_tro in (self.hien_tai(), self.last_good()):
+            if isinstance(con_tro, dict) and \
+                    os.path.normcase(os.path.abspath(str(con_tro.get("runtime") or ""))) == p:
+                return True
+        return False
+
+    def _con_tro_truoc(self, sha_ung_vien: str) -> Optional[dict]:
+        """Con trỏ để QUAY VỀ khi ứng viên (manifest ``sha_ung_vien``) lỗi: con trỏ TRƯỚC kích hoạt ghi trong
+        nhật ký, rồi mới tới last_good — KHÔNG BAO GIỜ là chính ứng viên (last_good có thể đã trỏ sang nó nếu
+        lượt trước bị cắt ngang đúng lúc). ``None``: không có bản trước (cài lần đầu)."""
+        nk = self.nk.doc() or {}
+        for ung in (nk.get("con_tro_cu"), self.last_good()):
+            if isinstance(ung, dict) and ung.get("manifest_sha256") and \
+                    ung.get("manifest_sha256") != sha_ung_vien:
+                return ung
+        return None
+
+    def _ve_con_tro_truoc(self, sha_ung_vien: str) -> Optional[dict]:
+        """Đặt ``current`` (và sửa ``last_good``) về con trỏ trước; không có thì bỏ ``current``."""
+        tot = self._con_tro_truoc(sha_ung_vien)
+        if tot:
+            ghi_json_nguyen_tu(self.cd.file_trang_thai("current.json"), tot)
+            lg = self.last_good()
+            if not isinstance(lg, dict) or lg.get("manifest_sha256") != tot.get("manifest_sha256"):
+                ghi_json_nguyen_tu(self.cd.file_trang_thai("last_good.json"), tot)
+        else:
+            with contextlib.suppress(FileNotFoundError):
+                os.remove(self.cd.file_trang_thai("current.json"))
+            lg = self.last_good()
+            if isinstance(lg, dict) and lg.get("manifest_sha256") == sha_ung_vien:
+                with contextlib.suppress(FileNotFoundError):
+                    os.remove(self.cd.file_trang_thai("last_good.json"))
+        return tot
 
     def _con_tro(self, m: Manifest) -> dict:
         return {"phien_ban": m.phien_ban, "release": self.cd.release_dir(m.phien_ban),
@@ -792,7 +883,9 @@ class CapNhat:
 
     def _tim_ung_vien(self) -> tuple:
         """``(ban, manifest, raw_m, raw_s, lý_do_bỏ)`` của bản Stable hợp lệ CAO NHẤT, hoặc ``ban=None``.
-        Manifest sai chữ ký/chính sách → cách ly đúng phiên bản đó, xét bản kế tiếp."""
+        Manifest ĐÃ KÝ HỢP LỆ mà sai chính sách → cách ly đúng phiên bản đó. Chữ ký sai/thiếu gói chỉ BỎ QUA
+        lần này: có thể là thư mục chép dở hoặc bản đang tải lên — cách ly theo SỐ phiên bản sẽ chặn vĩnh
+        viễn bản đúng chép/tải lên sau đó (manifest nhỏ, kiểm lại mỗi lần rất rẻ)."""
         hien = (self.hien_tai() or {}).get("phien_ban", "")
         ds, bo = loc_ung_vien(self.nguon.ds(), hien_tai=hien, cach_ly=self.cach_ly())
         tam = os.path.join(self.cd.staging, "kiem-" + uuid.uuid4().hex[:8])
@@ -801,7 +894,8 @@ class CapNhat:
                 try:
                     m, raw_m, raw_s = self._manifest_ung_vien(ban, tam)
                 except TuChoiGoi as e:
-                    self._cach_ly(ban.tag[len(TIEN_TO_TAG):], str(e))
+                    if e.ma not in ("chu_ky", "thieu_goi"):
+                        self._cach_ly(ban.tag[len(TIEN_TO_TAG):], str(e))
                     bo.append(f"{ban.tag}: {e}")
                     continue
                 if m.launcher_toi_thieu > self.launcher:
@@ -821,7 +915,7 @@ class CapNhat:
                 ban, m, _, _, bo = self._tim_ung_vien()
         except LoiCapNhat as e:
             return KetQua(e.ma if e.ma == BAN else LOI, "", str(e))
-        except (OSError, ValueError) as e:
+        except Exception as e:  # noqa: BLE001 — mạng/đĩa/thư viện thiếu: vẫn chạy bản hiện tại
             return KetQua(LOI, "", f"Không kiểm được bản mới ({type(e).__name__}) — vẫn chạy bản hiện tại.")
         if ban is None:
             return KetQua(KHONG_CO, "", "Không có bản Stable mới hợp lệ.", bo)
@@ -838,6 +932,27 @@ class CapNhat:
                 return self._chuan_bi()
         except LoiCapNhat as e:
             return KetQua(e.ma if e.ma == BAN else LOI, "", str(e))
+        except Exception as e:  # noqa: BLE001 — lỗi lạ không được làm sập launcher; bản đang chạy giữ nguyên
+            return KetQua(LOI, "", f"Lỗi không lường trước khi chuẩn bị ({type(e).__name__}) — giữ bản "
+                          "hiện tại.")
+
+    def _chan_theo_lich_su(self, m: Manifest) -> Optional[KetQua]:
+        """Chính sách dữ liệu, kiểm TRƯỚC khi tải/rút cổng/sao lưu: schema trên máy mới hơn bản phát hành →
+        BLOCKED; bản mới cần nâng lịch sử mà KHÔNG khai tự động an toàn → WAITING_APPROVAL (không tải, không
+        sao lưu, không rút cổng — lặp lại mỗi lần chỉ tốn một lần đọc manifest). Máy mới chưa có lịch sử
+        (``phien_ban_db() is None``) không phải migration."""
+        db = self.phien_ban_db()
+        if db is None:
+            return None
+        if db > m.lich_su:
+            self.nk.ghi(BLOCKED, ung_vien=m.phien_ban, con_tro_moi=None,
+                        loi="Lịch sử trên máy mới hơn bản phát hành (schema quá mới).")
+            return KetQua(BLOCKED, m.phien_ban, "Schema dữ liệu mới hơn bản phát hành — chặn.")
+        if db < m.lich_su and not m.tu_dong_an_toan:
+            self.nk.ghi(WAITING_APPROVAL, ung_vien=m.phien_ban, con_tro_moi=None,
+                        loi="Bản mới cần nâng lịch sử nhưng chưa được đánh giá tự động an toàn — chờ duyệt.")
+            return KetQua(WAITING_APPROVAL, m.phien_ban, "Cần duyệt migration trước khi cập nhật.")
+        return None
 
     def _chuan_bi(self) -> KetQua:
         nk = self.nk.doc() or {}
@@ -850,14 +965,13 @@ class CapNhat:
         if (nk.get("trang_thai") == STAGED and nk.get("ung_vien") == m.phien_ban
                 and self._manifest_da_cai(nk.get("con_tro_moi") or {}) is not None):
             return KetQua(STAGED, m.phien_ban, f"Bản {m.phien_ban} đã sẵn sàng, chờ lúc rảnh để áp dụng.")
-        if m.lich_su < self.phien_ban_db():
-            self.nk.ghi(BLOCKED, ung_vien=m.phien_ban, con_tro_moi=None,
-                        loi="Lịch sử trên máy mới hơn bản phát hành (schema quá mới).")
-            return KetQua(BLOCKED, m.phien_ban, "Schema dữ liệu mới hơn bản phát hành — chặn.")
+        chan = self._chan_theo_lich_su(m)
+        if chan is not None:
+            return chan
         phien = uuid.uuid4().hex[:12]
         tam = os.path.join(self.cd.staging, phien)
         self.nk.ghi(CHECKED, ung_vien=m.phien_ban, tag=ban.tag, phien=phien, con_tro_moi=None,
-                    manifest_sha256=m.sha256, loi="")
+                    con_tro_cu=None, manifest_sha256=m.sha256, loi="")
         try:
             self.nk.ghi(DOWNLOADING)
             self.diem_dung(DOWNLOADING)
@@ -877,12 +991,17 @@ class CapNhat:
             rt = self.cd.runtime_dir(m.runtime_id)
             if not self._runtime_san_sang(rt, m):
                 if os.path.exists(rt):
+                    if self._runtime_dang_dung(rt):
+                        # Runtime DÙNG CHUNG với bản đang chạy mà dấu sẵn sàng hỏng: xoá là phá bản đang
+                        # chạy (Windows còn xoá dở vì file đang mở) — dừng, cần người kiểm.
+                        raise LoiCapNhat("runtime_dang_dung", "Dấu sẵn sàng của runtime ĐANG DÙNG bị hỏng — "
+                                         "không xoá/tạo lại; chạy «launcher.py doctor» và báo chủ dự án.")
                     shutil.rmtree(rt)                    # dở dang (chưa có dấu sẵn sàng)
-                self.tao_moi_truong(m, rel, rt)          # tạo TẠI ĐƯỜNG DẪN CUỐI
+                self._tao_runtime(m, rel, rt)            # tạo TẠI ĐƯỜNG DẪN CUỐI
                 ghi_json_nguyen_tu(os.path.join(rt, TEN_SAN_SANG),
                                    {"lock_sha256": m.lock_sha256, "luc": _bay_gio()})
             self.diem_dung("RUNTIME_READY")
-            ok, chi_tiet = self.kiem_suc_khoe(m, rel, rt, "staging")
+            ok, chi_tiet = self._kiem(m, rel, rt, "staging")
             if not ok:
                 self._cach_ly(m.phien_ban, f"health check staging: {chi_tiet}")
                 self.nk.ghi(QUARANTINED, loi=f"Health check ở staging lỗi: {chi_tiet}")
@@ -891,7 +1010,9 @@ class CapNhat:
             self.diem_dung(STAGED)
             return KetQua(STAGED, m.phien_ban, f"Bản {m.phien_ban} đã sẵn sàng, chờ lúc rảnh để áp dụng.")
         except TuChoiGoi as e:
-            if e.ma in ("zip_slip", "zip_symlink", "zip_bom", "zip", "ds_file"):
+            # Nội dung ĐÃ KÝ sai một cách tất định (zip độc hại, danh sách file, lock chưa băm/không khớp)
+            # → cách ly: tải lại cũng y hệt.
+            if e.ma in ("zip_slip", "zip_symlink", "zip_bom", "zip", "ds_file", "lock", "lock_chua_bam"):
                 self._cach_ly(m.phien_ban, str(e))
             self.nk.ghi(CHECKED, loi=str(e))
             return KetQua(TU_CHOI, m.phien_ban, str(e))
@@ -902,8 +1023,38 @@ class CapNhat:
             self.nk.ghi(CHECKED, loi=f"Lỗi đĩa/mạng khi chuẩn bị ({type(e).__name__}).")
             return KetQua(LOI, m.phien_ban, f"Lỗi đĩa/mạng khi chuẩn bị ({type(e).__name__}) — giữ bản "
                           "hiện tại.")
+        except Exception as e:  # noqa: BLE001 — lỗi lạ: ghi vào nhật ký, giữ bản hiện tại
+            with contextlib.suppress(Exception):
+                self.nk.ghi(CHECKED, loi=f"Lỗi không lường trước khi chuẩn bị ({type(e).__name__}).")
+            return KetQua(LOI, m.phien_ban, f"Lỗi không lường trước khi chuẩn bị ({type(e).__name__}) — "
+                          "giữ bản hiện tại.")
         finally:
             shutil.rmtree(tam, ignore_errors=True)
+
+    def _tao_runtime(self, m: Manifest, rel: str, rt: str) -> None:
+        """Gọi ``tao_moi_truong``. Từ chối nội dung đã ký (``TuChoiGoi``, vd. lock chưa băm) → nguyên trạng
+        (cách ly ngay). Lỗi khác (pip/venv/mạng/timeout) → ``LoiCapNhat``; lặp tới ``SO_LAN_LOI_TOI_DA`` lần
+        cho cùng phiên bản → cách ly (không tải + dựng lại mãi mỗi lượt kiểm; ``update bo-cach-ly`` để thử
+        lại sau khi khắc phục)."""
+        try:
+            self.tao_moi_truong(m, rel, rt)
+        except TuChoiGoi:
+            raise
+        except Exception as e:  # noqa: BLE001
+            with contextlib.suppress(OSError):
+                shutil.rmtree(rt, ignore_errors=True)     # dở dang, chưa có dấu sẵn sàng, không ai dùng
+            ly_do = str(e) if isinstance(e, LoiCapNhat) else type(e).__name__
+            if self._dem_loi("loi_runtime.json", m.phien_ban) >= SO_LAN_LOI_TOI_DA:
+                self._cach_ly(m.phien_ban, f"tạo runtime lỗi {SO_LAN_LOI_TOI_DA} lần: {ly_do}")
+            raise LoiCapNhat("runtime", f"Tạo runtime lỗi ({ly_do}) — giữ bản hiện tại.") from e
+
+    def _kiem(self, m: Manifest, rel: str, rt: str, che_do: str) -> tuple:
+        """Health check; KHÔNG chạy được (timeout, thiếu python, lỗi lạ) = KHÔNG ĐẠT — không bao giờ thoát
+        khỏi bộ cập nhật giữa chừng (con trỏ có thể đang ở bản chưa kiểm)."""
+        try:
+            return self.kiem_suc_khoe(m, rel, rt, che_do)
+        except Exception as e:  # noqa: BLE001
+            return False, f"không chạy được health check ({type(e).__name__})"
 
     def _cai_release(self, goi: str, rel: str, m: Manifest, raw_m: bytes, raw_s: bytes,
                      phien: str) -> None:
@@ -911,10 +1062,11 @@ class CapNhat:
         giai_nen_an_toan(goi, tam_rel)
         try:
             kiem_cay_release(tam_rel, m)
-            with open(os.path.join(tam_rel, TEN_MANIFEST), "wb") as f:
-                f.write(raw_m)
-            with open(os.path.join(tam_rel, TEN_CHU_KY), "wb") as f:
-                f.write(raw_s)
+            for ten, du in ((TEN_MANIFEST, raw_m), (TEN_CHU_KY, raw_s)):
+                with open(os.path.join(tam_rel, ten), "wb") as f:
+                    f.write(du)
+                    f.flush()
+                    os.fsync(f.fileno())
             if os.path.exists(rel):                  # dở dang từ lần trước (chưa có dấu sẵn sàng)
                 shutil.rmtree(rel)
             os.replace(tam_rel, rel)
@@ -967,6 +1119,15 @@ class CapNhat:
                 return self._ap_dung()
         except LoiCapNhat as e:
             return KetQua(e.ma if e.ma == BAN else LOI, "", str(e))
+        except Exception as e:  # noqa: BLE001 — lỗi lạ: nhật ký giữ trạng thái giữa chừng, lần chạy sau
+            # khôi phục đúng như sau mất điện (cổng đã mở lại trong finally của _ap_dung).
+            return KetQua(LOI, "", f"Lỗi không lường trước khi áp dụng ({type(e).__name__}) — lần mở sau sẽ "
+                          "tự khôi phục.")
+
+    @staticmethod
+    def _ket_qua_hoan(phien_ban: str, den: float) -> KetQua:
+        return KetQua(STAGED, phien_ban, "Người dùng đã hoãn áp dụng cập nhật tới "
+                      f"{datetime.fromtimestamp(den):%H:%M %d/%m} — giữ bản hiện tại.")
 
     def _ap_dung(self) -> KetQua:
         nk = self.nk.doc()
@@ -974,13 +1135,15 @@ class CapNhat:
             return KetQua(nk.get("trang_thai") if nk else KHONG_CO, "", "Không có bản nào đang chờ áp dụng.")
         den = doc_hoan(self.cd.goc)
         if den is not None:
-            return KetQua(STAGED, nk.get("ung_vien", ""), "Người dùng đã hoãn áp dụng cập nhật tới "
-                          f"{datetime.fromtimestamp(den):%H:%M %d/%m} — giữ bản hiện tại.")
+            return self._ket_qua_hoan(nk.get("ung_vien", ""), den)
         con_tro_moi = nk.get("con_tro_moi") or {}
         m = self._manifest_da_cai(con_tro_moi)
         if m is None:
             self.nk.ghi(CHECKED, con_tro_moi=None, loi="Bản đã stage không còn nguyên vẹn — sẽ tải lại.")
             return KetQua(LOI, nk.get("ung_vien", ""), "Bản đã stage hỏng — sẽ tải lại ở lần kiểm sau.")
+        chan = self._chan_theo_lich_su(m)                 # TRƯỚC rút cổng/sao lưu
+        if chan is not None:
+            return chan
         try:
             rut = self.cong.bat_dau_rut(f"cập nhật lên {m.phien_ban}")
         except Exception as e:  # noqa: BLE001 — cổng đang bị một lượt khác rút
@@ -991,6 +1154,10 @@ class CapNhat:
             if not rut.cho_ranh(self.han_cho_ranh_s, self.chu_ky_cho_s):
                 self.nk.ghi(STAGED, loi="Còn việc đang chạy — hoãn cập nhật, giữ bản hiện tại.")
                 return KetQua(STAGED, m.phien_ban, "Còn việc đang chạy — đã hoãn cập nhật.")
+            den = doc_hoan(self.cd.goc)                    # người dùng bấm «Hoãn» TRONG lúc chờ rảnh
+            if den is not None:
+                self.nk.ghi(STAGED, loi="")
+                return self._ket_qua_hoan(m.phien_ban, den)
             return self._ap_dung_da_rut(m, con_tro_moi)
         finally:
             rut.ket_thuc()
@@ -1002,17 +1169,28 @@ class CapNhat:
         self.nk.ghi(BACKED_UP, sao_luu=bk)
         self.diem_dung(BACKED_UP)
         db = self.phien_ban_db()
-        if db > m.lich_su:
+        if db is not None and db > m.lich_su:
             self.nk.ghi(BLOCKED, loi="Lịch sử trên máy mới hơn bản phát hành (schema quá mới).")
             return KetQua(BLOCKED, m.phien_ban, "Schema dữ liệu mới hơn bản phát hành — chặn.")
-        if db < m.lich_su:
-            if not m.tu_dong_an_toan:
+        # Máy mới (chưa có lịch sử): TẠO lược đồ bằng mã mới — luôn an toàn, không cần cờ. Có lịch sử cũ hơn:
+        # chỉ khi bản phát hành khai tự động an toàn (⇒ tương thích ngược).
+        if db is None or db < m.lich_su:
+            if db is not None and not m.tu_dong_an_toan:
                 self.nk.ghi(WAITING_APPROVAL, loi="Bản mới cần migration chưa được đánh giá tự động an "
                             "toàn — chờ duyệt.")
                 return KetQua(WAITING_APPROVAL, m.phien_ban, "Cần duyệt migration trước khi cập nhật.")
             self.nk.ghi(MIGRATING)
             self.diem_dung(MIGRATING)
-            self.di_chuyen(m, con_tro_moi["release"], con_tro_moi["runtime"])
+            try:
+                self.di_chuyen(m, con_tro_moi["release"], con_tro_moi["runtime"])
+            except Exception as e:  # noqa: BLE001 — migration lỗi là TẤT ĐỊNH với bản này: cách ly, không
+                # lặp «sao lưu + rút cổng + migration» mỗi lần mở. Mã chưa đổi; migration tự động luôn
+                # tương thích ngược nên bản đang chạy dùng tiếp được dù migration đã đi một phần.
+                ly_do = (f"migration lỗi: {e}" if isinstance(e, LoiCapNhat)
+                         else f"migration lỗi ({type(e).__name__})")
+                self._cach_ly(m.phien_ban, ly_do)
+                self.nk.ghi(QUARANTINED, con_tro_moi=None, loi=ly_do + " — giữ bản hiện tại.")
+                return KetQua(QUARANTINED, m.phien_ban, "Migration lỗi — đã cách ly bản mới, giữ bản hiện tại.")
             self.diem_dung("MIGRATED")
         return self._kich_hoat(m, con_tro_moi)
 
@@ -1029,25 +1207,22 @@ class CapNhat:
     def _kiem_sau_kich_hoat(self, m: Manifest, con_tro_moi: dict) -> KetQua:
         self.nk.ghi(HEALTHCHECK)
         self.diem_dung(HEALTHCHECK)
-        ok, chi_tiet = self.kiem_suc_khoe(m, con_tro_moi["release"], con_tro_moi["runtime"], "kich_hoat")
+        ok, chi_tiet = self._kiem(m, con_tro_moi["release"], con_tro_moi["runtime"], "kich_hoat")
         if not ok:
             return self._quay_lai(m, f"health check sau kích hoạt lỗi: {chi_tiet}")
-        ghi_json_nguyen_tu(self.cd.file_trang_thai("last_good.json"), con_tro_moi)
+        # ACTIVE TRƯỚC last_good: chết giữa hai bước thì khôi phục (nhánh ACTIVE) bù last_good. Ngược lại
+        # (last_good trước) để lại last_good = bản CHƯA chốt → quay lại sẽ "về" chính bản lỗi.
         self.nk.ghi(ACTIVE, loi="")
         self.diem_dung(ACTIVE)
+        ghi_json_nguyen_tu(self.cd.file_trang_thai("last_good.json"), con_tro_moi)
         return KetQua(ACTIVE, m.phien_ban, f"Đã chuyển sang bản {m.phien_ban}.")
 
     def _quay_lai(self, m: Manifest, ly_do: str) -> KetQua:
-        """Quay MÃ về last-good. DB KHÔNG BAO GIỜ tự khôi phục (migration tự động luôn tương thích
-        ngược) — việc đã gửi không thể quay về chờ gửi. Cách ly bản lỗi."""
+        """Quay MÃ về con trỏ TRƯỚC kích hoạt (không bao giờ về chính bản lỗi). DB KHÔNG BAO GIỜ tự khôi phục
+        (migration tự động luôn tương thích ngược) — việc đã gửi không thể quay về chờ gửi. Cách ly bản lỗi."""
         self.nk.ghi(ROLLBACK, loi=ly_do)
         self.diem_dung(ROLLBACK)
-        tot = self.last_good()
-        if tot:
-            ghi_json_nguyen_tu(self.cd.file_trang_thai("current.json"), tot)
-        else:
-            with contextlib.suppress(FileNotFoundError):
-                os.remove(self.cd.file_trang_thai("current.json"))
+        self._ve_con_tro_truoc(m.sha256)
         self._cach_ly(m.phien_ban, ly_do)
         self.nk.ghi(QUARANTINED, loi=ly_do)
         return KetQua(QUARANTINED, m.phien_ban,
@@ -1057,15 +1232,23 @@ class CapNhat:
 
     def phuc_hoi(self) -> Optional[str]:
         """Chạy MỖI lần launcher khởi động, trước khi mở app/Watch. Xác định theo nhật ký + con trỏ,
-        không đoán theo thư mục."""
+        không đoán theo thư mục. Lỗi lạ → ``LoiCapNhat`` (launcher cảnh báo rồi chạy con trỏ hiện tại)."""
         with self._giu_quyen():
-            return self._phuc_hoi()
+            try:
+                return self._phuc_hoi()
+            except LoiCapNhat:
+                raise
+            except Exception as e:  # noqa: BLE001
+                raise LoiCapNhat("khoi_phuc", f"Khôi phục cập nhật lỗi không lường trước ({type(e).__name__})"
+                                 " — giữ con trỏ hiện tại; chạy «launcher.py doctor».") from e
 
     def _phuc_hoi(self) -> Optional[str]:
         nk = self.nk.doc()
         if not nk:
             return None
         tt = nk["trang_thai"]
+        if tt == ACTIVE:
+            self._bu_last_good(nk)
         if tt in KET_THUC or tt in (CHECKED, STAGED):
             self._don_staging()
             return tt
@@ -1083,9 +1266,7 @@ class CapNhat:
         con_tro_moi = nk.get("con_tro_moi") or {}
         m = self._manifest_da_cai(con_tro_moi)
         if m is None:
-            tot = self.last_good()
-            if tot:
-                ghi_json_nguyen_tu(self.cd.file_trang_thai("current.json"), tot)
+            self._ve_con_tro_truoc(str(con_tro_moi.get("manifest_sha256") or nk.get("manifest_sha256") or ""))
             self.nk.ghi(BLOCKED, loi="Bản ứng viên hỏng sau gián đoạn — đã về bản trước, cần kiểm tay.")
             return BLOCKED
         if tt == ROLLBACK:
@@ -1102,14 +1283,27 @@ class CapNhat:
         try:
             if rut is not None and rut.cho_ranh(self.han_cho_ranh_s, self.chu_ky_cho_s):
                 return self._kiem_sau_kich_hoat(m, con_tro_moi).trang_thai
-            tot = self.last_good()
-            if tot:
-                ghi_json_nguyen_tu(self.cd.file_trang_thai("current.json"), tot)
+            if self._con_tro_truoc(m.sha256) is None:
+                # Cài lần đầu (không có bản trước): giữ con trỏ, lần mở sau kiểm lại.
+                return tt
+            self._ve_con_tro_truoc(m.sha256)
             self.nk.ghi(STAGED, loi="Chưa kiểm được bản mới sau gián đoạn — tạm về bản trước.")
             return STAGED
         finally:
             if rut is not None:
                 rut.ket_thuc()
+
+    def _bu_last_good(self, nk: dict) -> None:
+        """Nhật ký ACTIVE nhưng last_good chưa trỏ tới con trỏ đã chốt (chết giữa ``ACTIVE`` và ghi
+        last_good) → ghi bù. Chỉ khi ``current`` đúng là con trỏ ACTIVE của nhật ký."""
+        cur, moi = self.hien_tai(), nk.get("con_tro_moi")
+        if not (isinstance(cur, dict) and isinstance(moi, dict)):
+            return
+        if cur.get("manifest_sha256") != moi.get("manifest_sha256"):
+            return
+        lg = self.last_good()
+        if not isinstance(lg, dict) or lg.get("manifest_sha256") != cur.get("manifest_sha256"):
+            ghi_json_nguyen_tu(self.cd.file_trang_thai("last_good.json"), cur)
 
     def _don_staging(self) -> None:
         """Chỉ dọn thư mục DO UPDATER SỞ HỮU: ``staging/`` và ``releases/*.tmp-*`` (giữ quyền updater
@@ -1133,14 +1327,15 @@ class CapNhat:
 
 def don_ban_cu(cai_dat: CaiDat, *, giu: int = 2) -> list:
     """Xoá release/runtime KHÔNG phải current/last_good/ứng viên trong nhật ký, giữ ``giu`` bản mới nhất.
-    Không bao giờ chạm state root, kho hay thư mục ngoài installation root."""
+    Không bao giờ chạm state root, kho hay thư mục ngoài installation root. Con trỏ/nhật ký HỎNG →
+    ``LoiCapNhat``, không xoá gì (đọc lỏng sẽ coi bản đang chạy là "không ai dùng")."""
     tham_chieu = set()
     for ten in ("current.json", "last_good.json"):
-        d = doc_json(cai_dat.file_trang_thai(ten), bat_buoc_hop_le=False)
+        d = doc_json(cai_dat.file_trang_thai(ten))
         if isinstance(d, dict):
             tham_chieu.update({os.path.normcase(os.path.abspath(d.get("release", ""))),
                                os.path.normcase(os.path.abspath(d.get("runtime", "")))})
-    nk = doc_json(cai_dat.file_trang_thai("journal.json"), bat_buoc_hop_le=False)
+    nk = doc_json(cai_dat.file_trang_thai("journal.json"))
     if isinstance(nk, dict) and isinstance(nk.get("con_tro_moi"), dict):
         tham_chieu.update({os.path.normcase(os.path.abspath(nk["con_tro_moi"].get(k, "")))
                            for k in ("release", "runtime")})

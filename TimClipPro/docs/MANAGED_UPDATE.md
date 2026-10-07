@@ -107,9 +107,22 @@ và "kích hoạt"; chờ CÓ HẠN; quá hạn thì hoãn, không giết việc
   nhỏ (`khos.json`, `cau_hinh.json`) vào `<state_root>/backups/<thời điểm>_truoc_<phiên bản>/`. Không sao
   lưu kho vân tay (release không chạm kho).
 * Migration chạy bằng MÃ CỦA RELEASE MỚI (`health_check.py migrate`) khi cổng đã rút — tự động chỉ khi
-  `tu_dong_an_toan`; không thì WAITING_APPROVAL. Schema trên máy mới hơn bản phát hành → BLOCKED.
-* Rollback chỉ quay MÃ (con trỏ) — **không bao giờ tự khôi phục DB**: việc đã gửi không thể quay về chờ gửi,
-  kết quả quét sau backup không mất. Backup chỉ để khôi phục thủ công có duyệt.
+  `tu_dong_an_toan` (⇒ `tuong_thich_nguoc`); không thì WAITING_APPROVAL. Schema trên máy mới hơn bản phát hành →
+  BLOCKED. Cả hai được kiểm NGAY lúc `prepare` và trước khi rút cổng — không tải gói, không sao lưu, không rút
+  cổng cho một bản sẽ không được áp dụng. Máy mới chưa có `lichsu.db` (`phien_ban_db() is None`) KHÔNG phải
+  migration: tạo lược đồ bằng mã mới, không cần cờ. `release_tool.py build` để hai cờ TẮT mặc định — người
+  phát hành khai `--tu-dong-an-toan --tuong-thich-nguoc` cho bản có nâng lịch sử đã đánh giá.
+* Migration lỗi (kể cả quá hạn) → cách ly bản đó, giữ bản hiện tại (không lặp «sao lưu + rút cổng +
+  migration» mỗi lần mở).
+* Rollback chỉ quay MÃ (con trỏ) về con trỏ TRƯỚC kích hoạt ghi trong nhật ký (`con_tro_cu`; không bao giờ về
+  chính bản lỗi, kể cả khi `last_good` đã trỏ sang nó) — **không bao giờ tự khôi phục DB**: việc đã gửi không
+  thể quay về chờ gửi, kết quả quét sau backup không mất. Backup chỉ để khôi phục thủ công có duyệt.
+* Health check KHÔNG chạy được (quá hạn, thiếu python của runtime, lỗi lạ) = KHÔNG ĐẠT → quay lại + cách ly;
+  không bao giờ thoát khỏi bộ cập nhật giữa chừng. Kết quả đọc từ dòng `TIMCLIP_HEALTH_KET_QUA {json}`; cwd ở
+  state root. Thứ tự chốt: nhật ký ACTIVE rồi mới `last_good` (khôi phục ở ACTIVE ghi bù last_good).
+* Cách ly: chỉ khi nội dung ĐÃ KÝ sai (chính sách manifest, zip độc hại, danh sách file, lock chưa băm/không
+  khớp), health/migration lỗi, hoặc tải/dựng runtime lỗi lặp `SO_LAN_LOI_TOI_DA` lần. Chữ ký sai / thiếu gói
+  chỉ bỏ qua lần đó (thư mục chép dở, bản đang tải lên). Bỏ cách ly: `launcher.py update bo-cach-ly X.Y.Z`.
 
 ## 7b. Giao diện «ℹ️ Phiên bản và cập nhật»
 
@@ -137,10 +150,23 @@ mạng, không chạy updater trong tiến trình app. Nút «⏸ Hoãn cập nh
 
 ## 8. Giới hạn đã biết
 
-* Windows không fsync được thư mục: cam kết dựa trên `FlushFileBuffers` của file + thay thế nguyên tử NTFS.
-* Runtime production cần `requirements-lock.txt` CÓ BĂM (`--require-hashes`); sinh băm cần mạng (tải wheel
-  hoặc API PyPI) — bước chuẩn bị phát hành có duyệt, chưa chạy trong vòng này.
-* Launcher cần Python có `cryptography` (môi trường riêng của launcher tạo lúc bootstrap).
+* Windows không fsync được thư mục: cam kết dựa trên `FlushFileBuffers` của file (file giải nén, manifest,
+  JSON trạng thái) + thay thế nguyên tử NTFS. File do `pip` ghi vào runtime không được fsync/kiểm lại sau khi
+  cài (health check ở staging là lần kiểm runtime).
+* `os.replace` trên Windows bị từ chối khi tiến trình khác đang MỞ file đích (giao diện/doctor đọc trạng
+  thái) — ghi trạng thái thử lại có hạn (~2,75 s) rồi mới báo lỗi.
+* Runtime production cần `requirements-lock.txt` CÓ BĂM (`--require-hashes --only-binary=:all:`); sinh băm
+  cần mạng — bước chuẩn bị phát hành có duyệt, chưa chạy trong vòng này. **docopt 0.6.2 không có wheel trên
+  PyPI** → wheel dựng từ sdist đã đối chiếu băm, kèm release (`build --wheel-kem`, PC2 dùng `--find-links`).
+* Launcher cần Python có `cryptography` (môi trường riêng của launcher tạo lúc bootstrap). Bộ cập nhật không
+  dựng được (khoá tin cậy hỏng, thiếu thư viện…) chỉ chặn CẬP NHẬT: app/Watch vẫn mở bản đang kích hoạt nếu
+  nhật ký không dừng giữa lúc kích hoạt.
+* Chưa có đường nâng cấp chính launcher (file trong `launcher/` cố định từ lúc bootstrap; `launcher_toi_thieu`
+  trong manifest chặn bản cần launcher mới hơn) — bản cần launcher mới = bootstrap lại có kế hoạch.
+* WAITING_APPROVAL chưa có lệnh duyệt — bản cần migration chưa đánh giá chỉ được áp dụng qua một quy trình
+  riêng có duyệt (hoặc phát hành lại với cờ đã đánh giá).
 * App đang mở chạy mã CŨ tới khi người dùng mở lại; sau khi bản mới kích hoạt, cổng của bản cũ từ chối việc
-  mới và báo "mở lại ứng dụng".
-* Chưa kiểm trên PC2 thật (UNVERIFIED_ON_PC2); chưa gọi GitHub thật (NOT_RUN).
+  mới, người gửi Sheets của bản cũ NHƯỜNG quyền cho bản mới (Watch/CLI/app mới gửi tiếp) và trang hiện cảnh
+  báo nổi «đóng và mở lại».
+* Chưa kiểm trên PC2 thật (UNVERIFIED_ON_PC2); chưa gọi GitHub thật (NOT_RUN) — nguồn GitHub tự theo chuyển
+  hướng, kiểm host TRƯỚC mỗi request.

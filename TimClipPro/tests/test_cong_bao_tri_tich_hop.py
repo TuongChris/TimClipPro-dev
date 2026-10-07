@@ -146,6 +146,34 @@ def test_cli_quet_khi_dang_rut_thoat_ma_ban(engine, monkeypatch, capsys):
     assert e.value.code == 2 and "cập nhật" in capsys.readouterr().err
 
 
+def test_cli_dondep_khi_dang_rut_thoat_ma_ban(engine, monkeypatch, capsys):
+    """Rà soát M3+M4 (P3-9): ``dondep`` xoá đệm + thư mục job quét — cũng là việc, phải vào cổng."""
+    monkeypatch.setattr("sys.argv", ["cli.py", "dondep", "--xem-truoc"])
+    monkeypatch.setattr(cli, "Engine", lambda *a, **k: engine)
+    monkeypatch.setattr(cli.don_dep, "don_kho_dem", lambda *a, **k: pytest.fail("không được dọn"))
+    rut = engine.cong_bao_tri.bat_dau_rut("cập nhật")
+    try:
+        with pytest.raises(SystemExit) as e:
+            cli.main()
+    finally:
+        rut.ket_thuc()
+    assert e.value.code == 2 and "cập nhật" in capsys.readouterr().err
+
+
+def test_cli_vameta_khi_dang_rut_thoat_ma_ban(engine, tmp_path, monkeypatch, capsys):
+    """Rà soát M3+M4 (P3-9): ``vameta`` gọi mạng + ghi metadata kho — vào cổng TRƯỚC khi gọi gì."""
+    monkeypatch.setattr("sys.argv", ["cli.py", "vameta", "--kho", str(tmp_path / "kho")])
+    monkeypatch.setattr(cli, "thu_muc_data_mac_dinh", lambda *a, **k: engine.data_dir)
+    monkeypatch.setattr(cli, "ChannelSync", lambda *a, **k: pytest.fail("không được gọi mạng"))
+    rut = engine.cong_bao_tri.bat_dau_rut("cập nhật")
+    try:
+        with pytest.raises(SystemExit) as e:
+            cli.main()
+    finally:
+        rut.ket_thuc()
+    assert e.value.code == 2 and "cập nhật" in capsys.readouterr().err
+
+
 def test_ban_cu_khong_nhan_viec_moi_sau_khi_ban_moi_kich_hoat(tmp_path):
     goc = tmp_path / "cai dat"
     rel_cu = goc / "releases" / "1.0.0"

@@ -9,7 +9,8 @@ Nằm NGOÀI mọi release: ``<installation_root>/launcher/`` (bootstrap chép v
     launcher.py watch [đối số cli]     — như trên, chạy ``cli.py watch --log …`` (cho lịch Windows)
     launcher.py cli <đối số cli>       — chạy ``cli.py`` bất kỳ (dich, gui, youtube…)
     launcher.py update status|check|prepare|apply|recover
-    launcher.py doctor                 — chẩn đoán CHỈ ĐỌC cài đặt này (không mạng, không ghi)
+    launcher.py update bo-cach-ly X.Y.Z  — bỏ cách ly một phiên bản sau khi đã khắc phục nguyên nhân
+    launcher.py doctor                 — chẩn đoán cài đặt này (không mạng; không đổi dữ liệu/cấu hình/bản cài)
 
 Mã thoát: của tiến trình con (app/watch/cli); ``update``: 0 xong/không có gì, 1 lỗi, 2 bận/hoãn.
 Không mạng khi mở app/Watch: kiểm bản mới chỉ qua ``update check|prepare`` (lịch riêng, opt-in).
@@ -31,8 +32,16 @@ import managed_update as mu
 TEN_CAU_HINH = "launcher.json"
 TEN_KHOA_TIN_CAY = "trusted_keys.json"
 CONG_STREAMLIT = 8501
+# Biến của máy/người dùng KHÔNG được chảy vào tiến trình của release: đường dẫn legacy, nơi tìm module, và
+# biến đổi hành vi trình thông dịch (PYTHONINSPECT treo ở dấu nhắc sau khi thoát, PYTHONOPTIMIZE bỏ assert,
+# PYTHONWARNINGS=error làm sập, PYTHONSAFEPATH làm cli.py không thấy module cùng thư mục…).
 _BIEN_BO = ("TIMCLIP_DATA_DIR", "TIMCLIP_OUTPUT_DIR", "SHEET_LINK", "PYTHONPATH", "PYTHONHOME",
-            "VIRTUAL_ENV")
+            "VIRTUAL_ENV", "PYTHONINSPECT", "PYTHONWARNINGS", "PYTHONOPTIMIZE", "PYTHONSTARTUP",
+            "PYTHONBREAKPOINT", "PYTHONDEVMODE", "PYTHONUSERBASE", "PYTHONEXECUTABLE", "PYTHONSAFEPATH",
+            "PYTHONCASEOK", "PYTHONVERBOSE", "PYTHONDEBUG", "PYTHONPLATLIBDIR")
+# health_check.py (trong release) in kết quả trên MỘT dòng mở đầu bằng dấu này — dòng khác (thư viện in khi
+# thoát…) không làm hỏng việc đọc kết quả. Giữ đúng giá trị ở health_check.DAU_KET_QUA.
+DAU_KET_QUA_HEALTH = "TIMCLIP_HEALTH_KET_QUA"
 
 
 class LoiLauncher(RuntimeError):
@@ -92,7 +101,9 @@ def ma_nguon(con_tro: dict) -> str:
 
 
 def lenh_app(con_tro: dict) -> list:
-    return [python_runtime(con_tro), "-m", "streamlit", "run", os.path.join(ma_nguon(con_tro), "app.py"),
+    # ``-P``: ``-m`` không chèn thư mục hiện tại (state root) vào sys.path — file lạ ở đó không che được
+    # module thật; Streamlit tự thêm thư mục của app.py.
+    return [python_runtime(con_tro), "-P", "-m", "streamlit", "run", os.path.join(ma_nguon(con_tro), "app.py"),
             "--browser.gatherUsageStats=false", f"--server.port={CONG_STREAMLIT}",
             "--server.address=127.0.0.1"]
 
@@ -106,20 +117,33 @@ def lenh_cli(con_tro: dict, doi_so: list) -> list:
 # ---------------------------------------------------------------------------
 
 def _chay_health(cd: mu.CaiDat, rel: str, rt: str, doi_so: list, han_s: float) -> tuple:
+    """Chạy ``health_check.py`` của release trong tiến trình riêng. Quá hạn / không chạy được = KHÔNG ĐẠT
+    (không bao giờ ném ra ngoài bộ cập nhật). cwd ở state root (cây release đã ký là bất biến)."""
     con_tro = {"release": rel, "runtime": rt}
     env = moi_truong_con(cd, con_tro)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
-    p = subprocess.run([python_runtime(con_tro), os.path.join(ma_nguon(con_tro), "health_check.py"),
-                        *doi_so, "--data-dir", cd.data_dir], capture_output=True, text=True,
-                       encoding="utf-8", errors="replace", timeout=han_s, env=env,
-                       cwd=ma_nguon(con_tro))
-    dong = [x for x in p.stdout.splitlines() if x.strip()]
+    cwd = os.path.join(cd.state_root, "cache", "health")
     try:
-        kq = json.loads(dong[-1]) if dong else {}
-    except ValueError:
+        os.makedirs(cwd, exist_ok=True)
+        p = subprocess.run([python_runtime(con_tro), os.path.join(ma_nguon(con_tro), "health_check.py"),
+                            *doi_so, "--data-dir", cd.data_dir], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=han_s, env=env, cwd=cwd)
+    except subprocess.TimeoutExpired:
+        return False, {"loi": [f"health_check quá {han_s:.0f} s (TimeoutExpired)"]}
+    except (OSError, subprocess.SubprocessError) as e:
+        return False, {"loi": [f"không chạy được health_check ({type(e).__name__})"]}
+    kq = {}
+    for dong in reversed((p.stdout or "").splitlines()):
+        if dong.startswith(DAU_KET_QUA_HEALTH + " "):
+            try:
+                kq = json.loads(dong[len(DAU_KET_QUA_HEALTH) + 1:])
+            except ValueError:
+                kq = {}
+            break
+    if not isinstance(kq, dict):
         kq = {}
-    ok = p.returncode == 0 and bool(kq.get("ok"))
-    return ok, kq if kq else {"loi": [f"health_check thoát mã {p.returncode}"]}
+    ok = p.returncode == 0 and kq.get("ok") is True
+    return ok, kq if kq else {"loi": [f"health_check thoát mã {p.returncode}, không có dòng kết quả"]}
 
 
 def kiem_suc_khoe_tien_trinh(cd: mu.CaiDat, *, han_s: float = 600.0):
@@ -139,7 +163,9 @@ def di_chuyen_tien_trinh(cd: mu.CaiDat, *, han_s: float = 1800.0):
 
 def tao_moi_truong_pip(python_goc: str, *, han_s: float = 3600.0):
     """Runtime TẠI ĐƯỜNG DẪN CUỐI: venv từ Python gốc đã ghi lúc bootstrap, pip ``--require-hashes``
-    ``--no-deps`` theo lock ĐÃ KÝ (băm lock nằm trong manifest). Lock thiếu băm → từ chối."""
+    ``--no-deps --only-binary=:all:`` theo lock ĐÃ KÝ (băm lock nằm trong manifest). Lock thiếu băm → từ chối
+    gói (cách ly — tải lại cũng y hệt). Gói KHÔNG có wheel trên PyPI (vd. docopt 0.6.2 chỉ có sdist) đi kèm
+    release ở ``TimClipPro/wheels/`` (file đã ký, băm có trong lock) → ``--find-links``."""
     def tao(m, rel, rt):
         lock = os.path.join(rel, "TimClipPro", "requirements-lock.txt")
         if mu._sha256_file(lock) != m.lock_sha256:
@@ -147,15 +173,18 @@ def tao_moi_truong_pip(python_goc: str, *, han_s: float = 3600.0):
         with open(lock, encoding="utf-8") as f:
             noi_dung = f.read()
         if "--hash=sha256:" not in noi_dung:
-            raise mu.LoiCapNhat("lock", "Lock chưa có băm gói — không cài runtime chưa xác minh.")
+            raise mu.TuChoiGoi("lock_chua_bam", "Lock chưa có băm gói — không cài runtime chưa xác minh.")
         if not (os.path.isabs(python_goc) and os.path.isfile(python_goc)):
             raise mu.LoiCapNhat("python_goc", "Không thấy Python gốc đã ghi lúc bootstrap.")
-        subprocess.run([python_goc, "-m", "venv", rt], check=True, timeout=600)
+        subprocess.run([python_goc, "-P", "-m", "venv", rt], check=True, timeout=600)
         py = python_runtime({"runtime": rt})
-        subprocess.run([py, "-m", "pip", "install", "--no-input", "--disable-pip-version-check",
-                        "--require-hashes", "--no-deps", "--only-binary=:all:", "-r", lock],
-                       check=True, timeout=han_s)
-        subprocess.run([py, "-m", "pip", "check"], check=True, timeout=300)
+        pip = [py, "-P", "-m", "pip", "install", "--no-input", "--disable-pip-version-check",
+               "--require-hashes", "--no-deps", "--only-binary=:all:"]
+        wheels = os.path.join(rel, "TimClipPro", "wheels")
+        if os.path.isdir(wheels):
+            pip += ["--find-links", wheels]
+        subprocess.run([*pip, "-r", lock], check=True, timeout=han_s)
+        subprocess.run([py, "-P", "-m", "pip", "check"], check=True, timeout=300)
     return tao
 
 
@@ -167,15 +196,22 @@ def sao_luu_sqlite(cd: mu.CaiDat):
         os.makedirs(dich)
         db = os.path.join(cd.data_dir, "lichsu.db")
         if os.path.isfile(db):
-            src = sqlite3.connect(db, timeout=30)
-            dst = sqlite3.connect(os.path.join(dich, "lichsu.db"))
             try:
-                src.backup(dst)
-                if dst.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
-                    raise mu.LoiCapNhat("sao_luu", "Bản sao lưu lịch sử không toàn vẹn.")
-            finally:
-                src.close()
-                dst.close()
+                src = sqlite3.connect(db, timeout=30)
+                try:
+                    dst = sqlite3.connect(os.path.join(dich, "lichsu.db"))
+                    try:
+                        src.backup(dst)
+                        ok = dst.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+                    finally:
+                        dst.close()
+                finally:
+                    src.close()
+            except sqlite3.Error as e:
+                raise mu.LoiCapNhat("sao_luu", f"Không sao lưu được lịch sử ({type(e).__name__}) — chưa đổi "
+                                    "gì, giữ bản hiện tại.") from e
+            if not ok:
+                raise mu.LoiCapNhat("sao_luu", "Bản sao lưu lịch sử không toàn vẹn.")
         for ten in ("khos.json", "cau_hinh.json"):
             p = os.path.join(cd.data_dir, ten)
             if os.path.isfile(p):
@@ -186,18 +222,24 @@ def sao_luu_sqlite(cd: mu.CaiDat):
 
 
 def phien_ban_db(cd: mu.CaiDat):
-    def doc() -> int:
+    """Phiên bản lược đồ ``lichsu.db``; ``None`` = máy mới chưa có lịch sử (tạo mới, KHÔNG phải migration).
+    Đọc lỗi → ``LoiCapNhat`` (không đoán)."""
+    def doc() -> Optional[int]:
         db = os.path.join(cd.data_dir, "lichsu.db")
         if not os.path.isfile(db):
-            return 0
+            return None
         from urllib.parse import quote
 
-        con = sqlite3.connect("file:" + quote(os.path.abspath(db).replace("\\", "/")) + "?mode=ro",
-                              uri=True, timeout=30)
         try:
-            return int(con.execute("PRAGMA user_version").fetchone()[0])
-        finally:
-            con.close()
+            con = sqlite3.connect("file:" + quote(os.path.abspath(db).replace("\\", "/")) + "?mode=ro",
+                                  uri=True, timeout=30)
+            try:
+                return int(con.execute("PRAGMA user_version").fetchone()[0])
+            finally:
+                con.close()
+        except sqlite3.Error as e:
+            raise mu.LoiCapNhat("lich_su", f"Không đọc được phiên bản lịch sử ({type(e).__name__}) — chưa "
+                                "đổi gì.") from e
     return doc
 
 
@@ -236,7 +278,13 @@ def ban_dang_kich_hoat(cn: mu.CapNhat) -> dict:
         cn.phuc_hoi()
     except mu.LoiCapNhat as e:
         print(f"[CẢNH BÁO] {e}", file=sys.stderr)
-    con_tro = cn.hien_tai()
+    except Exception as e:  # noqa: BLE001 — khôi phục lỗi lạ không được chặn mở bản đang kích hoạt
+        print(f"[CẢNH BÁO] Khôi phục cập nhật lỗi không lường trước ({type(e).__name__}) — mở bản đang kích "
+              "hoạt; chạy «launcher.py doctor».", file=sys.stderr)
+    return _kiem_con_tro(cn.hien_tai())
+
+
+def _kiem_con_tro(con_tro) -> dict:
     if not con_tro:
         raise LoiLauncher("Chưa có bản nào được kích hoạt — chạy bootstrap trước.")
     if not os.path.isfile(os.path.join(con_tro.get("release", ""), mu.TEN_DAU_RELEASE)):
@@ -246,11 +294,24 @@ def ban_dang_kich_hoat(cn: mu.CapNhat) -> dict:
     return con_tro
 
 
+def con_tro_khong_khoi_phuc(cd: mu.CaiDat) -> dict:
+    """Bộ cập nhật KHÔNG dựng được (khoá tin cậy hỏng, thiếu thư viện, chưa cấu hình nguồn): dùng con trỏ
+    ``current`` NGUYÊN TRẠNG — chỉ khi nhật ký không dừng giữa một lần kích hoạt (khi đó không khôi phục được
+    thì không đoán bản nào chạy được)."""
+    nk = mu.doc_json(cd.file_trang_thai("journal.json")) or {}
+    if nk.get("trang_thai") in (mu.ACTIVATING, mu.HEALTHCHECK, mu.ROLLBACK):
+        raise LoiLauncher("Lần cập nhật trước dừng giữa lúc kích hoạt mà bộ cập nhật không dựng được — chạy "
+                          "«launcher.py doctor» và báo chủ dự án.")
+    return _kiem_con_tro(mu.doc_json(cd.file_trang_thai("current.json")))
+
+
 DAT, CANH_BAO, LOI = "✅", "⚠️", "❌"
 
 
 def doctor(goc: str) -> list:
-    """Chẩn đoán CHỈ ĐỌC: ``[(mức, mục, ghi chú)]``. Không gọi mạng, không ghi file, không khôi phục gì."""
+    """Chẩn đoán: ``[(mức, mục, ghi chú)]``. Không gọi mạng, không đổi dữ liệu/cấu hình/bản cài, không khôi
+    phục gì. Ngoại lệ duy nhất: kiểm cổng bảo trì dọn dấu của việc/updater ĐÃ CHẾT (lease, cờ rút mồ côi) —
+    như mọi lần kiểm cổng khác."""
     kq = []
 
     def them(muc, ten, ghi_chu=""):
@@ -302,16 +363,24 @@ def doctor(goc: str) -> list:
             with open(os.path.join(rel, mu.TEN_CHU_KY), "rb") as f:
                 mu.kiem_chu_ky(raw_m, f.read(), khoa)
             m = mu.doc_manifest(raw_m)
+            if cur.get("manifest_sha256") != m.sha256:
+                raise mu.LoiCapNhat("con_tro", "con trỏ không khớp manifest đã ký của release")
             mu.kiem_cay_release(rel, m)
             them(DAT, "Bản đang kích hoạt", f"{m.phien_ban} — chữ ký + cây file đúng")
         except (OSError, mu.LoiCapNhat) as e:
             them(LOI, "Bản đang kích hoạt", f"{cur.get('phien_ban', '?')} — {e}")
         them(DAT if os.path.isfile(python_runtime(cur)) else LOI, "Runtime", python_runtime(cur))
     try:
-        nk = mu.doc_json(cd.file_trang_thai("journal.json"))
-        tt = (nk or {}).get("trang_thai", "")
-        them(CANH_BAO if tt in (mu.BLOCKED, mu.WAITING_APPROVAL, mu.QUARANTINED) else DAT,
-             "Nhật ký cập nhật", f"{tt or 'trống'} {(nk or {}).get('loi', '')}".strip())
+        nk = mu.doc_json(cd.file_trang_thai("journal.json")) or {}
+        tt, loi = nk.get("trang_thai", ""), str(nk.get("loi") or "")
+        # Trạng thái trung gian = lượt cập nhật bị cắt ngang (mất điện/bị giết): launcher sẽ khôi phục ở lần
+        # chạy kế; doctor không khôi phục nên chỉ báo. Có lỗi ở lượt gần nhất → cũng cần người xem.
+        dang_do = tt in (mu.DOWNLOADING, mu.VERIFIED, mu.QUIESCED, mu.BACKED_UP, mu.MIGRATING,
+                         mu.ACTIVATING, mu.HEALTHCHECK, mu.ROLLBACK)
+        them(CANH_BAO if (tt in (mu.BLOCKED, mu.WAITING_APPROVAL, mu.QUARANTINED) or dang_do or loi)
+             else DAT, "Nhật ký cập nhật",
+             " ".join(x for x in (tt or "trống", "— dở dang, lần chạy launcher kế sẽ tự khôi phục"
+                                  if dang_do else "", loi) if x))
     except mu.LoiCapNhat as e:
         them(LOI, "Nhật ký cập nhật", str(e))
     try:
@@ -372,7 +441,19 @@ def _utf8_dau_ra() -> None:
             pass
 
 
-def main(argv=None, *, goc: Optional[str] = None, chay=subprocess.call, **thay) -> int:
+def _chay_cho_con(argv: list, **kw) -> int:
+    """Chạy tiến trình con và CHỜ tới khi nó tự thoát. Ctrl+C ở cửa sổ console tới CẢ tiến trình con (app
+    tự tắt êm: người gửi Sheets chờ việc đang bay ≤ 90 s); launcher không bao giờ ``kill`` nó —
+    ``subprocess.call`` giết con sau 0,25 s, biến việc đang gửi thành KHÔNG RÕ."""
+    p = subprocess.Popen(argv, **kw)
+    while True:
+        try:
+            return p.wait()
+        except KeyboardInterrupt:
+            continue
+
+
+def main(argv=None, *, goc: Optional[str] = None, chay=_chay_cho_con, **thay) -> int:
     _utf8_dau_ra()
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv:
@@ -386,8 +467,19 @@ def main(argv=None, *, goc: Optional[str] = None, chay=subprocess.call, **thay) 
         return 1 if any(muc == LOI for muc, _, _ in ket) else 0
     try:
         cfg = doc_cau_hinh(goc)
-        cn = tao_cap_nhat(goc, cfg, **thay)
         lenh = argv[0]
+        if lenh not in ("app", "watch", "cli", "update"):
+            raise LoiLauncher(f"Lệnh «{lenh}» không có (app | watch | cli | update | doctor).")
+        try:
+            cn = tao_cap_nhat(goc, cfg, **thay)
+        except Exception as e:  # noqa: BLE001 — chỉ chặn CẬP NHẬT, không chặn mở bản đang kích hoạt
+            if lenh == "update":
+                if isinstance(e, (LoiLauncher, mu.LoiCapNhat)):
+                    raise
+                raise LoiLauncher(f"Bộ cập nhật không dựng được ({type(e).__name__}: {e}).") from e
+            print(f"[CẢNH BÁO] Bộ cập nhật không dựng được ({type(e).__name__}: {e}) — mở bản đang kích hoạt, "
+                  "KHÔNG khôi phục/cập nhật; chạy «launcher.py doctor».", file=sys.stderr)
+            cn = None
         if lenh == "update":
             con = argv[1] if len(argv) > 1 else "status"
             if con == "status":
@@ -396,20 +488,29 @@ def main(argv=None, *, goc: Optional[str] = None, chay=subprocess.call, **thay) 
             if con == "recover":
                 print(f"[{cn.phuc_hoi()}] đã khôi phục theo nhật ký.")
                 return 0
+            if con == "bo-cach-ly":
+                if len(argv) < 3:
+                    raise LoiLauncher("Cần phiên bản: update bo-cach-ly X.Y.Z")
+                if cn.bo_cach_ly(argv[2]):
+                    print(f"Đã bỏ cách ly {argv[2]} — lần «update prepare» sau sẽ xét lại (vẫn đủ chữ ký, "
+                          "băm, health).")
+                    return 0
+                print(f"Phiên bản {argv[2]} không bị cách ly.", file=sys.stderr)
+                return 1
             ham = {"check": cn.kiem_tra, "prepare": cn.chuan_bi, "apply": cn.ap_dung}.get(con)
             if ham is None:
-                raise LoiLauncher(f"Lệnh update «{con}» không có (status|check|prepare|apply|recover).")
+                raise LoiLauncher(f"Lệnh update «{con}» không có "
+                                  "(status|check|prepare|apply|recover|bo-cach-ly).")
             return _in(ham())
-        con_tro = ban_dang_kich_hoat(cn)
-        env = moi_truong_con(cn.cd, con_tro)
-        os.makedirs(cn.cd.state_root, exist_ok=True)
+        cd = cn.cd if cn is not None else cai_dat(goc, cfg)
+        con_tro = ban_dang_kich_hoat(cn) if cn is not None else con_tro_khong_khoi_phuc(cd)
+        env = moi_truong_con(cd, con_tro)
+        os.makedirs(cd.state_root, exist_ok=True)
         if lenh == "app":
-            return chay(lenh_app(con_tro), env=env, cwd=cn.cd.state_root)
+            return chay(lenh_app(con_tro), env=env, cwd=cd.state_root)
         if lenh == "watch":
-            return chay(lenh_cli(con_tro, ["watch", "--log", *argv[1:]]), env=env, cwd=cn.cd.state_root)
-        if lenh == "cli":
-            return chay(lenh_cli(con_tro, argv[1:]), env=env, cwd=cn.cd.state_root)
-        raise LoiLauncher(f"Lệnh «{lenh}» không có (app | watch | cli | update).")
+            return chay(lenh_cli(con_tro, ["watch", "--log", *argv[1:]]), env=env, cwd=cd.state_root)
+        return chay(lenh_cli(con_tro, argv[1:]), env=env, cwd=cd.state_root)
     except (LoiLauncher, mu.LoiCapNhat) as e:
         print(f"[LỖI] {e}", file=sys.stderr)
         return 1

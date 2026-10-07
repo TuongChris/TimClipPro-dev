@@ -76,6 +76,19 @@ def _giu_nguyen_path():
         os.environ["PATH"] = cu
 
 
+_DATA_CANH_MA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+_DATA_CANH_MA_CO_SAN = os.path.exists(_DATA_CANH_MA)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Chốt cách ly: bộ test KHÔNG được tạo ``data/`` cạnh mã (trên máy thật đó là lịch sử, kho, khoá thật).
+    Chỉ kiểm được khi thư mục CHƯA có lúc bắt đầu (bản gương, cây xuất từ git) — có sẵn thì bỏ qua."""
+    if not _DATA_CANH_MA_CO_SAN and os.path.exists(_DATA_CANH_MA):
+        print(f"\n[LỖI CÁCH LY] Bộ test đã tạo {_DATA_CANH_MA} — test phải dùng tmp_path / TIMCLIP_DATA_DIR.",
+              file=sys.stderr)
+        session.exitstatus = 1
+
+
 @pytest.fixture()
 def engine(tmp_path):
     """Engine sạch, dữ liệu ghi vào thư mục tạm — không đụng data/ thật."""

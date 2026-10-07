@@ -28,12 +28,17 @@ Mở Command Prompt trong thư mục bộ bootstrap, chạy (một dòng):
 
 (`--nguon-thu-muc E:\phat_hanh` thay cho `--repo` nếu nhận bản phát hành từ USB.)
 
-Bootstrap sẽ: kiểm đường dẫn (từ chối OneDrive/ổ mạng, từ chối ghi đè cài đặt có sẵn) → tạo **định danh máy
-mới** → chép launcher + khoá tin cậy → tạo `TimClipPro.bat`, `GiamSat.bat`, `CapNhat.bat` → xuất file lịch
-Windows để XEM TRƯỚC (`launcher\lich_xem_truoc\`, **chưa đăng ký**) → tải, **xác minh chữ ký** và cài bản Stable
-đầu tiên. Kết thúc in ra trạng thái `ACTIVE`.
+Chạy bằng Python 3.12 GỐC là đủ: bootstrap tự tạo môi trường riêng của launcher (`D:\TimClipPro\launcher\env`,
+cần mạng tới PyPI, chỉ cài gói đã ghim băm) rồi tự chạy tiếp bằng môi trường đó. Báo «launcher-lock.txt chưa có
+băm gói» = bộ kit chưa qua bước 2 của `KE_HOACH_PILOT_PC2.md` — dừng, báo chủ dự án.
 
-Kiểm lại bất kỳ lúc nào (chỉ đọc, không mạng):
+Bootstrap sẽ: kiểm đường dẫn (từ chối OneDrive/ổ mạng, bản clone git, ghi đè cài đặt có sẵn) → chép launcher +
+khoá tin cậy → tạo `TimClipPro.bat`, `GiamSat.bat`, `CapNhat.bat` → xuất file lịch Windows để XEM TRƯỚC
+(`launcher\lich_xem_truoc\`, **chưa đăng ký**) → tạo **định danh máy mới** → `launcher.json` → tải, **xác minh
+chữ ký** và cài bản Stable đầu tiên. Kết thúc in ra trạng thái `ACTIVE`. Đường dẫn có dấu tiếng Việt dùng được.
+Bị ngắt giữa chừng (mất điện, mất mạng) trước khi xong `launcher.json` → chạy lại ĐÚNG lệnh trên để làm tiếp.
+
+Kiểm lại bất kỳ lúc nào (không mạng, không đổi dữ liệu hay bản cài):
 
 ```
 D:\TimClipPro\launcher\env\Scripts\python.exe D:\TimClipPro\launcher\launcher.py doctor
@@ -92,3 +97,13 @@ pilot được duyệt** (thay `<MÃ_HỒ_SƠ_ĐÍCH>`). Lịch chạy không c�
 1. Chạy `launcher.py doctor` — đọc các dòng ❌/⚠️.
 2. `launcher.py update status` — trạng thái cập nhật (nhật ký, bản đang kích hoạt, bản cách ly).
 3. Gửi chủ dự án ảnh màn hình doctor + `update status` (không gửi file khoá, cookie, `lichsu.db`).
+
+Bootstrap xong nhưng **không cài được bản đầu** (dòng cuối không phải `ACTIVE`; doctor ❌ «Bản đang kích
+hoạt: chưa có»):
+
+* «Lock chưa có băm gói» — bản phát hành/bộ kit chưa qua bước lock có băm (`KE_HOACH_PILOT_PC2.md` bước 2).
+  Báo chủ dự án; cài đặt vừa tạo vẫn giữ, khi có bản đúng chỉ cần chạy `CapNhat.bat`.
+* «ký bằng khoá KHÔNG tin cậy» / «Không có bản Stable mới hợp lệ» — bộ kit và bản phát hành không cùng khoá.
+  KHÔNG sửa `trusted_keys.json` bằng tay. Báo chủ dự án. Lúc này máy CHƯA có dữ liệu nào (ứng dụng chưa mở
+  được), nên có thể xoá hai thư mục vừa tạo (thư mục cài đặt + state root MỚI) rồi bootstrap lại bằng bộ kit
+  đúng — chạy lại lên thư mục cũ sẽ bị từ chối (không ghi đè cài đặt/định danh).

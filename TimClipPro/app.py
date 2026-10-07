@@ -108,6 +108,8 @@ _dong_bo_job_van_tay()
 if "scan_controller" not in st.session_state:
     st.session_state.scan_controller = ScanJobController(eng)
 scan_controller: ScanJobController = st.session_state.scan_controller
+# Bản cài managed: bản mới đã kích hoạt mà cửa sổ này còn chạy bản cũ → cảnh báo nổi ở đầu trang.
+ui_cap_nhat.canh_bao_ban_cu()
 # Gửi Google Sheets: hàng đợi BỀN trong lichsu.db + MỘT người gửi nền mỗi tiến trình (không đọc
 # st.session_state). Còn việc chờ từ lần chạy trước (tắt app, mất điện) thì gửi tiếp ngay.
 ui_gui.dam_bao_nguoi_gui(eng)

@@ -23,6 +23,9 @@ import socket
 import sys
 
 MAU_ANH_CHUP = 50
+# Kết quả in trên MỘT dòng mở đầu bằng dấu này (launcher đọc đúng dòng đó, bỏ qua dòng thư viện in thêm khi
+# thoát). Giữ đúng giá trị ở launcher.DAU_KET_QUA_HEALTH — launcher nằm NGOÀI release, đổi là vỡ hợp đồng.
+DAU_KET_QUA = "TIMCLIP_HEALTH_KET_QUA"
 
 
 def chan_mang() -> None:
@@ -227,7 +230,7 @@ def main(argv=None) -> int:
         kq = kiem(a.data_dir, a.che_do) if a.lenh == "kiem" else migrate(a.data_dir)
     except Exception as e:  # noqa: BLE001
         kq = {"ok": False, "loi": [f"{type(e).__name__}: {e}"]}
-    sys.stdout.write(json.dumps(kq, ensure_ascii=False) + "\n")
+    sys.stdout.write(f"{DAU_KET_QUA} {json.dumps(kq, ensure_ascii=False)}\n")
     sys.stdout.flush()
     return 0 if kq.get("ok") else 1
 

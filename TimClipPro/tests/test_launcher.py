@@ -69,7 +69,8 @@ def test_app_chay_ban_dang_kich_hoat_moi_truong_managed(cai):
     (argv, kw), = cai["goi"]
     rel = os.path.join(cai["goc"], "releases", "1.0.0")
     assert argv[0] == os.path.join(cai["goc"], "environments", "py312-thu", "Scripts", "python.exe")
-    assert argv[1:4] == ["-m", "streamlit", "run"] and argv[4] == os.path.join(rel, "TimClipPro", "app.py")
+    assert argv[1:5] == ["-P", "-m", "streamlit", "run"]
+    assert argv[5] == os.path.join(rel, "TimClipPro", "app.py")
     assert "--server.address=127.0.0.1" in argv
     env = kw["env"]
     assert env["TIMCLIP_RUNTIME_MODE"] == "managed" and env["TIMCLIP_STATE_ROOT"] == cai["state"]
@@ -109,7 +110,7 @@ def test_khoi_phuc_cap_nhat_do_truoc_khi_mo(cai):
         cai["main"]("update", "apply", diem_dung=chet)
     assert cai["main"]("app") == 0                 # tiến trình mới: khôi phục rồi mới mở
     (argv, _), = cai["goi"]
-    assert os.path.join("releases", "1.1.0") in argv[4]
+    assert os.path.join("releases", "1.1.0") in argv[5]
     cd = mu.CaiDat(cai["goc"], cai["state"])
     assert mu.doc_json(cd.file_trang_thai("last_good.json"))["phien_ban"] == "1.1.0"
 
@@ -146,6 +147,48 @@ def test_doctor_cai_dat_lanh_dat_va_phat_hien_cay_release_bi_sua(cai, capsys):
         f.write("# bị sửa tay\n")
     assert cai["main"]("doctor") == 1
     assert "❌" in capsys.readouterr().out
+
+
+def _dong_nhat_ky(out):
+    return next(d for d in out.splitlines() if "Nhật ký cập nhật" in d)
+
+
+def test_doctor_canh_bao_khi_lan_cap_nhat_gan_nhat_loi(cai, capsys):
+    """Lần cập nhật gần nhất LỖI (vd. mất mạng giữa lúc tải, lock chưa băm) → nhật ký về CHECKED kèm lỗi:
+    doctor phải ⚠️ + nêu lỗi (bản đang chạy vẫn dùng được nên không phải ❌) — trước đây hiện ✅."""
+    _cai_ban(cai, "1.0.0")
+    phat_hanh(cai["nguon"], "1.1.0", cai["khoa"])
+
+    class NguonDut(mu.NguonThuMuc):
+        def tai(self, ban, ten, dich, gioi_han):
+            if ten.endswith(".zip"):                 # manifest tải được, gói thì đứt giữa chừng
+                raise OSError("mất mạng giữa lúc tải (giả)")
+            return super().tai(ban, ten, dich, gioi_han)
+
+    assert cai["main"]("update", "prepare", nguon=NguonDut(cai["nguon"])) == 1
+    capsys.readouterr()
+    assert cai["main"]("doctor") == 0
+    dong = _dong_nhat_ky(capsys.readouterr().out)
+    assert dong.startswith(launcher.CANH_BAO) and "Lỗi đĩa/mạng" in dong
+
+
+def test_doctor_canh_bao_khi_cap_nhat_dang_do(cai, capsys):
+    """Mất điện giữa lúc áp dụng → nhật ký kẹt ở trạng thái trung gian; doctor (chỉ đọc, không khôi phục)
+    phải ⚠️ «dở dang», không ✅."""
+    _cai_ban(cai, "1.0.0")
+    phat_hanh(cai["nguon"], "1.1.0", cai["khoa"])
+    assert cai["main"]("update", "prepare") == 0
+
+    def chet(ten):
+        if ten == "POINTER_SWITCHED":
+            raise mu.MatDien(ten)
+
+    with pytest.raises(mu.MatDien):
+        cai["main"]("update", "apply", diem_dung=chet)
+    capsys.readouterr()
+    cai["main"]("doctor")
+    dong = _dong_nhat_ky(capsys.readouterr().out)
+    assert dong.startswith(launcher.CANH_BAO) and "dở dang" in dong
 
 
 def test_doctor_van_chay_khi_khoa_tin_cay_hong(cai, capsys):

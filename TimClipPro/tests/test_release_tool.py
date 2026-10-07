@@ -135,6 +135,16 @@ def test_publish_chi_in_lenh_khong_chay_gi(ban_ky, monkeypatch, capsys):
     assert "CHƯA PHÁT HÀNH" in out and "gh release create stable-1.0.0" in out and M1 in out
 
 
+def test_publish_in_lenh_dan_nguyen_van_duoc(ban_ky, capsys):
+    """Lệnh in ra phải chạy ĐÚNG khi dán nguyên văn vào Command Prompt/PowerShell: tham số có dấu cách (tiêu
+    đề, ghi chú) nằm trong ngoặc kép — nối bằng dấu cách thì «TimClipPro 1.0.0 (Stable)» vỡ thành nhiều đối số."""
+    assert rt.main(["publish", "--dir", ban_ky["goc"], "--repo", "chu/du-an"]) == 0
+    dong = next(d.strip() for d in capsys.readouterr().out.splitlines()
+                if d.strip().startswith("gh release create"))
+    assert dong == subprocess.list2cmdline(rt.lenh_publish(ban_ky["goc"], "chu/du-an"))
+    assert '--title "TimClipPro 1.0.0 (Stable)"' in dong
+
+
 def test_lock_tu_moi_truong_da_nghiem_thu(tmp_path):
     van_ban = rt.tao_lock(sys.executable)
     assert re.search(r"^streamlit==\S+$", van_ban, re.M)

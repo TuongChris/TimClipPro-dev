@@ -12,6 +12,7 @@ import sqlite3
 import subprocess
 import sys
 
+import health_check
 import lich_su
 from test_bao_cao_v2 import _bc, _kq_ca_that
 
@@ -22,7 +23,8 @@ BANG_V3 = ("cai_dat_may", "xac_thuc_gui", "dich_gui", "dich_gui_phien_ban", "han
 def _chay(*doi_so):
     p = subprocess.run([sys.executable, HC, *doi_so], capture_output=True, text=True,
                        encoding="utf-8", timeout=300)
-    dong = [x for x in p.stdout.splitlines() if x.strip()]
+    dau = health_check.DAU_KET_QUA + " "
+    dong = [x[len(dau):] for x in p.stdout.splitlines() if x.startswith(dau)]
     return p.returncode, (json.loads(dong[-1]) if dong else {"stderr": p.stderr})
 
 

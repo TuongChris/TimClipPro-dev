@@ -5,18 +5,28 @@
                         --tin-cay trusted_keys.json (--nguon-thu-muc E:\\phat_hanh | --repo chu/du-an)
                         [--workspace mac_dinh] [--python-launcher <python có cryptography>]
 
-Làm: kiểm đường dẫn (không OneDrive/ổ mạng, không đè cài đặt/định danh có sẵn, không đè bản clone git cũ)
-→ tạo ``installation.json`` với UUID MỚI (PC2 không bao giờ kế thừa định danh của PC1) → chép launcher +
-khoá tin cậy → ``launcher.json`` → ``TimClipPro.bat``/``GiamSat.bat``/``CapNhat.bat`` → XML lịch Windows
-để XEM TRƯỚC (KHÔNG đăng ký) → cài bản Stable đầu tiên qua ĐÚNG bộ cập nhật (chữ ký, băm, health).
+Chạy được bằng Python 3.12 GỐC (chỉ thư viện chuẩn): giai đoạn 1 kiểm đường dẫn + khoá tin cậy rồi tạo môi
+trường RIÊNG của launcher (pip ``--require-hashes`` theo ``launcher-lock.txt``), giai đoạn 2 chạy lại CHÍNH file
+này bằng Python của môi trường đó.
+
+Làm: kiểm đường dẫn (không OneDrive/ổ mạng, không đè cài đặt/định danh có sẵn, không nằm trong bản clone git,
+không có dữ liệu cập nhật cũ) → chép launcher + khoá tin cậy → ``TimClipPro.bat``/``GiamSat.bat``/``CapNhat.bat``
+(CHỈ ASCII: ``%~dp0`` cho đường dẫn trong thư mục cài đặt) → XML lịch Windows để XEM TRƯỚC (KHÔNG đăng ký) →
+``installation.json`` với UUID MỚI (PC2 không bao giờ kế thừa định danh của PC1) → ``launcher.json`` GHI CUỐI
+(đánh dấu đã bootstrap) → cài bản Stable đầu tiên qua ĐÚNG bộ cập nhật (chữ ký, băm, health).
+
+Dừng giữa chừng TRƯỚC launcher.json → chạy lại đúng lệnh đó để làm tiếp (định danh đã tạo cho CHÍNH thư mục cài
+đặt này được giữ). Cài bản đầu lỗi → cài đặt vẫn dùng được, chạy ``CapNhat.bat`` sau khi khắc phục.
 PC2 bắt đầu với kho RỖNG và tự dựng; không chép kho, lịch sử, outbox, cookie hay khoá từ PC1.
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shutil
+import subprocess
 import sys
 from xml.sax.saxutils import escape
 
@@ -26,6 +36,8 @@ import runtime_paths
 FILE_LAUNCHER = ("launcher.py", "managed_update.py", "maintenance_gate.py", "khoa.py",
                  "runtime_paths.py")
 THU_MUC_LICH = "lich_xem_truoc"
+# Thư mục do bộ cập nhật sở hữu — có sẵn trong thư mục cài đặt MỚI nghĩa là dữ liệu cũ của cài đặt khác.
+THU_MUC_CAP_NHAT = ("releases", "environments", "update_state", "staging")
 
 
 class LoiBootstrap(RuntimeError):
@@ -42,20 +54,88 @@ def _kiem_goc(ten: str, p: str) -> str:
     return p
 
 
+def _trong_ban_clone_git(p: str) -> bool:
+    """``p`` hoặc một thư mục CHA của nó có ``.git`` (bản clone đang dùng cho phát triển/legacy)."""
+    hien = os.path.abspath(p)
+    while True:
+        if os.path.exists(os.path.join(hien, ".git")):
+            return True
+        cha = os.path.dirname(hien)
+        if cha == hien:
+            return False
+        hien = cha
+
+
 def kiem_truoc(goc: str, state: str, python_goc: str) -> tuple:
-    """Kiểm MỌI điều kiện trước khi ghi byte nào. Trả ``(goc, state)`` đã chuẩn hoá."""
+    """Kiểm MỌI điều kiện trước khi ghi byte nào. Trả ``(goc, state, tiep_tuc)`` đã chuẩn hoá — ``tiep_tuc``:
+    lần trước dừng SAU khi tạo định danh cho CHÍNH thư mục cài đặt này (chưa có launcher.json) → làm tiếp."""
     goc, state = _kiem_goc("Thư mục cài đặt", goc), _kiem_goc("State root", state)
     if os.path.normcase(goc) == os.path.normcase(state):
         raise LoiBootstrap("Thư mục cài đặt và state root phải khác nhau.")
     if os.path.exists(os.path.join(goc, "launcher", "launcher.json")):
         raise LoiBootstrap("Thư mục cài đặt đã được bootstrap — không làm lại đè lên.")
-    if os.path.exists(os.path.join(goc, ".git")) or os.path.exists(os.path.join(state, ".git")):
-        raise LoiBootstrap("Không cài vào thư mục là bản clone git cũ — chọn thư mục MỚI.")
+    if _trong_ban_clone_git(goc) or _trong_ban_clone_git(state):
+        raise LoiBootstrap("Không cài vào (hoặc bên trong) thư mục bản clone git — chọn thư mục MỚI.")
+    cu = [t for t in THU_MUC_CAP_NHAT
+          if os.path.isdir(os.path.join(goc, t)) and os.listdir(os.path.join(goc, t))]
+    if cu:
+        raise LoiBootstrap("Thư mục cài đặt đã có dữ liệu cập nhật cũ (" + ", ".join(cu) + ") — chọn thư mục "
+                           "MỚI.")
+    tiep_tuc = False
     if os.path.exists(os.path.join(state, runtime_paths.TEN_DINH_DANH)):
-        raise LoiBootstrap("State root đã thuộc một cài đặt khác — không ghi đè định danh.")
+        try:
+            dd = runtime_paths.doc_dinh_danh(state)
+        except runtime_paths.LoiRuntime:
+            raise LoiBootstrap("State root có định danh hỏng — không ghi đè; chọn state root MỚI.") from None
+        if os.path.normcase(os.path.abspath(str(dd.get("installation_root") or ""))) != os.path.normcase(goc):
+            raise LoiBootstrap("State root đã thuộc một cài đặt khác — không ghi đè định danh.")
+        tiep_tuc = True
     if not (os.path.isabs(python_goc) and os.path.isfile(python_goc)):
         raise LoiBootstrap("Không thấy Python gốc (cần đường dẫn tuyệt đối tới python.exe 3.12).")
-    return goc, state
+    return goc, state, tiep_tuc
+
+
+def _kiem_khoa_tin_cay_tho(tin_cay: str) -> int:
+    """Kiểm CẤU TRÚC file khoá tin cậy chỉ bằng thư viện chuẩn (trước khi ghi gì): JSON, mỗi khoá là 32 byte
+    Ed25519 thô, ``key_id`` khớp khoá. Dựng khoá thật (``cryptography``) ở giai đoạn 2."""
+    try:
+        with open(tin_cay, encoding="utf-8") as f:
+            d = json.load(f)
+        khoa = d.get("khoa") if isinstance(d, dict) else None
+        if not khoa:
+            raise ValueError
+        for k in khoa:
+            raw = base64.b64decode(k["ed25519_pub_b64"], validate=True)
+            if len(raw) != 32 or k.get("key_id") != mu.tao_key_id(raw):
+                raise ValueError
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        raise LoiBootstrap("File khoá tin cậy không hợp lệ — dùng đúng trusted_keys.json của bộ kit.") from None
+    return len(khoa)
+
+
+def _thieu_goi(nguon: dict) -> list:
+    """Gói mà giai đoạn 2 cần nhưng Python ĐANG CHẠY không có (Python gốc thường thiếu cả hai)."""
+    import importlib.util
+
+    can = ["cryptography"] + (["requests"] if (nguon or {}).get("loai") == "github" else [])
+    return [g for g in can if importlib.util.find_spec(g) is None]
+
+
+def _duong_dan_bat(goc: str, p: str) -> str:
+    """Đường dẫn viết vào ``.bat`` — cmd.exe đọc file .bat theo trang mã OEM nên CHỈ dùng ASCII: trong thư mục
+    cài đặt → ``%~dp0…`` (cmd tự mở rộng đúng, kể cả thư mục có dấu); ngoài → tuyệt đối và phải ASCII."""
+    p = os.path.abspath(p)
+    try:
+        rel = os.path.relpath(p, goc)
+    except ValueError:                               # khác ổ đĩa
+        rel = ""
+    if rel and not rel.startswith("..") and not os.path.isabs(rel):
+        return "%~dp0" + rel
+    if not p.isascii():
+        raise LoiBootstrap("Python của launcher nằm NGOÀI thư mục cài đặt và đường dẫn có ký tự có dấu — bỏ "
+                           "--python-launcher (bootstrap tự tạo trong thư mục cài đặt) hoặc chọn đường dẫn "
+                           "không dấu.")
+    return p
 
 
 def _bat(duong_dan: str, dong: list) -> None:
@@ -64,15 +144,17 @@ def _bat(duong_dan: str, dong: list) -> None:
 
 
 def tao_bat(goc: str, py_launcher: str) -> list:
-    """Ba file chạy cho người vận hành — gọi launcher bằng đường dẫn TUYỆT ĐỐI (không phụ thuộc PATH)."""
-    lc = os.path.join(goc, "launcher", "launcher.py")
+    """Ba file chạy cho người vận hành. ``-E -s``: biến PYTHON* và site của người dùng không chen vào bộ
+    xác minh chữ ký của launcher."""
+    lc = _duong_dan_bat(goc, os.path.join(goc, "launcher", "launcher.py"))
+    py = _duong_dan_bat(goc, py_launcher)
     tep = []
     for ten, lenh, cho in (("TimClipPro.bat", "app", True), ("GiamSat.bat", "watch %*", False),
                            ("CapNhat.bat", "update prepare", True)):
         dong = ["@echo off", "REM Ban cai TimClip Pro co quan ly (launcher). KHONG dung updater cu.",
-                f'"{py_launcher}" "{lc}" {lenh}', 'set "MA=%errorlevel%"']
+                f'"{py}" -E -s "{lc}" {lenh}', 'set "MA=%errorlevel%"']
         if ten == "CapNhat.bat":
-            dong += ['if not "%MA%"=="0" goto :xong', f'"{py_launcher}" "{lc}" update apply',
+            dong += ['if not "%MA%"=="0" goto :xong', f'"{py}" -E -s "{lc}" update apply',
                      'set "MA=%errorlevel%"', ":xong"]
         if cho:
             dong += ['if not "%MA%"=="0" pause']
@@ -113,9 +195,9 @@ def tao_lich_xem_truoc(goc: str, state: str, py_launcher: str) -> list:
     lc = os.path.join(goc, "launcher", "launcher.py")
     tep = []
     for ten, doi_so, gio, lap, mo_ta in (
-            ("GiamSat", f'"{lc}" watch --destination <MÃ_HỒ_SƠ_ĐÍCH>', "08:00", 3,
+            ("GiamSat", f'-E -s "{lc}" watch --destination <MÃ_HỒ_SƠ_ĐÍCH>', "08:00", 3,
              "Giám sát kênh theo watchlist; gửi Google Sheets theo hồ sơ đích chỉ định."),
-            ("CapNhat", f'"{lc}" update prepare', "03:00", 0,
+            ("CapNhat", f'-E -s "{lc}" update prepare', "03:00", 0,
              "Tải + kiểm bản Stable mới (chưa áp dụng). Áp dụng khi rảnh: thêm lệnh update apply SAU "
              "khi pilot được duyệt.")):
         p = os.path.join(thu_muc, f"TimClipPro_{ten}.xml")
@@ -129,19 +211,18 @@ def tao_lich_xem_truoc(goc: str, state: str, py_launcher: str) -> list:
 
 
 def tao_moi_truong_launcher(goc: str, python_goc: str, kit_dir: str, *, chay=None) -> str:
-    """Môi trường RIÊNG của launcher (chỉ ``cryptography`` để xác minh chữ ký), tạo tại đường dẫn cuối từ
-    Python gốc + ``launcher-lock.txt`` CÓ BĂM trong bộ bootstrap. Cần mạng (PyPI) — bước pilot có duyệt."""
-    import subprocess
-
+    """Môi trường RIÊNG của launcher (``cryptography`` để xác minh chữ ký, ``requests`` cho nguồn GitHub), tạo
+    tại đường dẫn cuối từ Python gốc + ``launcher-lock.txt`` CÓ BĂM trong bộ bootstrap. Cần mạng (PyPI) — bước
+    pilot có duyệt. ``--clear``: lần trước dừng giữa chừng thì tạo lại sạch."""
     chay = chay or subprocess.run
     lock = os.path.join(kit_dir, "launcher-lock.txt")
     with open(lock, encoding="utf-8") as f:
         if "--hash=sha256:" not in f.read():
             raise LoiBootstrap("launcher-lock.txt chưa có băm gói — không cài gói chưa xác minh.")
     env = os.path.join(goc, "launcher", "env")
-    chay([python_goc, "-m", "venv", env], check=True, timeout=600)
+    chay([python_goc, "-P", "-m", "venv", "--clear", env], check=True, timeout=600)
     py = os.path.join(env, "Scripts", "python.exe")
-    chay([py, "-m", "pip", "install", "--no-input", "--disable-pip-version-check", "--require-hashes",
+    chay([py, "-P", "-m", "pip", "install", "--no-input", "--disable-pip-version-check", "--require-hashes",
           "--only-binary=:all:", "-r", lock], check=True, timeout=1800)
     return py
 
@@ -149,36 +230,48 @@ def tao_moi_truong_launcher(goc: str, python_goc: str, kit_dir: str, *, chay=Non
 def bootstrap(goc: str, state: str, *, kit_dir: str, python_goc: str, tin_cay: str, nguon: dict,
               workspace: str = runtime_paths.WORKSPACE_MAC_DINH, py_launcher: str = "",
               cai_ban_dau: bool = True, **thay) -> dict:
-    """Dựng một cài đặt managed mới. ``thay``: phụ thuộc của bộ cập nhật (kiểm thử tiêm runtime/health)."""
-    goc, state = kiem_truoc(goc, state, python_goc)
-    khoa = mu.doc_khoa_tin_cay(tin_cay)                       # kiểm khoá tin cậy TRƯỚC khi ghi
+    """Dựng một cài đặt managed mới (hoặc làm TIẾP lần trước dừng trước launcher.json). ``thay``: phụ thuộc
+    của bộ cập nhật (kiểm thử tiêm runtime/health). Python đang chạy phải có ``cryptography`` (``main`` lo
+    việc này khi chạy bằng Python gốc)."""
+    goc, state, tiep_tuc = kiem_truoc(goc, state, python_goc)
+    _kiem_khoa_tin_cay_tho(tin_cay)
     thieu = [f for f in FILE_LAUNCHER if not os.path.isfile(os.path.join(kit_dir, f))]
     if thieu:
         raise LoiBootstrap("Bộ bootstrap thiếu file: " + ", ".join(thieu))
+    if py_launcher:
+        py_launcher = os.path.abspath(py_launcher)
+        _duong_dan_bat(goc, py_launcher)                 # đường dẫn viết được vào .bat — kiểm TRƯỚC khi ghi
+    else:
+        py_launcher = tao_moi_truong_launcher(goc, python_goc, kit_dir)
+    khoa = mu.doc_khoa_tin_cay(tin_cay)                   # dựng khoá thật TRƯỚC khi ghi file cài đặt
     thu_muc_lc = os.path.join(goc, "launcher")
     os.makedirs(thu_muc_lc, exist_ok=True)
-    if not py_launcher:
-        py_launcher = tao_moi_truong_launcher(goc, python_goc, kit_dir)
     for f in FILE_LAUNCHER:
         shutil.copy2(os.path.join(kit_dir, f), os.path.join(thu_muc_lc, f))
     shutil.copy2(tin_cay, os.path.join(thu_muc_lc, "trusted_keys.json"))
     for con in ("data", "output", "secrets", "backups", "logs"):
         os.makedirs(os.path.join(state, con), exist_ok=True)
-    dd = runtime_paths.tao_dinh_danh(state, installation_root=goc, workspace=workspace)
-    cfg = {"dinh_dang": 1, "state_root": state, "nguon": nguon, "python_goc": os.path.abspath(python_goc),
-           "python_launcher": py_launcher, "han_cho_ranh_s": 600, "tu_ap_dung": False}
-    mu.ghi_json_nguyen_tu(os.path.join(thu_muc_lc, "launcher.json"), cfg)
     bat = tao_bat(goc, py_launcher)
     lich = tao_lich_xem_truoc(goc, state, py_launcher)
-    kq = {"goc": goc, "state": state, "installation_id": dd["installation_id"], "bat": bat, "lich": lich,
-          "khoa_tin_cay": sorted(khoa), "cai_dat": None}
+    dd = (runtime_paths.doc_dinh_danh(state) if tiep_tuc
+          else runtime_paths.tao_dinh_danh(state, installation_root=goc, workspace=workspace))
+    cfg = {"dinh_dang": 1, "state_root": state, "nguon": nguon, "python_goc": os.path.abspath(python_goc),
+           "python_launcher": py_launcher, "han_cho_ranh_s": 600}
+    mu.ghi_json_nguyen_tu(os.path.join(thu_muc_lc, "launcher.json"), cfg)     # CUỐI: đánh dấu đã bootstrap
+    kq = {"goc": goc, "state": state, "installation_id": dd["installation_id"], "tiep_tuc": tiep_tuc,
+          "bat": bat, "lich": lich, "khoa_tin_cay": sorted(khoa), "cai_dat": None}
     if cai_ban_dau:
-        sys.path.insert(0, thu_muc_lc)
-        import launcher
+        try:
+            sys.path.insert(0, thu_muc_lc)
+            import launcher
 
-        cn = launcher.tao_cap_nhat(goc, cfg, **thay)
-        bc = cn.chuan_bi()
-        kq["cai_dat"] = (bc if bc.trang_thai != mu.STAGED else cn.ap_dung()).__dict__
+            cn = launcher.tao_cap_nhat(goc, cfg, **thay)
+            bc = cn.chuan_bi()
+            kq["cai_dat"] = (bc if bc.trang_thai != mu.STAGED else cn.ap_dung()).__dict__
+        except Exception as e:  # noqa: BLE001 — cài đặt đã dựng xong; bản đầu cài lại bằng CapNhat.bat
+            kq["cai_dat"] = {"trang_thai": mu.LOI, "phien_ban": "", "chi_tiet": [],
+                             "thong_diep": f"Cài bản đầu chưa xong ({type(e).__name__}: {e}) — cài đặt đã tạo; "
+                                           "khắc phục rồi chạy CapNhat.bat."}
     return kq
 
 
@@ -197,6 +290,7 @@ def main(argv=None) -> int:
     _utf8_dau_ra()
     import argparse
 
+    argv = list(sys.argv[1:] if argv is None else argv)
     ap = argparse.ArgumentParser(description="Bootstrap cài đặt managed TimClipPro (PC2)")
     ap.add_argument("--goc", required=True)
     ap.add_argument("--state", required=True)
@@ -210,12 +304,23 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     cfg_nguon = ({"loai": "thu_muc", "duong_dan": os.path.abspath(a.nguon_thu_muc)} if a.nguon_thu_muc
                  else {"loai": "github", "repo": a.repo})
+    kit = os.path.dirname(os.path.abspath(__file__))
     try:
-        kq = bootstrap(a.goc, a.state, kit_dir=os.path.dirname(os.path.abspath(__file__)),
-                       python_goc=a.python_goc, tin_cay=a.tin_cay, nguon=cfg_nguon,
-                       workspace=a.workspace, py_launcher=a.python_launcher)
+        if not a.python_launcher and _thieu_goi(cfg_nguon):
+            # Giai đoạn 1 (Python gốc, chỉ thư viện chuẩn): kiểm trước khi ghi, tạo môi trường launcher (pip có
+            # băm), rồi chạy lại CHÍNH file này bằng Python của môi trường đó (có cryptography/requests).
+            goc, _, _ = kiem_truoc(a.goc, a.state, a.python_goc)
+            _kiem_khoa_tin_cay_tho(a.tin_cay)
+            py = tao_moi_truong_launcher(goc, a.python_goc, kit)
+            return subprocess.run([py, "-E", "-s", os.path.abspath(__file__), *argv,
+                                   "--python-launcher", py]).returncode
+        kq = bootstrap(a.goc, a.state, kit_dir=kit, python_goc=a.python_goc, tin_cay=a.tin_cay,
+                       nguon=cfg_nguon, workspace=a.workspace, py_launcher=a.python_launcher)
     except (LoiBootstrap, runtime_paths.LoiRuntime, mu.LoiCapNhat, OSError) as e:
         print(f"[LỖI] {e}", file=sys.stderr)
+        return 1
+    except Exception as e:  # noqa: BLE001 — người vận hành không lập trình: không traceback
+        print(f"[LỖI] {type(e).__name__}: {e}", file=sys.stderr)
         return 1
     print(json.dumps(kq, ensure_ascii=False, indent=1, default=str))
     cai = kq.get("cai_dat") or {}

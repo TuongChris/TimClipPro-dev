@@ -79,12 +79,14 @@ def test_nang_cap_giu_last_good_va_dung_lai_runtime(mt):
 
 # ---------------------------------------------------------------- chính sách + xác thực
 
-def test_chu_ky_khoa_la_bi_tu_choi_va_cach_ly(mt):
+def test_chu_ky_khoa_la_bi_tu_choi_khong_cai_khong_cach_ly(mt):
+    # Rà soát M3+M4 (P3-3): chữ ký sai chỉ BỎ QUA — không cách ly theo số phiên bản (thư mục chép dở / bản
+    # đang tải lên sẽ chặn vĩnh viễn bản đúng). Xem test_managed_update_ra_soat.py.
     phat_hanh(mt["nguon"], "1.0.0", mt["khoa"], ky_bang=KhoaThu())
     cn = mt["tao"]()
     kq = cn.chuan_bi()
-    assert kq.trang_thai == mu.KHONG_CO
-    assert "1.0.0" in cn.cach_ly() and "KHÔNG tin cậy" in cn.cach_ly()["1.0.0"]["ly_do"]
+    assert kq.trang_thai == mu.KHONG_CO and "KHÔNG tin cậy" in " ".join(kq.chi_tiet)
+    assert "1.0.0" not in cn.cach_ly()
     assert not os.path.exists(mt["cd"].release_dir("1.0.0")) and _hien(mt) is None
 
 
@@ -92,8 +94,9 @@ def test_manifest_bi_sua_sau_khi_ky_bi_tu_choi(mt):
     phat_hanh(mt["nguon"], "1.0.0", mt["khoa"],
               sua_sau_ky=lambda raw: raw.replace(b'"lich_su": 3', b'"lich_su": 4'))
     cn = mt["tao"]()
-    assert cn.chuan_bi().trang_thai == mu.KHONG_CO
-    assert "không hợp lệ" in cn.cach_ly()["1.0.0"]["ly_do"].lower()
+    kq = cn.chuan_bi()
+    assert kq.trang_thai == mu.KHONG_CO and "không hợp lệ" in " ".join(kq.chi_tiet).lower()
+    assert not os.path.exists(mt["cd"].release_dir("1.0.0"))
 
 
 @pytest.mark.parametrize("kw", [dict(draft=True), dict(prerelease=True), dict(tag="v1.0.0"),
@@ -321,7 +324,8 @@ def test_migration_chua_tu_dong_an_toan_cho_duyet(mt):
     phat_hanh(mt["nguon"], "1.1.0", mt["khoa"],
               sua_manifest=dict(du_lieu={"lich_su": 4}, migration={"tu_dong_an_toan": False}))
     cn = mt["tao"]()
-    assert cn.chuan_bi().trang_thai == mu.STAGED
+    # Rà soát M3+M4 (P3-1): cần duyệt thì báo NGAY lúc chuẩn bị — không tải gói, không rút cổng, không sao lưu.
+    assert cn.chuan_bi().trang_thai == mu.WAITING_APPROVAL
     assert cn.ap_dung().trang_thai == mu.WAITING_APPROVAL
     assert _hien(mt) == "1.0.0" and mt["gia"].phien_ban_db() == 3
     assert not [g for g in mt["gia"].goi if g[0] == "di_chuyen"]

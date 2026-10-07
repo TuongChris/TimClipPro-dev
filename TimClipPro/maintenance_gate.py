@@ -45,6 +45,12 @@ class DangBaoTri(DangChayRoi):
     báo đúng mà không phải sửa từng nơi. Thông báo tiếng Việt."""
 
 
+class BanCu(DangBaoTri):
+    """Tiến trình này chạy mã của release ĐÃ BỊ THAY (con trỏ ``current`` sang bản khác, hoặc con trỏ hỏng).
+    Khác «đang rút cổng» (tạm thời): bản cũ không bao giờ nhận việc mới nữa — việc nền nên NHƯỜNG tài nguyên
+    (vd. quyền người gửi Sheets) cho bản đang kích hoạt."""
+
+
 class LoiCong(RuntimeError):
     """Không vào được mutex của cổng trong thời gian chờ (bất thường — mutex chỉ giữ vài mili-giây)."""
 
@@ -289,8 +295,15 @@ class CongBaoTri:
                                  "việc mới; việc đang chạy vẫn chạy tiếp. Thử lại sau ít phút.")
             ly_do = self.kiem_them() if self.kiem_them is not None else ""
             if ly_do:
-                raise DangBaoTri(ly_do)
+                raise BanCu(ly_do)
             return LeaseViec(self._tao_lease(ten))
+
+    def ly_do_ban_cu(self) -> str:
+        """Lý do tiến trình này là bản cũ (rỗng nếu không) — kiểm nhanh, không qua mutex, không ghi gì."""
+        try:
+            return self.kiem_them() if self.kiem_them is not None else ""
+        except Exception:  # noqa: BLE001 — kiểm phụ không được làm hỏng người gọi
+            return ""
 
     @contextlib.contextmanager
     def viec(self, ten: str):

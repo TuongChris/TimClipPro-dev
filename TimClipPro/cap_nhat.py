@@ -116,16 +116,27 @@ def cay_lam_viec_sach(repo: str) -> tuple:
     return True, ""
 
 
+_TAG_V = re.compile(r"^v(\d+(?:\.\d+)*)$")
+
+
 def ban_hien_tai(repo: str) -> str:
-    """Tên tag đang dùng; không ở đúng tag nào thì trả mã commit ngắn."""
-    ok, ra = _git(["describe", "--tags", "--exact-match"], repo)
-    if ok and ra:
+    """Tag ``v<số>`` đang đứng; không ở đúng tag ``v<số>`` nào thì trả mã commit ngắn.
+
+    CHỈ xét ``v<số>``: commit có thể mang thêm tag ``stable-…`` của kênh managed (``gh release create`` tạo tag
+    NHẸ) — ``git describe`` khi đó trả tag xếp trước theo tên (``stable-…``), so tên với ``v…`` sẽ luôn khác và
+    updater «cập nhật» lặp mỗi lần chạy (rà soát M3+M4, P2-G)."""
+    ok, ra = _git(["describe", "--tags", "--exact-match", "--match", "v[0-9]*"], repo)
+    if ok and ra and _TAG_V.match(ra):
         return ra
     ok, ra = _git(["rev-parse", "--short", "HEAD"], repo)
     return ra if ok else "(không rõ)"
 
 
-_TAG_V = re.compile(r"^v(\d+(?:\.\d+)*)$")
+def _cung_commit(repo: str, a: str, b: str) -> bool:
+    """``a`` và ``b`` trỏ CÙNG một commit (so mã commit, không so tên)."""
+    ok_a, ra_a = _git(["rev-parse", f"{a}^{{commit}}"], repo)
+    ok_b, ra_b = _git(["rev-parse", f"{b}^{{commit}}"], repo)
+    return ok_a and ok_b and bool(ra_a) and ra_a == ra_b
 
 
 def ban_moi_nhat(repo: str) -> str:
@@ -220,8 +231,8 @@ def cap_nhat(goc: str = GOC, ban_muon: str = "", chi_kiem_tra: bool = False) -> 
         return kq.bao("Trên GitHub chưa có tag phiên bản nào — bỏ qua.")
     kq.ban_moi = dich
 
-    if dich == kq.ban_cu:
-        return kq.bao(f"Đang dùng bản mới nhất: {kq.ban_cu}.")
+    if dich == kq.ban_cu or _cung_commit(repo, "HEAD", dich):
+        return kq.bao(f"Đang dùng bản mới nhất: {dich}.")
 
     # `--ban` là yêu cầu tường minh của người dùng (thường để LÙI bản) nên được phép
     # đi ngược; còn cập nhật tự động thì tuyệt đối chỉ tiến, không lùi.

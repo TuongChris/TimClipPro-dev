@@ -13,7 +13,16 @@ from datetime import datetime
 
 import streamlit as st
 
+import maintenance_gate
 import managed_update as mu
+
+
+def canh_bao_ban_cu() -> None:
+    """Cảnh báo NỔI ở đầu trang khi tiến trình app này chạy bản ĐÃ BỊ THAY (bản mới đã kích hoạt): không nhận
+    việc mới, đã nhường việc gửi Sheets cho bản mới — người dùng cần đóng và mở lại bằng launcher."""
+    ly_do = maintenance_gate.ly_do_ban_cu()
+    if ly_do:
+        st.warning("⚠️ " + ly_do)
 
 
 def _doc(path: str):

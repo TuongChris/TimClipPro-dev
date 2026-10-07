@@ -331,11 +331,13 @@ def _main():
             ap.error("Lệnh vameta cần --kho trỏ tới thư mục kho clip gốc.")
         # Lệnh này cố tình KHÔNG dựng Engine (xem test_cli_watch), nhưng vẫn gọi
         # mạng một lượt mỗi video nên vẫn cần cookie và nhịp tải đã cấu hình.
-        cs_meta = ChannelSync(
-            a.kho,
-            cau_hinh_mang=CauHinhMang.tu_file_cau_hinh(thu_muc_data_mac_dinh()),
-        )
-        ket_qua = cs_meta.va_metadata(in_tien_do)
+        # Gọi mạng + ghi metadata của kho: là MỘT việc — vào cổng bảo trì (không chạy giữa lúc cập nhật).
+        with maintenance_gate.CongBaoTri(thu_muc_data_mac_dinh()).viec("vá metadata kho (dòng lệnh)"):
+            cs_meta = ChannelSync(
+                a.kho,
+                cau_hinh_mang=CauHinhMang.tu_file_cau_hinh(thu_muc_data_mac_dinh()),
+            )
+            ket_qua = cs_meta.va_metadata(in_tien_do)
         print(
             f"\nXONG: đã vá {ket_qua['da_va']}/{ket_qua['tong']} mục metadata, "
             f"bỏ qua {ket_qua['bo_qua']} mục đã đủ, "
@@ -367,38 +369,40 @@ def _main():
         return
 
     if a.lenh == "dondep":
-        ket_qua = don_dep.don_kho_dem(
-            eng.dl_dir,
-            max_gb=eng.config.dem_max_gb,
-            max_ngay=eng.config.dem_max_ngay,
-            thuc_hien=not a.xem_truoc,
-        )
-        hanh_dong = "Sẽ xóa" if a.xem_truoc else "Đã xóa"
-        print(
-            f"Kho đệm: {ket_qua['tong_file']} file, "
-            f"{ket_qua['tong_gb']:.3f} GB.\n"
-            f"{hanh_dong}: {ket_qua['xoa_file']} file, "
-            f"{ket_qua['xoa_gb']:.3f} GB."
-        )
-        # Thư mục job quét mồ côi: quét xong bình thường là engine tự xoá, nên còn
-        # sót nghĩa là có lượt bị kill/crash. Mỗi thư mục giữ chunk WAV đã giải mã,
-        # đo thật 246 MB đến 3,2 GB một cái — không dọn thì đầy ổ lúc nào không hay.
-        job = don_dep.don_job_quet(
-            os.path.join(eng.data_dir, "scan_jobs"),
-            max_ngay=eng.config.dem_max_ngay,
-            thuc_hien=not a.xem_truoc,
-        )
-        print(
-            f"Thư mục job quét: {job['tong_job']} thư mục, "
-            f"{job['tong_gb']:.3f} GB.\n"
-            f"{hanh_dong}: {job['xoa_job']} thư mục, {job['xoa_gb']:.3f} GB."
-        )
-        if job["bo_qua_dang_chay"]:
-            print(f"Giữ lại {job['bo_qua_dang_chay']} thư mục còn mới "
-                  "(có thể đang có lượt quét chạy).")
-        loi = ket_qua["loi"] + job["loi"]
-        if loi:
-            print("Lỗi:", *loi, sep="\n  - ")
+        # Xoá đệm + thư mục job quét mồ côi: là MỘT việc — vào cổng bảo trì.
+        with maintenance_gate.vao_cong_cua(eng, "dọn đệm (dòng lệnh)"):
+            ket_qua = don_dep.don_kho_dem(
+                eng.dl_dir,
+                max_gb=eng.config.dem_max_gb,
+                max_ngay=eng.config.dem_max_ngay,
+                thuc_hien=not a.xem_truoc,
+            )
+            hanh_dong = "Sẽ xóa" if a.xem_truoc else "Đã xóa"
+            print(
+                f"Kho đệm: {ket_qua['tong_file']} file, "
+                f"{ket_qua['tong_gb']:.3f} GB.\n"
+                f"{hanh_dong}: {ket_qua['xoa_file']} file, "
+                f"{ket_qua['xoa_gb']:.3f} GB."
+            )
+            # Thư mục job quét mồ côi: quét xong bình thường là engine tự xoá, nên còn
+            # sót nghĩa là có lượt bị kill/crash. Mỗi thư mục giữ chunk WAV đã giải mã,
+            # đo thật 246 MB đến 3,2 GB một cái — không dọn thì đầy ổ lúc nào không hay.
+            job = don_dep.don_job_quet(
+                os.path.join(eng.data_dir, "scan_jobs"),
+                max_ngay=eng.config.dem_max_ngay,
+                thuc_hien=not a.xem_truoc,
+            )
+            print(
+                f"Thư mục job quét: {job['tong_job']} thư mục, "
+                f"{job['tong_gb']:.3f} GB.\n"
+                f"{hanh_dong}: {job['xoa_job']} thư mục, {job['xoa_gb']:.3f} GB."
+            )
+            if job["bo_qua_dang_chay"]:
+                print(f"Giữ lại {job['bo_qua_dang_chay']} thư mục còn mới "
+                      "(có thể đang có lượt quét chạy).")
+            loi = ket_qua["loi"] + job["loi"]
+            if loi:
+                print("Lỗi:", *loi, sep="\n  - ")
         return
 
     if a.lenh == "watch":

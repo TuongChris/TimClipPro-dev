@@ -51,11 +51,11 @@ def test_bootstrap_dung_cai_dat_rieng_va_cai_ban_dau(bo, monkeypatch):
     for f in bs.FILE_LAUNCHER + ("launcher.json", "trusted_keys.json"):
         assert os.path.isfile(os.path.join(goc, "launcher", f)), f
     cfg = json.load(open(os.path.join(goc, "launcher", "launcher.json"), encoding="utf-8"))
-    assert cfg["state_root"] == state and cfg["tu_ap_dung"] is False
+    assert cfg["state_root"] == state and "tu_ap_dung" not in cfg
     dd = json.load(open(os.path.join(state, "installation.json"), encoding="utf-8"))
     assert dd["installation_id"] == kq["installation_id"] and len(dd["installation_id"]) == 32
     bat = open(os.path.join(goc, "TimClipPro.bat"), encoding="ascii").read()
-    assert f'"{sys.executable}" "{os.path.join(goc, "launcher", "launcher.py")}" app' in bat
+    assert f'"{sys.executable}" -E -s "%~dp0launcher\\launcher.py" app' in bat
     assert "cap_nhat.py" not in bat and "git" not in bat.lower()
     for p in kq["lich"]:
         goc_xml = ET.fromstring(open(p, encoding="utf-16").read().split("?>", 1)[1])
@@ -106,7 +106,7 @@ def test_moi_truong_launcher_chi_cai_lock_co_bam(tmp_path):
     py = bs.tao_moi_truong_launcher(str(tmp_path / "goc"), sys.executable, str(kit),
                                     chay=lambda args, **k: goi.append(args))
     assert py.endswith(os.path.join("launcher", "env", "Scripts", "python.exe"))
-    assert goi[0][1:3] == ["-m", "venv"] and "--require-hashes" in goi[1]
+    assert goi[0][1:5] == ["-P", "-m", "venv", "--clear"] and "--require-hashes" in goi[1]
 
 
 def test_launcher_da_chep_chay_doc_lap_chi_voi_file_cua_no(bo):

@@ -4,7 +4,8 @@
     release_tool.py khoa-thu --out <thư mục>                  cặp khoá Ed25519 THỬ (vòng dev — không phát hành thật)
     release_tool.py lock --python <python.exe đã nghiệm thu> --out <file> [--wheelhouse <thư mục wheel>]
     release_tool.py build --commit <sha> --phien-ban X.Y.Z --lock <file> --out <thư mục nguồn>
-    release_tool.py sign --dir <thư mục tag> --khoa <khoá riêng PEM>
+                          [--tu-dong-an-toan --tuong-thich-nguoc] [--wheel-kem <file.whl> ...]
+    release_tool.py sign --dir <thư mục tag> --khoa <khoá riêng PEM> [--hoi-mat-khau]
     release_tool.py verify --dir <thư mục tag> --tin-cay <trusted_keys.json>
     release_tool.py publish --dir <thư mục tag> --repo <owner/name>   CHỈ IN lệnh + checklist (không có chế độ chạy thật)
 
@@ -44,8 +45,10 @@ MAU_BI_MAT = (
     ("token OAuth Google", re.compile(rb"ya29\.[0-9A-Za-z_\-]{20,}")),
     ("token GitHub", re.compile(rb"gh[pousr]_[0-9A-Za-z]{30,}")),
     ("cookie phiên YouTube", re.compile(rb"__Secure-[0-9A-Z]*PSID[A-Z]*\s*[=\t]\s*[^\s;]{10,}")),
-    ("khoá riêng PEM", re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----")),
-    ("service account Google", re.compile(rb'"type"\s*:\s*"service' + rb'_account"')),
+    ("khoá riêng PEM", re.compile(rb"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")),
+    ("service account Google", re.compile(rb'["\']type["\']\s*:\s*["\']service' + rb'_account["\']')),
+    ("client secret OAuth Google", re.compile(rb"GOCSPX-[0-9A-Za-z_\-]{20,}")),
+    ("refresh token Google", re.compile(rb"1//0[0-9A-Za-z_\-]{30,}")),
     ("link Google Sheet thật", re.compile(rb"docs\.google\.com/spreadsheets/d/[A-Za-z0-9_\-]{20,}")),
 )
 _BO_QUA_LOCK = {"pip", "setuptools", "wheel"}
@@ -81,7 +84,7 @@ def chon_file_phat_hanh(files: dict) -> dict:
     đường dẫn + loại, không nêu nội dung)."""
     import dong_goi
 
-    chon, loi = {}, []
+    chon, loi, bo_py = {}, [], []
     for p, data in sorted(files.items()):
         if not p.startswith(THU_MUC_MA + "/"):
             continue
@@ -91,6 +94,8 @@ def chon_file_phat_hanh(files: dict) -> dict:
                 or rel in LOAI_KHOI_RELEASE):
             continue
         if not dong_goi.nen_lay(rel):
+            if ten.lower().endswith(".py"):
+                bo_py.append(p)
             continue
         for loai, mau in MAU_BI_MAT:
             if mau.search(data):
@@ -105,6 +110,9 @@ def chon_file_phat_hanh(files: dict) -> dict:
                 chon[p] = data
     if loi:
         raise LoiPhatHanh("Commit chứa nội dung nhạy cảm — không phát hành: " + "; ".join(loi))
+    if bo_py:
+        # Gói thiếu module thì PC2 chỉ phát hiện ở health check (rồi cách ly) — chặn ngay lúc build.
+        raise LoiPhatHanh("Luật đóng gói loại file mã Python — gói sẽ thiếu module: " + ", ".join(bo_py))
     if f"{THU_MUC_MA}/app.py" not in chon or f"{THU_MUC_MA}/engine.py" not in chon:
         raise LoiPhatHanh("Commit thiếu mã lõi (app.py/engine.py).")
     return chon
@@ -121,6 +129,24 @@ def _zip_tat_dinh(files: dict) -> bytes:
     return buf.getvalue()
 
 
+_TEN_WHEEL = re.compile(r"[A-Za-z0-9_.]+-[A-Za-z0-9_.+!]+(?:-[0-9][A-Za-z0-9_.]*)?"
+                        r"-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+\.whl")
+
+
+def _wheel_kem(ds: tuple, lock: bytes) -> dict:
+    kq = {}
+    for w in ds or ():
+        ten = os.path.basename(w)
+        if not _TEN_WHEEL.fullmatch(ten):
+            raise LoiPhatHanh(f"Tên wheel kèm không hợp lệ: {ten}")
+        with open(w, "rb") as f:
+            du = f.read()
+        if f"--hash=sha256:{hashlib.sha256(du).hexdigest()}".encode() not in lock:
+            raise LoiPhatHanh(f"Lock không có băm của wheel kèm {ten} — PC2 sẽ từ chối cài.")
+        kq[f"{THU_MUC_MA}/wheels/{ten}"] = du
+    return kq
+
+
 def _phien_ban_lich_su(files: dict) -> int:
     m = re.search(rb"^PHIEN_BAN\s*=\s*(\d+)", files.get(f"{THU_MUC_MA}/lich_su.py", b""), re.M)
     if not m:
@@ -129,26 +155,35 @@ def _phien_ban_lich_su(files: dict) -> int:
 
 
 def build(repo: str, commit: str, phien_ban: str, lock: bytes, out: str, *, python: str = "3.12",
-          tuong_thich_nguoc: bool = True, tu_dong_an_toan: bool = True,
-          tao_luc: str = "") -> str:
+          tuong_thich_nguoc: bool = False, tu_dong_an_toan: bool = False,
+          tao_luc: str = "", wheel_kem=()) -> str:
     """Dựng ``<out>/stable-X.Y.Z/{release.json, manifest.json, TimClipPro-X.Y.Z-win_amd64.zip}`` từ ĐÚNG
     cây git của ``commit`` (không bao giờ từ cây làm việc)."""
     files, commit_day_du, tree = thu_thap_tu_git(repo, commit)
     return dong_goi_tu_files(files, commit_day_du, tree, phien_ban, lock, out, python=python,
                              tuong_thich_nguoc=tuong_thich_nguoc, tu_dong_an_toan=tu_dong_an_toan,
-                             tao_luc=tao_luc)
+                             tao_luc=tao_luc, wheel_kem=wheel_kem)
 
 
 def dong_goi_tu_files(files: dict, commit_day_du: str, tree: str, phien_ban: str, lock: bytes, out: str,
-                      *, python: str = "3.12", tuong_thich_nguoc: bool = True,
-                      tu_dong_an_toan: bool = True, tao_luc: str = "") -> str:
+                      *, python: str = "3.12", tuong_thich_nguoc: bool = False,
+                      tu_dong_an_toan: bool = False, tao_luc: str = "", wheel_kem=()) -> str:
     """Lõi đóng gói (lọc + quét bí mật + ZIP tất định + manifest). ``build`` cấp file từ object git;
-    kiểm thử mô phỏng hai máy cấp file từ mã đang test (commit/tree giả) — cùng một đường đóng gói."""
+    kiểm thử mô phỏng hai máy cấp file từ mã đang test (commit/tree giả) — cùng một đường đóng gói.
+
+    Cờ migration MẶC ĐỊNH TẮT: «tự động an toàn» + «tương thích ngược» là QUYẾT ĐỊNH của người phát hành
+    cho bản có nâng lịch sử (PC2 có lịch sử cũ hơn sẽ chờ duyệt nếu không khai); máy mới chưa có lịch sử
+    không cần cờ. ``wheel_kem``: wheel của gói KHÔNG có wheel trên PyPI (vd. docopt 0.6.2 chỉ có sdist) —
+    đi kèm release ở ``TimClipPro/wheels/``, băm của ĐÚNG file phải có trong lock."""
     mu.phan_tich_phien_ban(phien_ban)
+    for loai, mau in MAU_BI_MAT:
+        if mau.search(lock):
+            raise LoiPhatHanh(f"Lock chứa nội dung nhạy cảm ({loai}) — không phát hành.")
     if b"--hash=sha256:" not in lock:
         print("[CẢNH BÁO] Lock chưa có băm gói — PC2 sẽ TỪ CHỐI tạo runtime từ bản này (chỉ dùng để thử).",
               file=sys.stderr)
     chon = chon_file_phat_hanh(files)
+    chon.update(_wheel_kem(wheel_kem, lock))
     lich_su = _phien_ban_lich_su(chon)
     chon[f"{THU_MUC_MA}/requirements-lock.txt"] = lock
     chon[mu.TEN_DAU_RELEASE] = json.dumps(
@@ -201,12 +236,20 @@ def tao_khoa_thu(out: str) -> tuple:
     return p_rieng, p_tin
 
 
-def sign(thu_muc_tag: str, khoa_rieng_pem: str) -> str:
+def sign(thu_muc_tag: str, khoa_rieng_pem: str, *, mat_khau: bytes = None) -> str:
+    """Ký manifest. Khoá phát hành THẬT nên được mã hoá — ``mat_khau`` (CLI: ``--hoi-mat-khau``)."""
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
     with open(khoa_rieng_pem, "rb") as f:
-        k = serialization.load_pem_private_key(f.read(), password=None)
+        du = f.read()
+    try:
+        k = serialization.load_pem_private_key(du, password=mat_khau)
+    except TypeError:
+        raise LoiPhatHanh("Khoá ký được mã hoá — chạy lại với --hoi-mat-khau." if mat_khau is None else
+                          "Khoá ký KHÔNG mã hoá — bỏ --hoi-mat-khau.") from None
+    except ValueError:
+        raise LoiPhatHanh("Không mở được khoá ký (sai mật khẩu hoặc file hỏng).") from None
     if not isinstance(k, Ed25519PrivateKey):
         raise LoiPhatHanh("Khoá ký phải là Ed25519.")
     with open(os.path.join(thu_muc_tag, mu.TEN_MANIFEST), "rb") as f:
@@ -302,9 +345,17 @@ def main(argv=None) -> int:
     a.add_argument("--phien-ban", required=True)
     a.add_argument("--lock", required=True)
     a.add_argument("--out", required=True)
+    a.add_argument("--tu-dong-an-toan", action="store_true",
+                   help="bản này nâng lịch sử bằng migration ĐÃ ĐÁNH GIÁ tự động an toàn (cần kèm "
+                        "--tuong-thich-nguoc)")
+    a.add_argument("--tuong-thich-nguoc", action="store_true",
+                   help="bản TRƯỚC chạy được trên lịch sử đã nâng (điều kiện để quay lại không khôi phục DB)")
+    a.add_argument("--wheel-kem", action="append", default=[],
+                   help="wheel kèm release cho gói không có wheel trên PyPI (băm phải có trong lock)")
     a = sub.add_parser("sign")
     a.add_argument("--dir", required=True)
     a.add_argument("--khoa", required=True)
+    a.add_argument("--hoi-mat-khau", action="store_true")
     a = sub.add_parser("verify")
     a.add_argument("--dir", required=True)
     a.add_argument("--tin-cay", required=True)
@@ -320,14 +371,23 @@ def main(argv=None) -> int:
                 f.write(tao_lock(ns.python, wheelhouse=ns.wheelhouse))
         elif ns.lenh == "build":
             with open(ns.lock, "rb") as f:
-                print(build(ns.repo, ns.commit, ns.phien_ban, f.read(), ns.out))
+                print(build(ns.repo, ns.commit, ns.phien_ban, f.read(), ns.out,
+                            tuong_thich_nguoc=ns.tuong_thich_nguoc, tu_dong_an_toan=ns.tu_dong_an_toan,
+                            wheel_kem=tuple(ns.wheel_kem)))
         elif ns.lenh == "sign":
-            print(sign(ns.dir, ns.khoa))
+            mk = None
+            if ns.hoi_mat_khau:
+                import getpass
+
+                mk = getpass.getpass("Mật khẩu khoá ký: ").encode("utf-8")
+            print(sign(ns.dir, ns.khoa, mat_khau=mk))
         elif ns.lenh == "verify":
             m = verify(ns.dir, ns.tin_cay)
             print(f"ĐẠT: {m.phien_ban} commit {m.commit} gói {m.goi_sha256}")
         else:
-            print("CHƯA PHÁT HÀNH. Khi chủ dự án DUYỆT, lệnh sẽ là:\n  " + " ".join(lenh_publish(ns.dir, ns.repo)))
+            # Trích dẫn kiểu Windows: dán nguyên văn vào Command Prompt/PowerShell vẫn đúng từng đối số.
+            print("CHƯA PHÁT HÀNH. Khi chủ dự án DUYỆT, lệnh sẽ là:\n  "
+                  + subprocess.list2cmdline(lenh_publish(ns.dir, ns.repo)))
             print("Checklist: (1) duyệt bằng văn bản; (2) tag chưa tồn tại — KHÔNG bao giờ gắn lại tag cũ; "
                   "(3) không draft, không pre-release; (4) verify lại bằng trusted_keys.json của PC2.")
     except (LoiPhatHanh, mu.LoiCapNhat, OSError, subprocess.CalledProcessError) as e:

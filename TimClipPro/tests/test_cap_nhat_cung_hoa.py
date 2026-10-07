@@ -39,6 +39,42 @@ def _cam_git(*a, **k):
     raise AssertionError("updater cũ không được chạy git trong trường hợp này")
 
 
+def _repo_that(tmp_path):
+    """Repo git THẬT, cục bộ (không remote, không mạng): ``Tool_Quet/TimClipPro/app.py``, một commit."""
+    import subprocess
+
+    goc = tmp_path / "Tool_Quet" / "TimClipPro"
+    goc.mkdir(parents=True)
+    (goc / "app.py").write_text("# app\n", encoding="utf-8")
+    repo = str(tmp_path / "Tool_Quet")
+    env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t.invalid",
+           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t.invalid"}
+
+    def git(*a):
+        subprocess.run(["git", "-C", repo, *a], check=True, env=env, capture_output=True)
+
+    git("init", "-q")
+    git("add", "-A")
+    git("commit", "-q", "-m", "ban dau")
+    return goc, git
+
+
+def test_cung_commit_co_ca_tag_v_va_stable_khong_cap_nhat_gia(tmp_path, monkeypatch):
+    """Rà soát M3+M4 (P2-G): commit mang CẢ ``v2.7`` và ``stable-1.0.0`` (đều tag nhẹ — ``gh release create``
+    tạo tag nhẹ) → ``git describe`` trả ``stable-1.0.0`` → so TÊN thấy khác ``v2.7`` → «cập nhật» lặp mỗi lần
+    chạy (checkout không đổi gì, mã 10: ChayMayPhu.bat bỏ mọi lượt Watch). Nay so theo tag ``v<số>`` + commit."""
+    goc, git = _repo_that(tmp_path)
+    git("tag", "v2.7")
+    git("tag", "stable-1.0.0")
+    monkeypatch.setattr(cap_nhat, "lay_tag_moi", lambda repo: (True, ""))      # không mạng
+    for bien in ("TIMCLIP_DEV_MODE", "TIMCLIP_RUNTIME_MODE", "TIMCLIP_DATA_DIR"):
+        monkeypatch.delenv(bien, raising=False)
+    assert cap_nhat.ban_hien_tai(os.path.dirname(str(goc))) == "v2.7"
+    kq = cap_nhat.cap_nhat(goc=str(goc))
+    assert not kq.ok and cap_nhat.ma_thoat(kq) == 0
+    assert any("mới nhất" in x for x in kq.thong_bao), kq.thong_bao
+
+
 def test_may_dev_co_dau_dev_mode_khong_tu_cap_nhat(tmp_path, monkeypatch):
     (tmp_path / "data").mkdir()
     (tmp_path / "data" / "dev_mode").write_text("", encoding="utf-8")

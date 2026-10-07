@@ -180,7 +180,9 @@ def test_cli_watch_dang_doc_tat_bao_cao_ngang(monkeypatch):
     assert dang_ngang == [False]
 
 
-def test_cli_vameta_goi_dung_thu_muc_va_in_tom_tat(monkeypatch, capsys):
+def test_cli_vameta_goi_dung_thu_muc_va_in_tom_tat(tmp_path, monkeypatch, capsys):
+    # vameta vào cổng bảo trì của thư mục dữ liệu mặc định — trỏ sang thư mục TẠM, không ghi data/ cạnh mã.
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setattr(
         "sys.argv",
         ["cli.py", "vameta", "--kho", "D:/KhoClipGoc"],

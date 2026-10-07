@@ -231,3 +231,25 @@ ký thử, verify như PC2, publish CHỈ in lệnh, lock từ runtime đã nghi
 đích trên UI (khoá, link/tab), `requirements-lock.txt` UTF-8 tạo lại từ runtime đã nghiệm thu (thay bản UTF-16
 lệch — H11), `launcher-lock.txt`. Mô phỏng HAI cài đặt end-to-end (`tests/test_hai_may_gia_lap.py`, -m slow).
 Hướng dẫn: `docs/HUONG_DAN_PC2.md`; pilot: `docs/KE_HOACH_PILOT_PC2.md`.
+
+**M5 — sửa theo rà soát đối nghịch M3+M4** (0 P1 · 7 P2 · 16 P3, mọi phát hiện đã kiểm trên mã; mỗi sửa có
+test ĐỎ trước — `tests/test_*_ra_soat.py`, `tests/test_outbox_ban_cu.py`):
+
+| # | Phát hiện | Sửa |
+|---|---|---|
+| A | Quay lại về `last_good` có thể là CHÍNH bản mới (last_good ghi trước ACTIVE; `con_tro_cu` không dùng) | Quay về `con_tro_cu`, không bao giờ về bản lỗi; ACTIVE trước last_good, khôi phục ghi bù |
+| B | Timeout/OSError/CalledProcessError/sqlite3.Error thoát khỏi updater/launcher → app không mở được | Health không chạy được = không đạt; lỗi lạ → LOI/LoiCapNhat; lock chưa băm + migration lỗi + runtime lỗi lặp → cách ly |
+| C | Người gửi Sheets của app CŨ giữ quyền mãi sau khi bản mới kích hoạt | `BanCu(DangBaoTri)`: nhường quyền + dừng hẳn; cảnh báo nổi ở app cũ |
+| D | Cờ «tự động an toàn» luôn bật mặc định; máy mới bị coi là migration | Cờ mặc định TẮT + cờ CLI; DB chưa có = tạo mới; cần duyệt báo ngay lúc prepare |
+| E | Bootstrap dở dang không làm lại được (`.bat` ASCII với đường dẫn có dấu; Python gốc thiếu cryptography) | Hai giai đoạn (Python gốc → môi trường launcher → chạy lại); `.bat` ASCII `%~dp0`; định danh + launcher.json ghi cuối, làm tiếp được |
+| F | docopt 0.6.2 không có wheel → PC2 `--only-binary` không cài được | Wheel kèm release (`--wheel-kem`, băm trong lock) + `--find-links` |
+| G | Updater cũ: commit có cả `v…` nhẹ và `stable-…` → «cập nhật» lặp (mã 10) | So `v<số>` + so commit; quy tắc gắn tag cho PC1 production (KE_HOACH_PILOT) |
+
+P3 đã sửa: kiểm chính sách trước sao lưu/rút cổng; hoãn bấm trong lúc chờ rảnh; chữ ký sai/thiếu gói không
+cách ly + `update bo-cach-ly`; ghi JSON thử lại khi bị khoá đọc; doctor ⚠️ cho lượt lỗi/dở dang + so con trỏ
+với manifest; Ctrl+C không giết app; health theo dòng đánh dấu + cwd ngoài release; bỏ biến PYTHON* nguy
+hiểm, `-P`; `vameta`/`dondep` vào cổng; release_tool quét lock + mẫu bí mật mới + chặn `.py` bị loại + khoá ký
+có mật khẩu; bootstrap từ chối thư mục trong bản clone git / có dữ liệu cập nhật cũ; không xoá runtime đang
+dùng; `don_ban_cu` đọc con trỏ nghiêm ngặt; fsync file giải nén; GitHub kiểm host từng bước chuyển hướng;
+app vẫn mở khi bộ cập nhật không dựng được. Còn lại (giới hạn, `docs/MANAGED_UPDATE.md` §8): chưa có đường
+nâng cấp launcher, chưa có lệnh duyệt WAITING_APPROVAL, runtime pip không kiểm lại, `data/dev_mode` là opt-in.
