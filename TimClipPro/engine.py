@@ -51,6 +51,8 @@ import truy_cap_youtube
 import ytdlp_chung
 import dossier
 import lich_su
+import runtime_paths
+import sheet_destinations
 from chan_doan_quet import (
     AUDFPRINT_KHONG_RA_MATCH,
     ChanDoanQuet,
@@ -946,16 +948,25 @@ def thu_muc_data_mac_dinh(root: Optional[str] = None) -> str:
     tiến trình. Giữ đúng một công thức đường dẫn cho cả hai đường, khỏi trôi dạt.
     """
     goc = os.path.abspath(root or os.path.dirname(os.path.abspath(__file__)))
-    return os.path.abspath(os.environ.get("TIMCLIP_DATA_DIR")
-                           or os.path.join(goc, "data"))
+    return runtime_paths.resolve(ma_nguon=goc).data_dir
 
 
 class Engine:
     """Lõi xử lý. Không phụ thuộc vào bất kỳ giao diện nào."""
 
     def __init__(self, root: Optional[str] = None, config: Optional[Config] = None,
-                 data_dir: Optional[str] = None, out_dir: Optional[str] = None):
+                 data_dir: Optional[str] = None, out_dir: Optional[str] = None,
+                 runtime: Optional["runtime_paths.RuntimePaths"] = None):
         self.root = os.path.abspath(root or os.path.dirname(os.path.abspath(__file__)))
+        # Đường dẫn trạng thái đi qua MỘT bộ phân giải (docs/MANAGED_RUNTIME_DESIGN.md §4) — phân
+        # giải TRƯỚC mọi thao tác ghi: cấu hình managed sai thì dừng mà không tạo gì ở chỗ đoán.
+        self.runtime = runtime or runtime_paths.resolve(ma_nguon=self.root)
+        if self.runtime.che_do == runtime_paths.MANAGED:
+            for ten, gia_tri, mong in (("data_dir", data_dir, self.runtime.data_dir),
+                                       ("out_dir", out_dir, self.runtime.out_dir)):
+                if gia_tri and os.path.normcase(os.path.abspath(gia_tri)) != os.path.normcase(mong):
+                    raise runtime_paths.LoiRuntime(
+                        f"{ten} mâu thuẫn với state root ở chế độ managed.")
         self.config = config or Config()
         self.canh_bao_khoi_dong: list = []
         self.canh_bao_gop: list = []
@@ -980,13 +991,13 @@ class Engine:
         self.cau_hinh_da_luu: dict = {}
 
         self.bin_dir = os.path.join(self.root, "bin")
-        self.data_dir = os.path.abspath(data_dir or os.path.join(self.root, "data"))
+        self.data_dir = os.path.abspath(data_dir or self.runtime.data_dir)
         self.db_file = os.path.join(self.data_dir, "db.pklz")  # sẽ được _init_kho ghi đè
         self.kho_dang_dung = ""
         self.kho_thu_muc = ""
         self.dl_dir = os.path.join(self.data_dir, "downloads")
         self.chunk_dir = os.path.join(self.data_dir, "chunks")
-        self.out_dir = os.path.abspath(out_dir or os.path.join(self.root, "ketqua"))
+        self.out_dir = os.path.abspath(out_dir or self.runtime.out_dir)
         self.sqlite_file = os.path.join(self.data_dir, "lichsu.db")
 
         for d in (self.data_dir, self.dl_dir, self.out_dir):
@@ -1006,6 +1017,9 @@ class Engine:
         self.canh_bao_metadata: list[str] = []
         self._nap_cau_hinh()
         self._init_sqlite()
+        if self.runtime.che_do == runtime_paths.MANAGED:
+            # Lịch sử/outbox phải thuộc ĐÚNG cài đặt này (state root chép từ máy khác → dừng).
+            self.installation_id()
         self._init_kho()
 
     @property
@@ -1501,9 +1515,20 @@ class Engine:
                 kq["phien_ban_cu"], kq["phien_ban"], kq["sao_luu"],
             )
 
+    def installation_id(self) -> str:
+        """Định danh máy gắn với lịch sử này (managed: phải khớp ``installation.json``)."""
+        iid = getattr(self, "_installation_id", "")
+        if not iid:
+            iid = sheet_destinations.dinh_danh_may(
+                self.sqlite_file, mong_doi=getattr(self.runtime, "installation_id", ""))
+            self._installation_id = iid
+        return iid
+
     @contextlib.contextmanager
     def _db(self):
-        con = sqlite3.connect(self.sqlite_file)
+        # 30 s thay vì 5 s mặc định: người gửi Sheets ghi outbox từ luồng khác, Watch ghi từ tiến
+        # trình khác — chờ khoá ngắn còn hơn làm hỏng cả lô quét vì "database is locked".
+        con = sqlite3.connect(self.sqlite_file, timeout=sheet_destinations.THOI_GIAN_CHO_KHOA_S)
         con.row_factory = sqlite3.Row
         try:
             yield con

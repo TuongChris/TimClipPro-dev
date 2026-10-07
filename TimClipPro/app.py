@@ -22,6 +22,8 @@ import bao_cao_v2
 import common_original as nguon_chung
 import danh_sach_video
 import lich_su
+import runtime_paths
+import sheet_destinations
 from cau_hinh import GIA_TRI_GIAO_DIEN_MAC_DINH
 from clip_metadata import configure_metadata_logging
 import truy_cap_youtube
@@ -56,10 +58,16 @@ configure_metadata_logging()
 # =====================================================================
 
 if "eng" not in st.session_state:
-    st.session_state.eng = Engine(
-        data_dir=os.environ.get("TIMCLIP_DATA_DIR") or None,
-        out_dir=os.environ.get("TIMCLIP_OUTPUT_DIR") or None,
-    )
+    try:
+        st.session_state.eng = Engine(
+            data_dir=os.environ.get("TIMCLIP_DATA_DIR") or None,
+            out_dir=os.environ.get("TIMCLIP_OUTPUT_DIR") or None,
+        )
+    except (runtime_paths.LoiRuntime, sheet_destinations.LoiDichGui) as e:
+        # Cấu hình runtime sai (bản managed thiếu state root, lịch sử của máy khác…): dừng rõ
+        # ràng — không đoán thư mục dữ liệu, không tạo DB ở chỗ đoán.
+        st.error(f"Không khởi động được TimClip Pro: {e}")
+        st.stop()
 du_lieu_giao_dien = st.session_state.eng.cau_hinh_da_luu
 for khoa, mac_dinh in GIA_TRI_GIAO_DIEN_MAC_DINH.items():
     if khoa not in st.session_state:

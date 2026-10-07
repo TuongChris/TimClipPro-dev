@@ -9,6 +9,10 @@ PHIÊN BẢN LƯỢC ĐỒ (``PRAGMA user_version``)
 * 2 — thêm BẢNG ``bao_cao_job`` (ảnh chụp báo cáo V2 của từng lần quét, khoá ``job_id``).
   CHỈ THÊM BẢNG: dòng ``jobs``/``matches`` giữ nguyên cột; lần quét cũ không có dòng nào
   trong bảng mới = báo cáo theo luật cũ (docs/REPORT_POLICY_V2.md).
+* 3 — thêm các BẢNG gửi Google Sheets lưu bền (docs/MANAGED_RUNTIME_DESIGN.md §5): định danh máy
+  (``cai_dat_may``), credential binding (``xac_thuc_gui``), hồ sơ đích + revision bất biến
+  (``dich_gui``/``dich_gui_phien_ban``) và outbox (``hang_doi_gui``). CHỈ THÊM BẢNG; bản 6dc3f9d
+  mở DB v3 thấy đủ cột + ``bao_cao_job`` nên không nâng/hạ gì.
 
 Nguyên tắc nâng cấp:
 
@@ -40,7 +44,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-PHIEN_BAN = 2
+PHIEN_BAN = 3
 
 # (tên cột, kiểu) thêm ở phiên bản 1. ``day_du``/``dat_muc_tieu`` để NULL ở dòng cũ:
 # NULL là "không biết", khác hẳn 0 là "biết là chưa trọn".
@@ -79,6 +83,48 @@ _DDL_BAO_CAO = (
         du_lieu TEXT NOT NULL, created_at TEXT)""",
 )
 
+# Phiên bản 3: gửi Google Sheets lưu bền. Cùng FILE với lịch sử để một giao dịch chốt được cả lần
+# quét lẫn ý định gửi của nó; bảng RIÊNG nên `jobs` và mọi `SELECT * FROM jobs` không đổi.
+BANG_GUI = ("cai_dat_may", "xac_thuc_gui", "dich_gui", "dich_gui_phien_ban", "hang_doi_gui")
+_DDL_GUI = (
+    """CREATE TABLE IF NOT EXISTS cai_dat_may(
+        khoa TEXT PRIMARY KEY, gia_tri TEXT NOT NULL)""",
+    # Credential binding: đường dẫn file khoá + tài khoản dịch vụ MONG ĐỢI. Không bao giờ chứa
+    # khoá riêng hay token.
+    """CREATE TABLE IF NOT EXISTS xac_thuc_gui(
+        ref TEXT PRIMARY KEY, duong_dan TEXT NOT NULL, principal TEXT NOT NULL,
+        key_id TEXT NOT NULL DEFAULT '', cho_xoay_khoa INTEGER NOT NULL DEFAULT 1,
+        trang_thai TEXT NOT NULL DEFAULT 'hoat_dong', tao_luc TEXT NOT NULL, sua_luc TEXT NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS dich_gui(
+        id TEXT PRIMARY KEY, workspace TEXT NOT NULL, phien_ban INTEGER NOT NULL,
+        trang_thai TEXT NOT NULL, nguon TEXT NOT NULL DEFAULT 'tay',
+        tao_luc TEXT NOT NULL, sua_luc TEXT NOT NULL)""",
+    # Revision BẤT BIẾN: sửa hồ sơ = thêm dòng mới; việc gửi đã ghim giữ revision cũ.
+    """CREATE TABLE IF NOT EXISTS dich_gui_phien_ban(
+        dich_id TEXT NOT NULL, phien_ban INTEGER NOT NULL, ten TEXT NOT NULL,
+        spreadsheet_id TEXT NOT NULL, worksheet_id INTEGER, worksheet_ten TEXT NOT NULL,
+        schema_id TEXT NOT NULL, xac_thuc_ref TEXT NOT NULL, tao_luc TEXT NOT NULL,
+        PRIMARY KEY(dich_id, phien_ban))""",
+    # Outbox: đích ghim (`dich_json`) + payload đã dựng (`header_json`/`rows_json`) sống trong dòng —
+    # gửi lại không bao giờ dựng lại từ hồ sơ hiện tại hay quét lại.
+    """CREATE TABLE IF NOT EXISTS hang_doi_gui(
+        id TEXT PRIMARY KEY, dedupe_key TEXT NOT NULL UNIQUE,
+        installation_id TEXT NOT NULL, workspace TEXT NOT NULL,
+        job_id INTEGER, lo_id TEXT NOT NULL DEFAULT '', nguon TEXT NOT NULL,
+        dich_id TEXT NOT NULL, dich_phien_ban INTEGER NOT NULL, dich_json TEXT NOT NULL,
+        schema_id TEXT NOT NULL, chinh_sach TEXT NOT NULL DEFAULT '',
+        header_json TEXT, rows_json TEXT, so_dong INTEGER NOT NULL DEFAULT 0,
+        payload_sha256 TEXT NOT NULL DEFAULT '',
+        trang_thai TEXT NOT NULL, so_lan_thu INTEGER NOT NULL DEFAULT 0,
+        thu_lai_sau REAL NOT NULL DEFAULT 0, chu_so_huu TEXT NOT NULL DEFAULT '',
+        claim_token TEXT NOT NULL DEFAULT '', claim_luc REAL, gui_luc REAL,
+        loi TEXT NOT NULL DEFAULT '', bien_nhan TEXT NOT NULL DEFAULT '',
+        da_xoa_job INTEGER NOT NULL DEFAULT 0, tao_luc REAL NOT NULL, sua_luc REAL NOT NULL)""",
+    "CREATE INDEX IF NOT EXISTS idx_hang_doi_trang_thai ON hang_doi_gui(trang_thai, thu_lai_sau)",
+    "CREATE INDEX IF NOT EXISTS idx_hang_doi_job ON hang_doi_gui(job_id)",
+    "CREATE INDEX IF NOT EXISTS idx_hang_doi_dich ON hang_doi_gui(dich_id)",
+)
+
 CHUA_RO = "Chưa rõ (lịch sử cũ — cần rà soát)"
 _LY_DO = {
     "dung_som": "dừng sớm vì đã đủ bằng chứng",
@@ -105,7 +151,12 @@ def _can_nang_cap(con: sqlite3.Connection) -> bool:
         return True
     cot = set(_cot_jobs(con))
     return (not cot or any(ten not in cot for ten, _ in COT_MOI)
-            or not _co_bang(con, BANG_BAO_CAO))
+            or bool(_bang_thieu(con)))
+
+
+def _bang_thieu(con: sqlite3.Connection) -> list:
+    """Bảng của phiên bản 2–3 chưa có (thứ tự cố định)."""
+    return [ten for ten in (BANG_BAO_CAO, *BANG_GUI) if not _co_bang(con, ten)]
 
 
 def _co_du_lieu(con: sqlite3.Connection) -> bool:
@@ -185,7 +236,7 @@ def dam_bao_luoc_do(path: str, *, sao_luu: bool = True, han_cho_s: float = 30.0)
                     con.execute(f"ALTER TABLE jobs ADD COLUMN {ten} {kieu}")
             for lenh in _CHI_MUC:
                 con.execute(lenh)
-            for lenh in _DDL_BAO_CAO:
+            for lenh in (*_DDL_BAO_CAO, *_DDL_GUI):
                 con.execute(lenh)
             # Không bao giờ HẠ phiên bản: DB do bản mới hơn tạo chỉ được bổ sung cột thiếu.
             con.execute(f"PRAGMA user_version = {max(int(cu), PHIEN_BAN)}")
@@ -229,6 +280,9 @@ def thong_ke(path: str) -> dict:
         co_bang_bao_cao = _co_bang(con, BANG_BAO_CAO)
         so_bao_cao = (con.execute(f"SELECT COUNT(*) FROM {BANG_BAO_CAO}").fetchone()[0]
                       if co_bang_bao_cao else 0)
+        bang_thieu = _bang_thieu(con)
+        so_viec_gui = (con.execute("SELECT COUNT(*) FROM hang_doi_gui").fetchone()[0]
+                       if "hang_doi_gui" not in bang_thieu else 0)
         return {
             "ton_tai": True,
             "phien_ban": phien_ban,
@@ -236,9 +290,10 @@ def thong_ke(path: str) -> dict:
             "so_dong_chua_ro_kho": chua_ro,
             "so_match": so_match,
             "cot_se_them": se_them,
-            "bang_se_them": [] if co_bang_bao_cao else [BANG_BAO_CAO],
+            "bang_se_them": bang_thieu,
             "so_anh_chup_bao_cao": so_bao_cao,
-            "can_nang_cap": phien_ban < PHIEN_BAN or bool(se_them) or not co_bang_bao_cao,
+            "so_viec_gui": so_viec_gui,
+            "can_nang_cap": phien_ban < PHIEN_BAN or bool(se_them) or bool(bang_thieu),
         }
     finally:
         con.close()

@@ -24,6 +24,8 @@ import threading
 from dataclasses import dataclass
 from typing import Optional
 
+import runtime_paths
+
 TEN_FILE_KEY = "google_key.json"
 
 LOGGER = logging.getLogger("scan.sheet")
@@ -112,8 +114,8 @@ class SheetsExporter:
 
     def __init__(self, key_path: Optional[str] = None,
                  sheet: str = "", worksheet: str = "KetQuaQuet"):
-        self.key_path = key_path or os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), TEN_FILE_KEY)
+        # Legacy: cạnh mã như xưa. Managed: trong state root — khoá không bao giờ nằm trong release.
+        self.key_path = key_path or runtime_paths.resolve().khoa_google_mac_dinh
         self.sheet_id = _lay_sheet_id(sheet)
         self.worksheet = worksheet or "KetQuaQuet"
 

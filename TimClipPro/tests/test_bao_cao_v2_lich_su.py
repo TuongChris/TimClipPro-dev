@@ -52,12 +52,13 @@ def test_nang_cap_v1_len_v2_sao_luu_va_giu_nguyen_dong_cu(tmp_path):
     _db_v1(db)
     truoc, cot_truoc = _chup(db)
     kq = lich_su.dam_bao_luoc_do(db)
-    assert kq["da_nang_cap"] is True and kq["phien_ban_cu"] == 1 and kq["phien_ban"] == 2
+    assert kq["da_nang_cap"] is True and kq["phien_ban_cu"] == 1
+    assert kq["phien_ban"] == lich_su.PHIEN_BAN
     assert kq["sao_luu"] and os.path.isfile(kq["sao_luu"])
     sau, cot_sau = _chup(db)
     assert sau == truoc and cot_sau == cot_truoc          # không đổi dòng, không thêm cột
     con = sqlite3.connect(db)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert con.execute("PRAGMA user_version").fetchone()[0] == lich_su.PHIEN_BAN
     assert con.execute("SELECT COUNT(*) FROM bao_cao_job").fetchone()[0] == 0
     con.close()
     # Bản sao lưu là bản v1 nguyên vẹn (để rollback).
@@ -99,7 +100,8 @@ def test_thong_ke_bao_bang_se_them_ma_khong_ghi(tmp_path):
     with open(db, "rb") as f:
         truoc = f.read()
     tt = lich_su.thong_ke(db)
-    assert tt["can_nang_cap"] is True and tt["bang_se_them"] == ["bao_cao_job"]
+    assert tt["can_nang_cap"] is True
+    assert tt["bang_se_them"] == ["bao_cao_job", *lich_su.BANG_GUI]
     with open(db, "rb") as f:
         assert f.read() == truoc
 
@@ -109,4 +111,5 @@ def test_db_moi_tao_co_san_bang_anh_chup(tmp_path):
     kq = lich_su.dam_bao_luoc_do(db)
     assert kq["sao_luu"] == ""
     tt = lich_su.thong_ke(db)
-    assert tt["phien_ban"] == 2 and tt["can_nang_cap"] is False and tt["bang_se_them"] == []
+    assert tt["phien_ban"] == lich_su.PHIEN_BAN and tt["can_nang_cap"] is False
+    assert tt["bang_se_them"] == []

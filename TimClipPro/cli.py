@@ -19,6 +19,8 @@ import sys
 import bao_cao_v2
 import don_dep
 import nhat_ky
+import runtime_paths
+import sheet_destinations
 import watch
 from channel import ChannelSync
 from clip_metadata import configure_metadata_logging
@@ -55,11 +57,9 @@ def in_tien_do(pct, msg):
 
 
 def _file_dung_mac_dinh() -> str:
-    return os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "data",
-        "DUNG",
-    )
+    # Cùng bộ phân giải với Engine của lượt watch — trước đây cố định `<mã>/data/DUNG` nên
+    # `dung` và `watch` lệch nhau khi đặt TIMCLIP_DATA_DIR (AUD-004/185).
+    return os.path.join(runtime_paths.resolve().data_dir, "DUNG")
 
 
 def _chay_lenh_watch(a, eng: Engine) -> None:
@@ -136,6 +136,10 @@ def main():
     except SoKhoHong as e:
         # Sổ đăng ký kho hỏng/mất: cần người khôi phục — báo gọn, không traceback.
         print(f"\nLỖI SỔ ĐĂNG KÝ KHO: {e}", file=sys.stderr)
+        raise SystemExit(1) from None
+    except (runtime_paths.LoiRuntime, sheet_destinations.LoiDichGui) as e:
+        # Cấu hình runtime/đích gửi sai: dừng rõ ràng, không đoán đường dẫn, không traceback.
+        print(f"\nLỖI CẤU HÌNH: {e}", file=sys.stderr)
         raise SystemExit(1) from None
     except LoiTruyCapYouTube as e:
         # Lỗi vận hành ĐÃ PHÂN LOẠI (liệt kê kênh bị chặn, link không phải video…): câu tiếng
