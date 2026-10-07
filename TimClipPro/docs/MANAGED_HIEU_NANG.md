@@ -24,3 +24,23 @@ Ngân sách đặt TỪ số đo (kiểm lại ở pilot): lưu + xếp hàng �
 
 Cơ hội tối ưu (chưa làm, không ảnh hưởng đúng/sai): gom các việc cùng tab trong một vòng gửi để dùng lại
 metadata + kiểm tiêu đề (4N → 3 + N request cho N việc).
+
+## Đo lại trên mã cuối M5 (08/10/2026, PC1)
+
+Cùng script, cùng đầu vào, chạy trên cây xuất từ commit M5d 9d7b44f (commit tài liệu sau đó không đổi mã); số liệu
+thô `evidence\hieu_nang\{moi_9d7b44f,cap_nhat_9d7b44f}.json`. Từ M4, M5 chỉ đổi đường gửi (người gửi nền theo dõi
+«bản cũ») và cổng bảo trì; engine, lịch sử, hồ sơ đích không đổi.
+
+| Chỉ số | M4 | Mã cuối M5 |
+|---|---|---|
+| Dựng kho / quét video 6 phút (số lần audfprint) | 14,16 s / 5,70 s (1 / 1) | 13,87 s / 5,47 s (1 / 1); kết quả khớp GIỐNG HỆT 6dc3f9d |
+| Lưu lần quét: không gửi / có xếp hàng gửi (trung vị) | 5,87 / 6,31 ms | 5,89 / 6,35 ms |
+| Độ trễ lưu → «Đã gửi» (transport giả tức thì) | trung vị 47 ms | trung vị 47 ms, tối đa 50 ms |
+| CPU người gửi nền khi rảnh (20 s) | 0,0 s | 0,0 s |
+| Request Google mỗi lần gửi | 4 = 3 đọc + 1 ghi | 4 = 3 đọc + 1 ghi |
+| Bootstrap + cài bản đầu / chuẩn bị / áp dụng | 2,5 / 1,2 / 0,8 s | 2,2 / 1,3 / 0,8 s |
+
+Đính chính bảng trên: «163 file» là số file MÃ đầu vào (không test) của thư mục được đo — lần đo M4 chạy trên bản
+gương lúc M4 còn đang làm; cây commit M4 và mã cuối đều 164. Gói phát hành dựng từ git (M4 và mã cuối GIỐNG HỆT
+nhau) có 85 mục — 83 file dưới `TimClipPro/` + `MANAGED_RELEASE.json` + `RELEASE_FILES.json`, khoảng 480 KB; không
+có test hay cache.

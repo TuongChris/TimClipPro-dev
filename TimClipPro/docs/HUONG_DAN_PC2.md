@@ -83,8 +83,10 @@ pilot được duyệt** (thay `<MÃ_HỒ_SƠ_ĐÍCH>`). Lịch chạy không c�
 * Thanh bên ứng dụng → «ℹ️ Phiên bản và cập nhật»: bản đang chạy, bản đang kích hoạt, bản chờ áp dụng, việc đang
   chạy; nút «⏸ Hoãn cập nhật 24 giờ».
 * Bản mới đã kích hoạt mà ứng dụng còn mở bản cũ → ứng dụng báo «mở lại» và không nhận việc mới.
-* Bản lỗi health check → tự quay về bản trước và **cách ly** (không cài lại mỗi lần mở). Lịch sử không bao giờ bị
-  khôi phục mù — bản sao lưu trước mỗi lần cập nhật nằm ở `D:\TimClipPro_State\backups\`.
+* Bản lỗi health check → tự quay về bản trước NGAY. Lỗi rõ ràng (health chạy và báo lỗi) → **cách ly** (không
+  cài lại mỗi lần mở); lỗi có thể chỉ tạm thời (máy chậm, CSDL đang bị khoá) → thử lại ở lượt cập nhật sau, cách
+  ly ở lần thứ 3. Lịch sử không bao giờ bị khôi phục mù — bản sao lưu trước mỗi lần cập nhật nằm ở
+  `D:\TimClipPro_State\backups\`.
 
 ## 7. KHÔNG làm
 

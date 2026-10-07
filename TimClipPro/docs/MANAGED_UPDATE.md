@@ -3,7 +3,9 @@
 Mã: `managed_update.py` (bộ cập nhật), `maintenance_gate.py` (cổng bảo trì), `health_check.py` (kiểm sức
 khoẻ release, chạy bằng runtime của chính release), `launcher.py` (điểm vào ổn định, nằm ngoài release).
 Test: `tests/test_managed_update.py`, `tests/test_maintenance_gate.py`, `tests/test_health_check.py`,
-`tests/test_launcher.py` — artifact TỔNG HỢP ký bằng khoá thử sinh lúc chạy, không mạng.
+`tests/test_launcher.py`, các test rà soát M5 (`tests/test_managed_update_ra_soat.py`,
+`tests/test_launcher_ra_soat.py`, `tests/test_outbox_ban_cu.py`) — artifact TỔNG HỢP ký bằng khoá thử sinh lúc
+chạy, không mạng.
 
 ## 1. Luồng
 
@@ -13,7 +15,7 @@ PC1: commit đã test → release_tool build (git tree chính xác) → ký mani
 PC2: launcher update prepare  (tải manifest+chữ ký → XÁC MINH → tải gói → băm → giải nén an toàn
                                → kiểm từng file → runtime tại đường dẫn cuối → health staging) = STAGED
      launcher update apply    (rút cổng → chờ rảnh CÓ HẠN → backup → migration tự động an toàn
-                               → đổi con trỏ current → health sau kích hoạt → last_good) = ACTIVE
+                               → đổi con trỏ current → health sau kích hoạt → ghi ACTIVE → last_good) = ACTIVE
      launcher app|watch       (khôi phục nhật ký dở → chạy bản current)
 ```
 
