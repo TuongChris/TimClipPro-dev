@@ -13,6 +13,10 @@ PHIÊN BẢN LƯỢC ĐỒ (``PRAGMA user_version``)
   (``cai_dat_may``), credential binding (``xac_thuc_gui``), hồ sơ đích + revision bất biến
   (``dich_gui``/``dich_gui_phien_ban``) và outbox (``hang_doi_gui``). CHỈ THÊM BẢNG; bản 6dc3f9d
   mở DB v3 thấy đủ cột + ``bao_cao_job`` nên không nâng/hạ gì.
+* 4 — thêm CỘT ``hang_doi_gui.gui_worksheet_id``: mã tab của TỪNG LẦN PHÁT, ghi trong cùng giao dịch ``SENDING``
+  (MR-R2-P2-01, tái audit 78ba20c). Dòng cũ để NULL = «đã phát bởi bản chưa ghi mã tab theo việc» — mã tab mà
+  revision chốt SAU đó (kể cả do việc khác) không bao giờ được coi là nơi việc đó đã ghi. CHỈ THÊM CỘT; bản
+  78ba20c/f4d3cb7 vẫn đọc/ghi theo tên cột (cột mới để NULL = an toàn: việc đó không tự gửi lại theo tên).
 
 Nguyên tắc nâng cấp:
 
@@ -44,7 +48,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-PHIEN_BAN = 3
+PHIEN_BAN = 4
 
 # (tên cột, kiểu) thêm ở phiên bản 1. ``day_du``/``dat_muc_tieu`` để NULL ở dòng cũ:
 # NULL là "không biết", khác hẳn 0 là "biết là chưa trọn".
@@ -131,6 +135,10 @@ _DDL_GUI = (
     "CREATE INDEX IF NOT EXISTS idx_hang_doi_job ON hang_doi_gui(job_id)",
     "CREATE INDEX IF NOT EXISTS idx_hang_doi_dich ON hang_doi_gui(dich_id)",
 )
+# Phiên bản 4: cột của outbox (ALTER khi thiếu — bảng v3 đã có dữ liệu). NULL ở dòng cũ là CÓ NGHĨA (xem trên).
+COT_GUI_MOI = (
+    ("gui_worksheet_id", "INTEGER"),
+)
 
 CHUA_RO = "Chưa rõ (lịch sử cũ — cần rà soát)"
 _LY_DO = {
@@ -153,12 +161,20 @@ def _co_bang(con: sqlite3.Connection, ten: str) -> bool:
                        (ten,)).fetchone() is not None
 
 
+def _cot_gui_thieu(con: sqlite3.Connection) -> list:
+    """Cột phiên bản 4 của ``hang_doi_gui`` chưa có (bảng chưa có thì để ``_bang_thieu`` lo)."""
+    if not _co_bang(con, "hang_doi_gui"):
+        return []
+    cot = {r[1] for r in con.execute("PRAGMA table_info(hang_doi_gui)")}
+    return [ten for ten, _ in COT_GUI_MOI if ten not in cot]
+
+
 def _can_nang_cap(con: sqlite3.Connection) -> bool:
     if con.execute("PRAGMA user_version").fetchone()[0] < PHIEN_BAN:
         return True
     cot = set(_cot_jobs(con))
     return (not cot or any(ten not in cot for ten, _ in COT_MOI)
-            or bool(_bang_thieu(con)))
+            or bool(_bang_thieu(con)) or bool(_cot_gui_thieu(con)))
 
 
 def _bang_thieu(con: sqlite3.Connection) -> list:
@@ -167,7 +183,8 @@ def _bang_thieu(con: sqlite3.Connection) -> list:
 
 
 def _co_du_lieu(con: sqlite3.Connection) -> bool:
-    for bang in ("jobs", "matches"):
+    # Outbox/hồ sơ đích cũng là dữ liệu người dùng: nâng v3 → v4 ALTER chính bảng outbox — sao lưu trước.
+    for bang in ("jobs", "matches", "hang_doi_gui", "dich_gui"):
         if _co_bang(con, bang) and con.execute(
                 f"SELECT 1 FROM {bang} LIMIT 1").fetchone() is not None:
             return True
@@ -245,6 +262,10 @@ def dam_bao_luoc_do(path: str, *, sao_luu: bool = True, han_cho_s: float = 30.0)
                 con.execute(lenh)
             for lenh in (*_DDL_BAO_CAO, *_DDL_GUI):
                 con.execute(lenh)
+            thieu = set(_cot_gui_thieu(con))
+            for ten, kieu in COT_GUI_MOI:
+                if ten in thieu:
+                    con.execute(f"ALTER TABLE hang_doi_gui ADD COLUMN {ten} {kieu}")
             # Không bao giờ HẠ phiên bản: DB do bản mới hơn tạo chỉ được bổ sung cột thiếu.
             con.execute(f"PRAGMA user_version = {max(int(cu), PHIEN_BAN)}")
             con.commit()
@@ -290,6 +311,7 @@ def thong_ke(path: str) -> dict:
         bang_thieu = _bang_thieu(con)
         so_viec_gui = (con.execute("SELECT COUNT(*) FROM hang_doi_gui").fetchone()[0]
                        if "hang_doi_gui" not in bang_thieu else 0)
+        cot_gui_thieu = _cot_gui_thieu(con)
         return {
             "ton_tai": True,
             "phien_ban": phien_ban,
@@ -300,7 +322,9 @@ def thong_ke(path: str) -> dict:
             "bang_se_them": bang_thieu,
             "so_anh_chup_bao_cao": so_bao_cao,
             "so_viec_gui": so_viec_gui,
-            "can_nang_cap": phien_ban < PHIEN_BAN or bool(se_them) or bool(bang_thieu),
+            "cot_gui_se_them": cot_gui_thieu,
+            "can_nang_cap": (phien_ban < PHIEN_BAN or bool(se_them) or bool(bang_thieu)
+                             or bool(cot_gui_thieu)),
         }
     finally:
         con.close()

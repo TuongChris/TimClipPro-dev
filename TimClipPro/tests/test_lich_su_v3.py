@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Lược đồ ``lichsu.db`` phiên bản 3 — bảng hồ sơ đích gửi + outbox (docs/MANAGED_RUNTIME_DESIGN.md §5).
+"""Lược đồ ``lichsu.db`` phiên bản 3 — bảng hồ sơ đích gửi + outbox (docs/MANAGED_RUNTIME_DESIGN.md §5). Mã hiện
+hành ở phiên bản 4 (thêm một cột outbox — ``test_lich_su_v4.py``): nâng v2 đi thẳng lên phiên bản hiện hành.
 
 CHỈ THÊM BẢNG: dòng ``jobs``/``matches``/``bao_cao_job`` giữ nguyên byte-cho-byte về nội dung, sao lưu
 trước bằng backup API, chạy lại không làm gì; bản cũ ``6dc3f9d`` mở DB v3 không nâng/hạ gì và vẫn ghi
@@ -58,32 +59,32 @@ def _bang(path):
         con.close()
 
 
-def test_phien_ban_hien_hanh_la_3():
-    assert lich_su.PHIEN_BAN == 3
+def test_phien_ban_hien_hanh_la_4_va_bang_gui_cua_v3_giu_nguyen():
+    assert lich_su.PHIEN_BAN == 4
     assert set(lich_su.BANG_GUI) == BANG_V3
 
 
 def test_db_moi_co_du_bang_v3_khong_sao_luu(tmp_path):
     db = str(tmp_path / "moi.db")
     kq = lich_su.dam_bao_luoc_do(db)
-    assert kq["sao_luu"] == "" and kq["phien_ban"] == 3
+    assert kq["sao_luu"] == "" and kq["phien_ban"] == 4
     assert BANG_V3 <= _bang(db)
     tt = lich_su.thong_ke(db)
-    assert tt["phien_ban"] == 3 and tt["can_nang_cap"] is False and tt["bang_se_them"] == []
+    assert tt["phien_ban"] == 4 and tt["can_nang_cap"] is False and tt["bang_se_them"] == []
 
 
-def test_nang_cap_v2_len_v3_sao_luu_va_giu_nguyen_du_lieu(tmp_path):
+def test_nang_cap_v2_len_hien_hanh_sao_luu_va_giu_nguyen_du_lieu(tmp_path):
     db = str(tmp_path / "lichsu.db")
     _db_v2(db)
     truoc = _chup(db)
     kq = lich_su.dam_bao_luoc_do(db)
-    assert kq["da_nang_cap"] is True and kq["phien_ban_cu"] == 2 and kq["phien_ban"] == 3
+    assert kq["da_nang_cap"] is True and kq["phien_ban_cu"] == 2 and kq["phien_ban"] == 4
     assert os.path.basename(kq["sao_luu"]).startswith("lichsu.db.v2_")
     assert _chup(db) == truoc
     assert _chup(kq["sao_luu"]) == truoc                 # bản sao lưu là v2 nguyên vẹn
     assert BANG_V3 <= _bang(db) and not (BANG_V3 & _bang(kq["sao_luu"]))
     con = sqlite3.connect(db)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 4
     assert all(con.execute(f"SELECT COUNT(*) FROM {b}").fetchone()[0] == 0 for b in BANG_V3)
     con.close()
 
@@ -136,7 +137,7 @@ def _lich_su_cu():
     return mod
 
 
-def test_ban_cu_6dc3f9d_mo_db_v3_khong_nang_khong_ha_va_van_ghi(tmp_path):
+def test_ban_cu_6dc3f9d_mo_db_hien_hanh_khong_nang_khong_ha_va_van_ghi(tmp_path):
     cu = _lich_su_cu()
     assert cu.PHIEN_BAN == 2
     db = str(tmp_path / "lichsu.db")
@@ -154,5 +155,5 @@ def test_ban_cu_6dc3f9d_mo_db_v3_khong_nang_khong_ha_va_van_ghi(tmp_path):
                 " chinh_sach, day_du, dat_muc_tieu, pham_vi) VALUES"
                 " ('t','youtube','x','u',1.0,'ok',0,'','id','k','K','v','c',1,0,'{}')")
     con.commit()
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 4
     con.close()

@@ -71,13 +71,15 @@ class CongNhieuTab:
     không thì theo TÊN. Đổi tên / thêm / xoá tab được giữa các lượt gửi. ``ghi``: chỉ lần GHI thật;
     ``phat``: gid của MỌI request ghi đã phát (kể cả lần mất phản hồi). ``ke_hoach`` từng lượt:
     ``"ok"`` | ``("sau_da_ghi", exc)`` (ghi rồi mất phản hồi / tiến trình chết) | ``("chet_truoc_ghi", exc)``
-    (chết sau ``truoc_khi_gui``, request chưa đi)."""
+    (chết sau ``truoc_khi_gui``, request chưa đi). ``sau_khi_chot(gid)``: chạy ngay sau ``truoc_khi_gui`` (ghim +
+    SENDING đã COMMIT), trước request — để test đọc DB từ kết nối khác đúng thời điểm đó."""
 
     def __init__(self, tabs):
         self.tabs = dict(tabs)     # gid -> tên tab
         self.ghi = []              # [(gid, rows)]
         self.phat = []             # [gid]
         self.ke_hoach = []
+        self.sau_khi_chot = None
 
     def doi_ten(self, gid, ten):
         self.tabs[gid] = ten
@@ -103,6 +105,8 @@ class CongNhieuTab:
         gid = self._tim(chot)
         ten = self.tabs[gid]
         truoc_khi_gui(gid, ten)
+        if self.sau_khi_chot is not None:
+            self.sau_khi_chot(gid)
         self.phat.append(gid)
         if isinstance(hv, tuple) and hv[0] == "chet_truoc_ghi":
             raise hv[1]

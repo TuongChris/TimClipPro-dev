@@ -20,6 +20,9 @@ Hợp đồng
   ghi đầu tiên; chốt không được / mã đã chốt khác tab vừa tìm / mất claim → không gửi. Mọi lần gửi sau (thử
   lại, gửi lại sau UNKNOWN, khởi động lại, việc khác cùng revision) theo MÃ đó, không tìm lại theo tên; tab đã
   bị xoá → chặn, không bao giờ nhận tab mới cùng tên (MR-P1-02, audit độc lập f4d3cb7).
+* Mã tab của TỪNG LẦN PHÁT (``gui_worksheet_id``) ghi cùng giao dịch đó. Việc đã phát mà không có mã của chính nó
+  (bản cũ phát theo TÊN) không bao giờ được gửi lại: mã chốt của revision — có thể do việc KHÁC tạo SAU — không nói
+  việc đó đã ghi vào đâu (MR-R2-P2-01, tái audit 78ba20c). Hồ sơ có mã: mã của hồ sơ.
 * MỌI request chạm NỘI DUNG tab định tuyến bằng mã tab (``sheetId``), không theo tên: đọc hàng tiêu đề qua
   ``values:batchGetByDataFilter`` (``gridRange.sheetId``), ghi bằng MỘT ``spreadsheets.batchUpdate``
   ``AppendCells{sheetId}``. ``Worksheet.get_values``/``append_rows`` của gspread dựng range A1 từ TÊN tab, nên đổi
@@ -143,6 +146,7 @@ class ViecGui:
     tao_luc: float
     sua_luc: float
     gui_luc: Optional[float]
+    gui_worksheet_id: Optional[int]          # mã tab của LẦN PHÁT (v4); NULL + gui_luc = bản cũ phát, không ghi mã
 
     @property
     def dich(self) -> sd.DichGuiChot:
@@ -160,7 +164,7 @@ class ViecGui:
 _COT_VIEC = ("id", "job_id", "lo_id", "nguon", "dich_id", "dich_phien_ban", "dich_json",
              "schema_id", "header_json", "rows_json", "so_dong", "payload_sha256", "trang_thai",
              "so_lan_thu", "thu_lai_sau", "loi", "bien_nhan", "da_xoa_job", "tao_luc", "sua_luc",
-             "gui_luc")
+             "gui_luc", "gui_worksheet_id")
 
 
 def _viec_tu_hang(h) -> ViecGui:
@@ -282,20 +286,35 @@ def gui_lai_co_the_trung(db_path: str, viec_id: str) -> None:
 
 
 LY_DO_BAN_CU_CHUA_CO_MA_TAB = (
-    "Việc này đã được phát đi (bởi bản cũ) mà chưa ghi mã tab — gửi lại theo TÊN tab có thể rơi vào tab khác "
-    "cùng tên nên tool không gửi lại. Mở Sheet kiểm: đã có dòng thì bấm «Đã có trên Sheet»; chưa có thì huỷ "
+    "Việc này đã được phát đi (bởi bản cũ) mà chưa ghi mã tab của chính lần phát — mã tab hồ sơ chốt SAU đó (có "
+    "thể do việc khác) không cho biết việc này đã ghi vào đâu, còn gửi lại theo TÊN tab có thể rơi vào tab khác "
+    "cùng tên, nên tool không gửi lại. Mở Sheet kiểm: đã có dòng thì bấm «Đã có trên Sheet»; chưa có thì huỷ "
     "việc này rồi dùng «Gửi thêm (thủ công)».")
 
 
+def _ma_tab_da_phat(v: ViecGui, chot: sd.DichGuiChot) -> Optional[int]:
+    """Mã tab mà việc ĐÃ phát request tới: mã ghi theo việc (cùng giao dịch SENDING, lược đồ v4); việc của bản cũ
+    theo hồ sơ CÓ MÃ thì là mã hồ sơ (bản cũ cũng tìm tab theo mã đó). ``None`` = chưa phát, hoặc bản cũ phát theo
+    TÊN mà không ghi mã — không biết đã ghi vào tab nào."""
+    if v.gui_luc is None:
+        return None
+    return v.gui_worksheet_id if v.gui_worksheet_id is not None else chot.worksheet_id
+
+
 def _ly_do_chan_tab(v: ViecGui, chot: sd.DichGuiChot, da_chot: Optional[sd.TabDaChot]) -> str:
-    """Lý do KHÔNG được phát request cho việc này theo đích đã ghim (rỗng = được). Không bao giờ đoán mã tab mới
-    từ tên cho một việc ĐÃ từng phát request (``gui_luc``) — bản cũ chốt mã sau SENT nên dòng UNKNOWN cũ có thể
-    không có mã nào (MR-P1-02)."""
+    """Lý do KHÔNG được phát request cho việc này theo đích đã ghim (rỗng = được). Việc đã từng phát (``gui_luc``)
+    chỉ được gửi lại vào ĐÚNG mã tab của lần phát đó — không bao giờ đoán mã từ tên, và mã chốt của revision (có
+    thể do việc KHÁC tạo SAU) không thay được mã của chính việc (MR-P1-02, MR-R2-P2-01)."""
     if chot.worksheet_id is not None and da_chot is not None and da_chot.worksheet_id != chot.worksheet_id:
         return (f"Mã tab đã chốt ({da_chot.worksheet_id}) khác mã tab của hồ sơ đã ghim ({chot.worksheet_id}) — "
                 "không gửi; kiểm lại hồ sơ.")
-    if chot.worksheet_id is None and da_chot is None and v.gui_luc is not None:
-        return LY_DO_BAN_CU_CHUA_CO_MA_TAB
+    if v.gui_luc is not None:
+        da_phat = _ma_tab_da_phat(v, chot)
+        if da_phat is None:
+            return LY_DO_BAN_CU_CHUA_CO_MA_TAB
+        if da_chot is not None and da_chot.worksheet_id != da_phat:
+            return (f"Việc này đã phát tới tab mã {da_phat}, khác mã tab đã chốt của hồ sơ ({da_chot.worksheet_id}) "
+                    "— không gửi lại; đối soát trên Sheet.")
     return ""
 
 
@@ -310,13 +329,19 @@ def _kiem_gui_lai(con, v: ViecGui) -> None:
 
 
 def tab_da_ghim(db_path: str, v: ViecGui) -> Optional[sd.TabDaChot]:
-    """Tab việc này ĐÃ/SẼ ghi vào — để đối soát việc KHÔNG RÕ: mã chốt của revision (chốt ngay trước request ghi
-    đầu tiên), không thì mã của hồ sơ; ``None`` = hồ sơ theo tên chưa từng phát request (hoặc đích ghim hỏng)."""
+    """Tab việc này ĐÃ/SẼ ghi vào — để đối soát việc KHÔNG RÕ. Đã phát: mã của CHÍNH lần phát (không phải mã chốt
+    của revision — có thể do việc khác chốt sau); ``None`` = bản cũ phát theo tên, không biết tab nào. Chưa phát:
+    mã chốt của revision, không thì mã của hồ sơ; ``None`` = hồ sơ theo tên chưa từng phát (hoặc đích ghim hỏng)."""
     try:
         chot = v.dich
     except sd.LoiDichGui:
         return None
     tc = sd.tab_da_chot(db_path, chot.dich_id, chot.phien_ban)
+    if v.gui_luc is not None:
+        da_phat = _ma_tab_da_phat(v, chot)
+        if da_phat is None:
+            return None
+        return tc if tc is not None and tc.worksheet_id == da_phat else sd.TabDaChot(da_phat, chot.worksheet_ten)
     if tc is not None:
         return tc
     return None if chot.worksheet_id is None else sd.TabDaChot(chot.worksheet_id, chot.worksheet_ten)
@@ -361,10 +386,9 @@ def tao_viec_thu_cong(db_path: str, y_dinh: sd.YDinhGui, job_id: int, header: li
     """«Gửi thêm một bản» do người dùng chủ động: ý định MỚI (khoá riêng), không thay việc cũ.
     Lần quét đã có việc gửi (chưa huỷ) tới cùng hồ sơ → phải xác nhận ``cho_phep_trung``."""
     with sd.ket_noi(db_path, ghi=True) as con:
-        da_co = [h["dich_json"] for h in con.execute(
-            "SELECT dich_json FROM hang_doi_gui WHERE job_id=? AND trang_thai != ?",
-            (job_id, CANCELLED))]
-        if not cho_phep_trung and any(_co_the_cung_tab(con, x, y_dinh.dich) for x in da_co):
+        da_co = con.execute("SELECT * FROM hang_doi_gui WHERE job_id=? AND trang_thai != ?",
+                            (job_id, CANCELLED)).fetchall()
+        if not cho_phep_trung and any(_co_the_cung_tab(con, _viec_tu_hang(h), y_dinh.dich) for h in da_co):
             raise LoiHangDoi(f"Lần quét #{job_id} đã có việc gửi tới cùng bảng/tab với «{y_dinh.dich.ten}» "
                              "— gửi thêm sẽ tạo dòng TRÙNG trên Sheet; hãy xác nhận nếu vẫn muốn gửi.")
         vid = them_viec(con, y_dinh, job_id=job_id, chinh_sach=chinh_sach, header=header,
@@ -382,15 +406,19 @@ def _khoa_tab(con, chot: sd.DichGuiChot):
     return None if h is None else int(h["worksheet_id"])
 
 
-def _co_the_cung_tab(con, dich_json: str, moi: sd.DichGuiChot) -> bool:
-    """Việc đã có (``dich_json``) CÓ THỂ ghi vào cùng tab với đích ``moi``? Không chắc → coi là có."""
+def _co_the_cung_tab(con, v: ViecGui, moi: sd.DichGuiChot) -> bool:
+    """Việc đã có ``v`` CÓ THỂ ghi vào cùng tab với đích ``moi``? Không chắc → coi là có. Việc đã phát: theo mã của
+    CHÍNH lần phát; bản cũ phát theo tên (không mã) → không biết → có thể."""
     try:
-        cu = sd.DichGuiChot.from_json(dich_json)
+        cu = v.dich
     except sd.LoiDichGui:
         return True
     if cu.spreadsheet_id != moi.spreadsheet_id:
         return False
-    a, b = _khoa_tab(con, cu), _khoa_tab(con, moi)
+    if v.gui_luc is not None and _ma_tab_da_phat(v, cu) is None:
+        return True
+    a = _ma_tab_da_phat(v, cu) if v.gui_luc is not None else _khoa_tab(con, cu)
+    b = _khoa_tab(con, moi)
     if a is not None and b is not None:
         return a == b
     if a is None and b is None:
@@ -655,21 +683,27 @@ class NguoiGui:
 
     def _bat_dau_gui(self, viec_id: str, token: str, chot: sd.DichGuiChot, gid: int, ten: str) -> None:
         """Điểm không quay lại — MỘT giao dịch: chốt mã tab ``gid`` cho revision (lần đầu thắng) rồi COMMIT
-        ``SENDING`` (fencing ``claim_token``); xong transport mới được phát request ghi. Tab vừa tìm khác mã đã
+        ``SENDING`` + ``gui_worksheet_id`` = ``gid`` của CHÍNH việc (fencing ``claim_token``); xong transport mới được
+        phát request ghi. Tab vừa tìm khác mã đã
         ghim/đã chốt, chốt lỗi, hay mất claim → rollback cả hai, KHÔNG phát request (MR-P1-02: chốt sau SENT thì
         UNKNOWN/lỗi chốt làm lần gửi sau tìm lại theo TÊN và có thể rơi vào tab mới cùng tên)."""
         if chot.worksheet_id is not None and gid != chot.worksheet_id:
             raise ChuaGui(f"Tab tìm được (mã {gid}) khác mã tab đã ghim ({chot.worksheet_id}) — chưa ghi gì.",
                           tam_thoi=False)
         with sd.ket_noi(self.db_path, ghi=True) as con:
+            h = con.execute("SELECT gui_worksheet_id FROM hang_doi_gui WHERE id=?", (viec_id,)).fetchone()
+            if h is not None and h["gui_worksheet_id"] is not None and int(h["gui_worksheet_id"]) != gid:
+                # Mã của LẦN PHÁT TRƯỚC là bất biến — kể cả khi mã chốt của revision đã mất (DB sửa/khôi phục lệch).
+                raise ChuaGui(f"Tab tìm được (mã {gid}) khác mã tab lần phát trước của việc này "
+                              f"({h['gui_worksheet_id']}) — chưa ghi gì.", tam_thoi=False)
             tc = sd._chot_tab(con, chot.dich_id, chot.phien_ban, worksheet_id=gid, worksheet_ten=ten)
             if tc.worksheet_id != gid:
                 raise ChuaGui(f"Tab tìm được (mã {gid}) khác mã tab đã chốt của hồ sơ ({tc.worksheet_id}) — chưa ghi "
                               "gì; lần sau gửi theo mã đã chốt.", tam_thoi=True)
             n = con.execute(
-                "UPDATE hang_doi_gui SET trang_thai=?, gui_luc=?, sua_luc=? WHERE id=?"
+                "UPDATE hang_doi_gui SET trang_thai=?, gui_luc=?, gui_worksheet_id=?, sua_luc=? WHERE id=?"
                 " AND claim_token=? AND trang_thai=?",
-                (SENDING, time.time(), time.time(), viec_id, token, CLAIMED)).rowcount
+                (SENDING, time.time(), gid, time.time(), viec_id, token, CLAIMED)).rowcount
             if n != 1:
                 raise MatQuyen(viec_id)            # rollback: không để lại mã tab của người gửi đã mất claim
 
@@ -727,7 +761,7 @@ class NguoiGui:
             if nhom is not None:
                 self._chan_nhom(nhom, ly_do_khoa, viec_id)
             return "bi_chan"
-        chot_gui, da_chot = self._tab_gui(chot)
+        chot_gui, da_chot = self._tab_gui(v, chot)
         ly_do_tab = _ly_do_chan_tab(v, chot, da_chot)
         if ly_do_tab:
             self._chot(viec_id, token, BLOCKED_CONFIG, loi=ly_do_tab)
@@ -799,14 +833,16 @@ class NguoiGui:
             return ly_do, ""
         return "", sd.lay_xac_thuc(self.db_path, chot.xac_thuc_ref).duong_dan
 
-    def _tab_gui(self, chot: sd.DichGuiChot) -> tuple:
-        """``(đích để gửi, tab đã chốt | None)``: revision đã phát request (mã chốt trong giao dịch SENDING) →
-        gửi theo MÃ đã chốt của chính revision đó (không đọc hồ sơ hiện tại, không tìm lại theo tên — tab đổi
-        tên vẫn đúng chỗ, tab cùng tên tạo lại không bao giờ được coi là tab cũ)."""
+    def _tab_gui(self, v: ViecGui, chot: sd.DichGuiChot) -> tuple:
+        """``(đích để gửi, tab đã chốt | None)``: việc đã phát → MÃ của chính lần phát đó; không thì revision đã
+        phát request (mã chốt trong giao dịch SENDING) → MÃ đã chốt của revision (không đọc hồ sơ hiện tại, không tìm
+        lại theo tên — tab đổi tên vẫn đúng chỗ, tab cùng tên tạo lại không bao giờ được coi là tab cũ). Hai mã
+        lệch nhau thì ``_ly_do_chan_tab`` đã chặn trước."""
         da_chot = sd.tab_da_chot(self.db_path, chot.dich_id, chot.phien_ban)
-        if da_chot is None:
-            return chot, None
-        return replace(chot, worksheet_id=da_chot.worksheet_id), da_chot
+        ma = _ma_tab_da_phat(v, chot)
+        if ma is None and da_chot is not None:
+            ma = da_chot.worksheet_id
+        return (chot if ma is None else replace(chot, worksheet_id=ma)), da_chot
 
 
 # ---------------------------------------------------------------------------

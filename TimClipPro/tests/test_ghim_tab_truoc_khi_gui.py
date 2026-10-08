@@ -391,7 +391,9 @@ def test_ui_viec_khong_ro_hien_ma_tab_da_ghim(tmp_path, monkeypatch):
     with sd.ket_noi(db, ghi=True) as con:
         v = ob.them_viec(con, y, job_id=1, chinh_sach="v2", header=HEADER, rows=[["x"] + [""] * 33])
         sd._chot_tab(con, d.id, d.phien_ban, worksheet_id=101, worksheet_ten="KetQuaQuet")
-        con.execute("UPDATE hang_doi_gui SET trang_thai=?, gui_luc=1.0 WHERE id=?", (ob.UNKNOWN, v))
+        # Đúng như NguoiGui._bat_dau_gui: mã tab của LẦN PHÁT ghi cùng SENDING (lược đồ v4).
+        con.execute("UPDATE hang_doi_gui SET trang_thai=?, gui_luc=1.0, gui_worksheet_id=101 WHERE id=?",
+                    (ob.UNKNOWN, v))
     at.run()
     chu = " ".join(str(x.value) for x in [*at.caption, *at.warning, *at.error, *at.info])
     assert "mã 101" in chu
