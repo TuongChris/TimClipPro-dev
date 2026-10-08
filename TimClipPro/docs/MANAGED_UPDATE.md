@@ -127,6 +127,10 @@ và "kích hoạt"; chờ CÓ HẠN; quá hạn thì hoãn, không giết việc
   cổng cho một bản sẽ không được áp dụng. Chưa có `lichsu.db` (máy mới, hoặc app chưa mở lần nào —
   `phien_ban_db() is None`) KHÔNG migration gì: app tạo lược đồ bằng chính mã mới khi mở lần đầu. `release_tool.py build` để hai cờ TẮT mặc định — người
   phát hành khai `--tu-dong-an-toan --tuong-thich-nguoc` cho bản có nâng lịch sử đã đánh giá.
+* Lược đồ hiện hành: `lichsu.db` phiên bản 4 (chỉ thêm cột `hang_doi_gui.gui_worksheet_id`, tái audit 78ba20c). PC2
+  cài mới không qua migration nào. DB v3 do candidate cũ (f4d3cb7/78ba20c) tạo — chưa có trên máy thật: mã v3 chạy
+  được trên DB v4 (`tests/test_lich_su_v4.py`), nhưng nâng tự động v3→v4 chỉ khi người phát hành khai hai cờ trên
+  sau khi đánh giá; health của một release v3 trên DB v4 báo «schema quá mới». Pilot không nhập state v3.
 * Migration lỗi → giữ bản hiện tại; lỗi tất định (migration chạy và báo lỗi) → cách ly ngay; lỗi có thể tạm
   thời (quá hạn, CSDL bị khoá — chỉ khi đó là lỗi DUY NHẤT) → áp dụng lại lần sau, cách ly ở lần thứ 3 (không
   lặp «sao lưu + rút cổng + migration» mãi).

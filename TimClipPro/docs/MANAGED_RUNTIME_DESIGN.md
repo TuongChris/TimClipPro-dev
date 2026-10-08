@@ -22,7 +22,7 @@ cập nhật → giữ hành vi matching → dễ dùng → hiệu năng.**
 | H6 | `save_job` là nơi DUY NHẤT ghi lịch sử, một giao dịch (`jobs` + `matches` + `bao_cao_job`); gọi NGAY trong lượt quét (`engine.py:4676`, `4870`) trên bản Engine ghim cho job. | CONFIRMED `engine.py:5329-5375` |
 | H7 | Kết nối SQLite: `sqlite3.connect` mặc định (timeout 5 s, rollback journal, `synchronous` mặc định FULL), mở/đóng mỗi thao tác. Lược đồ có phiên bản (`lich_su.dam_bao_luoc_do`): `BEGIN IMMEDIATE` → sao lưu bằng backup API → DDL → `user_version`; không bao giờ hạ phiên bản; bản cũ chạy được trên DB mới. | CONFIRMED `engine.py:1504-1512`, `lich_su.py:152-199` |
 | H8 | SQLite của runtime là 3.49.1 — nằm trong dải dính WAL-reset bug (3.7.0–3.51.2, sửa ở 3.51.3/3.50.7/3.44.6) khi nhiều kết nối ghi/checkpoint ở chế độ WAL. | CONFIRMED (đo `sqlite3.sqlite_version`; sqlite.org/wal.html) |
-| H9 | gspread 6.2.1 dùng `HTTPClient` (KHÔNG tự thử lại) với timeout mặc định `None` (chờ vô hạn); `append_rows` trả nguyên phản hồi API (`spreadsheetId`, `tableRange`, `updates.updatedRange/updatedRows`) nhưng code hiện tại không đọc phản hồi. | CONFIRMED (site-packages `gspread/http_client.py:84-128`, `worksheet.py:1820-1865`) |
+| H9 | gspread 6.2.1 dùng `HTTPClient` (KHÔNG tự thử lại) với timeout mặc định `None` (chờ vô hạn); `append_rows` trả nguyên phản hồi API (`spreadsheetId`, `tableRange`, `updates.updatedRange/updatedRows`) nhưng code hiện tại không đọc phản hồi; range A1 dựng từ `self.title`, tức GHI THEO TÊN tab (tái audit 78ba20c, MR-R2-P1-01 — outbox không dùng `append_rows`/`get_values` nữa). | CONFIRMED (site-packages `gspread/http_client.py:84-128`, `worksheet.py:1820-1865`) |
 | H10 | Updater `cap_nhat.py` lấy tag `git tag --sort=-v:refname` lớn nhất (MỌI tag — không lọc `v*`, `vX-rc1` xếp trên `vX`) rồi `git checkout` TẠI CHỖ khi đang chạy app/Watch; chỉ tiến (tổ tiên) trừ `--ban`; `ChayTool.bat`/`ChayMayPhu.bat` gọi nó mỗi lần mở và gọi `pip install -r requirements.txt` vào chính `.venv` đang dùng khi mã thoát 11. | CONFIRMED `cap_nhat.py:127-132,168-225`, `ChayTool.bat:30-40` |
 | H11 | `requirements-lock.txt` mã hoá UTF-16, không hash, LỆCH 20 gói so với `.venv` đang chạy thật (vd. cryptography 49.0.0 vs 50.0.0, streamlit 1.60.0 vs 1.62.0), vi phạm cả `constraints.txt`; không ai dùng. | CONFIRMED (so `importlib.metadata`) |
 | H12 | Engine đã tách `root` (mã) khỏi `data_dir`/`out_dir`, nhưng CHỈ app đọc `TIMCLIP_DATA_DIR`/`TIMCLIP_OUTPUT_DIR` (`app.py:59-62`); `Engine()` của CLI/Watch bỏ qua (AUD-004) → app và Watch có thể dùng hai `tool.lock` khác nhau. Khoá Google mặc định cạnh mã (`sheets.py:116`), file `DUNG` cố định `<mã>/data` (`cli.py:57-62`), `watchlist.json` theo thư mục hiện hành (`cli.py:67`), `bin/` chèn vào PATH, `__pycache__` ghi vào cây mã. | CONFIRMED `engine.py:941-1009` |
@@ -43,8 +43,8 @@ cập nhật → giữ hành vi matching → dễ dùng → hiệu năng.**
 | Tab | tên `KetQuaQuet` | Đổi tên/xoá-tạo lại cùng tên không phát hiện | `worksheet_id` (gid) là định danh; tên chỉ là nhãn; link cũ không có gid → gid chốt cho revision NGAY TRƯỚC request ghi đầu tiên, cùng giao dịch `SENDING` (audit f4d3cb7 MR-P1-02) | Không coi tab tạo lại cùng tên là tab cũ | đổi tên → cập nhật nhãn; xoá-tạo lại → BLOCKED_CONFIG, 0 ghi |
 | Credential | `google_key.json` cạnh mã | Thay file khoá = đổi tài khoản âm thầm | Binding = đường dẫn + `client_email` mong đợi (+ `private_key_id`); khác principal → BLOCKED_CONFIG; xoay khoá cùng principal → cho phép theo cờ, ghi nhận | Không bao giờ rơi về khoá mặc định | đổi principal → chặn, 0 ghi |
 | Ai gửi | 1 thread mỗi phiên app | Không bền, không phối hợp giữa app/Watch/CLI | MỘT người gửi mỗi state root, giữ khoá HĐH `hang_doi_gui.lock`; claim nguyên tử `UPDATE … WHERE trang_thai IN (…)` + `claim_token` làm fencing | Writer cũ còn sống thì writer mới không lấy được khoá → không gửi đôi cục bộ | hai tiến trình cùng chạy: 1 lần append |
-| Mơ hồ khi gửi | thử lại mù | Trùng dòng (H3) | Commit `SENDING` NGAY TRƯỚC request append; chỉ lỗi CHẮC CHẮN chưa gửi (lỗi trước dispatch, `ConnectTimeout`, `NewConnectionError`, `RefreshError`, HTTP 4xx từ Google) mới quay lại; còn lại → `UNKNOWN_DELIVERY` | Không suy "chưa ghi" từ message hay từ lease hết hạn | ReadTimeout sau ghi → UNKNOWN, không append lần hai |
-| Biên nhận | không đọc | — | `SENT` chỉ khi phản hồi có `spreadsheetId` đúng, `updatedRows == số dòng`, `updatedRange` thuộc đúng tab đã kiểm theo ID; bất thường → UNKNOWN | Có bằng chứng phía Google | phản hồi lệch → UNKNOWN |
+| Mơ hồ khi gửi | thử lại mù | Trùng dòng (H3) | Commit `SENDING` NGAY TRƯỚC request ghi; chỉ lỗi CHẮC CHẮN chưa gửi (lỗi trước dispatch, `ConnectTimeout`, `NewConnectionError`, `RefreshError`, HTTP 4xx từ Google) mới quay lại; còn lại → `UNKNOWN_DELIVERY` | Không suy "chưa ghi" từ message hay từ lease hết hạn | ReadTimeout sau ghi → UNKNOWN, không ghi lần hai |
+| Biên nhận | không đọc | — | `SENT` chỉ khi phản hồi `spreadsheets.batchUpdate` (nguyên tử) có `spreadsheetId` đúng và `replies` đúng số request, và `sheetId` + dòng TRONG THÂN REQUEST đã phát khớp mã vừa chốt + payload (tái audit 78ba20c: không còn dựa vào tên trong `updatedRange`; AppendCells không trả vùng ghi nên biên nhận không dựng giả); bất thường → UNKNOWN | Có bằng chứng phía Google: lô nguyên tử đã áp dụng; định tuyến theo mã nằm trong chính request | phản hồi lệch / request lệch mã → UNKNOWN |
 | Xoá lần quét | xoá `jobs`/`matches`/`bao_cao_job` (P1-01) | Việc gửi còn treo có thể bắn sau khi UI báo đã xoá | Cùng giao dịch: PENDING/RETRY/BLOCKED → xoá; CLAIMED/SENDING/UNKNOWN → TỪ CHỐI xoá; SENT → giữ tombstone tối thiểu (công bố), bỏ payload | Không hứa thu hồi dòng Google | race xoá ↔ claim |
 | Đường dẫn | `root`/`data_dir`/`out_dir`; mặc định `<mã>/data` | Bản phát hành bất biến không được chứa dữ liệu | `runtime_paths.py`: chế độ `legacy` (y như cũ) và `managed` (BẮT BUỘC `TIMCLIP_STATE_ROOT` + `installation.json` khớp; thiếu là dừng, không rơi về `<release>/data`) | Tối thiểu: Engine đã nhận `data_dir`/`out_dir` | managed thiếu state root → lỗi rõ, không tạo thư mục |
 | Cổng bảo trì | không có | Update có thể đổi mã khi đang quét/gửi | `maintenance_gate.py`: mutex ngắn + lease theo việc (khoá HĐH); `dang_rut` → không nhận việc mới; updater chờ hết lease | Chống race giữa kiểm rảnh và activate | update lúc đang quét → chờ, không đổi mã |
@@ -92,7 +92,12 @@ cập nhật → giữ hành vi matching → dễ dùng → hiệu năng.**
   kiểu REMOTE) → `managed` từ chối, `legacy` chỉ cảnh báo (PC1 hiện ở OneDrive — giữ nguyên, có cảnh báo).
 * ffmpeg/ffprobe: launcher thêm `<installation>/tools/ffmpeg/bin` vào `PATH` của tiến trình con.
 
-## 5. Lược đồ `lichsu.db` phiên bản 3 (CHỈ THÊM BẢNG)
+## 5. Lược đồ `lichsu.db` phiên bản 3 (CHỈ THÊM BẢNG) và 4 (CHỈ THÊM CỘT)
+
+Phiên bản 4 (tái audit 78ba20c, MR-R2-P2-01): thêm cột `hang_doi_gui.gui_worksheet_id INTEGER` — mã tab của TỪNG LẦN
+PHÁT, ghi trong cùng giao dịch `SENDING`. NULL ở dòng đã phát = bản cũ phát theo tên, không ghi mã → không bao giờ
+gửi lại. Chỉ thêm cột (sao lưu trước khi outbox có dữ liệu); bản 78ba20c/f4d3cb7 vẫn đọc/ghi theo tên cột
+(`tests/test_lich_su_v4.py`).
 
 ```sql
 -- định danh cài đặt + cài đặt gửi (khoá/giá trị)
@@ -173,8 +178,11 @@ minh), tạo runtime tại đường dẫn cuối, ghi `TimClipPro.bat` mới, x
 ## 9. Giới hạn đã biết (cập nhật khi xong từng milestone)
 
 * Không exactly-once phía Google: UNKNOWN_DELIVERY là cơ chế xử lý mơ hồ, người dùng đối soát.
-* Race đổi tên/xoá-tạo tab giữa lúc kiểm theo ID và lúc append (cùng tên) không loại trừ tuyệt đối —
-  append của Sheets API nhận dải A1 theo TÊN; sau append kiểm `updatedRange` khớp tên tab của đúng ID.
+* Race đổi tên/xoá-tạo tab giữa lúc kiểm và lúc ghi: từng ghi ở đây là giới hạn «không loại trừ tuyệt đối» —
+  tái audit 78ba20c xếp P1 (MR-R2-P1-01) và đã LOẠI: sau bước tìm tab, MỌI request chạm nội dung tab định tuyến bằng
+  `sheetId` (đọc `values:batchGetByDataFilter`, ghi `batchUpdate` AppendCells). Còn lại: hàng tiêu đề (lược đồ cột)
+  có thể bị sửa giữa lúc kiểm và lúc ghi — Sheets không có khoá; đó là TOCTOU về lược đồ, không về định danh tab.
+  Ngữ nghĩa máy chủ theo tài liệu công khai, test trên mô hình HTTP giả — chưa đối chiếu Google thật (pilot 10b).
 * Hai PC cùng gửi một bảng: không có dedup toàn cục; khuyến nghị mỗi lịch Watch do một máy phụ trách.
 * Không fsync được thư mục trên Windows; cam kết sống qua mất điện dựa trên `FlushFileBuffers` của file +
   thay thế nguyên tử của NTFS.
@@ -207,12 +215,12 @@ cũ idempotent). Engine/CLI dùng `RuntimePaths` (sửa AUD-004: CLI/Watch nay t
 
 | Phần | Nơi | Ghi chú |
 |---|---|---|
-| Outbox, người gửi, transport gspread | `outbox.py` | Thay `sheet_delivery.py` (đã xoá cùng test của nó; bất biến tương đương ở `tests/test_outbox*.py`). Phân loại lỗi theo KIỂU ngoại lệ; timeout (10 s, 60 s); một `append_rows` RAW (tiêu đề + dòng khi trang trống). |
+| Outbox, người gửi, transport gspread | `outbox.py` | Thay `sheet_delivery.py` (đã xoá cùng test của nó; bất biến tương đương ở `tests/test_outbox*.py`). Phân loại lỗi theo KIỂU ngoại lệ; timeout (10 s, 60 s); một request ghi (tiêu đề + dòng khi trang trống) — từ tái audit 78ba20c: `spreadsheets.batchUpdate` AppendCells{sheetId}, đọc tiêu đề theo mã (`values:batchGetByDataFilter`), không `append_rows` theo tên. |
 | Xếp hàng cùng giao dịch | `Engine.save_job` → `_xep_hang_gui` | Chỉ kết quả `ok`; V2 lỗi / luật cũ / dựng dòng lỗi → `BLOCKED_REPORT` không payload; không có dòng → không tạo việc. `danh_thuc` SAU commit. |
 | Ghim | `ScanJobController.start(y_dinh_gui=…)` → `scan_iter(y_dinh_gui=…)` (bản sao job); Watch/CLI: `Engine.ghim_y_dinh_gui` | Đổi chọn trên UI chỉ áp cho lượt SAU; banner «Lượt đang chạy gửi A; lựa chọn B dùng cho lượt tiếp theo». |
 | Xoá lần quét | `Engine.delete_job` | `BEGIN IMMEDIATE`; CLAIMED/SENDING/UNKNOWN → `LoiXoaJob`; SENT → tombstone; ô xác nhận gắn mã lần quét, tự bỏ chọn sau khi xoá. |
 | Kiểm cấu hình chỉ đọc | `outbox.kiem_cau_hinh` → `CongGspread.kiem`, `sheets.kiem_tieu_de_nghiem_ngat`, `SheetsExporter.kiem_tra` | Không tạo tab, không chèn tiêu đề; tab theo mã đã chốt / mã ghim (đối chiếu tên) / tên. |
-| Tab định danh | `sheet_destinations._chot_tab`/`tab_da_chot`, bảng `dich_gui_tab_chot`; `NguoiGui._tab_gui`, `NguoiGui._bat_dau_gui` | Mã tab chốt theo revision ở request ghi đầu (từ audit f4d3cb7: TRONG giao dịch `SENDING`, trước khi phát — không còn chốt sau SENT); link cũ = tab «KetQuaQuet» (bỏ gid của link); hồ sơ có gid đối chiếu tên ở lần gửi đầu. Sửa hồ sơ cùng bảng/tab → revision mới kế thừa mã đã chốt. |
+| Tab định danh | `sheet_destinations._chot_tab`/`tab_da_chot`, bảng `dich_gui_tab_chot`; `NguoiGui._tab_gui`, `NguoiGui._bat_dau_gui` | Mã tab chốt theo revision ở request ghi đầu (từ audit f4d3cb7: TRONG giao dịch `SENDING`, trước khi phát — không còn chốt sau SENT); link cũ = tab «KetQuaQuet» (bỏ gid của link); hồ sơ có gid đối chiếu tên ở lần gửi đầu. Sửa hồ sơ cùng bảng/tab → revision mới kế thừa mã đã chốt. Từ tái audit 78ba20c: mã tab của TỪNG lần phát (`gui_worksheet_id`, v4) ghi cùng giao dịch — việc đã phát chỉ gửi lại vào đúng mã đó. |
 | Rà soát độc lập M2 | `tests/test_outbox_ra_soat.py` + test UI/CLI | 1 P1 + 8 P2 + 12 P3 đã kiểm trên mã; mọi phát hiện có giá trị được tái hiện bằng test ĐỎ trước khi sửa. |
 | Giao diện | `ui_gui_sheets.py` + `app.py` | Bộ chọn đích cạnh nút Bắt đầu (mỗi tab quét một trạng thái riêng, có «Chỉ lưu cục bộ»), tab «📤 Gửi Google Sheets» (hàng đợi + thao tác theo trạng thái, hồ sơ, binding khoá, nhập link cũ), «Gửi thêm (thủ công)» dựng lại payload TỪ LỊCH SỬ. Bỏ nút «Đẩy lên Google Sheets» (gửi lại cả lô bằng link hiện tại — H14). |
 | Watch | `watch.py` | Phân giải đích TRƯỚC khi liệt kê/quét (lỗi cấu hình → dừng trước khi quét); gửi qua outbox bằng người gửi nền; cuối lượt chờ CÓ HẠN (`cho_gui_s`, mặc định 120 s); bỏ gửi đồng bộ và «gửi lại cả lô cuối lượt». |
@@ -284,3 +292,17 @@ reproducer gốc của reviewer không đi kèm nên đã viết lại thành te
 Không cần migration: nhánh mới chưa triển khai ở đâu (production PC1 vẫn 6dc3f9d, chưa có outbox). Các «gap vận
 hành» của audit (§5: lịch cập nhật chỉ `prepare`, `InteractiveToken`/`PT6H`, bộ kit mẫu) là quyết định của
 pilot — ghi ở `docs/KE_HOACH_PILOT_PC2.md` (bước 14 + 4 quyết định), không đổi hành vi lịch trong vòng sửa này.
+
+**Tái audit độc lập `78ba20c` (08/10/2026)** — MR-P1-01 PASS ở phạm vi kiểm; phần giao dịch của MR-P1-02 PASS; hai
+phát hiện mới, sửa trên nhánh `fix/managed-runtime-reaudit` (tạo từ đúng `78ba20c`; mỗi kịch bản tái hiện bằng test
+ĐỎ trước khi sửa — các script `REPRO_*.py` của reviewer không đi kèm nên viết lại thành test):
+
+| # | Phát hiện (đã tái hiện trên mã) | Sửa | Test |
+|---|---|---|---|
+| MR-R2-P1-01 | `CongGspread.gui` tìm tab THEO MÃ nhưng đọc tiêu đề + GHI qua `Worksheet` của gspread: `get_values`/`append_rows` dựng range A1 từ `self.title` (gspread 6.2.1 `worksheet.py:1852`) → `values.append` định tuyến theo TÊN lúc request tới. Đổi tên tab 101 + tạo 202 mang tên cũ giữa lúc kiểm và lúc ghi → dòng vào 202, biên nhận lấy `ws.id` local → SENT/101. Đọc tiêu đề theo tên còn có thể kiểm nhầm tab trống mới rồi chèn hàng tiêu đề vào giữa tab thật | Sau bước tìm tab, MỌI request chạm nội dung tab theo `sheetId`: đọc `values:batchGetByDataFilter` (`_TabTheoMa`, luật kiểm tiêu đề giữ nguyên văn), ghi MỘT `spreadsheets.batchUpdate` [AppendDimension cột khi tab hẹp] + AppendCells{sheetId, userEnteredValue}; ô RAW-tương-đương (`dung_o`: chuỗi → stringValue, không công thức); NaN/vô cực → BLOCKED_REPORT trước request. `KetQuaGui` mang ĐÚNG thân request; biên nhận = spreadsheetId + replies (lô nguyên tử) + sheetId/dòng TRONG request khớp mã chốt/payload, không dựng `updatedRange` giả | `tests/test_ghi_theo_ma_tab.py`, `tests/test_outbox_gspread.py` — máy chủ Sheets giả ở tầng HTTP (`tests/sheets_http_gia.py`) + gspread THẬT |
+| MR-R2-P2-01 | `_ly_do_chan_tab` chỉ chặn việc đã phát khi REVISION chưa có mã chốt → UNKNOWN do f4d3cb7 phát theo tên (chưa mã) hết bị chặn khi việc MỚI cùng revision chốt 202; giao diện báo «đã ghim 202», «Gửi lại» ghi payload cũ vào 202 | Lược đồ v4: `hang_doi_gui.gui_worksheet_id` = mã tab của TỪNG lần phát, ghi cùng giao dịch `SENDING`, bất biến (phát lại phải đúng mã). Việc đã phát mà cột NULL + hồ sơ theo tên → không bao giờ gửi lại (mã chốt revision không thay được); hồ sơ có mã → mã hồ sơ. `tab_da_ghim`, chặn gửi lại, cảnh báo trùng của «Gửi thêm» theo mã của chính lần phát | `tests/test_viec_cu_khong_ma_tab.py` (có test chéo phiên bản chạy ĐÚNG mã f4d3cb7 trong tiến trình con), `tests/test_lich_su_v4.py` |
+
+Ngữ nghĩa máy chủ mà bản sửa dựa vào (AppendCells định tuyến theo `sheetId`; `batchUpdate` nguyên tử, `replies` 1:1;
+`batchGetByDataFilter` theo `gridRange`) lấy từ tài liệu công khai Sheets API v4 — test chạy trên mô hình HTTP giả,
+CHƯA đối chiếu Google thật: bước pilot 10b kiểm trên bảng thử. Pilot PC2 cài MỚI, không nhập state v3 từ candidate
+f4d3cb7/78ba20c (đường nâng v3→v4 chỉ được khoá bằng test, không công bố là đã kiểm trên máy thật).

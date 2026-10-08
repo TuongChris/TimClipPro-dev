@@ -683,10 +683,10 @@ class NguoiGui:
 
     def _bat_dau_gui(self, viec_id: str, token: str, chot: sd.DichGuiChot, gid: int, ten: str) -> None:
         """Điểm không quay lại — MỘT giao dịch: chốt mã tab ``gid`` cho revision (lần đầu thắng) rồi COMMIT
-        ``SENDING`` + ``gui_worksheet_id`` = ``gid`` của CHÍNH việc (fencing ``claim_token``); xong transport mới được
-        phát request ghi. Tab vừa tìm khác mã đã
-        ghim/đã chốt, chốt lỗi, hay mất claim → rollback cả hai, KHÔNG phát request (MR-P1-02: chốt sau SENT thì
-        UNKNOWN/lỗi chốt làm lần gửi sau tìm lại theo TÊN và có thể rơi vào tab mới cùng tên)."""
+        ``SENDING`` + ``gui_worksheet_id`` = ``gid`` của CHÍNH việc (fencing ``claim_token``); xong transport mới
+        được phát request ghi. Tab vừa tìm khác mã đã ghim / đã chốt / mã của lần phát trước, chốt lỗi, hay mất
+        claim → rollback cả giao dịch, KHÔNG phát request (MR-P1-02: chốt sau SENT thì UNKNOWN/lỗi chốt làm lần
+        gửi sau tìm lại theo TÊN và có thể rơi vào tab mới cùng tên; MR-R2-P2-01: mã của lần phát là bất biến)."""
         if chot.worksheet_id is not None and gid != chot.worksheet_id:
             raise ChuaGui(f"Tab tìm được (mã {gid}) khác mã tab đã ghim ({chot.worksheet_id}) — chưa ghi gì.",
                           tam_thoi=False)

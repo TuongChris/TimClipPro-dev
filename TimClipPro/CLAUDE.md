@@ -120,17 +120,29 @@ Thiết kế: `docs/MANAGED_RUNTIME_DESIGN.md` §5, §10. Những điều KHÔNG
   HTTP 4xx trừ 408) mới thử lại/chặn; phân loại theo KIỂU ngoại lệ (`outbox.phan_loai_loi`), đừng so
   chuỗi message. `UNKNOWN_DELIVERY` chỉ người dùng xử lý (đã có trên Sheet / gửi lại chấp nhận trùng).
 - Một người gửi mỗi state root (`data/hang_doi_gui.lock`); mọi cập nhật sau claim có điều kiện
-  `claim_token`. `SENT` chỉ khi biên nhận khớp bảng + số dòng + tab.
+  `claim_token`. `SENT` chỉ khi biên nhận khớp: `spreadsheetId` + `replies` của `batchUpdate` nguyên tử, và mã tab +
+  dòng TRONG THÂN REQUEST đã phát (`KetQuaGui.yeu_cau`) = mã vừa chốt + payload. AppendCells không trả vùng ghi —
+  đừng dựng `updatedRange`/`updatedRows` giả cho biên nhận.
 - «Kiểm cấu hình» CHỈ ĐỌC: không tạo tab, không chèn tiêu đề; tab định danh bằng ID (gid).
 - Mã tab CHỐT theo revision (`dich_gui_tab_chot`, lần đầu thắng) TRONG CÙNG giao dịch CLAIMED→`SENDING`,
   TRƯỚC request ghi đầu tiên (`NguoiGui._bat_dau_gui`); chốt lỗi / mã khác tab vừa tìm / mất claim → không
   gửi. Đừng chuyển việc chốt về sau `SENT` hay bọc nó trong `suppress`: đó là MR-P1-02 của audit độc lập
   f4d3cb7 — UNKNOWN hoặc lỗi chốt làm lần gửi sau tìm lại theo TÊN và rơi vào tab mới cùng tên. Từ đó mọi lần
   gửi theo mã đó (tab đổi tên vẫn đúng chỗ; tab cùng tên tạo lại không bao giờ là tab cũ; tab bị xoá → chặn).
-  Biên nhận phải khớp ĐÚNG mã vừa chốt. Việc đã phát (`gui_luc`) mà không có mã nào → không gửi lại theo tên.
+  Biên nhận phải khớp ĐÚNG mã vừa chốt. Việc đã phát mà không có mã của CHÍNH nó → không gửi lại (xem dưới).
   Đừng đọc hồ sơ HIỆN TẠI để chọn tab. Link cũ (`--sheet`, SHEET_LINK, `giam_sat_sheet.txt`) LUÔN là tab tên «KetQuaQuet» như bản
   cũ — gid trong link cũ bị bỏ qua (thường là tab đầu "Sheet1"). Hồ sơ có gid: tên tab là nhãn đối chiếu,
   lần gửi đầu mà tab mang tên khác thì chặn (dán nhầm link tab).
+- Transport (`CongGspread`): sau bước tìm tab, MỌI request chạm nội dung tab định tuyến bằng `sheetId` — đọc tiêu
+  đề qua `values:batchGetByDataFilter` (`_TabTheoMa`), ghi bằng MỘT `spreadsheets.batchUpdate` AppendCells{sheetId}
+  (`dung_yeu_cau_ghi`). Đừng dùng `Worksheet.append_rows`/`append_row`/`get_values`/`update` của gspread trong outbox:
+  chúng dựng range A1 từ TÊN tab — đổi tên + tạo tab trùng tên giữa lúc kiểm và lúc ghi làm dòng rơi sang tab khác
+  mà vẫn SENT (MR-R2-P1-01, tái audit 78ba20c). Ô gửi RAW-tương-đương (`dung_o`): chuỗi → `stringValue`, KHÔNG BAO
+  GIỜ `formulaValue`; ô NaN/vô cực → `BLOCKED_REPORT` trước mọi request.
+- Mã tab của TỪNG LẦN PHÁT (`hang_doi_gui.gui_worksheet_id`, lược đồ v4) ghi cùng giao dịch `SENDING` và bất biến
+  (phát lại phải đúng mã đó). Việc bản cũ phát theo tên (cột NULL, hồ sơ không có mã) KHÔNG BAO GIỜ được gửi lại:
+  mã chốt của revision có thể do việc KHÁC tạo SAU (MR-R2-P2-01). Đừng suy nơi một việc đã ghi từ
+  `dich_gui_tab_chot`; dùng `outbox._ma_tab_da_phat`.
 - Phân loại lỗi: `gspread.open_by_key` gặp HTTP 403 ném `PermissionError` (là `OSError`!) — lỗi CẤU HÌNH
   (chưa chia sẻ bảng), phải xét TRƯỚC nhánh mạng. `RefreshError` theo cờ `retryable`. Không suy "chưa
   gửi" từ `__context__`/`__cause__`.
