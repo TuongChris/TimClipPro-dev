@@ -5,20 +5,37 @@ Không bước nào đụng PC1 production (`Tool_Quet`, đang ở 6dc3f9d) tr�
 
 | # | Bước | Cách làm | ĐẠT khi | DỪNG nếu |
 |---|---|---|---|---|
-| 0 | Duyệt mã | Kiểm toán độc lập nhánh `feature/managed-runtime-sheet-profiles` + gói audit nguồn | Không còn P1/P2 mở | Có P1 |
+| 0 | Duyệt mã | Kiểm toán độc lập vòng 1 (`f4d3cb7`, 08/10/2026): NO-GO vì 2 P1 (MR-P1-01 state root lồng trong vùng updater bị xoá; MR-P1-02 mã tab ghim sau SENT). Đã sửa trên nhánh `fix/managed-runtime-audit` → kiểm toán lại chính các tái hiện + gói audit nguồn mới | Không còn P1/P2 mở | Có P1 |
 | 1 | **[DUYỆT]** Khoá phát hành thật | Sinh cặp Ed25519 trên PC1 (ngoài repo, khoá riêng KHÔNG đưa lên máy chủ/OneDrive), ghi `trusted_keys.json` | Khoá riêng cất an toàn, có bản dự phòng | Khoá riêng lộ |
 | 2 | **[DUYỆT]** Lock có băm | Trên PC1 có mạng: `pip download --only-binary=:all: --no-deps -d wheelhouse` theo `requirements-lock.txt` + `launcher-lock.txt`. **docopt 0.6.2 KHÔNG có wheel trên PyPI** (chỉ sdist — đã xác nhận qua bộ nhớ đệm wheel của pip trên PC1): tải sdist, đối chiếu băm sdist với trang PyPI, `pip wheel --no-deps` từ sdist đó vào `wheelhouse`. Rồi `release_tool.py lock --wheelhouse wheelhouse` | Mọi dòng có `--hash=sha256` | Thiếu wheel Windows / băm sdist lệch |
 | 3 | Bộ bootstrap | Đóng gói launcher + `bootstrap.py` + `trusted_keys.json` thật + 2 lock | Kit kiểm lại bằng `release_tool.py verify` | — |
 | 4 | **[DUYỆT]** Sao lưu PC2 | Nếu PC2 đang có bản cũ (clone + `.bat`): sao lưu thư mục + `data\` sang ổ khác, ghi lại bản đang chạy | Bản sao mở được | Thiếu chỗ trống |
 | 5 | **[DUYỆT]** Tắt đường cũ trên PC2 | Gỡ/đổi tên lịch Task Scheduler cũ chạy `ChayMayPhu.bat`/`GiamSat.bat`; KHÔNG xoá clone cũ | Không còn lịch cũ chạy | Lịch cũ vẫn chạy |
 | 6 | **[DUYỆT]** Phát hành Stable thử | `release_tool.py build --commit <đã duyệt> --phien-ban 1.0.0 --wheel-kem wheelhouse\docopt-0.6.2-py2.py3-none-any.whl` (máy PC2 mới: KHÔNG cần cờ migration; bản sau có nâng lịch sử thì quyết định `--tu-dong-an-toan --tuong-thich-nguoc` hay để PC2 chờ duyệt) → `sign --hoi-mat-khau` → `verify` → `publish` (in lệnh) → chủ dự án tự chạy `gh release create stable-1.0.0 …` (repo phù hợp, không draft/pre-release; commit không mang tag `v…` nhẹ — xem cuối trang) | `verify` ĐẠT; tag mới, không gắn lại | Sai chữ ký/băm |
-| 7 | Bootstrap PC2 | Theo `HUONG_DAN_PC2.md` §2, thư mục MỚI | `doctor` toàn ✅ | Bất kỳ ❌ |
+| 7 | Bootstrap PC2 | Theo `HUONG_DAN_PC2.md` §2, thư mục MỚI. TRƯỚC đó thử một lệnh cố ý sai: `--state D:\TimClipPro\staging\state` (lồng trong thư mục cài đặt) | Lệnh sai bị từ chối «Bố cục thư mục…», KHÔNG tạo thư mục/file nào; lệnh đúng (ngang hàng) → `doctor` toàn ✅ | Lệnh sai được chấp nhận / bất kỳ ❌ |
 | 8 | **[DUYỆT]** Hai bảng nhỏ | Tạo 2 Sheet thử (không phải bảng khách hàng), 2 hồ sơ đích, chia sẻ cho tài khoản dịch vụ; «Kiểm cấu hình» | Đọc được cả hai | Không đọc được |
 | 9 | Quét thử + ghim | Lô 2–3 video công khai: lô 1 → bảng A; giữa lô đổi chọn sang B; lô 2 → B | Dòng lô 1 chỉ ở A, lô 2 chỉ ở B; hàng đợi «✅ Đã gửi» | Dòng lạc bảng |
 | 10 | Restart/outbox | Bật «Tạm dừng toàn bộ», quét 1 video, tắt app (đóng cửa sổ), mở lại, bỏ tạm dừng | Việc vẫn còn và gửi đúng 1 lần | Mất việc / trùng |
+| 10b | Tab ghim theo MÃ | Trên bảng thử A (hồ sơ tạo từ link KHÔNG có `#gid`, tức theo tên): gửi 1 lần → đổi tên tab `KetQuaQuet` thành `Cu`, tạo tab mới tên `KetQuaQuet` → quét + gửi lần nữa; rồi XOÁ tab `Cu` → gửi lần ba | Lần 2 vào tab `Cu` (mã cũ), không vào tab mới; lần 3 bị chặn «Không thấy tab đã ghim», tab mới không có dòng nào | Dòng rơi vào tab mới cùng tên |
 | 11 | **[DUYỆT]** Cập nhật lúc rảnh | Phát hành `stable-1.0.1` (thay đổi nhỏ) → `CapNhat.bat` khi đang quét (phải hoãn) → khi rảnh (phải áp dụng) | Hoãn khi bận; áp dụng khi rảnh; `doctor` ✅ | Đổi mã khi đang quét |
-| 12 | Diễn tập quay lại | Phát hành `stable-1.0.2` cố ý lỗi health (chỉ trên bảng thử) | Tự quay về 1.0.1, 1.0.2 bị cách ly, lịch sử/hàng đợi nguyên vẹn | Mất dữ liệu |
+| 12 | Diễn tập quay lại | Bản `1.0.2` cố ý lỗi health ký bằng khoá phát hành, đặt trong một NGUỒN PILOT RIÊNG (thư mục `--nguon-thu-muc` của một cài đặt thử, hoặc repo thử) — KHÔNG đưa vào feed Stable dùng chung (máy khác sẽ tải nó) | Tự quay về 1.0.1, 1.0.2 bị cách ly, lịch sử/hàng đợi (kể cả việc đang chờ gửi) nguyên vẹn | Mất dữ liệu / bản lỗi lọt vào feed chung |
 | 13 | **[DUYỆT]** Lịch Watch thật | Import `TimClipPro_GiamSat.xml` (thay mã hồ sơ), theo dõi 2–3 ngày | Log mỗi lượt OK | Lỗi lặp lại |
+| 14 | **[DUYỆT]** Lịch cập nhật tự động | Chỉ sau khi chốt 4 quyết định ở mục dưới; diễn tập trọn chuỗi: lịch kích hoạt → `update prepare` → áp dụng an toàn (bận thì hoãn) → lần mở app/Watch kế dùng bản mới; thêm một lần khởi động lại máy (cold boot) theo đúng cách vận hành đã chọn | `update status` + `doctor` sau mỗi bước khớp mong đợi; không lượt nào bị cắt ngang | Áp dụng khi đang quét / lịch không chạy sau khởi động lại |
+
+**Quyết định trước bước 14 (audit độc lập f4d3cb7 §5 — chưa phải lỗi, là việc pilot phải chốt):**
+
+1. **Lịch cập nhật mới chỉ `prepare`.** XML mẫu `TimClipPro_CapNhat.xml` gọi `launcher.py update prepare` (tải +
+   kiểm + stage), CHƯA áp dụng; `CapNhat.bat` chạy tay thì `prepare` rồi `apply`. Muốn PC2 tự lên bản không cần
+   người trực: thêm bước `update apply` vào lịch (áp dụng vẫn qua cổng bảo trì — bận thì hoãn). KHÔNG dùng
+   `CapNhat.bat` trong lịch (có `pause` khi lỗi → treo tới hết giờ giới hạn). Có XML không phải bằng chứng PC2 tự
+   cập nhật.
+2. **`LogonType=InteractiveToken`.** Lịch chỉ chạy khi tài khoản vận hành ĐANG đăng nhập. Muốn chạy sau khởi
+   động lại mà chưa ai đăng nhập: chọn tài khoản + cách lưu mật khẩu (Task Scheduler) — cần duyệt riêng (đổi
+   cấu hình bảo mật máy).
+3. **`ExecutionTimeLimit=PT6H`.** Lượt Watch dài hơn 6 giờ sẽ bị Task Scheduler dừng (việc đang gửi thành KHÔNG
+   RÕ). Đo thời lượng Watch thật trên PC2 rồi chọn giới hạn.
+4. **Bộ kit mẫu `…_MAU_…` chỉ để kiểm từ chối** (khoá thử + lock chưa băm). Bộ kit triển khai cần khoá thật
+   (bước 1), lock có băm (bước 2), wheelhouse, rồi bootstrap trên Windows sạch.
 
 PC1: giữ bản legacy để phát triển. Trên các bản clone dùng để phát triển, tạo `data\dev_mode` để updater cũ
 không bao giờ checkout tag (cần duyệt riêng nếu áp dụng lên `Tool_Quet` production). Chuyển PC1 production sang

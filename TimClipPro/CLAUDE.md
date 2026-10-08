@@ -122,9 +122,13 @@ Thiết kế: `docs/MANAGED_RUNTIME_DESIGN.md` §5, §10. Những điều KHÔNG
 - Một người gửi mỗi state root (`data/hang_doi_gui.lock`); mọi cập nhật sau claim có điều kiện
   `claim_token`. `SENT` chỉ khi biên nhận khớp bảng + số dòng + tab.
 - «Kiểm cấu hình» CHỈ ĐỌC: không tạo tab, không chèn tiêu đề; tab định danh bằng ID (gid).
-- Mã tab CHỐT theo revision ở lần gửi thành công ĐẦU (`dich_gui_tab_chot`, lần đầu thắng); từ đó gửi theo
-  mã đó (tab đổi tên vẫn đúng chỗ; tab cùng tên tạo lại không bao giờ là tab cũ). Đừng đọc hồ sơ HIỆN TẠI
-  để chọn tab. Link cũ (`--sheet`, SHEET_LINK, `giam_sat_sheet.txt`) LUÔN là tab tên «KetQuaQuet» như bản
+- Mã tab CHỐT theo revision (`dich_gui_tab_chot`, lần đầu thắng) TRONG CÙNG giao dịch CLAIMED→`SENDING`,
+  TRƯỚC request ghi đầu tiên (`NguoiGui._bat_dau_gui`); chốt lỗi / mã khác tab vừa tìm / mất claim → không
+  gửi. Đừng chuyển việc chốt về sau `SENT` hay bọc nó trong `suppress`: đó là MR-P1-02 của audit độc lập
+  f4d3cb7 — UNKNOWN hoặc lỗi chốt làm lần gửi sau tìm lại theo TÊN và rơi vào tab mới cùng tên. Từ đó mọi lần
+  gửi theo mã đó (tab đổi tên vẫn đúng chỗ; tab cùng tên tạo lại không bao giờ là tab cũ; tab bị xoá → chặn).
+  Biên nhận phải khớp ĐÚNG mã vừa chốt. Việc đã phát (`gui_luc`) mà không có mã nào → không gửi lại theo tên.
+  Đừng đọc hồ sơ HIỆN TẠI để chọn tab. Link cũ (`--sheet`, SHEET_LINK, `giam_sat_sheet.txt`) LUÔN là tab tên «KetQuaQuet» như bản
   cũ — gid trong link cũ bị bỏ qua (thường là tab đầu "Sheet1"). Hồ sơ có gid: tên tab là nhãn đối chiếu,
   lần gửi đầu mà tab mang tên khác thì chặn (dán nhầm link tab).
 - Phân loại lỗi: `gspread.open_by_key` gặp HTTP 403 ném `PermissionError` (là `OSError`!) — lỗi CẤU HÌNH
@@ -138,6 +142,17 @@ Thiết kế: `docs/MANAGED_RUNTIME_DESIGN.md` §5, §10. Những điều KHÔNG
 - Kết quả V2 lỗi / luật cũ → `BLOCKED_REPORT` không payload — không bao giờ gửi theo luật cũ.
 - Hồ sơ không chứa khoá riêng/token; binding đổi principal là bị chặn, không rơi về khoá mặc định.
   Thông báo lỗi không chứa nội dung file khoá hay nguyên URL bảng.
+
+## Cài đặt managed (PC2) — bất biến bố cục
+
+- Thư mục cài đặt và state root TÁCH BIỆT: không trùng, không cái nào nằm trong cái kia — so cả dạng chữ lẫn
+  `realpath` (junction/symlink), bằng `commonpath`, không theo tiền tố chuỗi (`runtime_paths.ly_do_bo_cuc`).
+  Bộ cập nhật được quyền xoá/thay `releases/`, `environments/`, `update_state/`, `staging/` — bản f4d3cb7 nhận
+  `state = <cài đặt>\staging\state` rồi tự xoá sạch lịch sử (MR-P1-01). `CaiDat` kiểm khi dựng; mọi `rmtree` của
+  updater lên thư mục có sẵn đi qua `CapNhat._xoa_cay` / `CaiDat.kiem_xoa` (đích thuộc vùng updater, không chồng
+  state root, không chứa thư mục nguồn phát hành) — chỉ `giai_nen_an_toan` tự xoá thư mục chính nó vừa tạo.
+  Đừng thêm `shutil.rmtree` trực tiếp vào `managed_update.py` (test `test_moi_rmtree_cua_updater_deu_qua_chot`
+  khoá điều này). Bố cục cũ không an toàn → dừng có thông báo, không tự di chuyển/xoá.
 
 ## Ý nghĩa các trường thời gian trong Match
 

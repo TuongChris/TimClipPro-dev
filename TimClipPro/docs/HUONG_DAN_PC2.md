@@ -13,7 +13,7 @@ kho vân tay, lịch sử, hàng đợi gửi, cookie, khoá Google và cấu h�
 |---|---|
 | Python 3.12 (64-bit) | Ghi lại đường dẫn tuyệt đối, ví dụ `C:\Program Files\Python312\python.exe`. Không cần quyền admin cho các bước sau. |
 | Thư mục cài đặt MỚI | Ví dụ `D:\TimClipPro`. Không phải thư mục clone git cũ, KHÔNG nằm trong OneDrive/Dropbox/ổ mạng. |
-| State root MỚI | Ví dụ `D:\TimClipPro_State` — chứa lịch sử, hàng đợi gửi, khoá, kết quả. KHÔNG nằm trong OneDrive/ổ mạng. |
+| State root MỚI | Ví dụ `D:\TimClipPro_State` — chứa lịch sử, hàng đợi gửi, khoá, kết quả. KHÔNG nằm trong OneDrive/ổ mạng. **NGANG HÀNG với thư mục cài đặt** — không đặt bên trong nó (hay ngược lại), xem §9. |
 | FFmpeg | Chép `ffmpeg.exe`, `ffprobe.exe` vào `D:\TimClipPro\tools\ffmpeg\bin\` (bản chính thức, có nguồn rõ). |
 | Bộ bootstrap | File zip do chủ dự án chuẩn bị: launcher + `trusted_keys.json` (khoá công khai tin cậy) + `bootstrap.py`. |
 | Khoá Google (tuỳ chọn) | File JSON của tài khoản dịch vụ. Chép bằng kênh riêng (USB) vào `D:\TimClipPro_State\secrets\`. KHÔNG lấy từ PC1 tự động. |
@@ -32,7 +32,8 @@ Chạy bằng Python 3.12 GỐC là đủ: bootstrap tự tạo môi trường r
 cần mạng tới PyPI, chỉ cài gói đã ghim băm) rồi tự chạy tiếp bằng môi trường đó. Báo «launcher-lock.txt chưa có
 băm gói» = bộ kit chưa qua bước 2 của `KE_HOACH_PILOT_PC2.md` — dừng, báo chủ dự án.
 
-Bootstrap sẽ: kiểm đường dẫn (từ chối OneDrive/ổ mạng, bản clone git, ghi đè cài đặt có sẵn) → chép launcher +
+Bootstrap sẽ: kiểm đường dẫn (từ chối OneDrive/ổ mạng, bản clone git, ghi đè cài đặt có sẵn, thư mục cài đặt và
+state root lồng nhau, thư mục nguồn phát hành nằm trong vùng bộ cập nhật — §9) → chép launcher +
 khoá tin cậy → tạo `TimClipPro.bat`, `GiamSat.bat`, `CapNhat.bat` → xuất file lịch Windows để XEM TRƯỚC
 (`launcher\lich_xem_truoc\`, **chưa đăng ký**) → tạo **định danh máy mới** → `launcher.json` → tải, **xác minh
 chữ ký** và cài bản Stable đầu tiên. Kết thúc in ra trạng thái `ACTIVE`. Đường dẫn có dấu tiếng Việt dùng được.
@@ -65,8 +66,14 @@ Mọi dòng ✅ là ổn; ⚠️ cần xem; ❌ phải xử lý trước khi dù
   Đích được **ghim lúc bấm Bắt đầu**: đổi lựa chọn giữa chừng chỉ áp dụng cho lượt SAU (có dòng nhắc).
 * Mỗi video quét xong được **lưu + xếp hàng gửi cùng một lúc** — tắt máy, mất điện cũng không mất việc gửi.
 * Tab «📤 Gửi Google Sheets» → **Hàng đợi gửi**: trạng thái từng việc. Việc **❓ Không rõ đã gửi chưa** (mất
-  mạng/mất điện đúng lúc gửi): mở Sheet tìm dòng của lần quét đó — có rồi thì «✅ Đã kiểm: dòng đã có trên
-  Sheet», chưa có thì tick «chấp nhận có thể trùng» rồi «⚠️ Gửi lại». Tool **không tự gửi lại** việc không rõ.
+  mạng/mất điện đúng lúc gửi): màn hình ghi «Tab đích đã ghim: mã …» — mở Sheet, tìm dòng của lần quét đó ở
+  ĐÚNG tab mang mã ấy (tab có thể đã đổi tên) — có rồi thì «✅ Đã kiểm: dòng đã có trên Sheet», chưa có thì
+  tick «chấp nhận có thể trùng» rồi «⚠️ Gửi lại». Tool **không tự gửi lại** việc không rõ; «Gửi lại» chỉ ghi vào
+  đúng tab đã ghim — tab đó đã bị xoá thì việc bị chặn, KHÔNG tự sang tab mới cùng tên.
+* Mã tab được ghim ngay trước lần gửi ĐẦU TIÊN của mỗi hồ sơ (kể cả hồ sơ tạo từ link cũ «theo tên»). Từ đó đổi
+  tên tab vẫn gửi đúng chỗ; xoá tab rồi tạo tab mới cùng tên thì việc gửi bị chặn — muốn gửi sang tab mới: sửa
+  hồ sơ bằng LINK CỦA TAB MỚI (có `#gid=…`; chỉ đổi tên hồ sơ thì revision mới vẫn giữ mã tab cũ) cho các lượt
+  SAU, còn việc cũ thì huỷ rồi «Gửi thêm (thủ công)» tới hồ sơ đã sửa.
 * «⏸ Tạm dừng toàn bộ việc gửi»: quét vẫn chạy, việc vẫn xếp hàng; bật lại thì gửi tiếp.
 * Xoá một lần quét đang gửi / không rõ → bị chặn (đối soát trước). Xoá lần quét đã gửi KHÔNG xoá dòng trên Sheet.
 
@@ -94,6 +101,8 @@ pilot được duyệt** (thay `<MÃ_HỒ_SƠ_ĐÍCH>`). Lịch chạy không c�
 * Không chạy `ChayTool.bat`/`GiamSat.bat`/`cap_nhat.py` cũ trong thư mục cài đặt managed (bản cài từ chối).
 * Không sửa/xoá file trong `releases\` hay `environments\` (chữ ký sẽ không khớp → doctor báo ❌).
 * Không đặt state root vào OneDrive.
+* Không đặt state root BÊN TRONG thư mục cài đặt (hay ngược lại), không chép bản phát hành (USB) vào bên trong
+  thư mục cài đặt; không sửa `state_root` trong `launcher.json` bằng tay (§9).
 
 ## 8. Khi có sự cố
 
@@ -107,8 +116,28 @@ Bootstrap xong nhưng **không cài được bản đầu** (dòng cuối không
 hoạt: chưa có»):
 
 * «Lock chưa có băm gói» — bản phát hành/bộ kit chưa qua bước lock có băm (`KE_HOACH_PILOT_PC2.md` bước 2).
-  Báo chủ dự án; cài đặt vừa tạo vẫn giữ, khi có bản đúng chỉ cần chạy `CapNhat.bat`.
+  Báo chủ dự án; cài đặt vừa tạo vẫn giữ. Bản lỗi đó đã bị **cách ly** (không cài lại), nên bản đúng phải mang
+  **số phiên bản MỚI** (ví dụ 1.0.1) — khi chủ dự án phát hành xong chỉ cần chạy `CapNhat.bat`.
 * «ký bằng khoá KHÔNG tin cậy» / «Không có bản Stable mới hợp lệ» — bộ kit và bản phát hành không cùng khoá.
   KHÔNG sửa `trusted_keys.json` bằng tay. Báo chủ dự án. Lúc này máy CHƯA có dữ liệu nào (ứng dụng chưa mở
   được), nên có thể xoá hai thư mục vừa tạo (thư mục cài đặt + state root MỚI) rồi bootstrap lại bằng bộ kit
   đúng — chạy lại lên thư mục cũ sẽ bị từ chối (không ghi đè cài đặt/định danh).
+
+## 9. Bố cục thư mục
+
+Thư mục cài đặt (ví dụ `D:\TimClipPro`) và state root (ví dụ `D:\TimClipPro_State`) phải **ngang hàng, tách
+biệt**: không trùng nhau, không thư mục nào nằm bên trong thư mục kia. Lý do: bộ cập nhật được quyền xoá/thay các
+thư mục `staging`, `releases`, `environments`, `update_state` trong thư mục cài đặt — state root nằm trong đó thì
+một lần dọn dẹp có thể xoá mất lịch sử, hàng đợi gửi và định danh máy (lỗi đã được kiểm toán độc lập phát hiện
+và sửa). Bootstrap từ chối bố cục lồng nhau TRƯỚC khi ghi gì; thư mục nguồn phát hành (USB chép vào) cũng không
+được nằm trong thư mục cài đặt.
+
+Nếu launcher, `doctor` hay màn hình «ℹ️ Phiên bản và cập nhật» báo **«Bố cục thư mục không an toàn»**
+(thường do `launcher.json` bị sửa tay): ứng dụng, giám sát và cập nhật đều DỪNG — tool không tự di chuyển hay
+xoá gì. Không tự xử lý; gửi chủ dự án ảnh màn hình `doctor`. Cách sửa (chủ dự án làm, máy đang tắt app và lịch):
+
+1. Chép NGUYÊN thư mục state root hiện tại sang ổ khác làm bản sao lưu.
+2. Chuyển thư mục state root ra một chỗ ngang hàng với thư mục cài đặt (ví dụ `D:\TimClipPro_State`).
+3. Sửa `state_root` trong `D:\TimClipPro\launcher\launcher.json` thành đường dẫn mới (trong JSON mỗi dấu `\` viết thành `\\`, ví dụ `"D:\\TimClipPro_State"`).
+4. Chạy `launcher.py doctor`: «Bố cục thư mục» và «Định danh cài đặt» phải ✅.
+5. Mở ứng dụng; nếu file khoá Google nằm trong `secrets\` cũ, đăng ký lại binding (cùng tên) với đường dẫn mới.

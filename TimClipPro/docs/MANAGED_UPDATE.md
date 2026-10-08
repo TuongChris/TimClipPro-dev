@@ -4,8 +4,8 @@ Mã: `managed_update.py` (bộ cập nhật), `maintenance_gate.py` (cổng bả
 khoẻ release, chạy bằng runtime của chính release), `launcher.py` (điểm vào ổn định, nằm ngoài release).
 Test: `tests/test_managed_update.py`, `tests/test_maintenance_gate.py`, `tests/test_health_check.py`,
 `tests/test_launcher.py`, các test rà soát M5 (`tests/test_managed_update_ra_soat.py`,
-`tests/test_launcher_ra_soat.py`, `tests/test_outbox_ban_cu.py`) — artifact TỔNG HỢP ký bằng khoá thử sinh lúc
-chạy, không mạng.
+`tests/test_launcher_ra_soat.py`, `tests/test_outbox_ban_cu.py`), audit-fix `tests/test_bo_cuc_thu_muc.py` —
+artifact TỔNG HỢP ký bằng khoá thử sinh lúc chạy, không mạng.
 
 ## 1. Luồng
 
@@ -39,6 +39,18 @@ PC1 (dev, legacy) không bao giờ bị updater này đụng tới: nó chỉ ch
 
 Tiến trình con chạy với `TIMCLIP_RUNTIME_MODE=managed`, `TIMCLIP_STATE_ROOT`, `PYTHONPYCACHEPREFIX` trong
 state root (cây release đã ký không bao giờ có `__pycache__`), bỏ `TIMCLIP_DATA_DIR`/`SHEET_LINK`/`PYTHONPATH`.
+
+**Hai thư mục TÁCH BIỆT (audit độc lập f4d3cb7, MR-P1-01).** Bộ cập nhật được quyền xoá/thay toàn bộ
+`releases/`, `environments/`, `update_state/`, `staging/`. Bản f4d3cb7 chỉ chặn hai root BẰNG nhau, nên
+`state = <cài đặt>\staging\state` được bootstrap chấp nhận rồi bị `_don_staging` xoá sạch (lịch sử + định danh).
+Nay `installation_root` và `state_root` không được trùng, không cái nào nằm trong cái kia — so cả dạng CHỮ
+(không phân biệt hoa/thường) lẫn dạng THẬT (`realpath`: junction/symlink/tên 8.3), bằng `commonpath` (không
+theo tiền tố chuỗi). Kiểm ở ba tầng: `bootstrap.kiem_truoc` (trước khi ghi byte nào), `CaiDat` (mọi nơi dựng:
+launcher, giao diện, bootstrap; mỗi lượt cập nhật kiểm lại), và `CaiDat.kiem_xoa` NGAY TRƯỚC mọi `rmtree` của
+updater (`CapNhat._xoa_cay`, `don_ban_cu`): đích phải thuộc vùng updater, không chồng state root, không chứa
+thư mục nguồn phát hành (`--nguon-thu-muc` cũng bị chặn nếu nằm trong vùng updater). Cấu hình cũ không an
+toàn (launcher.json bị sửa tay): launcher/doctor/giao diện báo «Bố cục thư mục» và DỪNG — không tự di
+chuyển, không xoá gì (`HUONG_DAN_PC2.md` §9). Test: `tests/test_bo_cuc_thu_muc.py`.
 
 ## 3. Tin cậy và chính sách Stable
 
