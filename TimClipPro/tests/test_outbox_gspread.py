@@ -70,6 +70,9 @@ def test_thu_tu_tim_tab_doc_theo_ma_roi_sending_roi_mot_batchUpdate(gia):
     nk = gia["may"].nhat_ky
     assert [y["loai"] for y in nk] == ["metadata", "metadata", "batchGetByDataFilter", "batchUpdate"]
     assert gia["su_kien"] == [("SENDING", 3)]                          # SENDING sau khi đọc, trước request ghi
+    # Đọc ĐÚNG hàng tiêu đề (hàng 1, đủ bề rộng báo cáo) — không kéo cả trang tính về mỗi lần gửi.
+    assert nk[2]["body"]["dataFilters"] == [{"gridRange": {"sheetId": 0, "startRowIndex": 0, "endRowIndex": 1,
+                                                           "startColumnIndex": 0, "endColumnIndex": 34}}]
     assert set(gia["may"].timeouts) == {ob.CongGspread.THOI_GIAN_CHO}
     (yc,) = nk[-1]["body"]["requests"]
     assert yc["appendCells"]["sheetId"] == 0 and len(yc["appendCells"]["rows"]) == 2

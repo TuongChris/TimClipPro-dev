@@ -135,7 +135,7 @@ def test_viec_cu_dang_cho_khong_bao_gio_duoc_phat_theo_ma_chot_cua_viec_moi(mt):
     mt["dong_ho"].t += 3600
     ng.chay_mot_vong()
     assert cong.phat == [202] and _viec(mt, x).trang_thai == ob.BLOCKED_CONFIG
-    assert "mã tab" in _viec(mt, x).loi
+    assert _viec(mt, x).loi == ob.LY_DO_BAN_CU_CHUA_CO_MA_TAB          # đúng lý do «bản cũ, không mã»
 
 
 # ---------------------------------------------------------------- mã tab của TỪNG lần phát
@@ -255,6 +255,11 @@ def test_gui_them_thu_cong_canh_bao_trung_khi_viec_cu_khong_ro_tab(mt):
     y = sd.chot_y_dinh(mt["db"], d101.id, installation_id=IID, lo_id="lo")
     with pytest.raises(ob.LoiHangDoi, match="TRÙNG"):
         ob.tao_viec_thu_cong(mt["db"], y, 1, HEADER, [["x"] + [""] * 33], chinh_sach="v2")
+    # Đích THEO TÊN khác, chưa chốt mã: so tên không nói được gì về tab việc cũ đã ghi (101 có thể đã đổi tên).
+    d_ten = _ho_so(mt, tab="Tab khác")
+    y2 = sd.chot_y_dinh(mt["db"], d_ten.id, installation_id=IID, lo_id="lo")
+    with pytest.raises(ob.LoiHangDoi, match="TRÙNG"):
+        ob.tao_viec_thu_cong(mt["db"], y2, 1, HEADER, [["x"] + [""] * 33], chinh_sach="v2")
 
 
 # ---------------------------------------------------------------- giao diện đối soát

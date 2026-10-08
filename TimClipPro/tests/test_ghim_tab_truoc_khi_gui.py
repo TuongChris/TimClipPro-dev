@@ -117,6 +117,9 @@ def test_A_tab_cu_bi_xoa_thi_chan_khong_nhan_tab_moi_cung_ten(mt):
     cong.ke_hoach = [("sau_da_ghi", ob.KhongRo("mất phản hồi"))]
     ng = _ng(mt, cong)
     ng.chay_mot_vong()
+    # Ghim của REVISION có ngay trước request dù kết quả không rõ — mã của lần phát (v4) là lớp chặn thứ hai, không
+    # thay được lớp này (đột biến «chốt sau SENT» sống sót nếu chỉ kiểm kết quả gửi lại).
+    assert _ma_chot(mt, d) == 101
     ng.tha_quyen()
     cong.xoa(101)
     cong.them(202, "KetQuaQuet")
@@ -279,6 +282,7 @@ def test_transport_khong_qua_buoc_chot_la_khong_ro(mt):
     v = _xep(mt, d, 1)
     _ng(mt, CongKhongBao()).chay_mot_vong()
     assert _viec(mt, v).trang_thai == ob.UNKNOWN and _ma_chot(mt, d) is None
+    assert "bước chốt" in _viec(mt, v).loi             # đúng lý do — không chỉ nhờ biên nhận lệch mã mà ra UNKNOWN
 
 
 # ---------------------------------------------------------------- hồ sơ có mã tab: CÙNG bất biến
