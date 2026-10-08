@@ -20,7 +20,7 @@ import pytest
 import lich_su
 import outbox as ob
 import sheet_destinations as sd
-from outbox_gia import CongGia, CongNhieuTab, khoa_gia, phan_hoi_dung
+from outbox_gia import CongGia, CongNhieuTab, ket_qua, khoa_gia
 
 ID_A = "1" + "a" * 43
 IID = "c" * 32
@@ -254,7 +254,7 @@ class CongSaiMa(CongGia):
     def gui(self, chot, duong_dan_khoa, header, rows, truoc_khi_gui):
         truoc_khi_gui(999, "KetQuaQuet")
         self.bang.append((chot.spreadsheet_id, 999, [list(r) for r in rows]))
-        return ob.KetQuaGui(phan_hoi_dung(chot, "KetQuaQuet", len(rows)), 999, "KetQuaQuet", len(rows))
+        return ket_qua(chot, 999, "KetQuaQuet", rows)
 
 
 def test_transport_tra_tab_khac_ma_ho_so_thi_chan(mt):
@@ -271,7 +271,7 @@ class CongKhongBao(CongGia):
 
     def gui(self, chot, duong_dan_khoa, header, rows, truoc_khi_gui):
         self.bang.append((chot.spreadsheet_id, 101, [list(r) for r in rows]))
-        return ob.KetQuaGui(phan_hoi_dung(chot, "KetQuaQuet", len(rows)), 101, "KetQuaQuet", len(rows))
+        return ket_qua(chot, 101, "KetQuaQuet", rows)
 
 
 def test_transport_khong_qua_buoc_chot_la_khong_ro(mt):
@@ -318,7 +318,7 @@ class CongTraMaKhac(CongGia):
     def gui(self, chot, duong_dan_khoa, header, rows, truoc_khi_gui):
         truoc_khi_gui(101, "KetQuaQuet")
         self.bang.append((chot.spreadsheet_id, 101, [list(r) for r in rows]))
-        return ob.KetQuaGui(phan_hoi_dung(chot, "KetQuaQuet", len(rows)), 202, "KetQuaQuet", len(rows))
+        return ket_qua(chot, 202, "KetQuaQuet", rows)              # request mang mã 202, đã ghim 101
 
 
 def test_bien_nhan_khac_ma_vua_ghim_la_khong_ro_khong_chot_ma_moi(mt):

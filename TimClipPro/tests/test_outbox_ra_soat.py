@@ -161,8 +161,8 @@ def test_bien_nhan_khac_ma_tab_da_gui_la_khong_ro():
                           spreadsheet_id=ID_A, worksheet_id=5, worksheet_ten="KetQuaQuet",
                           schema_id=sd.SCHEMA_NGANG, xac_thuc_ref="mac_dinh", principal="p@x",
                           key_id="k", cho_xoay_khoa=True)
-    from outbox_gia import phan_hoi_dung
-    kq = ob.KetQuaGui(phan_hoi_dung(chot, "KetQuaQuet", 1), 6, "KetQuaQuet", 1)
+    from outbox_gia import ket_qua
+    kq = ket_qua(chot, 6, "KetQuaQuet", [["x"]])                  # request ghi theo mã 6, mã đã ghim 5
     assert ob.kiem_bien_nhan(kq, chot)[0] is False
 
 

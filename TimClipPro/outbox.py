@@ -20,10 +20,16 @@ Hợp đồng
   ghi đầu tiên; chốt không được / mã đã chốt khác tab vừa tìm / mất claim → không gửi. Mọi lần gửi sau (thử
   lại, gửi lại sau UNKNOWN, khởi động lại, việc khác cùng revision) theo MÃ đó, không tìm lại theo tên; tab đã
   bị xoá → chặn, không bao giờ nhận tab mới cùng tên (MR-P1-02, audit độc lập f4d3cb7).
+* MỌI request chạm NỘI DUNG tab định tuyến bằng mã tab (``sheetId``), không theo tên: đọc hàng tiêu đề qua
+  ``values:batchGetByDataFilter`` (``gridRange.sheetId``), ghi bằng MỘT ``spreadsheets.batchUpdate``
+  ``AppendCells{sheetId}``. ``Worksheet.get_values``/``append_rows`` của gspread dựng range A1 từ TÊN tab, nên đổi
+  tên/tạo tab trùng tên giữa lúc kiểm và lúc ghi từng làm dòng rơi sang tab khác mà vẫn SENT (MR-R2-P1-01, tái
+  audit 78ba20c).
 * Khởi động người gửi: ``CLAIMED`` (chưa dispatch) → ``PENDING``; ``SENDING`` của chủ cũ →
   ``UNKNOWN_DELIVERY`` (KHÔNG suy "chưa ghi" từ việc tiến trình đã chết).
-* ``SENT`` chỉ khi biên nhận khớp: ``spreadsheetId`` đúng, số dòng đúng, ``updatedRange`` thuộc đúng tab
-  vừa kiểm theo ID. Bất thường → ``UNKNOWN_DELIVERY``.
+* ``SENT`` chỉ khi biên nhận khớp: ``spreadsheetId`` máy chủ trả đúng bảng, ``replies`` đúng số request của lô
+  NGUYÊN TỬ, và ``sheetId`` TRONG THÂN REQUEST đã phát = mã vừa chốt, dòng trong request = payload. Bất thường →
+  ``UNKNOWN_DELIVERY``.
 * Không mạng khi đang mở giao dịch; không khoá DB trong lúc chờ Google.
 
 Không có exactly-once phía Google: ``UNKNOWN_DELIVERY`` là cơ chế xử lý mơ hồ — người dùng đối soát rồi
@@ -37,6 +43,7 @@ import contextlib
 import hashlib
 import json
 import logging
+import math
 import os
 import threading
 import time
@@ -104,12 +111,13 @@ class MatQuyen(Exception):
 
 @dataclass(frozen=True)
 class KetQuaGui:
-    """Transport trả về: phản hồi THÔ của Sheets API + tab thật đã ghi + số dòng đã gửi."""
+    """Transport trả về: phản hồi THÔ của ``spreadsheets.batchUpdate`` + ĐÚNG thân request ghi đã phát + tên tab lúc
+    tìm. Mã tab và các dòng được đọc TỪ THÂN REQUEST (``appendCells.sheetId``/``rows``), không từ object local — mã
+    cũ lấy ``ws.id`` local trong khi request ghi định tuyến theo TÊN (MR-R2-P1-01)."""
 
     phan_hoi: object
-    worksheet_id: int
+    yeu_cau: dict
     worksheet_ten: str
-    so_dong_gui: int
 
 
 @dataclass(frozen=True)
@@ -417,36 +425,97 @@ def _nhom(chot: sd.DichGuiChot) -> tuple:
             else "ten:" + chot.worksheet_ten, chot.xac_thuc_ref, chot.schema_id)
 
 
-def _ten_tab_trong_range(rng: str) -> Optional[str]:
-    if "!" not in rng:
-        return None
-    ten = rng.rsplit("!", 1)[0]
-    if len(ten) >= 2 and ten[0] == "'" and ten[-1] == "'":
-        ten = ten[1:-1].replace("''", "'")
-    return ten
+def dung_o(gia_tri) -> dict:
+    """MỘT ô của ``AppendCells`` (``fields: userEnteredValue``) tương đương ``values.append`` RAW: chuỗi →
+    ``stringValue`` (KHÔNG BAO GIỜ phân tích công thức, kể cả chuỗi bắt đầu bằng ``=``), số → ``numberValue``,
+    bool → ``boolValue``, ``""``/``None`` → ô trống (RAW: chuỗi rỗng đặt ô trống, null bỏ qua). Số không hữu hạn
+    (JSON không có NaN/vô cực) → ``ValueError``; kiểu khác → ``TypeError``."""
+    if gia_tri is None or (isinstance(gia_tri, str) and gia_tri == ""):
+        return {}
+    if isinstance(gia_tri, bool):
+        return {"userEnteredValue": {"boolValue": gia_tri}}
+    if isinstance(gia_tri, (int, float)):
+        if isinstance(gia_tri, float) and not math.isfinite(gia_tri):
+            raise ValueError("ô số không hữu hạn (NaN/vô cực)")
+        return {"userEnteredValue": {"numberValue": gia_tri}}
+    if isinstance(gia_tri, str):
+        return {"userEnteredValue": {"stringValue": gia_tri}}
+    raise TypeError(f"kiểu ô không gửi được: {type(gia_tri).__name__}")
 
 
-def kiem_bien_nhan(kq: KetQuaGui, chot: sd.DichGuiChot) -> tuple:
-    """``(hợp_lệ, lý_do, biên_nhận_dict)`` — chỉ hợp lệ khi phản hồi chứng minh đúng bảng, đúng tab,
-    đúng số dòng đã gửi."""
+def dung_yeu_cau_ghi(gid: int, gia_tri: list, so_cot_hien_co: Optional[int] = None) -> dict:
+    """Thân ``spreadsheets.batchUpdate`` DUY NHẤT của một lần gửi — định tuyến bằng MÃ tab, không mang tên tab nào:
+    [``AppendDimension`` cột khi tab hẹp hơn dòng dài nhất — tài liệu AppendCells không hứa tự nới cột như
+    ``values.append``] + ``AppendCells`` (thêm sau dòng cuối có dữ liệu). Cả lô nguyên tử: hoặc áp hết, hoặc không."""
+    yeu_cau = []
+    rong = max((len(dong) for dong in gia_tri), default=0)
+    if so_cot_hien_co is not None and rong > so_cot_hien_co:
+        yeu_cau.append({"appendDimension": {"sheetId": gid, "dimension": "COLUMNS",
+                                            "length": rong - so_cot_hien_co}})
+    yeu_cau.append({"appendCells": {"sheetId": gid, "fields": "userEnteredValue",
+                                    "rows": [{"values": [dung_o(x) for x in dong]} for dong in gia_tri]}})
+    return {"requests": yeu_cau}
+
+
+def _phan_tich_yeu_cau(yeu_cau) -> tuple:
+    """``(mã_tab, các_dòng, số_request)`` của thân request ghi — CHỈ nhận đúng dạng ``dung_yeu_cau_ghi`` dựng:
+    [AppendDimension(COLUMNS) cùng mã] + MỘT AppendCells{sheetId, userEnteredValue} cuối. Khác → ``ValueError``."""
+    ds = yeu_cau.get("requests") if isinstance(yeu_cau, dict) else None
+    if not isinstance(ds, list) or not ds or not all(isinstance(r, dict) and len(r) == 1 for r in ds):
+        raise ValueError("thân request ghi không đúng dạng batchUpdate")
+    ac = ds[-1].get("appendCells")
+    gid = ac.get("sheetId") if isinstance(ac, dict) else None
+    if (not isinstance(gid, int) or isinstance(gid, bool) or set(ac) != {"sheetId", "fields", "rows"}
+            or ac["fields"] != "userEnteredValue" or not isinstance(ac["rows"], list)):
+        raise ValueError("request ghi cuối không phải AppendCells theo mã tab")
+    for r in ds[:-1]:
+        ad = r.get("appendDimension")
+        if not (isinstance(ad, dict) and set(ad) == {"sheetId", "dimension", "length"} and ad["sheetId"] == gid
+                and ad["dimension"] == "COLUMNS" and isinstance(ad["length"], int) and ad["length"] > 0):
+            raise ValueError("thân request ghi có request ngoài hợp đồng")
+    return gid, ac["rows"], len(ds)
+
+
+def _dong_khop_payload(dong: list, header: Optional[list], rows: list) -> bool:
+    """Các dòng trong request = đúng payload của việc (có thể kèm hàng tiêu đề đầu khi trang tính trống)."""
+    try:
+        than = [{"values": [dung_o(x) for x in r]} for r in rows]
+        return dong == than or (header is not None and dong == [{"values": [dung_o(x) for x in header]}] + than)
+    except (TypeError, ValueError):
+        return False
+
+
+def kiem_bien_nhan(kq: KetQuaGui, chot: sd.DichGuiChot, *, header: Optional[list] = None,
+                   rows: Optional[list] = None) -> tuple:
+    """``(hợp_lệ, lý_do, biên_nhận_dict)``.
+
+    ``spreadsheets.batchUpdate`` là NGUYÊN TỬ: phản hồi THÀNH CÔNG mang đúng ``spreadsheetId`` và đúng số
+    ``replies`` = Google đã áp dụng TOÀN BỘ thân request — mà thân request định tuyến bằng ``appendCells.sheetId``.
+    Hợp lệ chỉ khi mã tab TRONG THÂN REQUEST = mã đã chốt (``chot.worksheet_id``) và dòng trong request đúng payload.
+    Google KHÔNG trả vùng ghi/số dòng cho AppendCells: biên nhận ghi rõ phần nào máy chủ xác nhận, phần nào lấy từ
+    request — không dựng ``updatedRange``/``updatedRows`` giả."""
+    try:
+        gid, dong, so_yeu_cau = _phan_tich_yeu_cau(kq.yeu_cau)
+    except ValueError as e:
+        return False, str(e), {}
     ph = kq.phan_hoi
     if not isinstance(ph, dict):
         return False, "phản hồi không phải đối tượng JSON", {}
-    up = ph.get("updates") if isinstance(ph.get("updates"), dict) else {}
-    sid = ph.get("spreadsheetId")
-    if sid != chot.spreadsheet_id or up.get("spreadsheetId", sid) != chot.spreadsheet_id:
+    if ph.get("spreadsheetId") != chot.spreadsheet_id:
         return False, "phản hồi mang mã bảng khác", {}
-    if up.get("updatedRows") != kq.so_dong_gui:
-        return False, (f"phản hồi báo {up.get('updatedRows')} dòng, đã gửi "
-                       f"{kq.so_dong_gui}"), {}
-    rng = up.get("updatedRange")
-    if not isinstance(rng, str) or _ten_tab_trong_range(rng) != kq.worksheet_ten:
-        return False, "vùng ghi không thuộc tab đã kiểm", {}
-    if chot.worksheet_id is not None and kq.worksheet_id != chot.worksheet_id:
-        return False, "đã ghi vào tab khác mã đã ghim", {}
-    return True, "", {"spreadsheet_id": sid, "worksheet_id": kq.worksheet_id,
-                      "worksheet_ten": kq.worksheet_ten, "updated_range": rng,
-                      "updated_rows": up.get("updatedRows"), "luc": time.time()}
+    tra_loi = ph.get("replies")
+    if not isinstance(tra_loi, list) or len(tra_loi) != so_yeu_cau:
+        return False, (f"phản hồi có {len(tra_loi) if isinstance(tra_loi, list) else 'không có'} reply, đã gửi "
+                       f"{so_yeu_cau} request"), {}
+    if chot.worksheet_id is None or gid != chot.worksheet_id:
+        return False, "request đã ghi vào mã tab khác mã đã chốt", {}
+    if rows is not None and not _dong_khop_payload(dong, header, rows):
+        return False, "dòng trong request khác dữ liệu của việc", {}
+    return True, "", {"kieu": "batchUpdate.appendCells", "spreadsheet_id": ph["spreadsheetId"],
+                      "so_reply": len(tra_loi), "worksheet_id": gid, "worksheet_ten": kq.worksheet_ten,
+                      "so_dong_gui": len(dong), "luc": time.time(),
+                      "may_chu_xac_nhan": "spreadsheetId + replies của batchUpdate nguyên tử; mã tab và số dòng "
+                                          "lấy từ thân request đã phát (AppendCells không trả vùng ghi)"}
 
 
 class NguoiGui:
@@ -646,6 +715,12 @@ class NguoiGui:
             self._chot(viec_id, token, BLOCKED_REPORT,
                        loi="Dữ liệu cần gửi bị thiếu hoặc đã bị thay đổi — không gửi; hãy quét lại.")
             return "bi_chan"
+        try:
+            dung_yeu_cau_ghi(0, [header, *rows])      # mọi ô gửi được (số hữu hạn, đúng kiểu) — trước mọi request
+        except (TypeError, ValueError):
+            self._chot(viec_id, token, BLOCKED_REPORT,
+                       loi="Dữ liệu cần gửi có ô không gửi được lên Sheets (số NaN/vô cực) — không gửi; hãy quét lại.")
+            return "bi_chan"
         ly_do_khoa, duong_dan_khoa = self._kiem_khoa(chot)
         if ly_do_khoa:
             self._chot(viec_id, token, BLOCKED_CONFIG, loi=ly_do_khoa)
@@ -691,8 +766,9 @@ class NguoiGui:
             self._chot(viec_id, token, UNKNOWN, loi="Transport trả kết quả mà chưa qua bước chốt trước khi gửi — "
                        "không rõ đã ghi chưa.")
             return "khong_ro"
-        # Biên nhận phải khớp ĐÚNG mã tab vừa chốt (hồ sơ theo tên cũng vậy — không chỉ khớp tên tab).
-        hop_le, ly_do, bien_nhan = kiem_bien_nhan(kq, replace(chot_gui, worksheet_id=da_phat["gid"]))
+        # Biên nhận phải khớp ĐÚNG mã tab vừa chốt — đọc từ THÂN REQUEST đã phát (hồ sơ theo tên cũng vậy).
+        hop_le, ly_do, bien_nhan = kiem_bien_nhan(kq, replace(chot_gui, worksheet_id=da_phat["gid"]),
+                                                  header=header, rows=rows)
         if not hop_le:
             self._chot(viec_id, token, UNKNOWN, loi=f"Biên nhận bất thường: {ly_do}.")
             return "khong_ro"
@@ -1023,10 +1099,47 @@ def phan_loai_loi(e: BaseException, *, da_phat: bool) -> Exception:
     return KhongRo(f"{ten} sau khi gửi — không rõ Google đã ghi chưa.")
 
 
+class _TabTheoMa:
+    """Một tab ĐỌC THEO MÃ cho ``sheets.kiem_tieu_de_nghiem_ngat`` (duck-type ``get_values``/``get_all_values`` của
+    ``Worksheet``, luật kiểm giữ nguyên văn): ``values:batchGetByDataFilter`` với ``gridRange.sheetId``.
+    ``Worksheet.get_values`` của gspread dựng range A1 từ TÊN — tab đổi tên + tab trống mới mang tên cũ ngay trước
+    lần đọc từng làm kiểm nhầm tab khác ("trang tính trống") rồi chèn thêm hàng tiêu đề vào tab thật."""
+
+    def __init__(self, sh, gid: int):
+        self._sh, self._gid = sh, int(gid)
+
+    def _doc(self, vung: dict) -> list:
+        import gspread
+        from gspread.urls import SPREADSHEETS_API_V4_BASE_URL
+
+        url = f"{SPREADSHEETS_API_V4_BASE_URL}/{self._sh.id}/values:batchGetByDataFilter"
+        ph = self._sh.client.request("post", url, json={
+            "dataFilters": [{"gridRange": {"sheetId": self._gid, **vung}}],
+            "majorDimension": "ROWS", "valueRenderOption": "FORMATTED_VALUE"}).json()
+        khop = [m.get("valueRange") for m in ph.get("valueRanges") or [] if isinstance(m, dict)]
+        if len(khop) != 1 or not isinstance(khop[0], dict):
+            # Tài liệu không nói ca bộ lọc không khớp: không có đúng MỘT vùng = không đọc được tab THEO MÃ.
+            raise gspread.exceptions.WorksheetNotFound(f"id {self._gid}")
+        return khop[0].get("values") or []
+
+    def get_values(self, a1: str) -> list:
+        from gspread.utils import a1_to_rowcol
+
+        dau, _, cuoi = a1.partition(":")
+        hang, cot = a1_to_rowcol(cuoi or dau)
+        if dau != "A1" or hang != 1:
+            raise ValueError(f"vùng đọc ngoài hợp đồng: {a1}")
+        return self._doc({"startRowIndex": 0, "endRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": cot})
+
+    def get_all_values(self) -> list:
+        return self._doc({})
+
+
 class CongGspread:
-    """Transport thật. Mỗi lần gửi: mở bảng (metadata) → tab theo ID (hoặc theo tên khi chưa có mã) →
-    kiểm tiêu đề NGHIÊM NGẶT → ``truoc_khi_gui(mã_tab, tên_tab)`` (người gửi đối chiếu rồi commit SENDING;
-    ném lỗi = huỷ, chưa ghi gì) → MỘT ``append_rows`` RAW. Timeout (kết nối 10 s, đọc 60 s); không thử lại
+    """Transport thật. Mỗi lần gửi: mở bảng (metadata) → tab THEO MÃ (theo tên chỉ khi revision chưa từng phát — để
+    TÌM mã) → kiểm tiêu đề NGHIÊM NGẶT, đọc THEO MÃ → ``truoc_khi_gui(mã_tab, tên_tab)`` (người gửi đối chiếu rồi
+    commit ghim + SENDING; ném lỗi = huỷ, chưa ghi gì) → MỘT ``spreadsheets.batchUpdate`` ``AppendCells{sheetId}``.
+    Sau bước tìm tab, KHÔNG request nào mang tên tab (MR-R2-P1-01). Timeout (kết nối 10 s, đọc 60 s); không thử lại
     bên trong (HTTPClient mặc định của gspread không backoff)."""
 
     THOI_GIAN_CHO = (10, 60)
@@ -1063,7 +1176,7 @@ class CongGspread:
             if ten_doi_chieu and ws.title != ten_doi_chieu:
                 return False, (f"Tab mã {ws.id} hiện tên «{ws.title}», khác tên đối chiếu "
                                f"«{ten_doi_chieu}» của hồ sơ — kiểm lại link/tên tab.")
-            trong = sheets.kiem_tieu_de_nghiem_ngat(ws, header, ws.title)
+            trong = sheets.kiem_tieu_de_nghiem_ngat(_TabTheoMa(sh, ws.id), header, ws.title)
         except Exception as e:  # noqa: BLE001 — chỉ đọc: mọi lỗi là "chưa gửi"
             loi = phan_loai_loi(e, da_phat=False)
             return False, getattr(loi, "ly_do", str(loi))
@@ -1080,13 +1193,16 @@ class CongGspread:
             sh = self._client(duong_dan_khoa).open_by_key(chot.spreadsheet_id)
             ws = (sh.get_worksheet_by_id(chot.worksheet_id) if chot.worksheet_id is not None
                   else sh.worksheet(chot.worksheet_ten))
-            can_tieu_de = sheets.kiem_tieu_de_nghiem_ngat(ws, header, ws.title)
+            gid, ten = int(ws.id), str(ws.title)
+            # Từ đây chỉ dùng MÃ tab; tên chỉ còn là nhãn (đối chiếu, hiển thị) — không request nào mang nó.
+            can_tieu_de = sheets.kiem_tieu_de_nghiem_ngat(_TabTheoMa(sh, gid), header, ten)
+            yeu_cau = dung_yeu_cau_ghi(gid, ([list(header)] if can_tieu_de else []) + [list(r) for r in rows],
+                                       ws.col_count)
         except Exception as e:  # noqa: BLE001 — trước dispatch: chưa có request ghi nào
             raise phan_loai_loi(e, da_phat=False) from None
-        gia_tri = ([list(header)] if can_tieu_de else []) + [list(r) for r in rows]
-        truoc_khi_gui(int(ws.id), str(ws.title))     # có thể ném ChuaGui/MatQuyen — chưa ghi gì
+        truoc_khi_gui(gid, ten)                      # có thể ném ChuaGui/MatQuyen — chưa ghi gì
         try:
-            phan_hoi = ws.append_rows(gia_tri, value_input_option="RAW")
+            phan_hoi = sh.batch_update(yeu_cau)
         except Exception as e:  # noqa: BLE001
             raise phan_loai_loi(e, da_phat=True) from None
-        return KetQuaGui(phan_hoi, int(ws.id), str(ws.title), len(gia_tri))
+        return KetQuaGui(phan_hoi, yeu_cau, ten)

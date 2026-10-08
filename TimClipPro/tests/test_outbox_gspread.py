@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
-"""Transport Google Sheets thật của outbox (``outbox.CongGspread``) với gspread GIẢ, ngoại lệ THẬT.
+"""Transport Google Sheets thật của outbox (``outbox.CongGspread``) — gspread THẬT trên máy chủ Sheets GIẢ ở tầng
+HTTP (``sheets_http_gia``), ngoại lệ THẬT của gspread/requests/google-auth.
 
 Khoá:
-* thứ tự: kiểm tab theo ID + tiêu đề (CHỈ ĐỌC) → ``truoc_khi_gui`` (commit SENDING) → MỘT append RAW;
-* mọi lỗi trước dispatch → ``ChuaGui`` và 0 lần ghi; sau dispatch chỉ kiểu chứng minh "không tới /
-  bị từ chối" mới là ``ChuaGui`` — ReadTimeout, 5xx, mất kết nối giữa chừng → ``KhongRo``;
+* thứ tự: tìm tab (metadata) → kiểm tiêu đề CHỈ ĐỌC, THEO MÃ (``values:batchGetByDataFilter``) → ``truoc_khi_gui``
+  (commit SENDING) → MỘT ``spreadsheets.batchUpdate`` AppendCells{sheetId}; không request nào sau bước tìm tab mang
+  tên tab (MR-R2-P1-01 — gspread ``get_values``/``append_rows`` dựng A1 từ TÊN);
+* mọi lỗi trước dispatch → ``ChuaGui`` và 0 request ghi; sau dispatch chỉ kiểu chứng minh "không tới / bị từ chối"
+  mới là ``ChuaGui`` — ReadTimeout, 5xx, 408, mất kết nối giữa chừng → ``KhongRo``;
 * lý do không chứa mã bảng/URL dù message gốc có;
-* timeout được đặt (HTTPClient mặc định chờ vô hạn).
-Không mạng: ``gspread.service_account`` bị thay bằng client giả.
+* timeout được đặt cho MỌI request (HTTPClient mặc định chờ vô hạn).
+Không mạng: ``gspread.service_account`` → ``gspread.Client(auth=None, session=máy_chủ_giả)``.
 """
 import google.auth.exceptions as gae
 import gspread
@@ -17,91 +20,21 @@ import urllib3.exceptions as u3
 
 import outbox as ob
 import sheet_destinations as sd
+from sheets_http_gia import DOC, GHI, LoiHttp, MayChuSheetsGia, TabGia, moc_mot_lan
 
 ID = "1" + "z" * 43
+URL_BANG = f"https://docs.google.com/spreadsheets/d/{ID}/edit"
 HEADER = [f"Cột {i}" for i in range(1, 35)]
 ROWS = [["v1"] + [""] * 33, ["v2"] + [""] * 33]
 
 
-class PhanHoiLoi:
-    def __init__(self, ma, trang_thai="LOI", thong_diep=None):
-        self.status_code = ma
-        self.text = thong_diep or f"loi {ma} https://docs.google.com/spreadsheets/d/{ID}/edit"
-        self._ma, self._tt, self._td = ma, trang_thai, self.text
-
-    def json(self):
-        return {"error": {"code": self._ma, "message": self._td, "status": self._tt}}
-
-
-def loi_api(ma, tt="LOI"):
-    return gspread.exceptions.APIError(PhanHoiLoi(ma, tt))
-
-
-class Tab:
-    def __init__(self, ghi, gid=0, ten="KetQuaQuet", hang1=None, toan_bang=None):
-        self.id, self.title, self._ghi = gid, ten, ghi
-        self.hang1 = [list(HEADER)] if hang1 is None else hang1
-        self.toan_bang = toan_bang
-        self.loi_append = None
-
-    def get_values(self, rng):
-        self._ghi.append(("doc", rng))
-        return self.hang1
-
-    def get_all_values(self):
-        self._ghi.append(("doc_tat_ca",))
-        return self.toan_bang if self.toan_bang is not None else self.hang1
-
-    def append_rows(self, values, value_input_option=None, **kw):
-        self._ghi.append(("append", len(values), value_input_option))
-        if self.loi_append is not None:
-            raise self.loi_append
-        return {"spreadsheetId": ID, "updates": {"spreadsheetId": ID,
-                "updatedRange": f"'{self.title}'!A2:AH{1 + len(values)}",
-                "updatedRows": len(values)}}
-
-    def append_row(self, *a, **k):   # outbox KHÔNG được dùng đường hai lần ghi
-        raise AssertionError("append_row không được gọi")
-
-
-class Bang:
-    def __init__(self, tab, loi_mo=None):
-        self.tab, self.loi_mo = tab, loi_mo
-
-    def get_worksheet_by_id(self, gid):
-        if gid != self.tab.id:
-            raise gspread.exceptions.WorksheetNotFound(gid)
-        return self.tab
-
-    def worksheet(self, ten):
-        if ten != self.tab.title:
-            raise gspread.exceptions.WorksheetNotFound(ten)
-        return self.tab
-
-
-class Khach:
-    def __init__(self, bang, nhat_ky):
-        self.bang, self.nhat_ky = bang, nhat_ky
-
-    def set_timeout(self, t):
-        self.nhat_ky.append(("timeout", t))
-
-    def open_by_key(self, key):
-        self.nhat_ky.append(("mo", key))
-        if self.bang.loi_mo is not None:
-            raise self.bang.loi_mo
-        return self.bang
-
-
 @pytest.fixture()
 def gia(monkeypatch, tmp_path):
-    nk = []
-    tab = Tab(nk)
-    bang = Bang(tab)
-    monkeypatch.setattr(gspread, "service_account", lambda filename: Khach(bang, nk))
+    may = MayChuSheetsGia(ID, [TabGia(0, "KetQuaQuet", [HEADER], so_cot=34)])
+    monkeypatch.setattr(gspread, "service_account", lambda filename: gspread.Client(auth=None, session=may))
     khoa = tmp_path / "k.json"
     khoa.write_text("{}", encoding="utf-8")
-    return {"nk": nk, "tab": tab, "bang": bang, "khoa": str(khoa)}
+    return {"may": may, "khoa": str(khoa), "su_kien": []}
 
 
 def _chot(gid=0, ten="KetQuaQuet"):
@@ -113,41 +46,58 @@ def _chot(gid=0, ten="KetQuaQuet"):
 
 def _gui(gia, chot=None):
     def truoc(gid, ten):
-        gia["nk"].append(("SENDING",))
+        gia["su_kien"].append(("SENDING", len(gia["may"].nhat_ky)))
         gia["tab_da_tim"] = (gid, ten)
     return ob.CongGspread().gui(chot or _chot(), gia["khoa"], HEADER, ROWS, truoc)
 
 
 def _ghi(gia):
-    return [x for x in gia["nk"] if x[0] == "append"]
+    return [y for y in gia["may"].nhat_ky if y["loai"] in GHI]
 
 
-def test_thu_tu_doc_roi_sending_roi_mot_append_raw(gia):
+def _sending(gia):
+    return any(s[0] == "SENDING" for s in gia["su_kien"])
+
+
+def _nem(loi):
+    def viec(su_kien, yc):
+        raise loi
+    return viec
+
+
+def test_thu_tu_tim_tab_doc_theo_ma_roi_sending_roi_mot_batchUpdate(gia):
     kq = _gui(gia)
-    buoc = [x[0] for x in gia["nk"]]
-    assert buoc == ["timeout", "mo", "doc", "SENDING", "append"]
-    assert gia["nk"][0] == ("timeout", ob.CongGspread.THOI_GIAN_CHO)
-    assert _ghi(gia) == [("append", 2, "RAW")]
-    assert (kq.so_dong_gui, kq.worksheet_id, kq.worksheet_ten) == (2, 0, "KetQuaQuet")
+    nk = gia["may"].nhat_ky
+    assert [y["loai"] for y in nk] == ["metadata", "metadata", "batchGetByDataFilter", "batchUpdate"]
+    assert gia["su_kien"] == [("SENDING", 3)]                          # SENDING sau khi đọc, trước request ghi
+    assert set(gia["may"].timeouts) == {ob.CongGspread.THOI_GIAN_CHO}
+    (yc,) = nk[-1]["body"]["requests"]
+    assert yc["appendCells"]["sheetId"] == 0 and len(yc["appendCells"]["rows"]) == 2
+    assert kq.yeu_cau == nk[-1]["body"] and kq.worksheet_ten == "KetQuaQuet"
+    assert gia["may"].tab(0).du_lieu() == [HEADER, ["v1"], ["v2"]]
 
 
 def test_trang_tinh_trong_that_ghi_tieu_de_va_dong_trong_mot_lan(gia):
-    gia["tab"].hang1, gia["tab"].toan_bang = [], []
-    kq = _gui(gia)
-    assert _ghi(gia) == [("append", 3, "RAW")] and kq.so_dong_gui == 3
+    gia["may"].tabs[0] = TabGia(0, "KetQuaQuet", [], so_cot=34)
+    _gui(gia)
+    doc = [y for y in gia["may"].nhat_ky if y["loai"] in DOC]
+    assert len(doc) == 2 and doc[1]["body"]["dataFilters"] == [{"gridRange": {"sheetId": 0}}]   # dò lần hai
+    (ghi,) = _ghi(gia)
+    assert len(ghi["body"]["requests"][-1]["appendCells"]["rows"]) == 3
+    assert gia["may"].tab(0).du_lieu() == [HEADER, ["v1"], ["v2"]]
 
 
-@pytest.mark.parametrize("hang1, toan_bang", [
-    ([["Sai tiêu đề"]], None),
-    ([], [[], ["dữ liệu cũ ở hàng 2"]]),
-    ([[""] * 34], [[""] * 34 + ["ô ngoài bề rộng"]]),
+@pytest.mark.parametrize("hang", [
+    [["Sai tiêu đề"]],
+    [[], ["dữ liệu cũ ở hàng 2"]],
+    [[""] * 34 + ["ô ngoài bề rộng"]],
 ])
-def test_tieu_de_sai_hoac_hang1_trong_co_du_lieu_la_chua_gui_0_ghi(gia, hang1, toan_bang):
-    gia["tab"].hang1, gia["tab"].toan_bang = hang1, toan_bang
+def test_tieu_de_sai_hoac_hang1_trong_co_du_lieu_la_chua_gui_0_ghi(gia, hang):
+    gia["may"].tabs[0] = TabGia(0, "KetQuaQuet", hang, so_cot=40)
     with pytest.raises(ob.ChuaGui) as e:
         _gui(gia)
     assert e.value.tam_thoi is False
-    assert _ghi(gia) == [] and ("SENDING",) not in gia["nk"]
+    assert _ghi(gia) == [] and not _sending(gia)
 
 
 def test_tab_theo_id_khong_con_la_chua_gui(gia):
@@ -156,24 +106,41 @@ def test_tab_theo_id_khong_con_la_chua_gui(gia):
     assert e.value.tam_thoi is False and "tab" in e.value.ly_do and _ghi(gia) == []
 
 
-def test_ghim_theo_ten_khi_chua_co_gid(gia):
-    kq = _gui(gia, _chot(gid=None, ten="KetQuaQuet"))
-    assert kq.worksheet_id == 0 and _ghi(gia)
-
-
-@pytest.mark.parametrize("loi, tam_thoi", [
-    (PermissionError(), False),                     # gspread.open_by_key: HTTP 403
-    (loi_api(403, "PERMISSION_DENIED"), False), (loi_api(404, "NOT_FOUND"), False),
-    (loi_api(429), True), (loi_api(503), True),
-    (gae.RefreshError("invalid_grant"), False), (gae.RefreshError("5xx", retryable=True), True),
-    (gae.TransportError("dns"), True),
-    (requests.exceptions.ConnectionError("x"), True),
-])
-def test_loi_khi_mo_bang_la_chua_gui(gia, loi, tam_thoi):
-    gia["bang"].loi_mo = loi
+def test_bo_loc_theo_ma_khong_tra_vung_nao_la_khong_thay_tab_0_ghi(gia):
+    gia["may"].khong_tra_vung = True
     with pytest.raises(ob.ChuaGui) as e:
         _gui(gia)
-    assert e.value.tam_thoi is tam_thoi and _ghi(gia) == []
+    assert e.value.tam_thoi is False and "tab" in e.value.ly_do and _ghi(gia) == [] and not _sending(gia)
+
+
+def test_ghim_theo_ten_khi_chua_co_gid_chi_dung_ten_de_tim_ma(gia):
+    gia["may"].tabs[5] = TabGia(5, "Tab khác", [HEADER], so_cot=34)
+    kq = _gui(gia, _chot(gid=None, ten="KetQuaQuet"))
+    assert gia["tab_da_tim"] == (0, "KetQuaQuet")
+    assert kq.yeu_cau["requests"][-1]["appendCells"]["sheetId"] == 0
+    assert all(y["loai"] in ("metadata", "batchGetByDataFilter", "batchUpdate") for y in gia["may"].nhat_ky)
+
+
+@pytest.mark.parametrize("noi, loi, tam_thoi", [
+    ("metadata", LoiHttp(403, f"loi 403 {URL_BANG}"), False),            # open_by_key: 403 → PermissionError
+    ("metadata", LoiHttp(404, f"loi 404 {URL_BANG}"), False),            # → SpreadsheetNotFound
+    ("metadata", LoiHttp(429, "quá hạn mức"), True),
+    ("metadata", LoiHttp(503, "bận"), True),
+    ("doc", LoiHttp(403, f"loi 403 {URL_BANG}"), False),                 # APIError 403 khi đọc tiêu đề
+    ("doc", LoiHttp(400, "Invalid dataFilters"), False),
+    ("metadata", gae.RefreshError("invalid_grant"), False),
+    ("metadata", gae.RefreshError("5xx", retryable=True), True),
+    ("metadata", gae.TransportError("dns"), True),
+    ("metadata", requests.exceptions.ConnectionError("x"), True),
+    ("doc", requests.exceptions.ReadTimeout("đọc tiêu đề quá hạn"), True),
+])
+def test_loi_truoc_khi_phat_la_chua_gui_0_ghi(gia, noi, loi, tam_thoi):
+    loai = ("metadata",) if noi == "metadata" else DOC
+    gia["may"].moc = moc_mot_lan(lambda sk, yc: sk == "den" and yc["loai"] in loai, _nem(loi))
+    with pytest.raises(ob.ChuaGui) as e:
+        _gui(gia)
+    assert e.value.tam_thoi is tam_thoi and _ghi(gia) == [] and not _sending(gia)
+    assert ID not in e.value.ly_do and "docs.google.com" not in e.value.ly_do
 
 
 def _ket_noi_moi_loi():
@@ -189,25 +156,34 @@ def _mat_ket_noi_giua_chung():
 @pytest.mark.parametrize("loi, kieu, tam_thoi", [
     (requests.exceptions.ReadTimeout("read timed out"), ob.KhongRo, None),
     (_mat_ket_noi_giua_chung(), ob.KhongRo, None),
-    (loi_api(500), ob.KhongRo, None),
-    (loi_api(502), ob.KhongRo, None),
-    (loi_api(408), ob.KhongRo, None),
+    (LoiHttp(500, f"loi 500 {URL_BANG}"), ob.KhongRo, None),
+    (LoiHttp(502, "bad gateway"), ob.KhongRo, None),
+    (LoiHttp(408, "request timeout"), ob.KhongRo, None),
     (RuntimeError("lạ"), ob.KhongRo, None),
     (requests.exceptions.ConnectTimeout("connect timeout"), ob.ChuaGui, True),
     (_ket_noi_moi_loi(), ob.ChuaGui, True),
-    (loi_api(429), ob.ChuaGui, True),
-    (loi_api(400, "INVALID_ARGUMENT"), ob.ChuaGui, False),
-    (loi_api(403, "PERMISSION_DENIED"), ob.ChuaGui, False),
+    (LoiHttp(429, "quá hạn mức"), ob.ChuaGui, True),
+    (LoiHttp(400, f"Invalid requests[0].appendCells: No grid with id: 0 {URL_BANG}"), ob.ChuaGui, False),
+    (LoiHttp(403, f"loi 403 {URL_BANG}"), ob.ChuaGui, False),
     (gae.RefreshError("revoked"), ob.ChuaGui, False),
 ])
 def test_phan_loai_loi_sau_dispatch(gia, loi, kieu, tam_thoi):
-    gia["tab"].loi_append = loi
+    gia["may"].moc = moc_mot_lan(lambda sk, yc: sk == "den" and yc["loai"] in GHI, _nem(loi))
     with pytest.raises(kieu) as e:
         _gui(gia)
     if tam_thoi is not None:
         assert e.value.tam_thoi is tam_thoi
-    assert ("SENDING",) in gia["nk"]
+    assert _sending(gia) and len(_ghi(gia)) == 1
+    assert gia["may"].tab(0).du_lieu() == [HEADER]                     # máy chủ không áp dụng gì
     assert ID not in e.value.ly_do and "docs.google.com" not in e.value.ly_do
+
+
+def test_mat_phan_hoi_sau_khi_may_chu_da_ghi_la_khong_ro(gia):
+    gia["may"].moc = moc_mot_lan(lambda sk, yc: sk == "xong" and yc["loai"] in GHI,
+                                 _nem(requests.exceptions.ReadTimeout("mất phản hồi")))
+    with pytest.raises(ob.KhongRo):
+        _gui(gia)
+    assert gia["may"].tab(0).du_lieu() == [HEADER, ["v1"], ["v2"]]
 
 
 def test_khong_dung_loi_tu_message_de_doan_chua_ghi():
@@ -216,10 +192,11 @@ def test_khong_dung_loi_tu_message_de_doan_chua_ghi():
     assert isinstance(ob.phan_loai_loi(loi, da_phat=True), ob.KhongRo)
 
 
-def test_kiem_dich_chi_doc_khong_ghi_gi(gia):
+def test_kiem_dich_chi_doc_theo_ma_khong_ghi_gi(gia):
     ok, tb = ob.CongGspread().kiem(_chot(), gia["khoa"], HEADER)
     assert ok is True and "đọc được" in tb and _ghi(gia) == []
     assert "quyền ghi" in tb                      # nói rõ: đọc được ≠ đã xác minh quyền ghi
+    assert {y["loai"] for y in gia["may"].nhat_ky} == {"metadata", "batchGetByDataFilter"}
 
 
 def test_gui_bao_ma_va_ten_tab_da_tim_truoc_khi_ghi(gia):
@@ -246,19 +223,23 @@ def test_kiem_dich_chi_doc_tab_khong_con(gia):
 
 
 def test_kiem_dich_chi_doc_tieu_de_sai(gia):
-    gia["tab"].hang1 = [["Sai"]]
+    gia["may"].tabs[0] = TabGia(0, "KetQuaQuet", [["Sai"]], so_cot=34)
     ok, tb = ob.CongGspread().kiem(_chot(), gia["khoa"], HEADER)
     assert ok is False and "tiêu đề" in tb and _ghi(gia) == []
 
 
-def test_hang1_trong_ma_lan_do_thu_hai_loi_mang_la_chua_gui_tam_0_ghi(gia, monkeypatch):
-    """P1-03 qua outbox: hàng 1 trống → dò lần hai; lần dò lỗi (mạng) → chưa gửi (tạm), 0 ghi."""
-    gia["tab"].hang1 = []
+def test_hang1_trong_ma_lan_do_thu_hai_loi_mang_la_chua_gui_tam_0_ghi(gia):
+    """P1-03 qua outbox: hàng 1 trống → dò lần hai (theo mã); lần dò lỗi (mạng) → chưa gửi (tạm), 0 ghi."""
+    gia["may"].tabs[0] = TabGia(0, "KetQuaQuet", [], so_cot=34)
+    dem = {"n": 0}
 
-    def do_loi():
-        raise requests.exceptions.ConnectionError("dò lần hai mất mạng")
+    def lan_doc_thu_hai(su_kien, yc):
+        if su_kien == "den" and yc["loai"] in DOC:
+            dem["n"] += 1
+            if dem["n"] == 2:
+                raise requests.exceptions.ConnectionError("dò lần hai mất mạng")
 
-    monkeypatch.setattr(gia["tab"], "get_all_values", do_loi)
+    gia["may"].moc = lan_doc_thu_hai
     with pytest.raises(ob.ChuaGui) as e:
         _gui(gia)
-    assert e.value.tam_thoi is True and _ghi(gia) == [] and ("SENDING",) not in gia["nk"]
+    assert e.value.tam_thoi is True and _ghi(gia) == [] and not _sending(gia)

@@ -5,12 +5,14 @@ Khoá các bất biến:
 * việc gửi xếp hàng trong giao dịch của người gọi; ý định trùng không tạo dòng thứ hai;
 * SENDING được COMMIT trước khi request đi; mơ hồ sau dispatch → UNKNOWN_DELIVERY, không bao giờ gửi
   lại mù; khởi động lại: SENDING của chủ cũ → UNKNOWN, CLAIMED → PENDING;
-* SENT chỉ khi biên nhận khớp (spreadsheetId, số dòng, đúng tab);
+* SENT chỉ khi biên nhận khớp (spreadsheetId + replies của batchUpdate nguyên tử, mã tab + dòng trong thân
+  request đã phát);
 * lỗi cấu hình/khoá → BLOCKED_CONFIG (0 request), lỗi tạm → RETRY_WAIT có hạn mức;
 * đích lấy từ ảnh chụp đã ghim, không từ hồ sơ hiện tại; tạm dừng không đổi đích;
 * một hồ sơ lỗi không chặn hồ sơ khác.
 Transport giả (``outbox_gia.CongGia``), khoá dịch vụ GIẢ.
 """
+import dataclasses
 import json
 import sqlite3
 
@@ -115,7 +117,9 @@ def test_gui_thanh_cong_luu_bien_nhan(moi_truong):
     v = ob.lay_viec(moi_truong["db"], vid)
     assert kq["da_gui"] == 1 and v.trang_thai == ob.SENT
     bn = json.loads(v.bien_nhan)
-    assert bn["updated_rows"] == 1 and bn["spreadsheet_id"] == ID_A and bn["worksheet_id"] == 0
+    assert bn["kieu"] == "batchUpdate.appendCells" and bn["so_reply"] == 1 and bn["so_dong_gui"] == 1
+    assert bn["spreadsheet_id"] == ID_A and bn["worksheet_id"] == 0
+    assert "updated_rows" not in bn and "updated_range" not in bn       # AppendCells không trả: không dựng giả
     assert cong.bang == [(ID_A, 0, v.rows)]
 
 
@@ -180,10 +184,13 @@ def test_loi_cau_hinh_chan_ca_nhom_cung_dich_khong_chan_dich_khac(moi_truong):
 
 @pytest.mark.parametrize("phan_hoi", [
     "khong-phai-dict",
-    {"spreadsheetId": ID_B, "updates": {"updatedRange": "'KetQuaQuet'!A2:AH2", "updatedRows": 1}},
-    {"spreadsheetId": ID_A, "updates": {"updatedRange": "'KetQuaQuet'!A2:AH3", "updatedRows": 2}},
-    {"spreadsheetId": ID_A, "updates": {"updatedRange": "'Tab Khac'!A2:AH2", "updatedRows": 1}},
-    {"spreadsheetId": ID_A, "updates": {}},
+    {"spreadsheetId": ID_B, "replies": [{}]},                     # bảng khác
+    {"spreadsheetId": ID_A, "replies": [{}, {}]},                 # số reply khác số request đã gửi
+    {"spreadsheetId": ID_A, "replies": []},
+    {"spreadsheetId": ID_A},                                      # thiếu replies
+    {"spreadsheetId": ID_A, "replies": None},
+    # Dạng phản hồi values.append của transport CŨ (ghi theo TÊN): không còn là biên nhận hợp lệ.
+    {"spreadsheetId": ID_A, "updates": {"updatedRange": "'KetQuaQuet'!A2:AH2", "updatedRows": 1}},
 ])
 def test_bien_nhan_bat_thuong_la_unknown(moi_truong, phan_hoi):
     vid = _xep(moi_truong, moi_truong["a"], 11)
@@ -195,17 +202,40 @@ def test_bien_nhan_bat_thuong_la_unknown(moi_truong, phan_hoi):
     assert _tt(moi_truong, vid) == ob.UNKNOWN and cong.lan_goi == 1
 
 
-def test_bien_nhan_ten_tab_co_dau_nhay_va_khong_nhay(moi_truong):
-    # Hồ sơ đối chiếu ĐÚNG tên tab thật (tên có dấu nháy) — tên khác thì lần gửi đầu bị chặn.
+def test_bien_nhan_khong_phu_thuoc_ten_tab_co_dau_nhay(moi_truong):
+    # Hồ sơ đối chiếu ĐÚNG tên tab thật (tên có dấu nháy) — tên khác thì lần gửi đầu bị chặn. Biên nhận định danh
+    # tab bằng MÃ trong thân request, tên chỉ là nhãn.
     d = sd.tao_dich(moi_truong["db"], ten="Bảng nháy", spreadsheet_id=ID_A, worksheet_id=0,
                     worksheet_ten="Kết quả 'mới'", schema_id=sd.SCHEMA_NGANG,
                     xac_thuc_ref="mac_dinh", workspace="mac_dinh")
     vid = _xep(moi_truong, d, 12)
-    cong = CongGia(ten_tab="Kết quả 'mới'")
-    cong.ke_hoach = [("phan_hoi", {"spreadsheetId": ID_A, "updates": {
-        "updatedRange": "'Kết quả ''mới'''!A2:AH2", "updatedRows": 1}})]
-    _nguoi_gui(moi_truong, cong).chay_mot_vong()
-    assert _tt(moi_truong, vid) == ob.SENT
+    _nguoi_gui(moi_truong, CongGia(ten_tab="Kết quả 'mới'")).chay_mot_vong()
+    bn = json.loads(ob.lay_viec(moi_truong["db"], vid).bien_nhan)
+    assert _tt(moi_truong, vid) == ob.SENT and (bn["worksheet_id"], bn["worksheet_ten"]) == (0, "Kết quả 'mới'")
+
+
+@pytest.mark.parametrize("hong", ["sheetId_khac", "them_request", "dong_khac", "thieu_dong", "fields_khac"])
+def test_bien_nhan_doc_tu_than_request_da_phat(moi_truong, hong):
+    """Mã tab/dòng của biên nhận lấy từ THÂN REQUEST đã phát: request lệch mã đã chốt, có request ngoài hợp đồng,
+    hay mang dòng khác payload → không bao giờ SENT."""
+    y = sd.chot_y_dinh(moi_truong["db"], moi_truong["a"].id, installation_id=IID)
+    chot = dataclasses.replace(y.dich, worksheet_id=0)
+    rows = [["x"] + [""] * 33]
+    yc = ob.dung_yeu_cau_ghi(0, rows)
+    assert ob.kiem_bien_nhan(ob.KetQuaGui(phan_hoi_dung(chot, yc), yc, "KetQuaQuet"), chot, rows=rows)[0]
+    if hong == "sheetId_khac":
+        yc = ob.dung_yeu_cau_ghi(7, rows)
+    elif hong == "them_request":
+        yc = {"requests": [{"deleteDimension": {"range": {"sheetId": 0, "dimension": "ROWS"}}},
+                           *yc["requests"]]}
+    elif hong == "dong_khac":
+        yc = ob.dung_yeu_cau_ghi(0, [["y"] + [""] * 33])
+    elif hong == "thieu_dong":
+        yc = ob.dung_yeu_cau_ghi(0, [])
+    else:
+        yc["requests"][-1]["appendCells"]["fields"] = "*"
+    kq = ob.KetQuaGui(phan_hoi_dung(chot, yc), yc, "KetQuaQuet")
+    assert ob.kiem_bien_nhan(kq, chot, rows=rows)[0] is False
 
 
 # ---------- phục hồi sau crash / fencing ----------
@@ -365,10 +395,10 @@ def test_tom_tat_dem_theo_trang_thai(moi_truong):
 
 
 def test_phan_hoi_dung_cua_do_gia_khop_api_that(moi_truong):
-    """Mẫu phản hồi giả phải đúng cấu trúc AppendValuesResponse (spreadsheetId/updates.*)."""
+    """Mẫu phản hồi giả đúng cấu trúc BatchUpdateSpreadsheetResponse: ``replies`` 1:1 với request."""
     y = sd.chot_y_dinh(moi_truong["db"], moi_truong["a"].id, installation_id=IID)
-    ph = phan_hoi_dung(y.dich, "KetQuaQuet", 3)
-    assert ph["updates"]["updatedRows"] == 3 and ph["spreadsheetId"] == ID_A
+    yc = ob.dung_yeu_cau_ghi(0, [["a"], ["b"]], so_cot_hien_co=0)
+    assert phan_hoi_dung(y.dich, yc) == {"spreadsheetId": ID_A, "replies": [{}, {}]}
 
 
 # ---------- tiện ích cho giao diện ----------

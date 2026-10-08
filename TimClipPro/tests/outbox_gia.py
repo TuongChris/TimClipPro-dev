@@ -4,7 +4,8 @@
 ``CongGia`` thay transport Google Sheets: ghi nhận MỌI lần "append" thật sự xảy ra (``bang``) và cho
 tiêm hành vi từng lượt gửi qua ``ke_hoach``:
 
-* ``"ok"`` — gọi ``truoc_khi_gui`` rồi ghi, trả phản hồi đúng như Sheets API;
+* ``"ok"`` — gọi ``truoc_khi_gui`` rồi ghi, trả phản hồi đúng như Sheets API (``batchUpdate`` AppendCells theo
+  mã tab, dựng bằng ``outbox.dung_yeu_cau_ghi`` — đúng thân request transport thật phát);
 * ``("truoc", exc)`` — lỗi TRƯỚC dispatch (không gọi ``truoc_khi_gui``, không ghi);
 * ``("sau_da_ghi", exc)`` — Google ĐÃ ghi rồi phản hồi mất (exc ném ra sau khi ghi);
 * ``("sau_chua_ghi", exc)`` — dispatch rồi bị từ chối/không tới (không ghi);
@@ -20,12 +21,16 @@ LOAI_KHOA = "service" + "_account"
 TRUONG_KHOA_RIENG = "private" + "_key"
 
 
-def phan_hoi_dung(chot, ten_tab, so_dong, dong_dau=2):
-    return {"spreadsheetId": chot.spreadsheet_id, "tableRange": f"{ten_tab}!A1:AH1",
-            "updates": {"spreadsheetId": chot.spreadsheet_id,
-                        "updatedRange": f"'{ten_tab}'!A{dong_dau}:AH{dong_dau + so_dong - 1}",
-                        "updatedRows": so_dong, "updatedColumns": 34,
-                        "updatedCells": 34 * so_dong}}
+def phan_hoi_dung(chot, yeu_cau):
+    """Phản hồi ``spreadsheets.batchUpdate`` đúng cấu trúc API (BatchUpdateSpreadsheetResponse): ``replies`` 1:1
+    với request, rỗng cho AppendCells/AppendDimension."""
+    return {"spreadsheetId": chot.spreadsheet_id, "replies": [{} for _ in yeu_cau["requests"]]}
+
+
+def ket_qua(chot, gid, ten_tab, rows, phan_hoi=None):
+    """``KetQuaGui`` như transport thật trả: thân request ghi THEO MÃ ``gid`` + phản hồi."""
+    yc = outbox.dung_yeu_cau_ghi(gid, [list(r) for r in rows])
+    return outbox.KetQuaGui(phan_hoi_dung(chot, yc) if phan_hoi is None else phan_hoi, yc, ten_tab)
 
 
 class CongGia:
@@ -48,8 +53,7 @@ class CongGia:
         truoc_khi_gui(gid, self.ten_tab)
         if hv == "ok":
             self.bang.append((chot.spreadsheet_id, gid, [list(r) for r in rows]))
-            return outbox.KetQuaGui(phan_hoi_dung(chot, self.ten_tab, len(rows)), gid,
-                                    self.ten_tab, len(rows))
+            return ket_qua(chot, gid, self.ten_tab, rows)
         loai, gia_tri = hv
         if loai == "sau_da_ghi":
             self.bang.append((chot.spreadsheet_id, gid, [list(r) for r in rows]))
@@ -58,7 +62,7 @@ class CongGia:
             raise gia_tri
         if loai == "phan_hoi":
             self.bang.append((chot.spreadsheet_id, gid, [list(r) for r in rows]))
-            return outbox.KetQuaGui(gia_tri, gid, self.ten_tab, len(rows))
+            return ket_qua(chot, gid, self.ten_tab, rows, phan_hoi=gia_tri)
         raise AssertionError(hv)
 
 
@@ -105,7 +109,7 @@ class CongNhieuTab:
         self.ghi.append((gid, [list(r) for r in rows]))
         if isinstance(hv, tuple) and hv[0] == "sau_da_ghi":
             raise hv[1]
-        return outbox.KetQuaGui(phan_hoi_dung(chot, ten, len(rows)), gid, ten, len(rows))
+        return ket_qua(chot, gid, ten, rows)
 
 
 def dich_gia(db, tmp_path, *, schema=None, installation_id=None, lo_id="", ten="Bảng thử",
