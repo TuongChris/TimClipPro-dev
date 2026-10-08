@@ -367,7 +367,12 @@ def doctor(goc: str) -> list:
     except LoiLauncher as e:
         them(LOI, "launcher.json", str(e))
         return kq
-    cd = cai_dat(goc, cfg)
+    try:
+        cd = cai_dat(goc, cfg)
+        them(DAT, "Bố cục thư mục", "thư mục cài đặt và state root tách biệt")
+    except mu.LoiCapNhat as e:
+        them(LOI, "Bố cục thư mục", str(e))
+        return kq
     if os.path.exists(os.path.join(goc, ".git")):
         them(LOI, "Thư mục cài đặt", "là bản clone git — cài đặt managed phải là thư mục riêng")
     try:
@@ -515,6 +520,7 @@ def main(argv=None, *, goc: Optional[str] = None, chay=_chay_cho_con, **thay) ->
         lenh = argv[0]
         if lenh not in ("app", "watch", "cli", "update"):
             raise LoiLauncher(f"Lệnh «{lenh}» không có (app | watch | cli | update | doctor).")
+        cai_dat(goc, cfg)          # bố cục lồng nhau (MR-P1-01) → dừng TRƯỚC mọi thứ: không mở app, không cập nhật
         try:
             cn = tao_cap_nhat(goc, cfg, **thay)
         except Exception as e:  # noqa: BLE001 — chỉ chặn CẬP NHẬT, không chặn mở bản đang kích hoạt

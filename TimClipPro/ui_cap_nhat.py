@@ -57,7 +57,11 @@ def ve_phien_ban(eng) -> None:
         st.caption("Bản phát triển (chế độ legacy) — không tự cập nhật; cập nhật mã do người phát triển "
                    "quản lý.")
         return
-    cd = mu.CaiDat(goc=goc, state_root=os.path.dirname(eng.data_dir))
+    try:
+        cd = mu.CaiDat(goc=goc, state_root=os.path.dirname(eng.data_dir))
+    except mu.LoiCapNhat as e:                 # bố cục lồng nhau (MR-P1-01): báo, không vẽ thao tác nào
+        st.error(str(e))
+        return
     dang_chay = _ban_dang_chay() or "?"
     cur = _doc(cd.file_trang_thai("current.json")) or {}
     kich_hoat = cur.get("phien_ban", "") if isinstance(cur, dict) else ""

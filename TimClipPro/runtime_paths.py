@@ -113,6 +113,49 @@ def kiem_duong_dan_trang_thai(duong_dan: str, environ: Optional[Mapping] = None)
     return ly_do
 
 
+def _hai_dang(duong_dan: str) -> tuple:
+    """Hai dạng của một đường dẫn để so cha/con: CHỮ (abspath; Windows không phân biệt hoa/thường) và THẬT
+    (realpath — giải junction/symlink/tên 8.3; phần chưa tồn tại giữ nguyên)."""
+    chu = os.path.normcase(os.path.abspath(duong_dan))
+    try:
+        that = os.path.normcase(os.path.realpath(duong_dan))
+    except (OSError, ValueError):
+        that = chu
+    return chu, that
+
+
+def nam_trong(con: str, cha: str) -> bool:
+    """``con`` là ``cha`` hoặc nằm BÊN TRONG ``cha`` — theo dạng chữ HOẶC dạng thật (một dạng là đủ: junction
+    trỏ vào trong, hay đường dẫn khai báo nằm trong mà junction trỏ ra ngoài, đều nguy hiểm như nhau). So bằng
+    ``commonpath`` theo từng thành phần, không theo tiền tố chuỗi (``D:\\TimClipPro_State`` không nằm trong
+    ``D:\\TimClipPro``). Chỉ đọc."""
+    for a, b in zip(_hai_dang(con), _hai_dang(cha)):
+        try:
+            if os.path.commonpath([a, b]) == b:
+                return True
+        except ValueError:                           # khác ổ đĩa
+            continue
+    return False
+
+
+def chong_lan(a: str, b: str) -> bool:
+    """Hai thư mục trùng nhau hoặc một cái nằm trong cái kia (xoá một cái là chạm vào cái còn lại)."""
+    return nam_trong(a, b) or nam_trong(b, a)
+
+
+def ly_do_bo_cuc(installation_root: str, state_root: str) -> str:
+    """Lý do bố cục KHÔNG an toàn (rỗng = an toàn). Bộ cập nhật được quyền xoá/thay các thư mục con của cài đặt
+    (``staging``, ``releases``, ``environments``, ``update_state``) — state root (lịch sử, kho, khoá, sao lưu)
+    nằm bên trong là có thể mất sạch (audit độc lập f4d3cb7, MR-P1-01). Hai thư mục phải TÁCH BIỆT: không trùng,
+    không thư mục nào nằm trong thư mục kia. Chỉ đọc."""
+    if nam_trong(state_root, installation_root):
+        return (f"state root «{state_root}» trùng hoặc nằm BÊN TRONG thư mục cài đặt «{installation_root}» — vùng "
+                "bộ cập nhật được quyền xoá/thay.")
+    if nam_trong(installation_root, state_root):
+        return f"thư mục cài đặt «{installation_root}» nằm BÊN TRONG state root «{state_root}»."
+    return ""
+
+
 def doc_dinh_danh(state_root: str) -> dict:
     """Đọc ``installation.json`` của một state root; thiếu/hỏng → ``LoiRuntime``."""
     duong_dan = os.path.join(state_root, TEN_DINH_DANH)

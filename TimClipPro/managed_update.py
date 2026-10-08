@@ -44,6 +44,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable, Optional
 
+import runtime_paths
+
 UNG_DUNG = "TimClipPro"
 DINH_DANG_MANIFEST = 1
 KENH_STABLE = "stable"
@@ -610,10 +612,48 @@ def doc_json(path: str, *, mac_dinh=None, bat_buoc_hop_le: bool = True):
                          " — cần kiểm tay (không tự đặt lại).") from None
 
 
+# Thư mục con của cài đặt mà bộ cập nhật SỞ HỮU — được quyền xoá/thay toàn bộ (MR-P1-01: không gì khác được nằm
+# trong đó, nhất là state root và thư mục nguồn phát hành).
+VUNG_UPDATER = ("releases", "environments", "update_state", "staging")
+
+
+def thong_diep_bo_cuc(ly_do: str) -> str:
+    return ("Bố cục thư mục không an toàn — thư mục cài đặt và state root phải TÁCH BIỆT (không trùng, không thư "
+            f"mục nào nằm trong thư mục kia): {ly_do} Không chạy để tránh mất dữ liệu; KHÔNG tự di chuyển hay xoá "
+            "gì — sao lưu rồi làm theo HUONG_DAN_PC2 mục «Bố cục thư mục».")
+
+
 @dataclass(frozen=True)
 class CaiDat:
+    """Bố cục MỘT cài đặt managed. Dựng là kiểm: thư mục cài đặt và state root chồng nhau → ``LoiCapNhat`` mã
+    ``bo_cuc`` (launcher, giao diện, bootstrap đều dựng qua đây — không có đường nào chạy với bố cục lồng nhau)."""
+
     goc: str                         # installation root
     state_root: str
+
+    def __post_init__(self):
+        self.kiem_bo_cuc()
+
+    def kiem_bo_cuc(self) -> None:
+        ly_do = runtime_paths.ly_do_bo_cuc(self.goc, self.state_root)
+        if ly_do:
+            raise LoiCapNhat("bo_cuc", thong_diep_bo_cuc(ly_do))
+
+    @property
+    def vung_updater(self) -> tuple:
+        return tuple(os.path.join(self.goc, t) for t in VUNG_UPDATER)
+
+    def kiem_xoa(self, path: str, bao_ve: tuple = ()) -> None:
+        """Chốt NGAY TRƯỚC khi updater xoá/thay một cây thư mục: ``path`` phải thuộc vùng updater sở hữu, không
+        chồng lên state root, không chứa thư mục được bảo vệ (``bao_ve`` — nguồn phát hành) — so cả qua
+        junction/symlink. Sai → ``LoiCapNhat("bo_cuc")``, không xoá gì."""
+        if not any(runtime_paths.nam_trong(path, v) for v in self.vung_updater):
+            raise LoiCapNhat("bo_cuc", thong_diep_bo_cuc(f"«{path}» không thuộc vùng bộ cập nhật sở hữu."))
+        if runtime_paths.chong_lan(path, self.state_root):
+            raise LoiCapNhat("bo_cuc", thong_diep_bo_cuc(f"xoá «{path}» sẽ chạm vào state root «{self.state_root}»."))
+        for p in bao_ve:
+            if p and runtime_paths.nam_trong(p, path):
+                raise LoiCapNhat("bo_cuc", thong_diep_bo_cuc(f"xoá «{path}» sẽ xoá cả «{p}»."))
 
     @property
     def releases(self) -> str:
@@ -749,12 +789,20 @@ class CapNhat:
         self.nk = NhatKy(cai_dat)
         self._quyen = None
         self._sau = 0
+        # Thư mục nguồn phát hành (USB / thư mục chép tay) nằm trong vùng updater thì lần dọn staging xoá luôn nó.
+        thu_muc_nguon = getattr(nguon, "thu_muc", None)
+        self._bao_ve = (os.path.abspath(thu_muc_nguon),) if thu_muc_nguon else ()
+        for p in self._bao_ve:
+            if any(runtime_paths.nam_trong(p, v) for v in cai_dat.vung_updater):
+                raise LoiCapNhat("bo_cuc", f"Bố cục thư mục không an toàn: thư mục nguồn phát hành «{p}» nằm trong "
+                                 "vùng bộ cập nhật được quyền xoá — chọn thư mục nguồn NGOÀI thư mục cài đặt.")
 
     # ---------- quyền updater (một lượt mỗi cài đặt) ----------
 
     @contextlib.contextmanager
     def _giu_quyen(self):
-        """Khoá HĐH ``update_state/updater.lock`` — reentrant trong cùng đối tượng. Bận → ``LoiCapNhat``."""
+        """Khoá HĐH ``update_state/updater.lock`` — reentrant trong cùng đối tượng. Bận → ``LoiCapNhat``. Mỗi
+        lượt kiểm LẠI bố cục trước khi đụng gì (junction có thể đổi đích sau khi dựng ``CaiDat``)."""
         if self._sau:
             self._sau += 1
             try:
@@ -764,6 +812,7 @@ class CapNhat:
             return
         from khoa import DangChayRoi, KhoaTienTrinh
 
+        self.cd.kiem_bo_cuc()
         os.makedirs(self.cd.update_state, exist_ok=True)
         khoa = KhoaTienTrinh(self.cd.file_trang_thai("updater.lock"), "cập nhật TimClipPro")
         try:
@@ -911,7 +960,7 @@ class CapNhat:
                 return ban, m, raw_m, raw_s, bo
             return None, None, None, None, bo
         finally:
-            shutil.rmtree(tam, ignore_errors=True)
+            self._xoa_cay(tam)
 
     def kiem_tra(self) -> KetQua:
         """CHỈ kiểm (tải + xác minh manifest, chưa tải gói, không đổi nhật ký). Lỗi mạng → ``LOI``:
@@ -1002,7 +1051,7 @@ class CapNhat:
                         # chạy (Windows còn xoá dở vì file đang mở) — dừng, cần người kiểm.
                         raise LoiCapNhat("runtime_dang_dung", "Dấu sẵn sàng của runtime ĐANG DÙNG bị hỏng — "
                                          "không xoá/tạo lại; chạy «launcher.py doctor» và báo chủ dự án.")
-                    shutil.rmtree(rt)                    # dở dang (chưa có dấu sẵn sàng)
+                    self._xoa_cay(rt, bo_qua_loi=False)  # dở dang (chưa có dấu sẵn sàng)
                 self._tao_runtime(m, rel, rt)            # tạo TẠI ĐƯỜNG DẪN CUỐI
                 ghi_json_nguyen_tu(os.path.join(rt, TEN_SAN_SANG),
                                    {"lock_sha256": m.lock_sha256, "luc": _bay_gio()})
@@ -1039,7 +1088,7 @@ class CapNhat:
             return KetQua(LOI, m.phien_ban, f"Lỗi không lường trước khi chuẩn bị ({type(e).__name__}) — "
                           "giữ bản hiện tại.")
         finally:
-            shutil.rmtree(tam, ignore_errors=True)
+            self._xoa_cay(tam)
 
     def _tao_runtime(self, m: Manifest, rel: str, rt: str) -> None:
         """Gọi ``tao_moi_truong``. Từ chối nội dung đã ký (``TuChoiGoi``, vd. lock chưa băm) → nguyên trạng
@@ -1052,7 +1101,7 @@ class CapNhat:
             raise
         except Exception as e:  # noqa: BLE001
             with contextlib.suppress(OSError):
-                shutil.rmtree(rt, ignore_errors=True)     # dở dang, chưa có dấu sẵn sàng, không ai dùng
+                self._xoa_cay(rt)                         # dở dang, chưa có dấu sẵn sàng, không ai dùng
             ly_do = str(e) if isinstance(e, LoiCapNhat) else type(e).__name__
             if self._dem_loi("loi_runtime.json", m.phien_ban) >= SO_LAN_LOI_TOI_DA:
                 self._cach_ly(m.phien_ban, f"tạo runtime lỗi {SO_LAN_LOI_TOI_DA} lần: {ly_do}")
@@ -1085,10 +1134,10 @@ class CapNhat:
                     f.flush()
                     os.fsync(f.fileno())
             if os.path.exists(rel):                  # dở dang từ lần trước (chưa có dấu sẵn sàng)
-                shutil.rmtree(rel)
+                self._xoa_cay(rel, bo_qua_loi=False)
             os.replace(tam_rel, rel)
         except BaseException:
-            shutil.rmtree(tam_rel, ignore_errors=True)
+            self._xoa_cay(tam_rel)
             raise
         ghi_json_nguyen_tu(os.path.join(rel, TEN_SAN_SANG),
                            {"manifest_sha256": m.sha256, "luc": _bay_gio()})
@@ -1340,14 +1389,20 @@ class CapNhat:
         if not isinstance(lg, dict) or lg.get("manifest_sha256") != cur.get("manifest_sha256"):
             ghi_json_nguyen_tu(self.cd.file_trang_thai("last_good.json"), cur)
 
+    def _xoa_cay(self, path: str, *, bo_qua_loi: bool = True) -> None:
+        """MỌI lần updater xoá một cây thư mục đi qua đây: chốt bố cục NGAY TRƯỚC khi xoá (``CaiDat.kiem_xoa`` —
+        đích thuộc vùng updater, không chồng state root/nguồn phát hành). Sai → ``LoiCapNhat``, không xoá gì."""
+        self.cd.kiem_xoa(path, self._bao_ve)
+        shutil.rmtree(path, ignore_errors=bo_qua_loi)
+
     def _don_staging(self) -> None:
         """Chỉ dọn thư mục DO UPDATER SỞ HỮU: ``staging/`` và ``releases/*.tmp-*`` (giữ quyền updater
         nên không đụng lượt khác)."""
-        shutil.rmtree(self.cd.staging, ignore_errors=True)
+        self._xoa_cay(self.cd.staging)
         if os.path.isdir(self.cd.releases):
             for ten in os.listdir(self.cd.releases):
                 if ".tmp-" in ten:
-                    shutil.rmtree(os.path.join(self.cd.releases, ten), ignore_errors=True)
+                    self._xoa_cay(os.path.join(self.cd.releases, ten))
 
     def trang_thai(self) -> dict:
         """Cho UI «Phiên bản và cập nhật» / ``launcher status`` — chỉ đọc."""
@@ -1385,6 +1440,7 @@ def don_ban_cu(cai_dat: CaiDat, *, giu: int = 2) -> list:
     for _, ten in ban[giu:]:
         p = os.path.normcase(os.path.abspath(cai_dat.release_dir(ten)))
         if p not in tham_chieu:
+            cai_dat.kiem_xoa(cai_dat.release_dir(ten))      # MR-P1-01: không bao giờ xoá trúng state root
             shutil.rmtree(cai_dat.release_dir(ten), ignore_errors=True)
             da_xoa.append(cai_dat.release_dir(ten))
     return da_xoa

@@ -9,8 +9,8 @@ Chạy được bằng Python 3.12 GỐC (chỉ thư viện chuẩn): giai đo�
 trường RIÊNG của launcher (pip ``--require-hashes`` theo ``launcher-lock.txt``), giai đoạn 2 chạy lại CHÍNH file
 này bằng Python của môi trường đó.
 
-Làm: kiểm đường dẫn (không OneDrive/ổ mạng, không đè cài đặt/định danh có sẵn, không nằm trong bản clone git,
-không có dữ liệu cập nhật cũ) → chép launcher + khoá tin cậy → ``TimClipPro.bat``/``GiamSat.bat``/``CapNhat.bat``
+Làm: kiểm đường dẫn (không OneDrive/ổ mạng, thư mục cài đặt và state root TÁCH BIỆT, không đè cài đặt/định danh
+có sẵn, không nằm trong bản clone git, không có dữ liệu cập nhật cũ) → chép launcher + khoá tin cậy → ``TimClipPro.bat``/``GiamSat.bat``/``CapNhat.bat``
 (CHỈ ASCII: ``%~dp0`` cho đường dẫn trong thư mục cài đặt) → XML lịch Windows để XEM TRƯỚC (KHÔNG đăng ký) →
 ``installation.json`` với UUID MỚI (PC2 không bao giờ kế thừa định danh của PC1) → ``launcher.json`` GHI CUỐI
 (đánh dấu đã bootstrap) → cài bản Stable đầu tiên qua ĐÚNG bộ cập nhật (chữ ký, băm, health).
@@ -37,7 +37,7 @@ FILE_LAUNCHER = ("launcher.py", "managed_update.py", "maintenance_gate.py", "kho
                  "runtime_paths.py")
 THU_MUC_LICH = "lich_xem_truoc"
 # Thư mục do bộ cập nhật sở hữu — có sẵn trong thư mục cài đặt MỚI nghĩa là dữ liệu cũ của cài đặt khác.
-THU_MUC_CAP_NHAT = ("releases", "environments", "update_state", "staging")
+THU_MUC_CAP_NHAT = mu.VUNG_UPDATER
 
 
 class LoiBootstrap(RuntimeError):
@@ -66,12 +66,19 @@ def _trong_ban_clone_git(p: str) -> bool:
         hien = cha
 
 
-def kiem_truoc(goc: str, state: str, python_goc: str) -> tuple:
+def kiem_truoc(goc: str, state: str, python_goc: str, nguon: dict = None) -> tuple:
     """Kiểm MỌI điều kiện trước khi ghi byte nào. Trả ``(goc, state, tiep_tuc)`` đã chuẩn hoá — ``tiep_tuc``:
-    lần trước dừng SAU khi tạo định danh cho CHÍNH thư mục cài đặt này (chưa có launcher.json) → làm tiếp."""
+    lần trước dừng SAU khi tạo định danh cho CHÍNH thư mục cài đặt này (chưa có launcher.json) → làm tiếp.
+    Hai thư mục phải TÁCH BIỆT (MR-P1-01: state root lồng trong ``staging`` từng bị bộ cập nhật xoá sạch); thư
+    mục nguồn phát hành không được nằm trong vùng bộ cập nhật xoá/thay."""
     goc, state = _kiem_goc("Thư mục cài đặt", goc), _kiem_goc("State root", state)
-    if os.path.normcase(goc) == os.path.normcase(state):
-        raise LoiBootstrap("Thư mục cài đặt và state root phải khác nhau.")
+    ly_do = runtime_paths.ly_do_bo_cuc(goc, state)
+    if ly_do:
+        raise LoiBootstrap(mu.thong_diep_bo_cuc(ly_do))
+    thu_muc_nguon = (nguon or {}).get("duong_dan") if (nguon or {}).get("loai") == "thu_muc" else ""
+    if thu_muc_nguon and any(runtime_paths.nam_trong(thu_muc_nguon, os.path.join(goc, t)) for t in THU_MUC_CAP_NHAT):
+        raise LoiBootstrap("Thư mục nguồn phát hành nằm trong vùng bộ cập nhật được quyền xoá của thư mục cài đặt — "
+                           "chọn thư mục nguồn NGOÀI thư mục cài đặt.")
     if os.path.exists(os.path.join(goc, "launcher", "launcher.json")):
         raise LoiBootstrap("Thư mục cài đặt đã được bootstrap — không làm lại đè lên.")
     if _trong_ban_clone_git(goc) or _trong_ban_clone_git(state):
@@ -233,7 +240,7 @@ def bootstrap(goc: str, state: str, *, kit_dir: str, python_goc: str, tin_cay: s
     """Dựng một cài đặt managed mới (hoặc làm TIẾP lần trước dừng trước launcher.json). ``thay``: phụ thuộc
     của bộ cập nhật (kiểm thử tiêm runtime/health). Python đang chạy phải có ``cryptography`` (``main`` lo
     việc này khi chạy bằng Python gốc)."""
-    goc, state, tiep_tuc = kiem_truoc(goc, state, python_goc)
+    goc, state, tiep_tuc = kiem_truoc(goc, state, python_goc, nguon)
     _kiem_khoa_tin_cay_tho(tin_cay)
     thieu = [f for f in FILE_LAUNCHER if not os.path.isfile(os.path.join(kit_dir, f))]
     if thieu:
@@ -309,7 +316,7 @@ def main(argv=None) -> int:
         if not a.python_launcher and _thieu_goi(cfg_nguon):
             # Giai đoạn 1 (Python gốc, chỉ thư viện chuẩn): kiểm trước khi ghi, tạo môi trường launcher (pip có
             # băm), rồi chạy lại CHÍNH file này bằng Python của môi trường đó (có cryptography/requests).
-            goc, _, _ = kiem_truoc(a.goc, a.state, a.python_goc)
+            goc, _, _ = kiem_truoc(a.goc, a.state, a.python_goc, cfg_nguon)
             _kiem_khoa_tin_cay_tho(a.tin_cay)
             py = tao_moi_truong_launcher(goc, a.python_goc, kit)
             return subprocess.run([py, "-E", "-s", os.path.abspath(__file__), *argv,
