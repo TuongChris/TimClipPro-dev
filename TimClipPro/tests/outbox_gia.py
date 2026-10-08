@@ -64,17 +64,25 @@ class CongGia:
 
 class CongNhieuTab:
     """Transport giả của MỘT bảng tính NHIỀU tab, tìm tab như gspread: theo mã (gid) nếu đích có mã,
-    không thì theo TÊN. Đổi tên / thêm tab được giữa các lượt gửi. Chỉ ghi lại lần GHI thật."""
+    không thì theo TÊN. Đổi tên / thêm / xoá tab được giữa các lượt gửi. ``ghi``: chỉ lần GHI thật;
+    ``phat``: gid của MỌI request ghi đã phát (kể cả lần mất phản hồi). ``ke_hoach`` từng lượt:
+    ``"ok"`` | ``("sau_da_ghi", exc)`` (ghi rồi mất phản hồi / tiến trình chết) | ``("chet_truoc_ghi", exc)``
+    (chết sau ``truoc_khi_gui``, request chưa đi)."""
 
     def __init__(self, tabs):
         self.tabs = dict(tabs)     # gid -> tên tab
         self.ghi = []              # [(gid, rows)]
+        self.phat = []             # [gid]
+        self.ke_hoach = []
 
     def doi_ten(self, gid, ten):
         self.tabs[gid] = ten
 
     def them(self, gid, ten):
         self.tabs[gid] = ten
+
+    def xoa(self, gid):
+        del self.tabs[gid]
 
     def _tim(self, chot):
         if chot.worksheet_id is not None:
@@ -87,10 +95,16 @@ class CongNhieuTab:
         raise outbox.ChuaGui("Không thấy tab theo tên.", tam_thoi=False)
 
     def gui(self, chot, duong_dan_khoa, header, rows, truoc_khi_gui):
+        hv = self.ke_hoach.pop(0) if self.ke_hoach else "ok"
         gid = self._tim(chot)
         ten = self.tabs[gid]
         truoc_khi_gui(gid, ten)
+        self.phat.append(gid)
+        if isinstance(hv, tuple) and hv[0] == "chet_truoc_ghi":
+            raise hv[1]
         self.ghi.append((gid, [list(r) for r in rows]))
+        if isinstance(hv, tuple) and hv[0] == "sau_da_ghi":
+            raise hv[1]
         return outbox.KetQuaGui(phan_hoi_dung(chot, ten, len(rows)), gid, ten, len(rows))
 
 

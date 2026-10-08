@@ -8,9 +8,10 @@ Thiết kế: docs/MANAGED_RUNTIME_DESIGN.md §2, §5. Lưu trong ``lichsu.db`` 
   (``dich_gui_phien_ban``). Việc gửi đã ghim mang theo cả ảnh chụp revision của nó.
 * Tab định danh bằng ``worksheet_id`` (gid). Hồ sơ có gid: tên tab là nhãn ĐỐI CHIẾU — lần gửi đầu
   của một revision mà tab mang tên khác thì chặn. Hồ sơ không gid (link cũ, luôn là «KetQuaQuet» như
-  bản cũ — gid trong link cũ bị BỎ QUA): tìm theo TÊN ở lần gửi đầu. Gid thật của lần gửi thành công đầu
-  tiên được CHỐT cho revision (``dich_gui_tab_chot``) — từ đó gửi theo mã đó, dù tab đổi tên hay có tab
-  cùng tên được tạo lại.
+  bản cũ — gid trong link cũ bị BỎ QUA): tìm theo TÊN ở lần gửi đầu. Gid thật được CHỐT cho revision
+  (``dich_gui_tab_chot``) NGAY TRƯỚC request ghi đầu tiên, trong cùng giao dịch với ``SENDING`` (không chờ
+  SENT — MR-P1-02) — từ đó mọi lần gửi (thử lại, gửi lại sau UNKNOWN, việc khác cùng revision) theo mã đó, dù
+  tab đổi tên hay có tab cùng tên được tạo lại.
 * Credential binding (``xac_thuc_gui``) = đường dẫn file khoá + tài khoản dịch vụ MONG ĐỢI
   (``client_email``) + ``private_key_id`` lúc đăng ký. KHÔNG lưu khoá riêng hay token. Đổi file khoá
   sang tài khoản khác không bao giờ được chấp nhận âm thầm.
@@ -241,7 +242,7 @@ class DichGui:
     worksheet_ten: str
     schema_id: str
     xac_thuc_ref: str
-    gid_da_chot: Optional[int] = None        # mã tab chốt ở lần gửi đầu của revision này (nếu có)
+    gid_da_chot: Optional[int] = None        # mã tab chốt ở request ghi đầu của revision này (nếu có)
 
     @property
     def nhan(self) -> str:
@@ -390,26 +391,26 @@ class TabDaChot:
     worksheet_ten: str              # tên tab LÚC chốt (để hiển thị/đối soát)
 
 
-def tab_da_chot(db_path: str, dich_id: str, phien_ban: int) -> Optional[TabDaChot]:
-    """Mã tab đã chốt của một revision (``None`` = revision chưa gửi thành công lần nào)."""
-    with ket_noi(db_path) as con:
-        h = con.execute("SELECT worksheet_id, worksheet_ten FROM dich_gui_tab_chot WHERE dich_id=?"
-                        " AND phien_ban=?", (dich_id, int(phien_ban))).fetchone()
+def _tab_da_chot(con, dich_id: str, phien_ban: int) -> Optional[TabDaChot]:
+    h = con.execute("SELECT worksheet_id, worksheet_ten FROM dich_gui_tab_chot WHERE dich_id=?"
+                    " AND phien_ban=?", (dich_id, int(phien_ban))).fetchone()
     return None if h is None else TabDaChot(int(h["worksheet_id"]), h["worksheet_ten"])
 
 
-def chot_tab(db_path: str, dich_id: str, phien_ban: int, *, worksheet_id: int,
-             worksheet_ten: str) -> TabDaChot:
-    """Sau lần gửi THÀNH CÔNG (biên nhận khớp): chốt mã tab thật cho revision — lần đầu thắng, KHÔNG tạo
-    revision, không đổi nhãn hồ sơ. Trả mã đã chốt (có thể là của lần trước)."""
-    with ket_noi(db_path, ghi=True) as con:
-        con.execute("INSERT OR IGNORE INTO dich_gui_tab_chot(dich_id, phien_ban, worksheet_id,"
-                    " worksheet_ten, luc) VALUES(?,?,?,?,?)",
-                    (dich_id, int(phien_ban), int(worksheet_id), str(worksheet_ten)[:100],
-                     _bay_gio()))
-        h = con.execute("SELECT worksheet_id, worksheet_ten FROM dich_gui_tab_chot WHERE dich_id=?"
-                        " AND phien_ban=?", (dich_id, int(phien_ban))).fetchone()
-    return TabDaChot(int(h["worksheet_id"]), h["worksheet_ten"])
+def tab_da_chot(db_path: str, dich_id: str, phien_ban: int) -> Optional[TabDaChot]:
+    """Mã tab đã chốt của một revision (``None`` = revision chưa từng phát request ghi nào)."""
+    with ket_noi(db_path) as con:
+        return _tab_da_chot(con, dich_id, phien_ban)
+
+
+def _chot_tab(con, dich_id: str, phien_ban: int, *, worksheet_id: int, worksheet_ten: str) -> TabDaChot:
+    """Chốt mã tab thật cho revision TRONG giao dịch của người gọi — lần đầu thắng (đã có thì giữ nguyên), KHÔNG
+    tạo revision, không đổi nhãn hồ sơ. Trả mã ĐÃ chốt (có thể của lần trước — người gọi so với tab vừa tìm).
+    Người gửi gọi nó trong CÙNG giao dịch CLAIMED→SENDING, ngay TRƯỚC request ghi đầu tiên (MR-P1-02)."""
+    con.execute("INSERT OR IGNORE INTO dich_gui_tab_chot(dich_id, phien_ban, worksheet_id,"
+                " worksheet_ten, luc) VALUES(?,?,?,?,?)",
+                (dich_id, int(phien_ban), int(worksheet_id), str(worksheet_ten)[:100], _bay_gio()))
+    return _tab_da_chot(con, dich_id, phien_ban)
 
 
 def xoa_dich(db_path: str, dich_id: str) -> None:
@@ -536,8 +537,8 @@ def nhap_link_cu(db_path: str, link: str, *, schema_id: str, duong_dan_khoa: str
     hồ sơ), trong MỘT giao dịch. Không lưu nguyên URL, tên hồ sơ không chứa mã bảng.
 
     Bản cũ LUÔN ghi vào tab tên «KetQuaQuet» (bỏ qua ``#gid=`` của link — gid đó thường là tab đầu
-    "Sheet1"). Giữ đúng nghĩa đó: hồ sơ ghim theo TÊN, gid của link bị bỏ qua; mã tab thật được chốt ở
-    lần gửi thành công đầu tiên (``chot_tab``)."""
+    "Sheet1"). Giữ đúng nghĩa đó: hồ sơ ghim theo TÊN, gid của link bị bỏ qua; mã tab thật được chốt ngay
+    trước request ghi đầu tiên (``_chot_tab`` trong giao dịch SENDING của người gửi)."""
     sid, _gid_bo_qua = phan_tich_link(link)
     if schema_id not in SO_COT:
         raise LoiDichGui("Định dạng báo cáo phải là Ngang 34 cột hoặc Dọc 16 cột.")

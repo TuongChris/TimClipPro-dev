@@ -273,6 +273,13 @@ def _ve_hang_doi(eng) -> None:
             st.warning("Request có thể đã tới Google mà phản hồi bị mất — tool KHÔNG tự gửi lại. Mở "
                        "Sheet, tìm dòng của lần quét này: có rồi thì bấm «Đã có trên Sheet»; chưa "
                        "có thì «Gửi lại» (chấp nhận khả năng trùng).")
+            tab = outbox.tab_da_ghim(_db(eng), v)
+            if tab is not None:
+                st.caption(f"Tab đích đã ghim: mã {tab.worksheet_id} (tên lúc ghim «{tab.worksheet_ten}») — tìm "
+                           "dòng ở ĐÚNG tab này (tab có thể đã đổi tên); «Gửi lại» cũng chỉ ghi vào tab này.")
+            khong_gui_lai = outbox.ly_do_khong_gui_lai(_db(eng), v)
+            if khong_gui_lai:
+                st.error(khong_gui_lai)
             c1, c2 = st.columns(2)
             with c1:
                 if st.button("✅ Đã kiểm: dòng đã có trên Sheet", key="gui_xac_nhan"):
@@ -281,7 +288,7 @@ def _ve_hang_doi(eng) -> None:
             with c2:
                 # Ô đồng ý gắn ĐÚNG việc đang chọn: đổi sang việc khác thì phải đồng ý lại.
                 dong_y = st.checkbox("Tôi chấp nhận có thể trùng dòng", key=f"gui_dong_y_trung_{v.id}")
-                if st.button("⚠️ Gửi lại", key="gui_lai_unknown", disabled=not dong_y):
+                if st.button("⚠️ Gửi lại", key="gui_lai_unknown", disabled=not dong_y or bool(khong_gui_lai)):
                     if _thu(outbox.gui_lai_co_the_trung, _db(eng), v.id):
                         dam_bao_nguoi_gui(eng, bat_buoc=True)
                         st.rerun()

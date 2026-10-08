@@ -16,6 +16,10 @@ Hợp đồng
 * ``SENDING`` được COMMIT ngay TRƯỚC request ghi. Lỗi chỉ được coi là "chắc chắn chưa ghi" khi xảy ra
   trước điểm đó, hoặc khi kiểu lỗi chứng minh request không tới/bị Google từ chối (transport phân loại
   theo KIỂU ngoại lệ, không theo chuỗi). Còn lại → ``UNKNOWN_DELIVERY``: không bao giờ gửi lại mù.
+* Mã tab (gid) của revision được CHỐT — lần đầu thắng — trong CÙNG giao dịch với ``SENDING``, trước request
+  ghi đầu tiên; chốt không được / mã đã chốt khác tab vừa tìm / mất claim → không gửi. Mọi lần gửi sau (thử
+  lại, gửi lại sau UNKNOWN, khởi động lại, việc khác cùng revision) theo MÃ đó, không tìm lại theo tên; tab đã
+  bị xoá → chặn, không bao giờ nhận tab mới cùng tên (MR-P1-02, audit độc lập f4d3cb7).
 * Khởi động người gửi: ``CLAIMED`` (chưa dispatch) → ``PENDING``; ``SENDING`` của chủ cũ →
   ``UNKNOWN_DELIVERY`` (KHÔNG suy "chưa ghi" từ việc tiến trình đã chết).
 * ``SENT`` chỉ khi biên nhận khớp: ``spreadsheetId`` đúng, số dòng đúng, ``updatedRange`` thuộc đúng tab
@@ -232,14 +236,17 @@ def tom_tat(db_path: str, *, lo_id: Optional[str] = None) -> dict:
     return kq
 
 
-def _doi_trang_thai_tay(db_path: str, viec_id: str, tu: tuple, den: str, **them) -> None:
+def _doi_trang_thai_tay(db_path: str, viec_id: str, tu: tuple, den: str, *,
+                        kiem: Optional[Callable] = None, **them) -> None:
     with sd.ket_noi(db_path, ghi=True) as con:
-        h = con.execute("SELECT trang_thai FROM hang_doi_gui WHERE id=?", (viec_id,)).fetchone()
+        h = con.execute("SELECT * FROM hang_doi_gui WHERE id=?", (viec_id,)).fetchone()
         if h is None:
             raise LoiHangDoi("Không thấy việc gửi này.")
         if h["trang_thai"] not in tu:
             raise LoiHangDoi(f"Việc đang ở trạng thái «{NHAN_TRANG_THAI.get(h['trang_thai'])}» — "
                              "không làm được thao tác này.")
+        if kiem is not None:
+            kiem(con, _viec_tu_hang(h))
         cot = {"trang_thai": den, "sua_luc": time.time(), "claim_token": "", "chu_so_huu": "",
                **them}
         con.execute(f"UPDATE hang_doi_gui SET {', '.join(f'{k}=?' for k in cot)} WHERE id=?",
@@ -260,9 +267,61 @@ def xac_nhan_da_gui(db_path: str, viec_id: str, ghi_chu: str = "") -> None:
 
 
 def gui_lai_co_the_trung(db_path: str, viec_id: str) -> None:
-    """UNKNOWN → PENDING theo xác nhận của người dùng: chấp nhận khả năng trùng dòng."""
-    _doi_trang_thai_tay(db_path, viec_id, (UNKNOWN,), PENDING, so_lan_thu=0, thu_lai_sau=0.0,
-                        loi="Gửi lại theo xác nhận của người dùng (có thể trùng dòng).")
+    """UNKNOWN → PENDING theo xác nhận của người dùng: chấp nhận khả năng TRÙNG dòng — không phải ĐỔI tab: gửi lại
+    luôn vào mã tab đã chốt; việc của bản cũ đã phát mà chưa có mã tab thì từ chối (``ly_do_khong_gui_lai``)."""
+    _doi_trang_thai_tay(db_path, viec_id, (UNKNOWN,), PENDING, kiem=_kiem_gui_lai, so_lan_thu=0,
+                        thu_lai_sau=0.0, loi="Gửi lại theo xác nhận của người dùng (có thể trùng dòng).")
+
+
+LY_DO_BAN_CU_CHUA_CO_MA_TAB = (
+    "Việc này đã được phát đi (bởi bản cũ) mà chưa ghi mã tab — gửi lại theo TÊN tab có thể rơi vào tab khác "
+    "cùng tên nên tool không gửi lại. Mở Sheet kiểm: đã có dòng thì bấm «Đã có trên Sheet»; chưa có thì huỷ "
+    "việc này rồi dùng «Gửi thêm (thủ công)».")
+
+
+def _ly_do_chan_tab(v: ViecGui, chot: sd.DichGuiChot, da_chot: Optional[sd.TabDaChot]) -> str:
+    """Lý do KHÔNG được phát request cho việc này theo đích đã ghim (rỗng = được). Không bao giờ đoán mã tab mới
+    từ tên cho một việc ĐÃ từng phát request (``gui_luc``) — bản cũ chốt mã sau SENT nên dòng UNKNOWN cũ có thể
+    không có mã nào (MR-P1-02)."""
+    if chot.worksheet_id is not None and da_chot is not None and da_chot.worksheet_id != chot.worksheet_id:
+        return (f"Mã tab đã chốt ({da_chot.worksheet_id}) khác mã tab của hồ sơ đã ghim ({chot.worksheet_id}) — "
+                "không gửi; kiểm lại hồ sơ.")
+    if chot.worksheet_id is None and da_chot is None and v.gui_luc is not None:
+        return LY_DO_BAN_CU_CHUA_CO_MA_TAB
+    return ""
+
+
+def _kiem_gui_lai(con, v: ViecGui) -> None:
+    try:
+        chot = v.dich
+    except sd.LoiDichGui:
+        return                       # đích ghim hỏng: người gửi tự chặn việc đó (không đoán lại đích)
+    ly_do = _ly_do_chan_tab(v, chot, sd._tab_da_chot(con, chot.dich_id, chot.phien_ban))
+    if ly_do:
+        raise LoiHangDoi(ly_do)
+
+
+def tab_da_ghim(db_path: str, v: ViecGui) -> Optional[sd.TabDaChot]:
+    """Tab việc này ĐÃ/SẼ ghi vào — để đối soát việc KHÔNG RÕ: mã chốt của revision (chốt ngay trước request ghi
+    đầu tiên), không thì mã của hồ sơ; ``None`` = hồ sơ theo tên chưa từng phát request (hoặc đích ghim hỏng)."""
+    try:
+        chot = v.dich
+    except sd.LoiDichGui:
+        return None
+    tc = sd.tab_da_chot(db_path, chot.dich_id, chot.phien_ban)
+    if tc is not None:
+        return tc
+    return None if chot.worksheet_id is None else sd.TabDaChot(chot.worksheet_id, chot.worksheet_ten)
+
+
+def ly_do_khong_gui_lai(db_path: str, v: ViecGui) -> str:
+    """Rỗng = được «Gửi lại (có thể trùng)» (giao diện khoá nút theo đây; thao tác gửi lại kiểm lại trong giao
+    dịch)."""
+    try:
+        chot = v.dich
+    except sd.LoiDichGui:
+        return ""
+    return _ly_do_chan_tab(v, chot, sd.tab_da_chot(db_path, chot.dich_id, chot.phien_ban))
 
 
 def huy(db_path: str, viec_id: str) -> None:
@@ -525,15 +584,25 @@ class NguoiGui:
             LOGGER.error("event=outbox.fencing_lost id=%s state=%s", viec_id[:12], trang_thai)
         return n == 1
 
-    def _bat_dau_gui(self, viec_id: str, token: str) -> None:
-        """Điểm không quay lại: COMMIT ``SENDING`` rồi transport mới được phát request ghi."""
+    def _bat_dau_gui(self, viec_id: str, token: str, chot: sd.DichGuiChot, gid: int, ten: str) -> None:
+        """Điểm không quay lại — MỘT giao dịch: chốt mã tab ``gid`` cho revision (lần đầu thắng) rồi COMMIT
+        ``SENDING`` (fencing ``claim_token``); xong transport mới được phát request ghi. Tab vừa tìm khác mã đã
+        ghim/đã chốt, chốt lỗi, hay mất claim → rollback cả hai, KHÔNG phát request (MR-P1-02: chốt sau SENT thì
+        UNKNOWN/lỗi chốt làm lần gửi sau tìm lại theo TÊN và có thể rơi vào tab mới cùng tên)."""
+        if chot.worksheet_id is not None and gid != chot.worksheet_id:
+            raise ChuaGui(f"Tab tìm được (mã {gid}) khác mã tab đã ghim ({chot.worksheet_id}) — chưa ghi gì.",
+                          tam_thoi=False)
         with sd.ket_noi(self.db_path, ghi=True) as con:
+            tc = sd._chot_tab(con, chot.dich_id, chot.phien_ban, worksheet_id=gid, worksheet_ten=ten)
+            if tc.worksheet_id != gid:
+                raise ChuaGui(f"Tab tìm được (mã {gid}) khác mã tab đã chốt của hồ sơ ({tc.worksheet_id}) — chưa ghi "
+                              "gì; lần sau gửi theo mã đã chốt.", tam_thoi=True)
             n = con.execute(
                 "UPDATE hang_doi_gui SET trang_thai=?, gui_luc=?, sua_luc=? WHERE id=?"
                 " AND claim_token=? AND trang_thai=?",
                 (SENDING, time.time(), time.time(), viec_id, token, CLAIMED)).rowcount
-        if n != 1:
-            raise MatQuyen(viec_id)
+            if n != 1:
+                raise MatQuyen(viec_id)            # rollback: không để lại mã tab của người gửi đã mất claim
 
     @staticmethod
     def _viec_cung_nhom(con, nhom: tuple, tru_id: str) -> list:
@@ -584,17 +653,21 @@ class NguoiGui:
                 self._chan_nhom(nhom, ly_do_khoa, viec_id)
             return "bi_chan"
         chot_gui, da_chot = self._tab_gui(chot)
-        da_phat = {"co": False}
+        ly_do_tab = _ly_do_chan_tab(v, chot, da_chot)
+        if ly_do_tab:
+            self._chot(viec_id, token, BLOCKED_CONFIG, loi=ly_do_tab)
+            return "bi_chan"
+        da_phat = {"co": False, "gid": None}
 
         def truoc_khi_gui(gid: int, ten: str) -> None:
-            # Transport đã tìm được tab (theo mã/tên) và kiểm tiêu đề, CHƯA ghi gì. Revision chưa từng
-            # gửi thành công + hồ sơ có mã tab → tên tab phải khớp tên đối chiếu (dán nhầm link tab).
+            # Transport đã tìm được tab (theo mã/tên) và kiểm tiêu đề, CHƯA ghi gì. Revision chưa từng phát
+            # request + hồ sơ có mã tab → tên tab phải khớp tên đối chiếu (dán nhầm link tab).
             if da_chot is None and chot.worksheet_id is not None and ten != chot.worksheet_ten:
                 raise ChuaGui(f"Tab mã {gid} hiện tên «{ten}», khác tên đối chiếu «{chot.worksheet_ten}» "
                               "của hồ sơ — kiểm lại link/tên tab trong hồ sơ (chưa ghi gì).",
                               tam_thoi=False)
-            self._bat_dau_gui(viec_id, token)
-            da_phat["co"] = True
+            self._bat_dau_gui(viec_id, token, chot, gid, ten)      # chốt mã tab + SENDING: MỘT giao dịch
+            da_phat["co"], da_phat["gid"] = True, gid
 
         try:
             kq = self.cong.gui(chot_gui, duong_dan_khoa, header, rows, truoc_khi_gui)
@@ -613,17 +686,17 @@ class NguoiGui:
                 return "khong_ro"
             return self._xu_ly_chua_gui(v, token, nhom,
                                         ChuaGui(f"Lỗi trước khi gửi: {ten}", tam_thoi=True), bay_gio)
-        hop_le, ly_do, bien_nhan = kiem_bien_nhan(kq, chot_gui)
+        if not da_phat["co"]:
+            # Transport trả kết quả mà không qua bước chốt trước khi gửi (vi phạm hợp đồng): không biết đã ghi đâu.
+            self._chot(viec_id, token, UNKNOWN, loi="Transport trả kết quả mà chưa qua bước chốt trước khi gửi — "
+                       "không rõ đã ghi chưa.")
+            return "khong_ro"
+        # Biên nhận phải khớp ĐÚNG mã tab vừa chốt (hồ sơ theo tên cũng vậy — không chỉ khớp tên tab).
+        hop_le, ly_do, bien_nhan = kiem_bien_nhan(kq, replace(chot_gui, worksheet_id=da_phat["gid"]))
         if not hop_le:
             self._chot(viec_id, token, UNKNOWN, loi=f"Biên nhận bất thường: {ly_do}.")
             return "khong_ro"
         self._chot(viec_id, token, SENT, loi="", bien_nhan=json.dumps(bien_nhan, ensure_ascii=False))
-        if da_chot is None:
-            # Chốt mã tab thật cho revision (lần đầu thắng) — mọi việc sau của revision gửi theo mã này.
-            # Lỗi ghi ở đây không ảnh hưởng việc đã gửi; lần gửi sau sẽ chốt lại.
-            with contextlib.suppress(Exception):
-                sd.chot_tab(self.db_path, chot.dich_id, chot.phien_ban,
-                            worksheet_id=kq.worksheet_id, worksheet_ten=kq.worksheet_ten)
         return "da_gui"
 
     def _xu_ly_chua_gui(self, v: ViecGui, token: str, nhom, e: ChuaGui, bay_gio: float) -> str:
@@ -651,9 +724,9 @@ class NguoiGui:
         return "", sd.lay_xac_thuc(self.db_path, chot.xac_thuc_ref).duong_dan
 
     def _tab_gui(self, chot: sd.DichGuiChot) -> tuple:
-        """``(đích để gửi, tab đã chốt | None)``: revision đã gửi thành công → gửi theo MÃ đã chốt của
-        chính revision đó (không đọc hồ sơ hiện tại, không tìm lại theo tên — tab đổi tên vẫn đúng chỗ,
-        tab cùng tên tạo lại không bao giờ được coi là tab cũ)."""
+        """``(đích để gửi, tab đã chốt | None)``: revision đã phát request (mã chốt trong giao dịch SENDING) →
+        gửi theo MÃ đã chốt của chính revision đó (không đọc hồ sơ hiện tại, không tìm lại theo tên — tab đổi
+        tên vẫn đúng chỗ, tab cùng tên tạo lại không bao giờ được coi là tab cũ)."""
         da_chot = sd.tab_da_chot(self.db_path, chot.dich_id, chot.phien_ban)
         if da_chot is None:
             return chot, None
