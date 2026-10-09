@@ -18,15 +18,24 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 - Khoá ký Stable: không bao giờ có trên PC2. PC2 chỉ có khoá CÔNG KHAI tin cậy (do bộ cài đặt sẵn).
 
 ## Tiếp theo
-1. (Chờ PC1 + người dùng) C7: cài Stable bằng bộ one-click `TimClipPro_PC2_CaiDat_1.0.0_e49340d.zip`
-   (giải nén → nhấp đúp `CAI_TIMCLIPPRO_PC2.bat` → chờ PASS); FFmpeg cài riêng (bộ cài chỉ cảnh báo).
-2. Giai đoạn 1: clone CHỈ ĐỌC theo `docs/ai/GIT_WORKFLOW.md` («PC2 — giai đoạn 1»). Đang đọc file này trong clone →
-   bước này xong; kiểm `git remote -v` chỉ có `private`, `git push --dry-run private integration/current` bị từ chối.
-3. `CLAUDE.local.md` (Máy: PC2, quyền CHỈ ĐỌC) + `.claude/settings.local.json` theo mẫu; mở phiên ở gốc clone, `/context`
-   thấy đủ `CLAUDE.md`, `docs/ai/CURRENT_STATE.md`, `CLAUDE.local.md`, `docs/ai/handoff/PC2.md`.
+1. C7: người dùng báo (09/10) Stable 1.0.0 ĐÃ cài và chạy trên PC2 — PC1 xác minh rồi sửa `CURRENT_STATE.md` (PC2 không
+   tự sửa `integration/current`). FFmpeg 9.0.1 có trên PATH (winget).
+2. Giai đoạn 1 — XONG 09/10: clone CHỈ ĐỌC (`git remote -v` chỉ `private`; `push --dry-run` bị từ chối «read only»).
+3. XONG 09/10: `CLAUDE.local.md` + `.claude/settings.local.json`; ngữ cảnh nạp đủ 4 file; venv dev `TimClipPro\.venv`
+   từ Python 3.12.10 GỐC của máy (Stable cũng dựng từ bản này — không cài gói/nâng cấp nó); chi tiết: `CLAUDE.local.md`.
 4. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md` — đầu phiên `git fetch private`, so HEAD với
    `private/integration/current`; chỉ dựa handoff + tài liệu, không audit toàn repo; commit LOCAL, chưa push.
-5. Giai đoạn 2 (quyền ghi + PR): chờ người dùng duyệt sau khi các bước trên đạt.
+5. Giai đoạn 2 (quyền ghi + PR): chờ người dùng duyệt — cần để đưa `fix/pc2/windows-health-encoding` (nhật ký dưới)
+   sang PC1 review + merge.
 
 ## Nhật ký
-- (chưa có phiên nào trên PC2)
+### 2026-10-09 — test bảng mã cp1252 của health_check (nhánh fix/pc2/windows-health-encoding)
+- Làm: PC2 (cp1252) hỏng `test_chan_mang_truoc_khi_import`: test gọi thẳng `chan_mang()` rồi print tiếng Việt, bỏ
+  `_utf8_dau_ra()` của `main()` — lỗi của test; production đúng (launcher ép UTF-8; `main` và `cli` đổi stdout). Chỉ
+  sửa `tests/test_health_check.py`: test cũ chạy đúng thứ tự `main()`, ép cp1252/utf-8; +3 test hồi quy × 2 bảng mã.
+- Commit: `da66f0e` (trên `c1f19d8`); commit chứa chính mục này: `git log -1 --format=%h -- docs/ai/handoff/PC2.md`.
+- Test (clone tạm, chặn mạng, cp1252): health_check 12/12; đột biến `_utf8_dau_ra` no-op → 2 đỏ, launcher bỏ biến
+  UTF-8 → 1 đỏ; ruff sạch; nhanh 2460 = 2458 đạt / 2 bỏ qua (symlink cần quyền; file đang mở) / 0 hỏng (junit ngoài
+  Git: `C:\Dev\pc2_test_runs\2026-10-09_fix_encoding`); chậm 14/14 ở `c1f19d8` — chỉ đổi test nên không chạy lại.
+- Còn mở / rủi ro: chưa đẩy được (khoá CHỈ ĐỌC). PC2 chưa đặt git `user.name`/`user.email` (commit tạm dùng tên PC1).
+- Tiếp theo: người dùng duyệt giai đoạn 2 → đẩy nhánh + PR; PC1 review, merge; PC1 xác minh Stable đã cài trên PC2.
