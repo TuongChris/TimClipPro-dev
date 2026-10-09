@@ -4,11 +4,20 @@ Mỗi mục: quyết định · vì sao · bằng chứng (commit / tài liệu)
 rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không có tiền tố là `TimClipPro/docs/…`.
 
 ## Đang chờ người dùng quyết
-- **P-1 Private remote cho PC1/PC2** — kế hoạch ở `GIT_WORKFLOW.md`; chưa tạo repo, chưa đổi remote, chưa push.
 - **P-2 PC1 production lên e49340d** — lược đồ `lichsu.db` v2 → v4; cần sao lưu + duyệt riêng.
 - **P-3 Lock có băm vào repo** — hiện chỉ nằm trong bộ phát hành Stable trên PC1; repo giữ lock chưa băm.
 - **P-4 Lịch sử repo public** — có dữ liệu cần xử lý (chi tiết ngoài Git); đóng repo public hay viết lại lịch sử đều
   cần duyệt (force-push đang bị cấm).
+
+## D-16 Remote PRIVATE cho PC1/PC2 (2026-10-09) — giải quyết P-1
+Quyết định: repo MỚI `TuongChris/TimClipPro-dev` (private, không fork); chỉ đẩy `integration/current` (lần đầu
+`9b763be`, 90 commit, giữ nguyên lịch sử để không cắt truy vết `e49340d` trong manifest Stable 1.0.0); không đẩy tag
+hay nhánh cũ. PC1: remote `private`, `remote.pushDefault=private`, `push.default=upstream`; push vào `origin` (PUBLIC)
+bị chặn bằng pushurl giả, fetch vẫn chạy. PC2: clone với `--origin private`, khoá deploy chỉ cho repo này.
+Vì sao: hai máy chia sẻ mã, tài liệu, handoff qua Git mà không đụng repo public.
+Bằng chứng: quét toàn bộ lịch sử sẽ đẩy (843 blob, 90 commit, đối chứng dương 39/39) → 0 phát hiện nhạy cảm mới, chỉ
+còn các mục đã báo người dùng và đã public sẵn (chi tiết ngoài Git, bằng chứng vòng 09/10 trên PC1); GitHub báo
+`private=true`, ref duy nhất `refs/heads/integration/current` = `9b763be`, 0 tag; thử push nhầm `origin` → bị chặn.
 
 ## D-15 Ngữ cảnh chung qua Git + sơ đồ nhánh (2026-10-09)
 Quyết định: `CLAUDE.md` gốc ngắn + `docs/ai/` + `.claude/rules/` theo vùng; `TimClipPro/CLAUDE.md` rút từ 782 xuống

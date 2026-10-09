@@ -17,8 +17,11 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 ## Tiếp theo
 1. (Chờ PC1 + người dùng) C7: cài Stable bằng bộ one-click `TimClipPro_PC2_CaiDat_1.0.0_e49340d.zip`
    (giải nén → nhấp đúp `CAI_TIMCLIPPRO_PC2.bat` → chờ PASS); FFmpeg cài riêng (bộ cài chỉ cảnh báo).
-2. (Chờ repo private) Clone phát triển theo `docs/ai/GIT_WORKFLOW.md` mục «PC2 — clone phát triển lần đầu».
-3. Tạo `CLAUDE.local.md` từ `docs/ai/CLAUDE.local.md.mau` (Máy: PC2).
+2. Clone phát triển theo `docs/ai/GIT_WORKFLOW.md` mục «PC2 — clone phát triển lần đầu» (repo private
+   `TuongChris/TimClipPro-dev` đã có từ 09/10; khoá deploy riêng cho repo này). Đang đọc file này trong clone → bước này
+   xong; kiểm `git remote -v` chỉ có `private`.
+3. Tạo `CLAUDE.local.md` từ `docs/ai/CLAUDE.local.md.mau` (Máy: PC2), mở phiên ở gốc clone, `/context` thấy đủ
+   `CLAUDE.md`, `docs/ai/CURRENT_STATE.md`, `CLAUDE.local.md`, `docs/ai/handoff/PC2.md`.
 
 ## Nhật ký
 - (chưa có phiên nào trên PC2)

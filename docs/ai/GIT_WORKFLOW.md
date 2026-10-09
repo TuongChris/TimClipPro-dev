@@ -21,46 +21,59 @@
 - Stable: chỉ build từ commit trên `integration/current` đã nghiệm thu (test đầy đủ + review/audit theo rủi ro + người
   dùng duyệt), ký trên PC1. Tag `stable-X.Y.Z` (nếu dùng) chỉ đẩy lên remote PRIVATE.
 - Đưa nhánh đã duyệt vào `integration/current` khi chưa có PR (chỉ fast-forward, từ chối nếu lệch):
-  `git fetch . feature/pc1/<tên>:integration/current`
+  `git fetch . feature/pc1/<tên>:integration/current`, rồi (khi được duyệt) `git push private integration/current`.
 
 ## Remote
-- `origin` (PC1) = GitHub `TuongChris/Tool_Quet`, **PUBLIC**. Quy trình mới KHÔNG push vào đây. Giữ tên `origin` vì
-  updater cũ `cap_nhat.py` của máy legacy chạy `git fetch --tags` theo remote mặc định.
-- `private` (CẢ HAI máy) = repo PRIVATE mới (đề xuất `TuongChris/TimClipPro-dev`). PC1 thêm remote tên `private`;
-  PC2 clone bằng `--origin private` — hai máy cùng gõ `git push private <nhánh>`. PC2 không có remote public.
-- Luồng: PC2 push `fix/pc2/<tên>` → mở PR vào `integration/current` trên repo private → PC1 review (diff + test mục
-  tiêu) → merge → PC1 build/ký Stable khi cần → chuyển bộ cài/feed sang PC2. Không push thẳng `integration/current` từ
-  PC2, không force-push nhánh máy kia, không merge khi test đỏ. (Bảo vệ nhánh trên repo private của gói GitHub miễn phí
-  không có — dựa vào quy ước này.)
+- `private` (CẢ HAI máy) = GitHub `TuongChris/TimClipPro-dev`, **PRIVATE** (tạo 09/10/2026). PC1 có remote tên
+  `private`; PC2 clone bằng `--origin private` — hai máy cùng gõ `git push private <nhánh>`. PC2 không có remote public.
+- `origin` (chỉ PC1) = GitHub `TuongChris/Tool_Quet`, **PUBLIC**. Chỉ để fetch: updater cũ `cap_nhat.py` của máy
+  legacy chạy `git fetch --tags` theo remote mặc định. Push vào `origin` bị chặn (mục dưới).
+- Luồng: PC2 push `fix/pc2/<tên>` → mở PR vào `integration/current` (trang web GitHub, hoặc `gh` trên PC1 — khoá deploy
+  của PC2 không mở được PR) → PC1 review (diff + test mục tiêu) → merge → PC1 build/ký Stable khi cần → chuyển bộ
+  cài/feed sang PC2. Không push thẳng `integration/current` từ PC2, không force-push nhánh máy kia, không merge khi test
+  đỏ. (Bảo vệ nhánh trên repo private của gói GitHub miễn phí không có — dựa vào quy ước này.)
 
-## Kế hoạch tạo private remote — CHỜ DUYỆT, CHƯA LÀM GÌ
-1. Repo: tạo MỚI `TuongChris/TimClipPro-dev`, PRIVATE, trống. Không fork repo public (GitHub không cho bản fork riêng tư
-   của repo public). Không dùng repo private có sẵn `TOOL_QUET_BANQUYEN_AUDIO` (lịch sử khác hẳn, không chung commit).
-2. Chuyển: CHỈ nhánh `integration/current` (= e49340d + commit tài liệu đã duyệt) cùng toàn bộ commit tổ tiên.
-   Không đẩy tag `v*` (đã ở public), nhánh cũ, nhánh feature đã merge.
-3. Kiểm trước khi đẩy: quét mọi blob trong lịch sử sẽ đẩy theo mẫu bí mật (`release_tool.MAU_BI_MAT` + khối PEM,
-   cookie, token, tên file nhạy cảm), so với lần quét đã được người dùng duyệt — phát hiện MỚI là dừng. Lịch sử có vài
-   mục đã lộ sẵn ở repo public (chi tiết trong báo cáo quét ngoài Git trên PC1); repo private không làm lộ thêm.
-   Không viết lại lịch sử khi đẩy: đổi SHA sẽ cắt đứt truy vết commit `e49340d` ghi trong manifest Stable 1.0.0 đã ký.
-4. Lệnh (PC1, Git Bash, chạy trong một worktree bất kỳ của repo PC1 — mọi worktree dùng chung cấu hình `.git`):
-   ```bash
-   git fetch . feature/pc1/ai-shared-context:integration/current      # sau khi tài liệu được duyệt
-   gh repo create TuongChris/TimClipPro-dev --private --description "TimClipPro dev (PC1/PC2)"
-   git remote add private git@github.com:TuongChris/TimClipPro-dev.git
-   git push -u private integration/current
-   git ls-remote private && gh repo view TuongChris/TimClipPro-dev --json visibility
-   ```
-   Tuỳ chọn, duyệt riêng (chặn push nhầm lên public, fetch vẫn chạy):
-   `git remote set-url --push origin DISABLED-public-repo` và `git config remote.pushDefault private`.
-5. Quay lại: `git remote remove private` (chỉ local, nhánh không đổi); trả push public:
-   `git remote set-url --push origin git@github.com:TuongChris/Tool_Quet.git`; `git config --unset remote.pushDefault`;
-   lùi `integration/current`: `git branch -f integration/current e49340d`. Xoá repo private tạo nhầm: trang Settings của
-   repo trên GitHub (người dùng tự làm; `gh` hiện không có quyền `delete_repo`). Không bước nào đụng repo public.
+## Remote private — ĐÃ LÀM 09/10/2026 (người dùng duyệt)
+1. `integration/current` fast-forward `e49340d` → `9b763be`; tạo repo PRIVATE `TuongChris/TimClipPro-dev` (trống, không
+   fork — GitHub không cho bản fork riêng tư của repo public); PC1 thêm remote `private`; đẩy DUY NHẤT
+   `integration/current` (90 commit), không tag, không nhánh cũ. Lịch sử giữ nguyên: đổi SHA sẽ cắt truy vết `e49340d`
+   trong manifest Stable 1.0.0 đã ký. Không dùng repo private `TOOL_QUET_BANQUYEN_AUDIO` (lịch sử khác hẳn).
+2. Trước khi đẩy: quét mọi blob + commit sẽ đẩy (khoá, token, cookie, khối PEM, mật khẩu ghi cứng, link/ID Sheet, link
+   YouTube, tên kho/khách hàng, đường dẫn cục bộ, tên file nhạy cảm; đọc cả file .zip trong lịch sử), so với lần quét
+   đã báo người dùng — phát hiện MỚI là dừng. Kết quả: 0 mới; các mục còn lại đều đã public sẵn (chi tiết ngoài Git
+   trên PC1). Mỗi lần đẩy thêm vẫn quét phần lịch sử MỚI theo cùng cách.
+3. Chặn push nhầm (PC1; cấu hình `.git` dùng chung mọi worktree):
+   `git remote set-url --push origin DISABLED_KHONG_PUSH__origin_la_repo_PUBLIC`, `git config remote.pushDefault private`,
+   `git config push.default upstream` (`git push` trần chỉ đẩy nhánh đã có upstream trên `private`; nhánh mới phải gõ
+   rõ `git push -u private <nhánh>`).
+4. Kiểm: `git remote -v`; `git ls-remote private`; `gh api repos/TuongChris/TimClipPro-dev --jq .private` → `true`.
+5. Quay lại (không bước nào đụng repo public): `git remote remove private`; `git config --unset remote.pushDefault`;
+   `git config --unset push.default`; lùi `integration/current`: `git branch -f integration/current e49340d`. Bỏ chặn
+   push public (`git config --unset remote.origin.pushurl`) CHỈ khi người dùng duyệt push lên public. Xoá repo private:
+   Settings của repo trên GitHub (người dùng tự làm; `gh` không có quyền `delete_repo`).
 
-## PC2 — clone phát triển lần đầu (sau khi có repo private)
-1. Người dùng cài Git for Windows + GitHub CLI, rồi `gh auth login` (đăng nhập qua trình duyệt) và `gh auth setup-git`.
-   Chặt hơn: token fine-grained chỉ cho repo `TimClipPro-dev` (Contents: read/write).
-2. `git clone --origin private --branch integration/current https://github.com/TuongChris/TimClipPro-dev.git D:\TimClipPro_Dev\TimClipPro`
-   (không có D: thì `C:\Dev\TimClipPro`) — ngoài OneDrive, KHÔNG nằm trong `C:\TimClipPro*`.
-3. Chép `docs/ai/CLAUDE.local.md.mau` thành `CLAUDE.local.md` (máy PC2); venv phát triển theo `docs/ai/TEST_MATRIX.md`.
-4. Mỗi lỗi: `git switch -c fix/pc2/<tên> private/integration/current` … `git push -u private fix/pc2/<tên>` (khi được duyệt).
+## PC2 — clone phát triển lần đầu
+Quyền GitHub cho PC2 (chọn một):
+- **Khuyên dùng — khoá deploy chỉ cho repo này**: PC2 đọc/ghi được đúng `TimClipPro-dev`, không đụng được repo public
+  hay tài khoản. Khoá riêng nằm yên trên PC2 — không chép đi đâu, không dán vào chat.
+- Đơn giản hơn nhưng rộng quyền: GitHub CLI `gh auth login` (trình duyệt) + `gh auth setup-git`, clone bằng
+  `https://github.com/TuongChris/TimClipPro-dev.git` — PC2 có quyền như cả tài khoản (kể cả repo public).
+Các bước khoá deploy (Git Bash trên PC2; Claude Code PC2 làm được, trừ bước 3 người dùng làm trên web):
+1. `ssh-keygen -t ed25519 -f ~/.ssh/timclippro_dev -N "" -C "PC2 TimClipPro-dev"`; in khoá CÔNG KHAI
+   `~/.ssh/timclippro_dev.pub` (khoá riêng không có đuôi `.pub` — không in).
+2. Thêm vào `~/.ssh/config`: `Host github-timclippro` · `HostName github.com` · `User git` ·
+   `IdentityFile ~/.ssh/timclippro_dev` · `IdentitiesOnly yes`.
+3. Người dùng: GitHub → repo `TimClipPro-dev` → Settings → Deploy keys → Add deploy key → dán khoá công khai, tick
+   «Allow write access».
+4. Kiểm máy chủ TRƯỚC khi tin: `ssh-keyscan -t ed25519 github.com > gh.tmp && ssh-keygen -lf gh.tmp` phải ra
+   `SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU` (GitHub công bố; PC1 tin đúng khoá này) → khớp mới
+   `cat gh.tmp >> ~/.ssh/known_hosts`; lệch → DỪNG. Rồi `ssh -T github-timclippro` phải chào `TuongChris/TimClipPro-dev`.
+5. Clone vào thư mục RIÊNG, ngoài OneDrive, KHÔNG nằm trong `C:\TimClipPro`, `C:\TimClipPro_State`, `C:\TimClipPro_Feed`:
+   `git clone --origin private --branch integration/current git@github-timclippro:TuongChris/TimClipPro-dev.git D:/TimClipPro_Dev/TimClipPro`
+   (không có ổ D: thì `C:/Dev/TimClipPro`).
+6. Trong clone: `git config push.default upstream`; chép `docs/ai/CLAUDE.local.md.mau` thành `CLAUDE.local.md` (Máy:
+   PC2; dòng nhập cuối file trỏ tới `docs/ai/handoff/PC2.md`). Venv phát triển theo `docs/ai/TEST_MATRIX.md` (cần
+   Python 3.12 riêng — không dùng Python của bản Stable).
+7. Mở Claude Code ở GỐC clone, gõ `/context`: phải thấy `CLAUDE.md`, `docs/ai/CURRENT_STATE.md`, `CLAUDE.local.md`,
+   `docs/ai/handoff/PC2.md`.
+8. Mỗi lỗi: `git switch -c fix/pc2/<tên> private/integration/current` … `git push -u private fix/pc2/<tên>` (khi được duyệt).

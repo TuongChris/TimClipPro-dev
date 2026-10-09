@@ -26,7 +26,7 @@ Trạng thái chung hiện tại (tự nạp):
 - Bản Stable chỉ chuẩn bị từ commit đã nghiệm thu trên `integration/current`, và chỉ ký trên PC1.
 
 ## Cấm, trừ khi người dùng duyệt rõ trong phiên này
-- Push, force-push, tạo/sửa remote, tag hay release công khai. `origin` hiện là repo PUBLIC.
+- Push (kể cả lên `private`), force-push, tạo/sửa remote, tag hay release. `origin` của PC1 là repo PUBLIC.
 - Sửa production: PC1 `Tool_Quet` đang chạy thật; Stable của PC2 `C:\TimClipPro`, `C:\TimClipPro_State`,
   `C:\TimClipPro_Feed` (chỉ launcher/updater do người dùng chạy được đổi chúng).
 - Đọc, in hay chép khoá ký riêng, mật khẩu, cookie, `google_key.json`, link Google Sheet thật.

@@ -12,15 +12,26 @@ sang `docs/ai/handoff/LICH_SU_PC1.md`. Không ghi bí mật, link Sheet thật, 
   được tích hợp bằng commit khác (3218aff, d67ce31). Dọn chúng = việc riêng, cần duyệt.
 - Bằng chứng mỗi vòng (ngoài Git): `D:\TimClipPro_<Vòng>\<thời điểm>\checkpoints\CHECKPOINT.md`.
 - Đường dẫn cục bộ khác (khoá ký, bộ phát hành, Python): `CLAUDE.local.md` của PC1 (không vào Git).
+- Remote: `private` (`TimClipPro-dev`, PRIVATE) để push; `origin` (PUBLIC) chỉ fetch — push bị chặn bằng pushurl giả.
 
 ## Tiếp theo
-1. Người dùng duyệt nhánh `feature/pc1/ai-shared-context` → fast-forward `integration/current` (lệnh trong
-   `docs/ai/GIT_WORKFLOW.md`).
-2. Người dùng duyệt kế hoạch private remote (`GIT_WORKFLOW.md`) → tạo repo, đẩy `integration/current`.
-3. Gửi e49340d đi tái audit độc lập; có kết quả → quyết định C7 (giao bộ cài one-click cho PC2).
-4. Sao lưu khoá ký ra USB khi có USB.
+1. Người dùng duyệt đẩy commit tài liệu cập nhật trạng thái (sau `9b763be`, cùng nhánh): fast-forward
+   `integration/current` rồi `git push private integration/current` — quét phần lịch sử mới trước khi đẩy.
+2. Người dùng kiểm nạp ngữ cảnh thật: mở phiên mới ở gốc worktree, gõ `/context` (phiên CLI lồng của Claude chưa đăng
+   nhập nên chưa tự kiểm được).
+3. PC2 clone theo `docs/ai/GIT_WORKFLOW.md` (khoá deploy — người dùng thêm khoá công khai trên GitHub).
+4. Gửi e49340d đi tái audit độc lập; có kết quả → quyết định C7 (giao bộ cài one-click cho PC2).
+5. Sao lưu khoá ký ra USB khi có USB.
 
 ## Nhật ký
+### 2026-10-09 — Remote PRIVATE `TimClipPro-dev` (nhánh feature/pc1/ai-shared-context)
+- Làm (người dùng duyệt): `integration/current` fast-forward e49340d → 9b763be; tạo repo PRIVATE; thêm remote `private`;
+  đẩy DUY NHẤT `integration/current` (không tag); chặn push vào `origin`, `remote.pushDefault=private`,
+  `push.default=upstream`. Repo public không đổi (18 ref như trước). Production giữ 6dc3f9d.
+- Kiểm: quét lịch sử sẽ đẩy (843 blob, 90 commit, đối chứng dương 39/39) → 0 phát hiện nhạy cảm mới; GitHub
+  `private=true`, ref duy nhất `refs/heads/integration/current` = `9b763be`, 0 tag; thử push nhầm `origin` → bị chặn.
+- Chưa kiểm: `/context` trong phiên thật (CLI lồng chưa đăng nhập).
+- Bằng chứng: `D:\TimClipPro_SharedContext\20261009_111332\` (logs/kiem_sau_push.txt, evidence/quet_truoc_push.json).
 ### 2026-10-09 — Ngữ cảnh chung PC1/PC2 (nhánh feature/pc1/ai-shared-context)
 - Làm: inventory chỉ đọc (Git, worktree, remote, tài liệu); `CLAUDE.md` gốc, `docs/ai/*`, `.claude/rules/*`,
   `.claude/settings.json`; chuẩn hoá `TimClipPro/CLAUDE.md` 782 → 198 dòng (phần dài chuyển nguyên

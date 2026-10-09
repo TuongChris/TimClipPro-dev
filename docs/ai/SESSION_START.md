@@ -20,6 +20,15 @@ C:\TimClipPro_Feed; test chỉ dùng dữ liệu synthetic + thư mục tạm. N
 nhật handoff/PC2.md và commit; chỉ push nhánh khi mình duyệt.
 ```
 
+## PC2 — phiên thiết lập đầu tiên (chưa có clone; mở Claude Code ở thư mục trống, ví dụ `D:\TimClipPro_Dev`)
+```text
+Phiên PC2 — thiết lập clone phát triển TimClipPro. Repo PRIVATE: TuongChris/TimClipPro-dev, nhánh integration/current.
+Làm theo GIT_WORKFLOW.md mục «PC2 — clone phát triển lần đầu» (xem trên GitHub, hoặc theo hướng dẫn mình dán).
+KHÔNG đọc/ghi C:\TimClipPro, C:\TimClipPro_State, C:\TimClipPro_Feed. Tạo khoá deploy ~/.ssh/timclippro_dev, chỉ in
+khoá CÔNG KHAI rồi dừng chờ mình thêm khoá trên GitHub. Kiểm vân tay máy chủ GitHub trước khi tin. Clone vào
+D:\TimClipPro_Dev\TimClipPro (không có D: thì C:\Dev\TimClipPro), tạo CLAUDE.local.md từ mẫu. Không push.
+```
+
 ## Tiếp tục việc dở (cả hai máy)
 ```text
 Tiếp tục theo «Tiếp theo» trong docs/ai/handoff/<PC1|PC2>.md và mục nhật ký mới nhất. Đối chiếu nhánh/HEAD với commit
