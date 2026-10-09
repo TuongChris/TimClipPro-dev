@@ -11,7 +11,9 @@ Trạng thái chung hiện tại (tự nạp):
 
 ## Mỗi phiên — làm đúng thứ tự
 1. Kiểm máy và Git: `hostname`, `git status -sb`, `git log --oneline -3`. Máy nào thì xem `CLAUDE.local.md`; không
-   có file đó thì HỎI người dùng, không đoán. HEAD lệch mốc trong CURRENT_STATE → nói rõ trước khi làm.
+   có file đó thì HỎI người dùng, không đoán. Kiểm remote THẬT mỗi phiên: `git fetch private` rồi
+   `git log --oneline -3 private/integration/current` — SHA ghi trong tài liệu chỉ là mốc lịch sử, KHÔNG phải bản mới
+   nhất. Nhánh đang làm lệch remote, hoặc remote có commit mới → đọc phần mới và nói rõ trước khi làm.
 2. Đọc `docs/ai/handoff/<PC1|PC2>.md` của máy này (mục «Tiếp theo»). Đụng nhánh của máy kia → đọc cả handoff kia.
 3. Chỉ đọc module liên quan: tra `docs/ai/ARCHITECTURE_INDEX.md`, rồi `rg`, `git diff`, `git log -- <file>`.
 4. Không quét/audit toàn repo khi task không cần. «Không audit lại» KHÔNG có nghĩa là bỏ qua kiểm chứng.

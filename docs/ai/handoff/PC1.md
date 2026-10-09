@@ -15,15 +15,24 @@ sang `docs/ai/handoff/LICH_SU_PC1.md`. Không ghi bí mật, link Sheet thật, 
 - Remote: `private` (`TimClipPro-dev`, PRIVATE) để push; `origin` (PUBLIC) chỉ fetch — push bị chặn bằng pushurl giả.
 
 ## Tiếp theo
-1. Người dùng duyệt đẩy commit tài liệu cập nhật trạng thái (sau `9b763be`, cùng nhánh): fast-forward
-   `integration/current` rồi `git push private integration/current` — quét phần lịch sử mới trước khi đẩy.
-2. Người dùng kiểm nạp ngữ cảnh thật: mở phiên mới ở gốc worktree, gõ `/context` (phiên CLI lồng của Claude chưa đăng
-   nhập nên chưa tự kiểm được).
-3. PC2 clone theo `docs/ai/GIT_WORKFLOW.md` (khoá deploy — người dùng thêm khoá công khai trên GitHub).
-4. Gửi e49340d đi tái audit độc lập; có kết quả → quyết định C7 (giao bộ cài one-click cho PC2).
-5. Sao lưu khoá ký ra USB khi có USB.
+1. PC2 giai đoạn 1 (Deploy Key CHỈ ĐỌC, clone `C:\Dev\Tool_Quet`) theo `docs/ai/GIT_WORKFLOW.md` — người dùng chạy
+   prompt thiết lập trên PC2 và thêm khoá công khai trên GitHub, KHÔNG tick «Allow write access».
+2. PC2 giai đoạn 2 (quyền ghi `fix/pc2/*` + Pull Request): chỉ khi người dùng duyệt, sau khi PC2 kiểm shared context.
+3. Gửi e49340d đi tái audit độc lập; có kết quả → quyết định C7 (giao bộ cài one-click cho PC2).
+4. Sao lưu khoá ký ra USB khi có USB.
 
 ## Nhật ký
+### 2026-10-09 — Chốt PC1 shared development (nhánh feature/pc1/ai-shared-context)
+- Làm: đẩy `bff0ac3` lên `private` (fast-forward, người dùng duyệt); chuẩn hoá tài liệu: PC2 giai đoạn 1 = Deploy Key
+  CHỈ ĐỌC, clone `C:\Dev\Tool_Quet`; giai đoạn 2 (ghi + PR) chỉ mô tả; mỗi phiên hỏi HEAD từ remote (D-17).
+- Kiểm nạp thật (phiên Claude Code CLI ở worktree này, người dùng đăng nhập lại CLI): `/context` → Memory files đúng 4
+  file `CLAUDE.md`, `docs/ai/CURRENT_STATE.md`, `CLAUDE.local.md`, `docs/ai/handoff/PC1.md`; dòng đầu phiên lồng khai
+  trùng file thật. Đọc một file vùng matcher / sheets-outbox / updater → transcript ghi Claude Code chèn đúng rule của
+  vùng đó + `TimClipPro/CLAUDE.md`; đọc file ngoài vùng → không chèn gì.
+- Quyền chặn (dữ liệu GIẢ, đã xoá): đọc `google_key.json`, `*cookie*.txt`, `giam_sat_sheet.txt` và sửa `db.pklz`,
+  `lichsu.db`, `downloaded.txt`, `clips_meta.json` → bị chặn; file đối chứng đọc/sửa được; ghi `C:\TimClipPro*` → bị chặn;
+  cú pháp chặn đường dẫn tuyệt đối `//c/…` thử bằng thư mục nháp → đúng. Không thử production hay thư mục khoá.
+- Bằng chứng: `D:\TimClipPro_SharedContext\20261009_111332\` (logs/nap_that/, evidence/kiem_nap_that.json).
 ### 2026-10-09 — Remote PRIVATE `TimClipPro-dev` (nhánh feature/pc1/ai-shared-context)
 - Làm (người dùng duyệt): `integration/current` fast-forward e49340d → 9b763be; tạo repo PRIVATE; thêm remote `private`;
   đẩy DUY NHẤT `integration/current` (không tag); chặn push vào `origin`, `remote.pushDefault=private`,

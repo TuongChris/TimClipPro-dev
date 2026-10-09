@@ -9,6 +9,14 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-4 Lịch sử repo public** — có dữ liệu cần xử lý (chi tiết ngoài Git); đóng repo public hay viết lại lịch sử đều
   cần duyệt (force-push đang bị cấm).
 
+## D-17 PC2 truy cập GitHub theo hai giai đoạn; tài liệu không ghi cứng HEAD (2026-10-09) — bổ sung D-16
+Quyết định (người dùng): giai đoạn 1 — Deploy Key CHỈ ĐỌC cho `TimClipPro-dev` (KHÔNG «Allow write access»), clone tại
+`C:\Dev\Tool_Quet`; giai đoạn 2 — quyền ghi `fix/pc2/*` + Pull Request, thiết lập riêng sau khi PC2 clone, kiểm shared
+context và người dùng duyệt. Tài liệu không ghi HEAD «mới nhất»; mỗi phiên hỏi remote (`git fetch private`).
+Vì sao: PC2 chạy dữ liệu thật — quyền tối thiểu cho tới khi quy trình PC2 được kiểm; SHA ghi trong tài liệu cũ đi ngay
+sau lần đẩy kế tiếp.
+Bằng chứng: `docs/ai/GIT_WORKFLOW.md` (mục «PC2 — giai đoạn 1/2»), `handoff/PC2.md`, `SESSION_START.md`.
+
 ## D-16 Remote PRIVATE cho PC1/PC2 (2026-10-09) — giải quyết P-1
 Quyết định: repo MỚI `TuongChris/TimClipPro-dev` (private, không fork); chỉ đẩy `integration/current` (lần đầu
 `9b763be`, 90 commit, giữ nguyên lịch sử để không cắt truy vết `e49340d` trong manifest Stable 1.0.0); không đẩy tag

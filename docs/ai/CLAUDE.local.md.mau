@@ -6,6 +6,9 @@
 
 Máy: <PC1 | PC2> · hostname: <kết quả lệnh `hostname`>
 Vai trò: <PC1: phát triển, tích hợp, review, ký Stable | PC2: vận hành Stable + clone phát triển riêng>
+Quyền GitHub: <PC1: push lên `private` khi người dùng duyệt; `origin` PUBLIC chỉ fetch | PC2: Deploy Key CHỈ ĐỌC
+(giai đoạn 1) — không push được; giai đoạn 2 (quyền ghi + PR) chỉ khi người dùng duyệt>
+HEAD: không ghi ở đây — mỗi phiên `git fetch private` và so với `private/integration/current`.
 
 ## Đường dẫn cục bộ
 - Clone/worktree này: <…>
