@@ -1,0 +1,25 @@
+# Ghi chú RIÊNG của máy này — mẫu
+
+> Chép file này thành `CLAUDE.local.md` ở GỐC clone/worktree rồi sửa. `CLAUDE.local.md` đã nằm trong `.gitignore`:
+> không commit, không đồng bộ sang máy kia. Không ghi mật khẩu, nội dung khoá, cookie, link Google Sheet thật.
+> Dòng nhập (import) cuối file làm Claude tự nạp handoff của ĐÚNG máy này mỗi phiên.
+
+Máy: <PC1 | PC2> · hostname: <kết quả lệnh `hostname`>
+Vai trò: <PC1: phát triển, tích hợp, review, ký Stable | PC2: vận hành Stable + clone phát triển riêng>
+
+## Đường dẫn cục bộ
+- Clone/worktree này: <…>
+- KHÔNG được sửa: <PC1: worktree production Tool_Quet | PC2: C:\TimClipPro, C:\TimClipPro_State, C:\TimClipPro_Feed>
+- Python 3.12 gốc: <…>; venv phát triển: `TimClipPro\.venv` của clone này.
+- (Chỉ PC1) Thư mục khoá ký: <…> — KHÔNG đọc, không in, không chép, không đưa vào lệnh.
+- (Chỉ PC1) Bộ phát hành Stable và bằng chứng các vòng: <…>
+
+## Chặn kỹ thuật kèm theo (tuỳ chọn)
+`.claude/settings.local.json` (cũng không commit) có thể thêm luật chặn riêng máy, ví dụ
+`{"permissions": {"deny": ["Edit(//c/<đường dẫn production>/**)"]}}` — Windows viết `C:\a\b` thành `//c/a/b`.
+Luật chặn chỉ áp cho công cụ sửa file của Claude và lệnh đọc/ghi file nhận ra được, KHÔNG chặn script Python/PowerShell.
+
+## Ghi chú riêng
+- <…>
+
+@docs/ai/handoff/<PC1 hoặc PC2>.md

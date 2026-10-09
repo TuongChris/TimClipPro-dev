@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(//c/TimClipPro/**)",
+      "Edit(//c/TimClipPro_State/**)",
+      "Edit(//c/TimClipPro_Feed/**)",
+      "Read(**/google_key.json)",
+      "Read(**/*cookie*.txt)",
+      "Read(**/giam_sat_sheet.txt)",
+      "Edit(**/db.pklz)",
+      "Edit(**/lichsu.db)",
+      "Edit(**/downloaded.txt)",
+      "Edit(**/clips_meta.json)"
+    ]
+  }
+}

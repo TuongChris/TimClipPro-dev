@@ -35,3 +35,7 @@ tmp/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Claude Code — ghi chú/cấu hình RIÊNG từng máy, không đồng bộ qua Git (docs/ai/GIT_WORKFLOW.md)
+CLAUDE.local.md
+.claude/settings.local.json
