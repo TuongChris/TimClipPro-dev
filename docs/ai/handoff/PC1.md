@@ -25,7 +25,7 @@ sang `docs/ai/handoff/LICH_SU_PC1.md`. Không ghi bí mật, link Sheet thật, 
 - Làm: inventory chỉ đọc (Git, worktree, remote, tài liệu); `CLAUDE.md` gốc, `docs/ai/*`, `.claude/rules/*`,
   `.claude/settings.json`; chuẩn hoá `TimClipPro/CLAUDE.md` 782 → 198 dòng (phần dài chuyển nguyên
   văn); tạo nhánh local `integration/current` = e49340d. Không push, không đổi remote, production giữ 6dc3f9d.
-- Kiểm: test và kiểm chứng đang chạy trên commit này — kết quả ghi ở commit kế tiếp cùng nhánh.
+- Kiểm: kiem_tai_lieu 9/9 ĐẠT (phủ 646/646 dòng có chữ; 79 glob rule khớp; 138/138 file test đúng một vùng; 0 bí mật, đối chứng dương 14/14); quét lịch sử commit `b05a74d`: 0 phát hiện mới; suite nhanh trên cây `b05a74d`: 2445 đạt / 8 bỏ qua / 0 hỏng; chậm `test_hai_may_gia_lap.py` 1/1; rào chắn: sạch
 - Bằng chứng: `D:\TimClipPro_SharedContext\20261009_111332\` (CHECKPOINT, evidence/).
 - Tiếp theo: mục «Tiếp theo» ở trên.
 ### 2026-10-09 — Bộ cài one-click PC2 (ngoài repo)

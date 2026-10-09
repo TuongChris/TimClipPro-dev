@@ -7,6 +7,7 @@ Thêm/đổi tên file test → thêm vào bảng «Chọn test theo vùng» tro
 | Mốc | Máy, môi trường | Nhanh (`-m "not slow"`) | Chậm (`-m slow`) | Khác |
 |---|---|---|---|---|
 | `e49340d` (08/10/2026) | PC1; runtime dựng từ lock CÓ BĂM, Python 3.12.10; bản sao cây; chặn mạng | 2453 thu thập = 2445 đạt / 8 bỏ qua / 0 hỏng (226 s) | 14/14 (422 s) | đột biến outbox 123/123 bị bắt |
+| `b05a74d` (09/10/2026, chỉ tài liệu) | PC1; cùng runtime lock có băm; bản sao cây; chặn mạng | 2453 thu thập = 2445 đạt / 8 bỏ qua / 0 hỏng (307 s) | chỉ `test_hai_may_gia_lap.py`: 1/1 | mã y hệt e49340d (diff chỉ tài liệu, `.gitignore`, `.claude/`) |
 
 Bằng chứng (ngoài Git, trên PC1): junit `test_fast_rt_kiem.xml`, `test_slow_rt_kiem.xml` trong thư mục vòng phát hành
 Stable 08/10. Số ở đây phải lấy từ junit/kết quả thật, không ước lượng.
