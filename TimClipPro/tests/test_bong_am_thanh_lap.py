@@ -7,7 +7,8 @@ chúng (1) kéo lệch mốc đầu clip tới ±dedup_s (``_merge`` neo vào m�
 ứng viên riêng ≥ 1.000 hash → «đạt chuẩn», thành dòng báo cáo thừa và làm phồng «Tổng số đoạn phát hiện».
 
 Ba nhóm test:
-* Tái hiện lỗi (``do_truoc_khi_sua``): ĐỎ trên mã trước khi sửa, phải XANH sau khi sửa.
+* Tái hiện lỗi: ĐỎ trên mã trước khi sửa (commit đưa test vào đánh dấu chúng ``xfail(strict=True)``),
+  XANH sau khi sửa.
 * Khoá hành vi cũ hợp lệ: xanh trước VÀ sau khi sửa — chặn sửa quá tay (clip cắt giữa, dùng hai lần, phát lại liền
   nhau, khúc gối, trôi tốc độ, nhạc hiệu chung, hai nguồn chồng tiếng, sát ngưỡng 1.000 hash, khác hệ số tốc độ,
   các chốt của gộp cùng vị trí: không tạo dương tính mới, không làm loãng, không dẫm lên đường bù tốc độ).
@@ -30,8 +31,6 @@ from engine import Config, Engine, Match, danh_gia
 DU_LIEU = os.path.join(os.path.dirname(os.path.abspath(__file__)), "golden", "bong_lap")
 CLIP = "nhac_lap [AAAAAAAAAAA].opus"
 VLOG = "vlog [BBBBBBBBBBB].opus"
-do_truoc_khi_sua = pytest.mark.xfail(
-    strict=True, reason="P0: tái hiện lỗi bóng của âm thanh lặp trên mã trước khi sửa (e49340d/7a76e71)")
 
 
 def _engine(tong_hash: dict) -> Engine:
@@ -90,7 +89,6 @@ BONG_XA = [                                # bóng lệch ~−60 s (cùng mẫu 
 
 
 # ------------------------------------------------------------------ tái hiện lỗi (đỏ trên mã trước khi sửa)
-@do_truoc_khi_sua
 def test_bong_khong_keo_lech_moc_dau_clip():
     ds = _engine({CLIP: 36981})._merge([THAT] + BONG_GAN)
     assert len(ds) == 1
@@ -98,14 +96,12 @@ def test_bong_khong_keo_lech_moc_dau_clip():
     assert ds[0].hashes >= THAT["hash"]
 
 
-@do_truoc_khi_sua
 def test_nhom_bong_khong_thanh_ung_vien_dat_chuan():
     ds, dat, chon = _chuoi(_engine({CLIP: 36981}), [THAT] + BONG_GAN + BONG_XA, duration=2100.0)
     assert len(dat) == 1                                            # trước khi sửa: 2 (nhóm bóng 1.078 hash qua bậc A)
     assert len(chon) == 1 and chon[0].start_s == pytest.approx(360.0, abs=0.5)
 
 
-@do_truoc_khi_sua
 def test_golden_trich_giua_mot_dong_dung_moc_va_dem_nhat_quan():
     """Nhạc có trống lặp, trích giữa — MỘT lần dùng. «Tổng số đoạn phát hiện» (= số ứng viên đạt chuẩn trước
     Top-N, hợp đồng giữ nguyên) phải bằng số lần dùng thật khi không còn ứng viên bóng."""
@@ -116,7 +112,6 @@ def test_golden_trich_giua_mot_dong_dung_moc_va_dem_nhat_quan():
     assert not chon[0].moc_mo_ho and chon[0].confidence == "Rất chắc chắn"
 
 
-@do_truoc_khi_sua
 def test_golden_cat_giua_moi_moc_la_moc_that_cua_mot_phan():
     """Bản reup cắt bỏ 12 s giữa clip. Hai phần có vị trí đặt khác nhau (120 và 108) và khe giữa hai vùng khớp có
     thể > dedup_s, nên một hay hai dòng đều đúng — nhưng MỖI mốc phải là mốc thật của đúng một phần."""
@@ -128,7 +123,6 @@ def test_golden_cat_giua_moi_moc_la_moc_that_cua_mot_phan():
         assert min(abs(m.start_s - t) for t in d["moc_phan_s"]) <= 1.0, m.start_s
 
 
-@do_truoc_khi_sua
 def test_golden_troi_nho_mot_dong_dung_moc():
     d, _, dat, chon = _quet_golden("troi_nho.json")
     assert len(chon) == 1 and len(dat) == 1, [(round(m.start_s, 1), m.hashes) for m in chon]   # trước: 5 / 12
@@ -148,7 +142,6 @@ B13_BONG = [
 ]
 
 
-@do_truoc_khi_sua
 def test_bong_trong_lo_cua_can_chinh_troi_khong_thanh_dong_va_mot_lan_dung_mot_dong():
     """Trước khi sửa: 3 dòng — 110,0 (neo vào bóng), 120,0 và 129,2 (nhóm do bóng mở đầu). Đúng: MỘT dòng ở 120,0.
     Cần cả hai: bóng được xét theo PHẠM VI của vị trí đặt (không theo từng mảnh — lỗ không có mảnh thật nào), và
@@ -159,7 +152,6 @@ def test_bong_trong_lo_cua_can_chinh_troi_khong_thanh_dong_va_mot_lan_dung_mot_d
     assert not chon[0].moc_mo_ho
 
 
-@do_truoc_khi_sua
 def test_vi_tri_that_vo_nhieu_manh_van_thang_mot_bong_manh_hon_tung_manh():
     """Vị trí đặt được so bằng TỔNG bằng chứng, không bằng mảnh mạnh nhất: căn chỉnh thật vỡ 4 mảnh × 2.000 hash vẫn
     là mốc, dù một căn chỉnh khác có MỘT mảnh 2.600 hash. Căn chỉnh đó lớn hơn từng mảnh thật nên dòng được đánh dấu
@@ -171,7 +163,6 @@ def test_vi_tri_that_vo_nhieu_manh_van_thang_mot_bong_manh_hon_tung_manh():
     assert ds[0].moc_mo_ho and ds[0].moc_thay_the == (60.0,)
 
 
-@do_truoc_khi_sua
 def test_vong_lap_y_het_mot_dong_danh_dau_mo_ho_va_giu_moc_thay_the():
     """Đoạn nằm TRỌN trong vùng lặp y hệt (chu kỳ 17 s): mọi mốc 140 ± 17k giải thích video NHƯ NHAU — không thể
     xác định mốc duy nhất. Đúng: MỘT dòng; mốc thuộc tập tương đương; cờ mơ hồ + các mốc thay thế + tỷ số đối thủ;
@@ -273,7 +264,6 @@ def test_khac_he_so_toc_do_khong_xet_bong_cua_nhau():
 
 
 # ------------------------------------------------------------------ gộp cùng vị trí đặt (C') và chốt an toàn
-@do_truoc_khi_sua
 def test_cung_vi_tri_khe_lon_hon_dedup_va_mot_phan_dat_chuan_gop_mot_dong():
     """Cùng vị trí đặt (align trùng), vùng khớp cách nhau 40 s > dedup_s (tiếng nói đè lên giữa clip): MỘT lần dùng.
     Một phần đã đạt bậc A và nhóm gộp vẫn đạt bậc A ⇒ gộp, không đổi kết luận."""
@@ -283,7 +273,6 @@ def test_cung_vi_tri_khe_lon_hon_dedup_va_mot_phan_dat_chuan_gop_mot_dong():
     assert chon[0].start_s == pytest.approx(50.0, abs=0.01) and chon[0].hashes == 8100
 
 
-@do_truoc_khi_sua
 def test_cung_vi_tri_lech_align_vai_khung_qua_khe_ngan_van_gop():
     """Hai mảnh của cùng một lần dùng hiếm khi có align TRÙNG từng mili-giây: lượng tử hoá khung 23 ms của audfprint
     và ranh giới khúc làm lệch vài khung. Lệch 0,08 s qua khoảng cách tâm 41 s (trôi 0,2% — vượt ngưỡng bù nếu coi
@@ -319,14 +308,12 @@ def test_cung_vi_tri_khong_dam_len_duong_bu_toc_do():
 
 
 # ------------------------------------------------------------------ bằng chứng mốc (B)
-@do_truoc_khi_sua
 def test_bong_yeu_khong_gan_co_mo_ho_nhung_ghi_ty_so_doi_thu():
     ds = _engine({CLIP: 36981})._merge([THAT] + BONG_GAN)
     assert not ds[0].moc_mo_ho and ds[0].moc_thay_the == ()
     assert ds[0].ty_so_doi_thu == pytest.approx(1647 / 12668, abs=0.01)
 
 
-@do_truoc_khi_sua
 def test_mo_ho_xet_theo_vi_tri_lam_moc_cua_dong():
     """Một dòng gồm hai phần (bản cắt giữa): mốc lấy từ phần ĐẦU. Đối thủ ngang ngửa của phần đầu làm mốc mơ hồ;
     đối thủ của phần sau thì không (mốc không lấy từ đó)."""
@@ -342,7 +329,6 @@ def test_mo_ho_xet_theo_vi_tri_lam_moc_cua_dong():
     assert not ds[0].moc_mo_ho
 
 
-@do_truoc_khi_sua
 def test_doi_thu_o_vung_cua_dong_khac_khong_lam_dong_nay_mo_ho():
     """Cùng một vị trí đặt tách hai dòng (phần sau quá thưa nên không gộp — chốt C'). Đối thủ ngang ngửa chỉ nằm
     trong vùng phần SAU: chỉ dòng đó mơ hồ, dòng phần đầu thì không."""
@@ -355,7 +341,6 @@ def test_doi_thu_o_vung_cua_dong_khac_khong_lam_dong_nay_mo_ho():
     assert ds[1].moc_mo_ho and ds[1].moc_thay_the == (80.0,)
 
 
-@do_truoc_khi_sua
 def test_truong_moc_moi_tuong_thich_ket_qua_cu():
     """Kết quả dựng theo kiểu cũ (lịch sử, test, exporter) không có trường mới: mặc định = mốc chắc chắn; trường mới
     không tham gia phép so sánh ``==``."""

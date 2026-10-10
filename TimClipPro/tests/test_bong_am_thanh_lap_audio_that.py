@@ -20,9 +20,6 @@ import pytest
 from am_thanh_lap import SR, nhac_co_nhip, vong_lap_y_het
 from conftest import _ghi_wav, _giai_dieu
 
-do_truoc_khi_sua = pytest.mark.xfail(
-    strict=True, reason="P0: tái hiện lỗi bóng của âm thanh lặp trên mã trước khi sửa (e49340d/7a76e71)")
-
 
 
 def _quet(engine, tmp_path, clip: np.ndarray, X: float, L: float, P: float, sau: float = 120.0):
@@ -48,7 +45,6 @@ def _can_ffmpeg():
 
 
 @pytest.mark.slow
-@do_truoc_khi_sua
 def test_nhac_co_nhip_trich_giua_mot_dong_dung_moc(engine, tmp_path):
     clip = np.concatenate([_giai_dieu(8, seed=9203, sr=SR), nhac_co_nhip(292, seed=9204)])
     kq, dong = _quet(engine, tmp_path, clip, X=40.0, L=180.0, P=120.0)
@@ -59,7 +55,6 @@ def test_nhac_co_nhip_trich_giua_mot_dong_dung_moc(engine, tmp_path):
 
 
 @pytest.mark.slow
-@do_truoc_khi_sua
 def test_vong_lap_y_het_mot_dong_danh_dau_mo_ho(engine, tmp_path):
     """Đoạn chèn nằm TRỌN trong vùng lặp y hệt từng mẫu (vòng 8 ô nhịp): không thể biết đó là vòng thứ mấy.
     Đúng: MỘT dòng, cờ mơ hồ, mốc báo và các mốc thay thế đều thuộc tập tương đương 140 ± k·chu kỳ; độ chắc chắn

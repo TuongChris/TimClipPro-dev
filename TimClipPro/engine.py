@@ -62,6 +62,7 @@ from chan_doan_quet import (
     ChanDoanQuet,
     ghi_nhan_bi_loai,
 )
+import chong_bong_lap
 from chap_nhan_khop import loc_chap_nhan
 from toc_do_khop import (
     HO_RESAMPLE,
@@ -373,6 +374,12 @@ class Match:
     vung: str = ""         # Đầu / Giữa / Cuối video vi phạm
     clip_bat_dau_s: float = 0.0  # thời điểm CLIP bắt đầu trong video dài
     vung_khop_s: float = 0.0     # thời điểm VÙNG KHỚP bắt đầu
+    # Độ chắc chắn của MỐC đầu clip — tách khỏi `confidence` (độ chắc chắn của NGUỒN): âm thanh lặp y hệt cho
+    # nhiều mốc giải thích video như nhau (chong_bong_lap). Mặc định = mốc chắc chắn, nên kết quả dựng kiểu cũ
+    # (lịch sử, exporter, test) không đổi nghĩa; không tham gia phép so sánh `==`.
+    moc_mo_ho: bool = field(default=False, compare=False)
+    moc_thay_the: tuple = field(default=(), compare=False)   # các mốc đầu clip khả dĩ khác (giây, 0,1 s)
+    ty_so_doi_thu: float = field(default=0.0, compare=False)  # căn chỉnh cạnh tranh mạnh nhất / căn chỉnh làm mốc
 
     @property
     def start_hhmmss(self) -> str:
@@ -3989,6 +3996,12 @@ class Engine:
         interval. Hash được tích phân theo mật độ tốt nhất trên từng đoạn con
         của hợp interval, tránh đếm đôi vùng overlap nhưng vẫn giữ đủ bằng
         chứng khi clip bị chia qua ranh giới khúc.
+
+        Âm thanh lặp (``chong_bong_lap``, P0): mảnh «bóng» — căn chỉnh khác của cùng clip
+        nằm trong phạm vi một vị trí đặt mạnh hơn — vẫn được gom và tính hash như cũ nhưng
+        không bao giờ làm mốc đầu clip; nhóm không có mảnh chính nào không thành ứng viên;
+        các nhóm cùng vị trí đặt được gộp thành một lần dùng khi không đổi kết luận chấp
+        nhận; dòng có căn chỉnh ngang ngửa (lặp y hệt) mang cờ mốc mơ hồ.
         """
         cfg = self.config
         self.canh_bao_gop = []
@@ -4051,8 +4064,14 @@ class Engine:
         def he_so(x: dict) -> float:
             return round(float(x.get("he_so", 1.0) or 1.0), 5)
 
+        # Âm thanh lặp: mảnh nào là căn chỉnh CHÍNH, mảnh nào là bóng/đối thủ của một vị trí đặt
+        # mạnh hơn (chong_bong_lap). Chỉ dùng để chọn mốc và bỏ nhóm toàn bóng — gom nhóm bên dưới
+        # vẫn xét ĐỦ mảnh như cũ nên hash, vùng khớp, cận trên của nhóm thật không đổi.
+        nhan, _ = chong_bong_lap.phan_loai_manh(loc)
+        canh_tranh = chong_bong_lap.chi_muc_canh_tranh(nhan)
+
         gop = []
-        for x in loc:
+        for i, x in enumerate(loc):
             trung = next(
                 (
                     g for g in gop
@@ -4074,14 +4093,33 @@ class Engine:
                     "align": x["align"],
                     "he_so": he_so(x),
                     "manh": [dict(x)],
+                    "cs": [i],
                 })
             else:
                 trung["manh"].append(dict(x))
+                trung["cs"].append(i)
+
+        # Nhóm không có mảnh chính nào (toàn bóng) không là ứng viên: vùng video của nó đã có
+        # căn chỉnh thật mạnh hơn giải thích — trước đây thành dòng «Rất chắc chắn» thừa.
+        gop = [g for g in gop if any(nhan[i].loai == chong_bong_lap.CHINH for i in g["cs"])]
+
+        def so_lieu_nhom(cs: list) -> tuple:
+            """(hash đã áp cận trên, độ dài khớp) — đúng số vòng dưới báo, không ghi cảnh báo."""
+            hash_uoc, do_dai_hop = tinh_hash_va_hop([loc[i] for i in cs])
+            gioi_han = tong_hash.get(os.path.basename(loc[cs[0]]["clip"]))
+            return (hash_uoc if gioi_han is None else min(hash_uoc, gioi_han)), do_dai_hop
+
+        # Các nhóm cùng vị trí đặt (trôi < ngưỡng bù tốc độ) là MỘT lần dùng — chỉ gộp khi không
+        # đổi kết luận chấp nhận (chong_bong_lap.gop_cung_vi_tri).
+        gop, _ = chong_bong_lap.gop_cung_vi_tri(gop, loc, nhan, cfg, so_lieu_nhom)
 
         ket_qua = []
         for g in gop:
             manh = g["manh"]
-            som_nhat = min(manh, key=lambda x: (x["bat_dau"], x["t_clip"]))
+            # Mốc chỉ lấy từ mảnh CHÍNH: bóng của âm thanh lặp không bao giờ làm mốc.
+            i_moc = min((i for i in g["cs"] if nhan[i].loai == chong_bong_lap.CHINH),
+                        key=lambda i: (loc[i]["bat_dau"], loc[i]["t_clip"]))
+            som_nhat = loc[i_moc]
             vung_khop_s = min(x["bat_dau"] for x in manh)
             end_s = max(x["bat_dau"] + x["khop"] for x in manh)
             hash_uoc, do_dai_hop = tinh_hash_va_hop(manh)
@@ -4106,6 +4144,8 @@ class Engine:
                 0.0,
                 som_nhat["bat_dau"] - k * som_nhat["t_clip"],
             )
+            moc_mo_ho, moc_thay_the, ty_so_doi_thu = chong_bong_lap.bang_chung_moc(
+                i_moc, loc, nhan, canh_tranh, vung_khop_s, end_s, k)
             ket_qua.append(Match(
                 clip=ten_clip,
                 start_s=clip_bat_dau_s,
@@ -4119,6 +4159,9 @@ class Engine:
                 confidence=danh_gia(hashes),
                 clip_bat_dau_s=clip_bat_dau_s,
                 vung_khop_s=vung_khop_s,
+                moc_mo_ho=moc_mo_ho,
+                moc_thay_the=moc_thay_the,
+                ty_so_doi_thu=ty_so_doi_thu,
             ))
         return sorted(ket_qua, key=lambda m: m.start_s)
 

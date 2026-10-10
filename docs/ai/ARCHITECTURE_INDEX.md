@@ -69,6 +69,7 @@ chạm file) — không phải audit lại mã. Thêm/xoá/đổi vai trò modul
 | `cau_hinh.py` | Lưu tùy chọn người dùng; không lưu khóa API, mật khẩu hay nội dung google_key.json. | 72 | `354da23 2026-08-19` |
 | `chan_doan_quet.py` | Chẩn đoán phễu phát hiện của một lượt quét. | 287 | `7f85c8d 2026-08-21` |
 | `chap_nhan_khop.py` | Tiêu chí CHẤP NHẬN một ứng viên đã gộp vào báo cáo. | 140 | `7a6fa4c 2026-08-07` |
+| `chong_bong_lap.py` | Chống «bóng» của âm thanh lặp khi gộp mảnh khớp — phần thuần của `Engine._merge` (P0, D-21; `docs/BONG_AM_THANH_LAP.md`). | 236 | nhánh `fix/pc2/loop-alias-p0` (PC2, 10/10) |
 | `chia_watchlist.py` | chia_watchlist.py — Chia watchlist thành N phần cho N máy chạy song song. | 109 | `1682ce6 2026-08-08` |
 | `clip_metadata.py` | Resolver metadata clip gốc độc lập UI, I/O mạng và thuật toán fingerprint. | 1147 | `35c7fc1 2026-10-04` |
 | `don_dep.py` | Quản lý vòng đời kho đệm và thư mục job quét theo tuổi/ngân sách dung lượng. | 243 | `0a4a572 2026-08-21` |
@@ -106,7 +107,7 @@ chạm file) — không phải audit lại mã. Thêm/xoá/đổi vai trò modul
 ## Tài liệu thiết kế (`TimClipPro/docs/` trừ khi ghi khác) — đọc theo vùng của task
 
 Cột «Cuối» = commit cuối chạm file (tính tới e49340d). Bốn bản đồ cũ được đánh dấu theo số module KHÔNG được nhắc tới
-(đếm bằng tên file, 54 module): dùng cho phần cũ, đừng coi là nguồn chân lý cho managed/outbox/báo cáo V2/nguồn chung/
+(đếm bằng tên file, 54 module tại e49340d): dùng cho phần cũ, đừng coi là nguồn chân lý cho managed/outbox/báo cáo V2/nguồn chung/
 YouTube — dùng bảng module ở trên.
 
 | Tài liệu | Nhóm | Dòng | Cuối | Ghi chú |
