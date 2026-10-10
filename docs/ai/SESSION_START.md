@@ -14,13 +14,15 @@ chạy test theo TEST_MATRIX; xong cập nhật handoff/PC1.md và commit trên 
 Không push, không sửa production, không đụng khoá ký khi mình chưa duyệt.
 ```
 
-## PC2 (giai đoạn 1 — Deploy Key CHỈ ĐỌC)
+## PC2 (giai đoạn 2 — Deploy Key có quyền ghi; chỉ `fix/pc2/*` khi được duyệt)
 ```text
 Phiên PC2 (clone C:\Dev\Tool_Quet). Task: <triệu chứng + cách tái hiện; KHÔNG dán dữ liệu thật, link khách hàng, cookie>.
 Làm theo «Mỗi phiên» trong CLAUDE.md: git fetch private và so HEAD với private/integration/current; đọc
 docs/ai/handoff/PC2.md; chỉ đọc module liên quan, không audit toàn repo. Không đọc/ghi C:\TimClipPro,
-C:\TimClipPro_State, C:\TimClipPro_Feed; test chỉ dùng dữ liệu synthetic + thư mục tạm. Nhánh fix/pc2/<tên> từ
-private/integration/current; xong cập nhật handoff/PC2.md và commit LOCAL. Khoá deploy CHỈ ĐỌC — không push; báo mình.
+C:\TimClipPro_State, C:\TimClipPro_Feed; Development chỉ cổng 8502 bằng launcher PC2, không đụng Stable 8501; test chỉ
+dùng dữ liệu synthetic + thư mục tạm. Nhánh: git switch --no-track -c fix/pc2/<tên> private/integration/current; xong
+cập nhật handoff/PC2.md, commit. Chỉ push khi mình duyệt, sau khi quét: git push private fix/pc2/<tên>:fix/pc2/<tên>;
+KHÔNG push integration/current, tag hay force-push. PR do mình hoặc PC1 mở (GIT_WORKFLOW.md «Pull Request và gộp»).
 ```
 
 ## PC2 — phiên thiết lập đầu tiên (chưa có clone; mở Claude Code ở thư mục trống `C:\Dev`)
@@ -43,12 +45,14 @@ nhánh/HEAD với commit ghi trong handoff và với private/integration/current
 ```text
 ### YYYY-MM-DD — <việc> (nhánh <tên>)
 - Làm: <1–3 dòng>
-- Commit: <sha ngắn của commit trước đó>; commit chứa chính mục này: git log -1 --format=%h -- docs/ai/handoff/<máy>.md
+- Commit: <sha ngắn các commit mã/test của việc này>; tra commit chứa chính mục này (đúng cả sau lần sửa sau):
+  git log --format=%h -S "<tiêu đề mục>" -- docs/ai/handoff/<máy>.md | tail -1
 - Test: <lệnh> → <đạt / bỏ qua / hỏng> (junit hoặc bằng chứng: <đường dẫn>)
 - Còn mở / rủi ro: <…>
 - Tiếp theo: <bước kế, ai làm, cần duyệt gì>
 ```
-Đổi trạng thái chung (nhánh tích hợp, bản Stable, remote, việc mở) → sửa cả `docs/ai/CURRENT_STATE.md`.
+Đổi trạng thái chung (nhánh tích hợp, bản Stable, remote, việc mở) → PC1 sửa `docs/ai/CURRENT_STATE.md` khi gộp; PC2
+ghi đề xuất trong handoff hoặc mô tả PR (`docs/ai/GIT_WORKFLOW.md` «ai sửa file nào»).
 
 ## Tiết kiệm token
 - Ngữ cảnh đã tự nạp (CLAUDE.md gốc + CURRENT_STATE + CLAUDE.local.md + handoff của máy) — đừng đọc lại.

@@ -8,9 +8,17 @@ Thêm/đổi tên file test → thêm vào bảng «Chọn test theo vùng» tro
 |---|---|---|---|---|
 | `e49340d` (08/10/2026) | PC1; runtime dựng từ lock CÓ BĂM, Python 3.12.10; bản sao cây; chặn mạng | 2453 thu thập = 2445 đạt / 8 bỏ qua / 0 hỏng (226 s) | 14/14 (422 s) | đột biến outbox 123/123 bị bắt |
 | `b05a74d` (09/10/2026, chỉ tài liệu) | PC1; cùng runtime lock có băm; bản sao cây; chặn mạng | 2453 thu thập = 2445 đạt / 8 bỏ qua / 0 hỏng (307 s) | chỉ `test_hai_may_gia_lap.py`: 1/1 | mã y hệt e49340d (diff chỉ tài liệu, `.gitignore`, `.claude/`) |
+| `da66f0e` (09/10/2026, PR #1; `b627af0` chỉ thêm handoff) — PC2 tự báo | PC2; Windows 11 (người dùng báo), Python 3.12.10 gốc + venv `TimClipPro\.venv`; stdout cp1252; clone tạm; chặn mạng | 2460 thu thập = 2458 đạt / 2 bỏ qua / 0 hỏng | 14/14 trên `c1f19d8` (không chạy lại — chỉ đổi test) | `test_health_check.py` 12/12; đột biến `_utf8_dau_ra` no-op → 2 đỏ, launcher bỏ biến UTF-8 → 1 đỏ; ruff sạch |
+| `b627af0` (10/10/2026, review PR #1) | PC1; runtime lock có băm, Python 3.12.10; bản sao cây; chặn mạng | 2460 thu thập = 2452 đạt / 8 bỏ qua / 0 hỏng (283 s) | — | test CŨ ép cp1252 → 1 hỏng (`UnicodeEncodeError`); `test_health_check.py` MỚI 12/12 ở UTF-8 và 12/12 khi cha cp1252 |
 
-Bằng chứng (ngoài Git, trên PC1): junit `test_fast_rt_kiem.xml`, `test_slow_rt_kiem.xml` trong thư mục vòng phát hành
-Stable 08/10. Số ở đây phải lấy từ junit/kết quả thật, không ước lượng.
+Bằng chứng (ngoài Git): PC1 — junit `test_fast_rt_kiem.xml`, `test_slow_rt_kiem.xml` trong thư mục vòng phát hành Stable
+08/10 và `pr1_*.xml` của vòng 10/10; PC2 — junit trong `C:\Dev\pc2_test_runs\` (handoff PC2). Số ở đây phải lấy từ
+junit/kết quả thật, không ước lượng.
+
+Bỏ qua trên PC1 (8): 6 test `test_dong_goi_bi_mat::test_gitignore_chan_bien_the_ten_bi_mat[*]` («không chạy trong repo
+git» — PC1 chạy trên BẢN SAO cây từ `git archive`), 1 symlink cần quyền (WinError 1314), 1 file đang mở (`test_khoa`).
+PC2 chạy trong clone nên chạy được 6 test `.gitignore`. Chỗ hở của cách chạy bản sao: PC1 phải chạy riêng 6 test đó
+trong một worktree git — vòng 10/10: `pytest tests/test_dong_goi_bi_mat.py -k gitignore` trong worktree → 6/6 đạt.
 
 ## Lệnh (chạy trong `TimClipPro/`, `<py>` = Python của venv phát triển)
 - Nhanh: `<py> -m pytest -q -p no:cacheprovider` (`pytest.ini` đã đặt `-m "not slow"`).
@@ -30,10 +38,21 @@ py -3.12 -m venv .venv
 .venv\Scripts\python -m pip install "pytest>=9,<10" "ruff>=0.12,<1"
 ```
 Cần mạng (PyPI); `docopt 0.6.2` chỉ có sdist nên pip tự build. `TimClipPro\.venv` đã nằm trong `.gitignore` và là chỗ
-`kiemtra.bat`, `ChayTool.bat`, `.claude/launch.json` tự tìm.
+`kiemtra.bat`, `ChayTool.bat` tự tìm. Tạo venv từ Python gốc của máy thì KHÔNG cài/nâng cấp gói vào chính Python gốc
+(PC2: Stable cũng dựng từ Python 3.12.10 gốc đó).
+
+## Hai máy và bảng mã Windows (cp1252)
+- PC2: Windows 11 (người dùng báo), Python 3.12.10 gốc + venv riêng, stdout mặc định cp1252 (Windows tiếng Anh). PC1:
+  test trên runtime lock có băm Python 3.12.10, bản sao cây, rào chắn đặt stdout UTF-8.
+- Tiến trình con in tiếng Việt phải đi qua `_utf8_dau_ra()` (như `health_check.main`) hoặc môi trường của launcher
+  (`PYTHONUTF8=1`, `PYTHONIOENCODING=utf-8`). Hồi quy: `test_health_check.py` ép bảng mã tiến trình con cp1252 và utf-8
+  (PR #1). Test mới có subprocess + tiếng Việt → tham số hoá cả hai bảng mã theo cùng cách.
+- PC2 chạy suite với bảng mã MẶC ĐỊNH của máy (không ép UTF-8) để bắt lỗi cp1252 mà PC1 không thấy.
 
 ## Quy tắc khi viết/chạy test
 - Không ghi vào `data/` của thư mục mã: dùng `tmp_path` + `TIMCLIP_DATA_DIR` / `TIMCLIP_OUTPUT_DIR`.
+- KHÔNG BAO GIỜ chạy test hay Development trỏ vào dữ liệu production: không đặt `TIMCLIP_DATA_DIR` / `TIMCLIP_STATE_ROOT`
+  về `C:\TimClipPro_State` hay `data/` của production; chỉ dữ liệu tổng hợp/thư mục tạm; venv riêng của clone.
 - Không mạng thật: Sheets dùng `tests/sheets_http_gia.py`; YouTube dùng `tests/ytdlp_gia.py`; kho dùng `tests/kho_gia.py`.
 - Lỗi: viết test ĐỎ tái hiện trước, sửa, rồi xanh; với vị từ quan trọng, đảo vị từ (đột biến) → test phải đỏ.
 - Test chậm cần bộ nhớ ảo trống (đã gặp WinError 1455 khi máy đang mở ứng dụng nặng).

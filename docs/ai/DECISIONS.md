@@ -9,6 +9,38 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-4 Lịch sử repo public** — có dữ liệu cần xử lý (chi tiết ngoài Git); đóng repo public hay viết lại lịch sử đều
   cần duyệt (force-push đang bị cấm).
 
+## D-20 Stable 1.0.0 cài lên PC2 trước tái audit (người dùng, báo 09/10) — thay một phần D-13
+Sự kiện/quyết định của người dùng: Stable 1.0.0 (từ e49340d) đã cài và chạy trên PC2, cổng 8501 — sớm hơn điều kiện
+«GIỮ ở PC1 tới khi e49340d được tái audit độc lập» của D-13. Hệ quả: C7 chưa đóng về kiểm chứng (cần kết quả bộ cài +
+health check do NGƯỜI DÙNG lấy — Claude không đụng `C:\TimClipPro*`); tái audit độc lập e49340d vẫn cần; bản Stable sau
+vẫn theo quy trình ký trên PC1.
+Bằng chứng: lời người dùng; handoff PC2 (09/10). PC1 chưa có log cài đặt.
+
+## D-19 Preview an toàn: `.claude/launch.json` chỉ GẮN vào Development 8502 (2026-10-10) — thay cấu hình 20/08
+Quyết định: bỏ cấu hình tự khởi động `streamlit … --server.port=8501` (có từ `b776082`, 20/08); thay bằng một cấu hình
+chỉ có `url` `http://localhost:8502` + `port` 8502 + `autoPort: false`, và `autoVerify: false` (Claude không tự mở preview
+sau khi sửa). Development chạy bằng launcher RIÊNG máy, ngoài Git — yêu cầu (PC2 tự kiểm, PC1 chưa xem launcher đó):
+danh sách duy nhất ở `docs/ai/handoff/PC2.md` «Máy» (cổng 8502 ghi rõ, data/output thử, không cookie/khoá thật, không
+`.bat` cũ trong clone). 8501 dành cho Stable (`launcher.py` `CONG_STREAMLIT`, `127.0.0.1`) và production legacy PC1
+(`ChayTool.bat`).
+Vì sao: cấu hình cũ trùng cổng Stable PC2/production PC1; tài liệu Claude Code ghi cấu hình chỉ `url` thì «gắn vào server
+đang chạy thay vì khởi động»; `env` trong file sẽ commit chung nên đường dẫn riêng máy không đặt ở đó được.
+Giới hạn: hành vi khi 8502 không có gì chạy chưa được ghi trong tài liệu; preview trên PC2 CHƯA nghiệm thu; production
+PC1 (`Tool_Quet` @ `6dc3f9d`) và các worktree cũ VẪN mang bản cũ tự khởi động 8501 (không sửa production) — không mở
+preview ở đó; Claude có thể tự tạo lại `.claude/launch.json` khi được nhờ xem trước → giữ quy tắc trong `CLAUDE.md`.
+Bằng chứng: kiểm tĩnh K10 (không 8501, không lệnh khởi động, có `url`, `autoVerify` false) vòng 10/10 trên PC1;
+https://code.claude.com/docs/en/desktop#configure-preview-servers.
+
+## D-18 PC2 giai đoạn 2 và cách gộp PR (2026-10-09/10) — bổ sung D-17
+Quyết định: người dùng bật quyền GHI cho Deploy Key của PC2 (09/10; quyền ở mức cả repo, tên khoá vẫn ghi «read-only»).
+PC2 chỉ đẩy `fix/pc2/*` khi được duyệt; PC1 review rồi gộp FAST-FORWARD bằng `update-ref` có kiểm SHA đã review (giữ SHA,
+GitHub tự đánh dấu merged); không bấm nút Merge nào trên web. Khuyến nghị hook `pre-push` cục bộ trên PC2 (chặn
+`integration/current`, tag, xoá, force-push) vì quy ước tên nhánh không phải giới hạn kỹ thuật.
+Vì sao: repo private gói miễn phí (gói tài khoản chưa kiểm) không có bảo vệ nhánh; giữ SHA để handoff/commit của PC2 trỏ
+đúng.
+Bằng chứng: PR #1 (`b627af0`) gộp 10/10 sau review PC1; hook trích từ `GIT_WORKFLOW.md` thử 11/11 tình huống trên repo giả
+(kể cả 3 lệnh thử ghi cho PC2) — vòng 10/10 trên PC1.
+
 ## D-17 PC2 truy cập GitHub theo hai giai đoạn; tài liệu không ghi cứng HEAD (2026-10-09) — bổ sung D-16
 Quyết định (người dùng): giai đoạn 1 — Deploy Key CHỈ ĐỌC cho `TimClipPro-dev` (KHÔNG «Allow write access»), clone tại
 `C:\Dev\Tool_Quet`; giai đoạn 2 — quyền ghi `fix/pc2/*` + Pull Request, thiết lập riêng sau khi PC2 clone, kiểm shared

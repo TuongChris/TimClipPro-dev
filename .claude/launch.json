@@ -1,19 +1,12 @@
 {
   "version": "0.0.1",
+  "autoVerify": false,
   "configurations": [
     {
-      "name": "TimClipPro",
-      "runtimeExecutable": "TimClipPro\\.venv\\Scripts\\python.exe",
-      "runtimeArgs": [
-        "-m",
-        "streamlit",
-        "run",
-        "TimClipPro\\app.py",
-        "--browser.gatherUsageStats=false",
-        "--server.port=8501",
-        "--server.headless=true"
-      ],
-      "port": 8501
+      "name": "TimClipPro-DEV-8502-chi-gan",
+      "url": "http://localhost:8502",
+      "port": 8502,
+      "autoPort": false
     }
   ]
 }

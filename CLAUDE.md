@@ -19,18 +19,26 @@ Trạng thái chung hiện tại (tự nạp):
 4. Không quét/audit toàn repo khi task không cần. «Không audit lại» KHÔNG có nghĩa là bỏ qua kiểm chứng.
 5. Sửa lỗi: tái hiện bằng dữ liệu synthetic và một test ĐỎ trước khi sửa. Không dùng dữ liệu thật/khách hàng.
 6. Chạy test mục tiêu theo `docs/ai/TEST_MATRIX.md`, mở rộng theo mức rủi ro; báo số thật (đạt/bỏ qua/hỏng).
-7. Xong việc: cập nhật `docs/ai/handoff/<máy>.md` (nhánh, commit, test, kết quả, bước tiếp theo) và
-   `docs/ai/CURRENT_STATE.md` nếu trạng thái chung đổi; commit trên CÙNG nhánh. Mẫu: `docs/ai/SESSION_START.md`.
+7. Xong việc: cập nhật `docs/ai/handoff/<máy>.md` (nhánh, commit, test, kết quả, bước tiếp theo); commit trên CÙNG
+   nhánh. Trạng thái chung đổi → PC1 sửa `docs/ai/CURRENT_STATE.md` khi gộp (PC2 ghi đề xuất trong handoff/mô tả PR).
+   Mẫu: `docs/ai/SESSION_START.md`.
 
 ## Nhánh (chi tiết: `docs/ai/GIT_WORKFLOW.md`)
 - `integration/current` — nguồn tích hợp đã kiểm; chỉ nhận thay đổi đã review + test xanh, không commit thẳng.
-- `feature/pc1/<tên>` — việc của PC1. `fix/pc2/<tên>` — sửa lỗi phát hiện trên PC2. Tạo từ `integration/current`.
+- `feature/pc1/<tên>` — việc của PC1. `fix/pc2/<tên>` — sửa lỗi phát hiện trên PC2. Tạo KHÔNG gắn upstream vào
+  integration: `git switch --no-track -c <nhánh> private/integration/current`. Đẩy luôn ghi đủ
+  `git push private <nhánh>:<nhánh>` (PC1 đặt `push.default=upstream`: thiếu `:<nhánh>` thì git đẩy vào upstream).
 - Bản Stable chỉ chuẩn bị từ commit đã nghiệm thu trên `integration/current`, và chỉ ký trên PC1.
+
+## Không bao giờ (muốn đổi: sửa quy ước này qua PR được người dùng duyệt)
+- Chạy Development hay preview ở cổng 8501 (Stable PC2, production PC1), hay thêm cấu hình TỰ KHỞI ĐỘNG vào
+  `.claude/launch.json` — Development chỉ cổng 8502 bằng launcher riêng máy; file đó chỉ GẮN vào 8502.
+- Claude đọc/ghi `C:\TimClipPro`, `C:\TimClipPro_State`, `C:\TimClipPro_Feed` (chỉ launcher/updater do người dùng chạy).
+- PC2 đẩy `integration/current`, tag, force-push, xoá nhánh trên remote, tạo release.
 
 ## Cấm, trừ khi người dùng duyệt rõ trong phiên này
 - Push (kể cả lên `private`), force-push, tạo/sửa remote, tag hay release. `origin` của PC1 là repo PUBLIC.
-- Sửa production: PC1 `Tool_Quet` đang chạy thật; Stable của PC2 `C:\TimClipPro`, `C:\TimClipPro_State`,
-  `C:\TimClipPro_Feed` (chỉ launcher/updater do người dùng chạy được đổi chúng).
+- Sửa production PC1 (`Tool_Quet` đang chạy thật).
 - Đọc, in hay chép khoá ký riêng, mật khẩu, cookie, `google_key.json`, link Google Sheet thật.
 - Gọi Google Sheets/YouTube thật, đăng ký Task Scheduler, xoá/ghi đè `db.pklz`, `lichsu.db`, `downloaded.txt`,
   `clips_meta.json`.

@@ -8,7 +8,7 @@ chạm file) — không phải audit lại mã. Thêm/xoá/đổi vai trò modul
   Apps Script (`apps_script/`), thư viện vendored `audfprint-master/` (KHÔNG sửa).
 - `docs/ai/` — ngữ cảnh chung cho Claude Code trên PC1/PC2 (file này, trạng thái, quyết định, test, handoff).
 - `.claude/rules/` — bất biến theo vùng (matcher, Sheets/outbox, updater); `.claude/settings.json` — quyền chặn chung;
-  `.claude/launch.json` — cấu hình xem trước app.
+  `.claude/launch.json` — xem trước: CHỈ gắn vào Development đang chạy ở cổng 8502, không tự khởi động (D-19).
 - Gói Stable chỉ chứa mã chạy trong `TimClipPro/` (bỏ `tests/`, `docs/`, `apps_script/`, `.bat`, `CLAUDE.md`...):
   `release_tool.chon_file_phat_hanh`.
 
@@ -138,7 +138,7 @@ YouTube — dùng bảng module ở trên.
 | `SETUP_VSCODE.md (gốc repo)` | Lịch sử / kế hoạch cũ | 78 | b776082 2026-08-20 | lịch sử — không dùng làm nguồn chân lý |
 | `TEST_REPORT.md` | Lịch sử / kế hoạch cũ | 489 | 1682ce6 2026-08-08 | lịch sử — không dùng làm nguồn chân lý |
 | `TimClipPro/.github/copilot-instructions.md` | Lịch sử / kế hoạch cũ | 30 | 448b467 2026-08-07 | lịch sử — không dùng làm nguồn chân lý |
-| `HUONG_DAN_PC2.md` | Managed runtime / PC2 | 143 | 78ba20c 2026-10-08 |  |
+| `HUONG_DAN_PC2.md` | Managed runtime / PC2 | 143 | 78ba20c 2026-10-08 | lỗi thời một phần: đường dẫn `D:\TimClipPro…` của kế hoạch cũ — cài đặt thật dùng `C:\TimClipPro*` (`docs/ai/handoff/PC2.md`) |
 | `KE_HOACH_PILOT_PC2.md` | Managed runtime / PC2 | 53 | 6461327 2026-10-08 |  |
 | `MANAGED_HIEU_NANG.md` | Managed runtime / PC2 | 46 | f4d3cb7 2026-10-08 |  |
 | `MANAGED_RUNTIME_DESIGN.md` | Managed runtime / PC2 | 308 | 6461327 2026-10-08 |  |

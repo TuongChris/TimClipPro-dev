@@ -7,21 +7,37 @@ sang `docs/ai/handoff/LICH_SU_PC1.md`. Không ghi bí mật, link Sheet thật, 
 - Vai trò: phát triển, tích hợp, review, ký Stable. Hostname `DESKTOP-UIQUSEM`.
 - Production (đang chạy thật, KHÔNG sửa, không checkout lại khi chưa duyệt): worktree chính `Tool_Quet` trong thư mục
   OneDrive `ToolQuet`, HEAD `6dc3f9d` (detached). Mọi worktree khác dùng chung `.git` của nó.
-- Worktree phát triển mới: đặt ở `D:\TimClipPro_Dev\<tên>` (ngoài OneDrive). 15 worktree cũ `ToolQuet\Tool_Quet_*`
+- Worktree phát triển mới: đặt ở `D:\TimClipPro_Dev\<tên>` (ngoài OneDrive; nhánh tạo bằng `--no-track` từ
+  `private/integration/current`). 15 worktree cũ `ToolQuet\Tool_Quet_*`
   là của các vòng trước — nội dung đều đã nằm trong e49340d, riêng `nguon-chung-ca-lo`/`sua-vung-final` (a602891) đã
   được tích hợp bằng commit khác (3218aff, d67ce31). Dọn chúng = việc riêng, cần duyệt.
 - Bằng chứng mỗi vòng (ngoài Git): `D:\TimClipPro_<Vòng>\<thời điểm>\checkpoints\CHECKPOINT.md`.
 - Đường dẫn cục bộ khác (khoá ký, bộ phát hành, Python): `CLAUDE.local.md` của PC1 (không vào Git).
 - Remote: `private` (`TimClipPro-dev`, PRIVATE) để push; `origin` (PUBLIC) chỉ fetch — push bị chặn bằng pushurl giả.
+  PR của PC2: PC1 review + gộp fast-forward (`docs/ai/GIT_WORKFLOW.md` «Pull Request và gộp»).
+- Cổng: production `ChayTool.bat` dùng 8501; PC1 không chạy server Development.
 
 ## Tiếp theo
-1. PC2 giai đoạn 1 (Deploy Key CHỈ ĐỌC, clone `C:\Dev\Tool_Quet`) theo `docs/ai/GIT_WORKFLOW.md` — người dùng chạy
-   prompt thiết lập trên PC2 và thêm khoá công khai trên GitHub, KHÔNG tick «Allow write access».
-2. PC2 giai đoạn 2 (quyền ghi `fix/pc2/*` + Pull Request): chỉ khi người dùng duyệt, sau khi PC2 kiểm shared context.
-3. Gửi e49340d đi tái audit độc lập; có kết quả → quyết định C7 (giao bộ cài one-click cho PC2).
-4. Sao lưu khoá ký ra USB khi có USB.
+1. Chờ PC2 nghiệm thu bản 10/10 (`handoff/PC2.md` «Tiếp theo» 1): fetch + fast-forward, Development 8502, Stable 8501
+   độc lập, test hồi quy + smoke, hook `pre-push`. Preview gắn 8502 CHƯA PASS tới khi PC2 báo.
+2. Nhận bằng chứng cài Stable từ PC2 → đóng C7 trong `CURRENT_STATE.md`.
+3. Gửi e49340d đi tái audit độc lập.
+4. Pilot thật có kiểm soát (Sheets/YouTube trên PC2) — chỉ khi người dùng duyệt.
+5. Sao lưu khoá ký ra USB khi có USB.
+6. (Tuỳ, cần duyệt) dọn nhánh đã gộp trên remote khi máy kia không còn dùng.
 
 ## Nhật ký
+### 2026-10-10 — PR #1 PC2 + quy trình chung giai đoạn 2 + preview an toàn (nhánh feature/pc1/shared-workflow-preview)
+- Làm: review + gộp fast-forward PR #1 của PC2 (`b627af0`, chỉ test + handoff); tài liệu chung: giai đoạn 2, gộp PR,
+  lấy bản mới/xung đột, hai máy + cp1252 (D-18, D-19); `.claude/launch.json` → chỉ gắn vào 8502, `autoVerify` false;
+  hook `pre-push` khuyến nghị cho PC2. Nhật ký cũ nhất chuyển sang `handoff/LICH_SU_PC1.md`.
+- Kiểm: PR #1 trên PC1 — test cũ ép cp1252 → 1 hỏng (tái hiện), `test_health_check.py` 12/12 ở UTF-8 và cp1252, suite
+  nhanh 2452 đạt / 8 bỏ qua / 0 hỏng, quét 0 phát hiện; 6 test `.gitignore` (bỏ qua khi chạy bản sao) chạy trong worktree
+  6/6; hook trích từ tài liệu thử 11/11 trên repo giả; review độc lập 2 lượt (agent) → đã sửa mâu thuẫn/lệnh sai (đáng
+  kể: thử hook phải dùng ref chưa có trên remote; PC1 `push.default=upstream` làm `git push private <nhánh>` thiếu `:đích`
+  đẩy vào upstream — đã thử; `.claude/settings.json` chặn thêm ĐỌC `C:\TimClipPro*`); K1–K10 ĐẠT.
+- Chưa kiểm: preview gắn 8502 trên PC2; Development 8502 / Stable 8501 mới có lời người dùng — chờ PC2 nghiệm thu.
+- Bằng chứng: `D:\TimClipPro_SharedWorkflow\20261010_083311\` (CHECKPOINT, logs/, evidence/).
 ### 2026-10-09 — Chốt PC1 shared development (nhánh feature/pc1/ai-shared-context)
 - Làm: đẩy `bff0ac3` lên `private` (fast-forward, người dùng duyệt); chuẩn hoá tài liệu: PC2 giai đoạn 1 = Deploy Key
   CHỈ ĐỌC, clone `C:\Dev\Tool_Quet`; giai đoạn 2 (ghi + PR) chỉ mô tả; mỗi phiên hỏi HEAD từ remote (D-17).
@@ -54,6 +70,3 @@ sang `docs/ai/handoff/LICH_SU_PC1.md`. Không ghi bí mật, link Sheet thật, 
 ### 2026-10-08 — Stable 1.0.0 ký thật từ e49340d (ngoài repo)
 - C1–C6 ĐẠT: khoá thật `8aa5baa6c8f225f9`; lock có băm; gói/manifest/chữ ký; kit; cài mới thử 29/29; test trên runtime
   lock 2445/8/0 + chậm 14/14. Giữ ở PC1 chờ tái audit e49340d.
-### 2026-10-08 — Sửa theo tái audit 78ba20c → e49340d
-- MR-R2-P1-01, MR-R2-P2-01 đã sửa (8e7dc24, c981450, 6461327, e49340d); cổng nội bộ xanh; đột biến 123/123.
-- Gói nộp tái audit: `ToolQuet\TimClipPro_source_2026-10-08_e49340d.zip` (ngoài Git).

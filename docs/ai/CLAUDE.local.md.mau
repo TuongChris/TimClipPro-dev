@@ -6,9 +6,12 @@
 
 Máy: <PC1 | PC2> · hostname: <kết quả lệnh `hostname`>
 Vai trò: <PC1: phát triển, tích hợp, review, ký Stable | PC2: vận hành Stable + clone phát triển riêng>
-Quyền GitHub: <PC1: push lên `private` khi người dùng duyệt; `origin` PUBLIC chỉ fetch | PC2: Deploy Key CHỈ ĐỌC
-(giai đoạn 1) — không push được; giai đoạn 2 (quyền ghi + PR) chỉ khi người dùng duyệt>
+Quyền GitHub: <PC1: push lên `private` khi người dùng duyệt; `origin` PUBLIC chỉ fetch | PC2 giai đoạn 1: Deploy Key
+CHỈ ĐỌC | PC2 giai đoạn 2: ghi CẢ repo — chỉ `git push private fix/pc2/<tên>:fix/pc2/<tên>` khi người dùng duyệt; hook `pre-push`
+cục bộ: <đã cài / chưa cài>>
 HEAD: không ghi ở đây — mỗi phiên `git fetch private` và so với `private/integration/current`.
+Development: <PC1: không chạy server | PC2: cổng 8502, launcher <đường dẫn ngoài Git> có `--server.port=8502` ghi rõ,
+data/output thử <…> — không bao giờ 8501, không `C:\TimClipPro_State`, không cookie/`google_key.json` thật>.
 
 ## Đường dẫn cục bộ
 - Clone/worktree này: <…>
