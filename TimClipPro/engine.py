@@ -3463,6 +3463,17 @@ class Engine:
             file_tien_do = os.path.join(thu_muc_td, f"{ten}-{uuid.uuid4().hex[:8]}.txt")
             rieng_cua_tai["external_downloader_args"] = {
                 "ffmpeg_o": ["-progress", "file:" + file_tien_do]}
+            # googlevideo nhả MỘT yêu cầu lớn/mở theo nhịp phát (~1–2× thời gian thực). yt-dlp tải thường vì thế
+            # xin từng khối 10 MiB (`http_chunk_size`), nhưng FFmpegFD bỏ qua nó: ffmpeg xin `Range: bytes=0-`.
+            # Pilot 13/10 (video 66 giờ): 2,03× — 3 giờ đầu mất ~1,5 giờ; A/B cùng video: khối 10 MiB 1280×.
+            # `-request_size` là tuỳ chọn ĐẦU VÀO của giao thức http (`ffmpeg_i`: yt-dlp đặt ngay trước `-i`).
+            if giam_sat_tai.ffmpeg_chia_khoi_duoc():
+                rieng_cua_tai["external_downloader_args"]["ffmpeg_i"] = [
+                    "-request_size", str(giam_sat_tai.KHOI_YEU_CAU_TAI)]
+            else:
+                LOGGER_SCAN.warning("event=download.ffmpeg_khong_chia_khoi video=%s", video_id)
+                self._td(ghi="ffmpeg trên máy không chia nhỏ được yêu cầu tải (thiếu -request_size): tải phần "
+                             "đầu sẽ chậm ~1–2× thời gian thực — nên cập nhật ffmpeg")
 
         # YouTube chặn từng "player client" một cách độc lập và thay đổi theo thời
         # gian. Đo ngày 2026-08-18: client mặc định trả HTTP 403 cho MỌI video tải

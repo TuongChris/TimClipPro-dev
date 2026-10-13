@@ -21,20 +21,45 @@ Luồng này, không sửa yt-dlp:
 
 Đường tải thường (tải trọn, yt-dlp tự tải trong tiến trình) đã có progress hook; luồng này khi đó
 chỉ không tìm thấy ffmpeg nào và không làm gì.
+
+Tải CHẬM của chính đường ffmpeg (pilot 13/10, video 66 giờ: 2,03× thời gian thực): ffmpeg xin MỘT yêu cầu
+``Range: bytes=0-`` và googlevideo nhả nó theo nhịp phát. ``KHOI_YEU_CAU_TAI`` + ``ffmpeg_chia_khoi_duoc`` để
+engine đặt ``-request_size`` (tuỳ chọn ĐẦU VÀO): ffmpeg xin từng khối Range ĐÓNG như yt-dlp tải thường.
 """
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 import threading
 import time
 from typing import Callable, Optional
 
+from process_runner import chay_lenh_media
+
 LOGGER = logging.getLogger("scan.download")
 
 # ffmpeg còn chạy mà không thêm byte nào quá mức này → coi là mạng đứng, giết.
 HAN_DUNG_TAI_S = 180.0
+
+# Cỡ mỗi yêu cầu HTTP khi ffmpeg tải phần đầu — bằng `CHUNK_SIZE` yt-dlp dùng cho YouTube: googlevideo nhả
+# một yêu cầu LỚN hoặc MỞ theo nhịp phát (~1–2× thời gian thực), còn khối ≤ 10 MiB thì nhả hết tốc.
+KHOI_YEU_CAU_TAI = 10 << 20
+
+
+@functools.lru_cache(maxsize=1)
+def ffmpeg_chia_khoi_duoc() -> bool:
+    """ffmpeg trên PATH (cũng là ffmpeg yt-dlp gọi) có tuỳ chọn ``request_size`` của giao thức http không.
+
+    FFmpeg 9.0.1 trên PC2: có. Bản cũ không có — truyền vào thì ffmpeg thoát ngay vì tuỳ chọn lạ, nên thà tải
+    chậm như cũ còn hơn hỏng. Hỏi MỘT lần mỗi tiến trình: ffmpeg không đổi khi app đang chạy.
+    """
+    try:
+        r = chay_lenh_media(["ffmpeg", "-hide_banner", "-h", "protocol=http"], tran_tong_s=15)
+    except (OSError, ValueError):
+        return False
+    return not r.timed_out and "request_size" in (r.stdout or "") + (r.stderr or "")
 
 
 def doc_tien_do_ffmpeg(duong: str, toi_da_byte: int = 16384) -> dict:

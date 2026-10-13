@@ -8,7 +8,8 @@ giới hạn video dài (``download_ranges`` → ffmpeg ``-t``):
 * tiến độ THẬT (byte, giây âm thanh) tới được sổ tiến độ trong lúc ffmpeg còn chạy;
 * Dừng giữa lúc ffmpeg đang tải: dừng trong vài giây, không còn ffmpeg con, không còn file tạm;
 * mạng đứng (máy chủ giữ kết nối, không gửi byte): báo lỗi rõ sau hạn, không chờ vô hạn;
-* máy chủ cắt kết nối sớm: ffmpeg vẫn có thể giao file CỤT — lý do phải kiểm độ dài giải mã.
+* máy chủ cắt kết nối sớm: ffmpeg vẫn có thể giao file CỤT — lý do phải kiểm độ dài giải mã;
+* máy chủ hãm yêu cầu lớn/mở như googlevideo: ffmpeg phải xin từng khối Range ĐÓNG (``-request_size``).
 
 YouTube thật (DASH, giới hạn tốc độ, client) KHÔNG được kiểm ở đây — cần pilot có duyệt.
 """
@@ -17,6 +18,7 @@ from __future__ import annotations
 
 import glob
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -231,3 +233,126 @@ def test_may_chu_cat_som_thi_file_co_the_cut_ma_van_bao_xong(may_chu, eng):
     dai = eng.duration_of(f)
     assert dai is not None and dai < GIOI_HAN_S - 5, dai
     assert Engine._thieu_duoi(GIOI_HAN_S, dai), "kiểm độ dài phải bắt được file cụt này"
+
+
+class MayChuKieuGooglevideo:
+    """Máy chủ có Range, hãm như googlevideo: yêu cầu MỞ hoặc dài hơn ``nguong`` byte bị nhả theo nhịp
+    ``toc_do_ham`` (sau ``bung`` byte đầu); khối ≤ ``nguong`` nhả hết tốc. Ghi Range từng yêu cầu của ffmpeg."""
+
+    def __init__(self, du_lieu: bytes, nguong: int, toc_do_ham: float, bung: int = 32 * 1024):
+        self.du_lieu, self.nguong, self.toc_do_ham, self.bung = du_lieu, nguong, toc_do_ham, bung
+        self.range_ffmpeg: list = []
+        self.dung = threading.Event()
+        cha = self
+
+        class XuLy(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def log_message(self, *a):
+                pass
+
+            def handle(self):
+                try:
+                    super().handle()
+                except OSError:                    # máy khách đóng kết nối giữ-sống: bình thường
+                    pass
+
+            def do_GET(self):
+                n = len(cha.du_lieu)
+                rng = self.headers.get("Range")
+                m = re.match(r"bytes=(\d+)-(\d*)$", (rng or "").strip())
+                a = int(m.group(1)) if m else 0
+                b = (min(int(m.group(2)), n - 1) if m.group(2) else n - 1) if m else n - 1
+                if "Icy-MetaData" in self.headers:      # ffmpeg luôn gửi header này; yt-dlp thì không
+                    cha.range_ffmpeg.append(rng)
+                if a >= n:
+                    self.send_response(416)
+                    self.send_header("Content-Range", f"bytes */{n}")
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
+                self.send_response(206 if m else 200)
+                if m:
+                    self.send_header("Content-Range", f"bytes {a}-{b}/{n}")
+                self.send_header("Content-Type", "audio/webm")
+                self.send_header("Accept-Ranges", "bytes")
+                self.send_header("Content-Length", str(b - a + 1))
+                self.end_headers()
+                ham = b - a + 1 > cha.nguong
+                gui = 0
+                try:
+                    while a + gui <= b and not cha.dung.is_set():
+                        khoi = cha.du_lieu[a + gui:min(a + gui + 4096, b + 1)]
+                        self.wfile.write(khoi)
+                        gui += len(khoi)
+                        if ham and gui > cha.bung:
+                            time.sleep(len(khoi) / cha.toc_do_ham)
+                except OSError:
+                    return
+
+        self.srv = ThreadingHTTPServer(("127.0.0.1", 0), XuLy)
+        self.srv.daemon_threads = True
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+
+    def url(self) -> str:
+        return f"http://127.0.0.1:{self.srv.server_address[1]}/am.webm"
+
+    def tat(self):
+        self.dung.set()
+        self.srv.shutdown()
+        self.srv.server_close()
+
+
+def test_tai_phan_dau_xin_tung_khoi_range_dong_nen_khong_bi_ham(eng, am_thanh, monkeypatch):
+    """Pilot 13/10 (video 66 giờ): ffmpeg xin MỘT yêu cầu ``Range: bytes=0-`` → YouTube nhả ~1–2× thời gian thực,
+    3 giờ đầu mất ~1,5 giờ. Như yt-dlp tải thường, phải xin từng khối Range ĐÓNG (``-request_size``, tuỳ chọn ĐẦU
+    VÀO, đứng trước ``-i``). A/B thật cùng video: một yêu cầu mở 0,7×, khối 10 MiB 1280×, âm thanh đủ."""
+    import giam_sat_tai
+    import yt_dlp.downloader.external as ext
+
+    nguong = 128 * 1024                                 # thu nhỏ tỉ lệ cho khối 10 MiB thật
+    monkeypatch.setattr(giam_sat_tai, "KHOI_YEU_CAU_TAI", nguong, raising=False)
+    lenh: list = []
+
+    class PopenGhi(ext.Popen):
+        def __init__(self, args, *a, **k):
+            lenh.append([str(x) for x in args])
+            super().__init__(args, *a, **k)
+
+    monkeypatch.setattr(ext, "Popen", PopenGhi)
+    # File thử ≈ 5,3 KB/s; hãm 8 KB/s ≈ 1,5× thời gian thực: 120 s âm thanh qua MỘT yêu cầu mở mất hơn 60 giây.
+    mc = MayChuKieuGooglevideo(am_thanh, nguong=nguong, toc_do_ham=8 * 1024)
+    ket: dict = {}
+
+    def chay():
+        try:
+            ket["f"] = eng.download_audio(mc.url(), "thu_khoi", gioi_han_giay=GIOI_HAN_S)
+        except BaseException as e:  # noqa: BLE001
+            ket["loi"] = e
+
+    t = threading.Thread(target=chay, daemon=True)
+    t.start()
+    try:
+        t.join(30)
+        assert not t.is_alive(), (f"tải {GIOI_HAN_S} s âm thanh quá 30 giây — máy chủ hãm vì ffmpeg xin Range "
+                                  f"{mc.range_ffmpeg} (một yêu cầu mở như trước khi sửa)")
+        assert "f" in ket, ket
+        ff = [x for x in lenh if "-progress" in x]
+        assert ff, "tải một phần phải đi qua ffmpeg"
+        args = ff[-1]
+        assert "-request_size" in args, args
+        i = args.index("-request_size")
+        assert args[i + 1] == str(nguong) and i < args.index("-i"), "request_size phải là tuỳ chọn ĐẦU VÀO"
+        assert mc.range_ffmpeg, "máy chủ phải thấy yêu cầu của ffmpeg"
+        for k, r in enumerate(mc.range_ffmpeg):
+            m = re.fullmatch(r"bytes=(\d+)-(\d+)", r or "")
+            assert m, f"yêu cầu {k}: Range phải ĐÓNG, nhận {r!r}"
+            dau, cuoi = int(m.group(1)), int(m.group(2))
+            assert dau == k * nguong and cuoi - dau + 1 <= nguong, (k, r)
+        dai = eng.do_dai_audio_that(ket["f"])           # kiểm toàn vẹn: gói audio cuối thật, không tin metadata
+        assert dai is not None and abs(dai - GIOI_HAN_S) <= 1.0, dai
+    finally:
+        eng.cancel_event.set()
+        _don("thu_khoi")
+        t.join(30)
+        mc.tat()
