@@ -72,7 +72,7 @@ NHIP_CON_SONG_S = 30.0
 # Cần ít nhất bấy nhiêu giây dữ liệu tốc độ mới tính ETA (tránh ETA nhảy loạn lúc mới bắt đầu).
 CUA_SO_TOC_DO_S = 10.0
 
-_SO_HOC = ("byte_da_nhan", "audio_da_nhan_s", "khuc_xong", "khop_xong")
+_SO_HOC = ("byte_da_nhan", "byte_dau_ra", "audio_da_nhan_s", "khuc_xong", "khop_xong")
 _KHONG_PHAI_TIEN_TRIEN = frozenset({"toc_do_byte_s", "toc_do_x", "eta_buoc_s", "giai_doan",
                                     "giai_doan_luc"})
 
@@ -101,8 +101,12 @@ class AnhTienDo:
     pham_vi_tu_s: Optional[float] = None
     pham_vi_den_s: Optional[float] = None
     che_do: str = ""
+    # Byte nhận QUA MẠNG (progress hook của yt-dlp, đường tải thường) — khác hẳn ``byte_dau_ra``.
     byte_da_nhan: Optional[int] = None
     byte_tong: Optional[int] = None
+    # Byte ffmpeg đã GHI ra file khi tải một phần (``-progress total_size`` / kích thước file đang ghi):
+    # dung lượng ĐẦU RA của muxer, không phải byte mạng (ffmpeg đọc trước vào bộ đệm, khác vỏ container).
+    byte_dau_ra: Optional[int] = None
     toc_do_byte_s: Optional[float] = None
     toc_do_x: Optional[float] = None          # ffmpeg: giây audio / giây thực
     audio_da_nhan_s: Optional[float] = None

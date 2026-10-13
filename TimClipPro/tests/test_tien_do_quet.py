@@ -167,7 +167,8 @@ def test_giam_sat_bao_so_lieu_that_va_nhip(tmp_path):
     file_td.write_text("total_size=2048\nout_time_us=60000000\nspeed=20x\nprogress=continue\n",
                        encoding="utf-8")
     gs.tick(1.0)
-    assert so_lieu == [{"byte_da_nhan": 2048, "audio_da_nhan_s": 60.0, "toc_do_x": 20.0}]
+    # total_size của ffmpeg = byte GHI ra file đầu ra — báo dưới khoá riêng, không mạo danh byte mạng.
+    assert so_lieu == [{"byte_dau_ra": 2048, "audio_da_nhan_s": 60.0, "toc_do_x": 20.0}]
     assert da_giet == []
 
 

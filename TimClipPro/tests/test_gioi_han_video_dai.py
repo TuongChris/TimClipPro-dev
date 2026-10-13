@@ -67,6 +67,8 @@ def _gia_lap(tmp_path, monkeypatch, *, dai=DAI_65H, che_do=GHVD_TU_DONG, matches
         return float(lan_tai[-1] or dai)
 
     monkeypatch.setattr(e, "duration_of", duration_of)
+    # Kiểm toàn vẹn đo ÂM THANH THẬT (``do_dai_audio_that``), không đọc metadata — giả cùng một nguồn số đo.
+    monkeypatch.setattr(e, "do_dai_audio_that", duration_of)
 
     def quet(path, **k):
         dai_file = duration_of(path)

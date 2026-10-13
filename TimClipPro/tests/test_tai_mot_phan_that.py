@@ -152,7 +152,8 @@ def test_gioi_han_o_duong_tai_chi_keo_phan_byte_tuong_ung(may_chu, eng, am_thanh
     # 120/1800 = 6,7% byte cần; cho rộng tới 30% vì đệm TCP/ffmpeg — vẫn KHÔNG phải tải trọn.
     assert ty_le_byte < 0.30, f"đã kéo {ty_le_byte:.1%} file — không được tải trọn rồi mới cắt"
     a = so.anh()
-    assert a.byte_da_nhan and a.byte_da_nhan > 0, "tiến độ THẬT (byte) phải tới sổ khi ffmpeg đang tải"
+    assert a.byte_dau_ra and a.byte_dau_ra > 0, "tiến độ THẬT (byte ffmpeg ghi) phải tới sổ khi đang tải"
+    assert a.byte_da_nhan in (None, 0), "đường ffmpeg không đo được byte MẠNG — không được gán nhãn đó"
     assert a.audio_da_nhan_s and a.audio_da_nhan_s > 0
     nk = [s.noi_dung for s in so.su_kien(50)]
     assert any(x.startswith("Bắt đầu nhận audio — tối đa 00:02:00 đầu") for x in nk)

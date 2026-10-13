@@ -59,7 +59,11 @@ def dong_chi_tiet(anh, v, ten_phase: dict, bay_gio: Optional[float] = None) -> l
     if td.giai_doan == tdq.GD_TAI:
         phan = []
         if td.byte_da_nhan:
-            phan.append(f"đã nhận {mb(td.byte_da_nhan)}" + (f" / {mb(td.byte_tong)}" if td.byte_tong else ""))
+            phan.append(f"đã nhận {mb(td.byte_da_nhan)} qua mạng"
+                        + (f" / {mb(td.byte_tong)}" if td.byte_tong else ""))
+        elif td.byte_dau_ra:
+            # Tải một phần qua ffmpeg: chỉ đo được dung lượng file ĐẦU RA, không phải byte mạng.
+            phan.append(f"ffmpeg đã ghi {mb(td.byte_dau_ra)} (dung lượng file, không phải byte mạng)")
         if td.audio_da_nhan_s is not None and td.audio_can_s:
             phan.append(f"{hhmmss(td.audio_da_nhan_s)} / {hhmmss(td.audio_can_s)} âm thanh")
         elif td.audio_can_s:
@@ -68,7 +72,7 @@ def dong_chi_tiet(anh, v, ten_phase: dict, bay_gio: Optional[float] = None) -> l
             phan.append(f"tốc độ {td.toc_do_x:.1f}× thời gian thực")
         elif td.toc_do_byte_s:
             phan.append(f"tốc độ {td.toc_do_byte_s / 1024:,.0f} KB/s")
-        if not td.byte_da_nhan:
+        if not td.byte_da_nhan and not td.byte_dau_ra:
             phan.append(f"đang chờ dữ liệu đầu tiên (đã chờ {int(bay_gio - td.giai_doan_luc)} giây)")
         dong.append("**Tải audio:** " + " · ".join(phan))
     elif td.giai_doan == tdq.GD_CAT and td.khuc_tong:

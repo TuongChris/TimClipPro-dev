@@ -630,6 +630,8 @@ DUNG_SAI_PHU_S = 2.0
 DUNG_SAI_TAI_THIEU_S = 5.0
 # Hai lần tải độc lập lệch nhau không quá mức này thì coi là CÙNG một độ dài.
 DUNG_SAI_TAI_LAI_S = 1.0
+# Đo độ dài âm thanh THẬT (``Engine.do_dai_audio_that``): bỏ cuộc khi bấy nhiêu giây không đọc thêm gói nào.
+IM_LANG_DO_AUDIO_S = 120.0
 
 
 def hop_khoang(khoang) -> list:
@@ -1709,6 +1711,33 @@ class Engine:
             return float(r.stdout.strip().splitlines()[-1])
         except Exception:
             return None
+
+    @staticmethod
+    def do_dai_audio_that(path: str) -> Optional[float]:
+        """Mốc ÂM THANH CÓ THẬT trong file (giây): đọc hết các gói audio tới chỗ dữ liệu thật sự kết thúc.
+
+        ``duration_of`` (ffprobe ``format.duration``) chỉ là METADATA ghi ở đầu file: WebM bị cắt đuôi
+        vẫn giữ nguyên số đó (tái hiện 13/10/2026: nguồn 30 giây cắt còn ~7,8 giây, ffprobe vẫn báo
+        30,008). Ở đây ffmpeg DEMUX luồng tiếng đầu tiên ra ``null`` với ``-c copy`` — chỉ đọc gói, KHÔNG
+        giải mã (file 3 giờ opus ~ 1 giây) — và lấy ``out_time`` cuối của ``-progress``: mốc của gói audio
+        cuối cùng thật sự đọc được. Hạn chờ theo IM LẶNG (không có gói mới), không theo tổng thời gian.
+        ``None`` = không đọc được — nơi gọi phải coi là CHƯA xác minh, không bao giờ là đủ.
+        """
+        try:
+            r = chay_lenh_media(
+                ["ffmpeg", "-hide_banner", "-nostdin", "-v", "error", "-i", path, "-map", "0:a:0",
+                 "-c", "copy", "-f", "null", "-"],
+                theo_doi_tien_do=True, im_lang_toi_da_s=IM_LANG_DO_AUDIO_S)
+        except Exception:  # noqa: BLE001
+            return None
+        if r.timed_out or r.cancelled:
+            LOGGER_SCAN.warning("event=audio_length.timeout path=%s", os.path.basename(path))
+            return None
+        try:
+            giay = int(getattr(r, "tien_do_cuoi", {}).get("out_time_us", "")) / 1_000_000
+        except (TypeError, ValueError):
+            return None
+        return giay if giay > 0 else None
 
     @staticmethod
     def do_dai_am_thanh(path: str) -> Optional[float]:
@@ -3360,18 +3389,21 @@ class Engine:
             self._bao(progress, 0.40, "Đã có sẵn audio, bỏ qua bước tải.")
             self._td(tdq.GD_TAI, ghi="Dùng lại audio đã tải trước đó (bộ đệm) — không tải lại")
             return san_co[0]
+        # Tải một phần đi qua ffmpeg: chỉ biết byte ffmpeg GHI ra file (đầu ra), không biết byte mạng.
+        dem_byte = {"byte_dau_ra": 0} if gioi_han_giay else {"byte_da_nhan": 0}
         self._td(tdq.GD_TAI, audio_can_s=float(gioi_han_giay) if gioi_han_giay else None,
-                 byte_da_nhan=0, ghi="Bắt đầu nhận audio" + (
+                 **dem_byte, ghi="Bắt đầu nhận audio" + (
                      f" — tối đa {hhmmss(gioi_han_giay)} đầu (giới hạn ngay ở đường tải)"
                      if gioi_han_giay else " — toàn bộ"))
         moc_nhat_ky = {"mb": 0.0}
 
-        def ghi_moc_tai(byte: int, audio_s: Optional[float] = None) -> None:
-            """Nhật ký thưa: mỗi 25 MB một dòng — đủ thấy tiến triển, không làm đầy sổ."""
+        def ghi_moc_tai(byte: int, audio_s: Optional[float] = None, *, dau_ra: bool = False) -> None:
+            """Nhật ký thưa: mỗi 25 MB một dòng — đủ thấy tiến triển, không làm đầy sổ. ``dau_ra``:
+            byte ffmpeg đã GHI ra file (tải một phần), không phải byte nhận qua mạng."""
             mb = byte / 1024 / 1024
             if mb - moc_nhat_ky["mb"] >= 25:
                 moc_nhat_ky["mb"] = mb
-                self._td(ghi=f"Đã nhận {mb:,.0f} MB audio"
+                self._td(ghi=(f"ffmpeg đã ghi {mb:,.0f} MB" if dau_ra else f"Đã nhận {mb:,.0f} MB qua mạng")
                          + (f" ({hhmmss(audio_s)} âm thanh)" if audio_s else ""))
 
         def hook(d):
@@ -3390,12 +3422,17 @@ class Engine:
             elif d.get("status") == "finished":
                 self._bao(progress, 0.40, "Tải xong, đang chuẩn bị xử lý...")
                 da = d.get("downloaded_bytes") or d.get("total_bytes") or 0
-                self._td(byte_da_nhan=int(da) or None,
-                         ghi=f"Tải xong — {da / 1024 / 1024:,.1f} MB" if da else "Tải xong")
+                if gioi_han_giay:
+                    # FFmpegFD báo «xong» kèm KÍCH THƯỚC FILE đầu ra — không phải byte mạng.
+                    self._td(byte_dau_ra=int(da) or None,
+                             ghi=f"ffmpeg ghi xong file {da / 1024 / 1024:,.1f} MB" if da else "Tải xong")
+                else:
+                    self._td(byte_da_nhan=int(da) or None,
+                             ghi=f"Tải xong — đã nhận {da / 1024 / 1024:,.1f} MB" if da else "Tải xong")
 
         def so_lieu_ffmpeg(s: dict) -> None:
             self._td(**s)
-            ghi_moc_tai(int(s.get("byte_da_nhan") or 0), s.get("audio_da_nhan_s"))
+            ghi_moc_tai(int(s.get("byte_dau_ra") or 0), s.get("audio_da_nhan_s"), dau_ra=True)
 
         phien = self.phien_youtube_hien_tai()
         # Tách phần riêng ra dict để dựng lại được tuỳ chọn với cấu hình mạng khác
@@ -3463,8 +3500,8 @@ class Engine:
                 self._check_cancel()
                 if giam_sat.dung_hinh:
                     raise TaiAudioDungHinh(
-                        f"Mạng đứng: {int(giam_sat.han_dung_s)} giây không nhận thêm byte audio nào "
-                        f"(đã nhận {giam_sat.byte_cuoi / 1024 / 1024:,.1f} MB) — đã dừng lượt tải. "
+                        f"Mạng đứng: {int(giam_sat.han_dung_s)} giây ffmpeg không ghi thêm dữ liệu audio nào "
+                        f"(file đã có {giam_sat.byte_cuoi / 1024 / 1024:,.1f} MB) — đã dừng lượt tải. "
                         "Kiểm kết nối mạng rồi quét lại.") from None
                 raise
 
@@ -4442,21 +4479,30 @@ class Engine:
         co_san = any(not p.endswith((".part", ".ytdl"))
                      for p in glob.glob(os.path.join(self.dl_dir, ten_tai + ".*")))
         f = self.download_audio(url, info["id"], progress, gioi_han_giay=gioi_han)
-        self._td(tdq.GD_KIEM_AUDIO, ghi="Kiểm độ dài audio đã nhận (giải mã thật, không tin mã thoát)")
-        dai_file = float(self.duration_of(f) or 0)
-        if co_san and self._thieu_duoi(can_den, dai_file):
+        self._td(tdq.GD_KIEM_AUDIO,
+                 ghi="Kiểm độ dài audio đã nhận (đọc tới gói audio cuối — không tin metadata/mã thoát)")
+        # KHÔNG dùng `duration_of`: đó là metadata đầu file, file cụt vẫn báo đủ (tái hiện 13/10/2026).
+        dai_file = float(self.do_dai_audio_that(f) or 0)
+
+        def thieu_that(dai: float) -> bool:
+            # Không đọc được (0) = CHƯA xác minh = thiếu; không bao giờ mặc nhiên coi là đủ.
+            return dai <= 0 or self._thieu_duoi(can_den, dai)
+
+        if co_san and thieu_that(dai_file):
             # Bản đệm của lượt trước bị cụt (tải đứt giữa chừng): không dùng lại, tải lại MỘT lần.
-            self._td(ghi=f"Bản đệm cũ chỉ dài {hhmmss(dai_file)} — bỏ và tải lại một lần")
+            self._td(ghi=f"Bản đệm cũ chỉ có {hhmmss(dai_file)} âm thanh — bỏ và tải lại một lần")
             with contextlib.suppress(OSError):
                 os.remove(f)
             f = self.download_audio(url, info["id"], progress, gioi_han_giay=gioi_han)
-            dai_file = float(self.duration_of(f) or 0)
-        thieu = self._thieu_duoi(can_den, dai_file)
+            dai_file = float(self.do_dai_audio_that(f) or 0)
+        thieu = thieu_that(dai_file)
         if dai_file > 0:
             self._td(audio_da_nhan_s=dai_file, audio_can_s=can_den,
                      ghi=(f"Audio THIẾU: chỉ nhận {hhmmss(dai_file)}/{hhmmss(can_den)} — phần sau sẽ là "
                           "vùng chưa kiểm" if thieu
                           else f"Audio đủ phạm vi: {hhmmss(dai_file)}/{hhmmss(can_den)}"))
+        else:
+            self._td(ghi="Không đo được độ dài âm thanh thật của file tải về — coi là CHƯA xác minh")
         r = self.scan_media(f, label=ten, ref=url, source_type="youtube", progress=progress,
                             luu_lich_su=False, pct_start=0.40)
         if r.status != "ok":
@@ -4479,9 +4525,11 @@ class Engine:
         if thieu:
             r.vung_loi = hop_khoang(list(r.vung_loi) + [(dai_file, can_den)])
             r.ly_do_pham_vi = "tai_thieu"
-            tin = (f"Audio tải về chỉ dài {hhmmss(dai_file)} trong phạm vi giới hạn {hhmmss(can_den)} — "
-                   f"phần {hhmmss(dai_file)} → {hhmmss(can_den)} chưa được quét (tải bị cắt ngang); "
-                   f"phần {hhmmss(can_den)} → {hhmmss(tong)} nằm ngoài giới hạn.")
+            tin = ((f"Audio tải về chỉ có {hhmmss(dai_file)} âm thanh thật trong phạm vi giới hạn "
+                    f"{hhmmss(can_den)} — phần {hhmmss(dai_file)} → {hhmmss(can_den)} chưa được quét (tải bị "
+                    "cắt ngang)") if dai_file > 0 else
+                   (f"Không đo được độ dài âm thanh thật của file tải về — phạm vi 00:00:00 → "
+                    f"{hhmmss(can_den)} CHƯA xác minh")) + f"; phần {hhmmss(can_den)} → {hhmmss(tong)} nằm ngoài giới hạn."
             if not r.matches:
                 r.status = "error"
                 tin += " Chưa thể kết luận — hãy quét lại."

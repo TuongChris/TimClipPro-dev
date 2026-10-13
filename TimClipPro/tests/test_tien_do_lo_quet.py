@@ -47,7 +47,7 @@ def test_lo_ghim_che_do_va_so_tien_do_tren_ban_sao(eng, monkeypatch):
         self._td(tdq.GD_METADATA, ghi="Đang lấy thông tin video từ YouTube")
         self._td(thoi_luong_nguon_s=65 * 3600 + 114.0, pham_vi_tu_s=0.0, pham_vi_den_s=10800.0,
                  che_do="Giới hạn video dài — 3 giờ đầu", ghi="Áp dụng giới hạn quét")
-        self._td(tdq.GD_TAI, audio_can_s=10800.0, byte_da_nhan=12 * 1024 * 1024,
+        self._td(tdq.GD_TAI, audio_can_s=10800.0, byte_dau_ra=12 * 1024 * 1024,
                  audio_da_nhan_s=600.0)
         r = ScanResult(source_name=f"V {url}", source_ref=url)
         r.source_id = url
@@ -141,18 +141,28 @@ def test_man_hinh_hien_so_do_that_cua_video_dai():
     anh, v = _anh(tieu_de="65 Hours of SML MOVIE Marathon", giai_doan=tdq.GD_TAI,
                   giai_doan_luc=bay_gio - 120, nhip_luc=bay_gio - 5, tien_trien_luc=bay_gio - 8,
                   thoi_luong_nguon_s=234114.0, pham_vi_tu_s=0.0, pham_vi_den_s=10800.0,
-                  che_do="Giới hạn video dài — 3 giờ đầu", byte_da_nhan=12 * 1024 * 1024,
+                  che_do="Giới hạn video dài — 3 giờ đầu", byte_dau_ra=12 * 1024 * 1024,
                   audio_da_nhan_s=600.0, audio_can_s=10800.0, toc_do_x=5.0)
     dong = "\n".join(ui.dong_chi_tiet(anh, v, {}, bay_gio))
     assert "65 Hours of SML MOVIE Marathon" in dong
     assert "**Thời lượng nguồn:** 65:01:54" in dong
     assert "**Phạm vi quét:** 00:00:00 → 03:00:00" in dong
     assert "Giới hạn video dài — 3 giờ đầu" in dong and "**Giai đoạn hiện tại:** Đang tải audio" in dong
-    assert "đã nhận 12.0 MB" in dong and "00:10:00 / 03:00:00 âm thanh" in dong
+    assert "ffmpeg đã ghi 12.0 MB (dung lượng file, không phải byte mạng)" in dong
+    assert "qua mạng" not in dong, "byte đầu ra ffmpeg không được gọi là byte nhận qua mạng"
+    assert "00:10:00 / 03:00:00 âm thanh" in dong
     nhip = ui.dong_nhip(anh, bay_gio)
     assert "nhịp tiến trình 5 giây trước" in nhip and "lần cuối có tiến triển 8 giây trước" in nhip
     assert ui.dong_eta_buoc(anh).endswith("chưa đủ dữ liệu để ước tính")
     assert anh.tien_do.ty_le_buoc == pytest.approx(600 / 10800)
+
+
+def test_tai_thuong_hien_byte_mang_that():
+    anh, v = _anh(giai_doan=tdq.GD_TAI, giai_doan_luc=1.0, byte_da_nhan=50 * 1024 * 1024,
+                  byte_tong=200 * 1024 * 1024, toc_do_byte_s=2 * 1024 * 1024)
+    dong = "\n".join(ui.dong_chi_tiet(anh, v, {}, 10.0))
+    assert "đã nhận 50.0 MB qua mạng / 200.0 MB" in dong and "tốc độ 2,048 KB/s" in dong
+    assert anh.tien_do.ty_le_buoc == pytest.approx(0.25)
 
 
 def test_man_hinh_khong_dung_so_do_cua_video_khac():
@@ -196,7 +206,7 @@ def test_app_man_hinh_quet_cap_nhat_so_do_that(tmp_path, monkeypatch):
         self._td(tieu_de="65 Hours of SML MOVIE Marathon", thoi_luong_nguon_s=234114.0,
                  pham_vi_tu_s=0.0, pham_vi_den_s=10800.0, che_do="Giới hạn video dài — 3 giờ đầu",
                  ghi="Metadata OK — nguồn dài 65:01:54")
-        self._td(tdq.GD_TAI, audio_can_s=10800.0, byte_da_nhan=3 * 1024 * 1024, audio_da_nhan_s=180.0)
+        self._td(tdq.GD_TAI, audio_can_s=10800.0, byte_dau_ra=3 * 1024 * 1024, audio_da_nhan_s=180.0)
         da_chup.wait(60)
         return ScanResult(source_name=url, source_ref=url)
 

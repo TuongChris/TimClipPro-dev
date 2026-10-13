@@ -13,8 +13,8 @@ yt-dlp chỉ ``proc.wait()`` — không hạn chờ, không phát progress hook 
 
 Luồng này, không sửa yt-dlp:
 
-* đọc file ``-progress`` mà ffmpeg ghi (``external_downloader_args``) → byte đã nhận, giây audio
-  đã nhận, tốc độ — số đo THẬT;
+* đọc file ``-progress`` mà ffmpeg ghi (``external_downloader_args``) → byte ffmpeg đã GHI ra file
+  (``total_size`` — dung lượng đầu ra, KHÔNG phải byte mạng), giây audio đã nhận, tốc độ — số đo THẬT;
 * có yêu cầu huỷ → giết ffmpeg đang ghi ĐÚNG file đích (chỉ tiến trình con của chính app);
 * không thêm byte nào quá ``han_dung_s`` trong lúc ffmpeg còn chạy → giết, đánh dấu ``dung_hinh``
   để nơi gọi báo lỗi mạng rõ ràng thay vì chờ vô hạn.
@@ -41,7 +41,8 @@ def doc_tien_do_ffmpeg(duong: str, toi_da_byte: int = 16384) -> dict:
     """Khối tiến độ HOÀN CHỈNH cuối cùng của file ``-progress`` của ffmpeg.
 
     Trả ``{"byte": int|None, "audio_s": float|None, "toc_do_x": float|None, "ket_thuc": bool}``,
-    hoặc ``{}`` khi chưa có khối nào. Chỉ đọc phần đuôi file (file chỉ ghi nối thêm).
+    hoặc ``{}`` khi chưa có khối nào. ``byte`` = ``total_size`` = byte ffmpeg ĐÃ GHI ra file đầu ra,
+    không phải byte nhận qua mạng. Chỉ đọc phần đuôi file (file chỉ ghi nối thêm).
     """
     try:
         with open(duong, "rb") as f:
@@ -207,7 +208,7 @@ class GiamSatTai:
                 self.audio_cuoi = max(self.audio_cuoi, audio)
             self.luc_tien_trien = bay_gio
             if self.khi_so_lieu is not None:
-                self.khi_so_lieu({"byte_da_nhan": int(self.byte_cuoi),
+                self.khi_so_lieu({"byte_dau_ra": int(self.byte_cuoi),
                                   "audio_da_nhan_s": audio, "toc_do_x": so.get("toc_do_x")})
         elif ffmpeg and self.khi_nhip is not None:
             self.khi_nhip()
