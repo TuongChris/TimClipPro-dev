@@ -71,6 +71,7 @@ chạm file) — không phải audit lại mã. Thêm/xoá/đổi vai trò modul
 | `dossier.py` | Mô hình dữ liệu và hàm dựng hồ sơ vi phạm. | 165 | `c7c78bc 2026-10-05` |
 | `dung_lai.py` | Gom tín hiệu dừng từ hệ điều hành, Engine và file điều khiển. | 56 | `448b467 2026-08-07` |
 | `fingerprint_progress.py` | Progress contract, aggregation, logging and UI-safe job controller. | 593 | `448b467 2026-08-07` |
+| `giam_sat_tai.py` | Giám sát MỘT lượt tải audio của yt-dlp bằng một luồng phụ nhỏ (chu kỳ 1 giây). | 253 | nhánh `fix/pc2/live-progress-smart-marathon` (PC2, 13/10) |
 | `khoa.py` | Khóa liên tiến trình dựa trên cơ chế khóa file của hệ điều hành. | 124 | `448b467 2026-08-07` |
 | `kiem_header.py` | kiem_header.py — Đối chiếu HEADER_NGANG trong code với tiêu đề THẬT trong Google Sheet. | 67 | `448b467 2026-08-07` |
 | `kiem_metadata_kho.py` | Audit metadata kho clip theo chế độ chỉ đọc; chỉ ghi snapshot khi có --apply. | 360 | `8f0558f 2026-10-02` |
@@ -86,7 +87,9 @@ chạm file) — không phải audit lại mã. Thêm/xoá/đổi vai trò modul
 | `scan_jobs.py` | Điều phối một batch quét: tiến độ, kết quả streaming, trạng thái giao Sheets. | 398 | `ce5a64b 2026-10-07` |
 | `scan_ui.py` | Dựng dữ liệu bảng trạng thái quét. **Không import streamlit.** | 234 | `83fb6c3 2026-10-07` |
 | `thiet_lap_may_phu.py` | thiet_lap_may_phu.py — Chạy MỘT LẦN trên máy phụ sau khi giải nén gói. | 143 | `8f0558f 2026-10-02` |
+| `tien_do_quet.py` | Tiến độ THẬT của một lô quét: số đo từ pipeline, nhịp sống, nhật ký ngắn. | 278 | nhánh `fix/pc2/live-progress-smart-marathon` (PC2, 13/10) |
 | `toc_do_khop.py` | Phát hiện video vi phạm đã bị ĐỔI TỐC ĐỘ để né vân tay âm thanh. | 253 | `1f85c79 2026-08-07` |
+| `ui_tien_do_quet.py` | Màn hình tiến độ khi ĐANG quét (Streamlit) — chỉ ĐỌC ảnh chụp ``scan_jobs.BatchSnapshot``. | 146 | nhánh `fix/pc2/live-progress-smart-marathon` (PC2, 13/10) |
 | `watch.py` | Mô hình dữ liệu và lưu trữ danh sách nguồn YouTube cần theo dõi. | 729 | `ce5a64b 2026-10-07` |
 
 ## Bộ giả và dữ liệu test dùng chung (`TimClipPro/tests/`)
