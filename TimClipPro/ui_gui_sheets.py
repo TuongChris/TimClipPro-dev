@@ -319,8 +319,10 @@ def _ve_ho_so(eng) -> None:
     if ds:
         st.dataframe(pd.DataFrame([{
             "Tên": d.ten, "Tab": d.worksheet_ten,
-            "Mã tab": (d.worksheet_id if d.worksheet_id is not None
-                       else d.gid_da_chot if d.gid_da_chot is not None
+            # Cột trộn số (mã tab) với chữ làm Arrow không chuyển được («Could not convert 'theo tên
+            # …' … int64», PC2 12/10/2026): hiển thị TOÀN CHUỖI — giá trị lưu trong DB không đổi.
+            "Mã tab": (str(d.worksheet_id) if d.worksheet_id is not None
+                       else str(d.gid_da_chot) if d.gid_da_chot is not None
                        else "theo tên — chốt ở lần gửi đầu"),
             "Định dạng": sd.SCHEMA_NHAN.get(d.schema_id), "Trạng thái": d.trang_thai,
             "Revision": d.phien_ban, "Khoá": d.xac_thuc_ref,

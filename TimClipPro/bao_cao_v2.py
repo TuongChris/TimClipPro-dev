@@ -68,6 +68,9 @@ _LY_DO_PHAM_VI = {
     "tai_thieu": "file tải về thiếu phần cuối",
     "huy": "đã huỷ",
     "am_thanh_ngan_hon": "âm thanh YouTube ngắn hơn thời lượng video — đã tải lại kiểm",
+    # Giới hạn quét video dài chọn theo lô (engine.GHVD_*): chỉ phần đầu, phần sau CHƯA quét.
+    "gioi_han_video_dai": "giới hạn quét video dài — chỉ quét phần đầu, phần sau chưa quét",
+    "thoi_luong_chua_ro": "YouTube không cho biết thời lượng — chưa xác nhận đã quét trọn",
 }
 
 

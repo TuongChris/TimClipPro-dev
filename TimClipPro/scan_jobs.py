@@ -8,16 +8,19 @@ Không phụ thuộc Streamlit — worker chỉ phát event; main thread của U
 
 from __future__ import annotations
 
+import contextlib
 import logging
+import os
 import queue
 import threading
 import time
 import uuid
 from collections import deque
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Callable, Optional
 
 import maintenance_gate
+import tien_do_quet as tdq
 
 LOGGER = logging.getLogger("scan.job")
 
@@ -40,7 +43,11 @@ QUET_LOI = "failed"
 
 _TU_KHOA_PHASE = (
     ("Đang lấy thông tin video", PHASE_METADATA),
-    ("chuẩn bị tải", PHASE_METADATA),
+    # «<tên> (thời lượng) — chuẩn bị tải audio...» phát SAU khi đã có thông tin video, ngay trước
+    # khi tải: đó là bước TẢI. Ánh xạ cũ về «metadata» làm màn hình PC2 ghi «Đang lấy thông tin
+    # video» suốt 24 phút trong lúc ffmpeg đang tải (12/10/2026).
+    ("chuẩn bị tải", PHASE_TAI),
+    ("Giới hạn video dài", PHASE_TAI),
     ("Đang tải", PHASE_TAI),
     ("Đã có sẵn audio", PHASE_TAI),
     ("Đang cắt khúc", PHASE_CAT_KHUC),
@@ -109,6 +116,11 @@ class BatchSnapshot:
     dich_gui: str = ""
     dich_id: str = ""
     lo_id: str = ""
+    # Số đo THẬT của video đang chạy + nhật ký ngắn (``tien_do_quet``); luồng quét còn sống không.
+    tien_do: tdq.AnhTienDo = field(default_factory=tdq.AnhTienDo)
+    nhat_ky: tuple = ()
+    worker_alive: bool = False
+    gioi_han_video_dai: str = ""
 
     @property
     def batch_progress(self) -> float:
@@ -124,11 +136,32 @@ class BatchSnapshot:
         return max(0.0, min(1.0, (xong + dang) / self.total))
 
 
+# Lô quét ĐANG CHẠY của tiến trình, theo thư mục dữ liệu. Mỗi phiên trình duyệt (tải lại trang = phiên
+# mới) có controller riêng trong ``st.session_state``: không có sổ chung này thì tải lại trang trong lúc
+# quét sẽ mất màn hình tiến độ và cho bấm «Bắt đầu quét» lần nữa — hai lô chạy song song trên cùng kho.
+_DANG_CHAY: dict = {}
+_KHOA_DANG_CHAY = threading.Lock()
+
+
+def _khoa_lo(engine) -> str:
+    thu_muc = getattr(engine, "data_dir", None)
+    return os.path.normcase(os.path.abspath(thu_muc)) if thu_muc else f"id:{id(engine)}"
+
+
 class ScanJobController:
     """Một batch, một worker thread, snapshot bất biến cho UI."""
 
+    @staticmethod
+    def dang_chay_cua(engine) -> Optional["ScanJobController"]:
+        """Controller đang chạy lô trên CÙNG thư mục dữ liệu (phiên khác của tiến trình), nếu có."""
+        with _KHOA_DANG_CHAY:
+            ctl = _DANG_CHAY.get(_khoa_lo(engine))
+        return ctl if ctl is not None and ctl.running else None
+
     def __init__(self, engine, recent_maxlen: int = 60):
         self.engine = engine
+        self.so_tien_do = tdq.SoTienDo()
+        self._gioi_han_video_dai = ""
         self._lock = threading.RLock()
         self._thread: Optional[threading.Thread] = None
         self._batch_id = ""
@@ -153,9 +186,15 @@ class ScanJobController:
         source_type: str = "youtube",
         on_result: Optional[Callable] = None,
         y_dinh_gui=None,
+        gioi_han_video_dai: Optional[str] = None,
     ) -> str:
         """``y_dinh_gui``: ý định gửi đã chụp lúc bấm Bắt đầu (``sheet_destinations.YDinhGui``) —
-        ghim trên bản Engine của lô, đổi lựa chọn trên giao diện giữa chừng không ảnh hưởng."""
+        ghim trên bản Engine của lô, đổi lựa chọn trên giao diện giữa chừng không ảnh hưởng.
+        ``gioi_han_video_dai``: chế độ giới hạn video dài (``engine.GHVD_*``) của lô; ``None`` = như cũ."""
+        khac = ScanJobController.dang_chay_cua(self.engine)
+        if khac is not None and khac is not self:
+            raise RuntimeError("Đang có lô quét chạy ở một cửa sổ/phiên khác của Tool — tải lại trang "
+                               "để xem tiến độ; không tạo lô trùng.")
         with self._lock:
             if self._running or (self._thread and self._thread.is_alive()):
                 raise RuntimeError("Đang có batch quét chạy; không tạo batch trùng.")
@@ -176,7 +215,11 @@ class ScanJobController:
             self._started_mono = time.monotonic()
             self._finished_mono = None
             self._y_dinh_gui = y_dinh_gui
+            self._gioi_han_video_dai = gioi_han_video_dai or ""
             batch_id = self._batch_id
+        self.so_tien_do.bat_dau_lo(batch_id, len(nguon))
+        with _KHOA_DANG_CHAY:
+            _DANG_CHAY[_khoa_lo(self.engine)] = self
 
         self.engine.cancel_event.clear()
         LOGGER.info(
@@ -197,6 +240,8 @@ class ScanJobController:
             self._cancelled = True
             self._message = "Đang yêu cầu dừng; giữ nguyên kết quả đã xong..."
         LOGGER.warning("event=scan.batch.cancel_requested batch_id=%s", self._batch_id)
+        self.so_tien_do.ghi("Đã yêu cầu DỪNG — đang dừng tác vụ con (tải/ffmpeg/audfprint); kết quả đã "
+                            "xong được giữ")
         self.engine.cancel()
 
     # ---------- worker ----------
@@ -207,6 +252,7 @@ class ScanJobController:
                 self._videos[index - 1] = replace(self._videos[index - 1], **thay_doi)
 
     def _ghi_su_kien(self, noi_dung: str) -> None:
+        self.so_tien_do.ghi(noi_dung)
         with self._lock:
             self._recent.append((time.time(), noi_dung))
         try:
@@ -225,6 +271,9 @@ class ScanJobController:
         finally:
             if lease is not None:
                 lease.tra()
+            with _KHOA_DANG_CHAY:
+                if _DANG_CHAY.get(_khoa_lo(self.engine)) is self:
+                    del _DANG_CHAY[_khoa_lo(self.engine)]
 
     def _chay_trong_cong(self, nguon: list, source_type: str, on_result: Optional[Callable]) -> None:
         try:
@@ -260,6 +309,9 @@ class ScanJobController:
             # cú bấm Dừng rơi vào khoảng giữa start() và lúc thread chạy không bị nuốt.
             # Chỉ truyền khi có, để engine giả trong test giữ chữ ký cũ.
             them = {"y_dinh_gui": self._y_dinh_gui} if self._y_dinh_gui is not None else {}
+            if self._gioi_han_video_dai:
+                them["gioi_han_video_dai"] = self._gioi_han_video_dai
+            them["so_tien_do"] = self.so_tien_do
             for ket_qua in self.engine.scan_iter(
                 nguon, source_type, tien_do, on_video=sau_moi_video, xoa_co_huy=False, **them
             ):
@@ -282,6 +334,8 @@ class ScanJobController:
                         "Đã dừng theo yêu cầu." if self._cancelled
                         else bi_chan or "Quét hoàn tất."
                     )
+                ket = f"Lô quét lỗi: {self._error[:160]}" if self._error else self._message
+            self.so_tien_do.ghi(ket)
             LOGGER.info(
                 "event=scan.batch.finished batch_id=%s completed=%d failed=%d",
                 self._batch_id,
@@ -327,9 +381,15 @@ class ScanJobController:
             "event=scan.video.completed batch_id=%s index=%d status=%s matches=%d",
             self._batch_id, index, "failed" if loi else "ok", so_match,
         )
-        self._ghi_su_kien(
-            f"Video {index}: " + ("lỗi" if loi else f"hoàn tất, {so_match} đoạn")
-        )
+        huy = loi and (getattr(ket_qua, "ly_do_pham_vi", "") or "") == "huy"
+        with contextlib.suppress(Exception):
+            self.so_tien_do.cap_nhat(giai_doan=tdq.GD_HUY if huy else tdq.GD_LOI if loi else tdq.GD_XONG)
+        if loi:
+            ghi_chu = " ".join(str(getattr(ket_qua, "note", "") or "").split())[:160]
+            self._ghi_su_kien(f"Video {index}: " + ("đã dừng theo yêu cầu" if huy
+                                                     else f"lỗi — {ghi_chu}" if ghi_chu else "lỗi"))
+        else:
+            self._ghi_su_kien(f"Video {index}: hoàn tất, {so_match} đoạn")
 
     def ghi_nhan_giao_hang(self, index: int, delivery_key: str) -> None:
         self._sua_video(index, delivery_key=delivery_key)
@@ -376,6 +436,10 @@ class ScanJobController:
                 dich_gui=(self._y_dinh_gui.dich.nhan if self._y_dinh_gui is not None else ""),
                 dich_id=(self._y_dinh_gui.dich.dich_id if self._y_dinh_gui is not None else ""),
                 lo_id=(self._y_dinh_gui.lo_id if self._y_dinh_gui is not None else ""),
+                tien_do=self.so_tien_do.anh(),
+                nhat_ky=tuple(self.so_tien_do.su_kien(20)),
+                worker_alive=bool(self._thread and self._thread.is_alive()),
+                gioi_han_video_dai=self._gioi_han_video_dai,
             )
         return replace(snapshot, eta_seconds=self._eta(len(videos) - xong - loi))
 

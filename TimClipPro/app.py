@@ -36,10 +36,12 @@ import ytdlp_chung
 from common_original_jobs import TEN_PHA as TEN_PHA_NGUON_CHUNG
 from common_original_jobs import CommonOriginalJobController, xuat_csv
 from engine import Engine, LoiXoaJob, ScanResult, hhmmss, mo_ta_pham_vi, o_bang_tinh_an_toan
+from engine import GHVD_TOAN_BO, GHVD_TU_DONG, NHAN_GHVD
 from fingerprint_progress import FingerprintJobController
 from khoa import DangChayRoi
 from publication_date import format_publication_date
 from scan_jobs import ScanJobController
+import ui_tien_do_quet
 from scan_ui import (
     build_nguon_chung_status_dataframe,
     build_scan_status_dataframe,
@@ -106,8 +108,15 @@ _dong_bo_job_van_tay()
 
 
 if "scan_controller" not in st.session_state:
-    st.session_state.scan_controller = ScanJobController(eng)
+    # Tải lại trang = phiên MỚI: lô của phiên trước còn chạy thì NHẬN LẠI nó (xem tiến độ, bấm Dừng),
+    # không tạo controller trống cho phép bấm «Bắt đầu quét» lần nữa.
+    st.session_state.scan_controller = (ScanJobController.dang_chay_cua(eng)
+                                        or ScanJobController(eng))
 scan_controller: ScanJobController = st.session_state.scan_controller
+if scan_controller.running and not job.get("running"):
+    job.update({"running": True, "pct": 0.0, "msg": "", "results": [], "error": "",
+                "kind": "scan", "da_day_sheet": True,
+                "scan_batch_id": scan_controller.snapshot().batch_id})
 # Bản cài managed: bản mới đã kích hoạt mà cửa sổ này còn chạy bản cũ → cảnh báo nổi ở đầu trang.
 ui_cap_nhat.canh_bao_ban_cu()
 # Gửi Google Sheets: hàng đợi BỀN trong lichsu.db + MỘT người gửi nền mỗi tiến trình (không đọc
@@ -126,8 +135,9 @@ def dang_co_tac_vu() -> bool:
 
 
 def chay_quet(nguon: list, source_type: str, *, dich_id: str = "", tu_dong: bool = False,
-              tab_key: str = "") -> None:
-    """Khởi động batch quét. Kết quả hiện ngay từng video; việc gửi Sheets xếp hàng bền song song."""
+              tab_key: str = "", gioi_han_video_dai: str | None = None) -> None:
+    """Khởi động batch quét. Kết quả hiện ngay từng video; việc gửi Sheets xếp hàng bền song song.
+    ``gioi_han_video_dai``: chế độ giới hạn video dài của lô YouTube (``engine.GHVD_*``)."""
     if dang_co_tac_vu():
         st.warning("Đang có tác vụ chạy; không tạo job trùng.")
         return
@@ -153,11 +163,15 @@ def chay_quet(nguon: list, source_type: str, *, dich_id: str = "", tu_dong: bool
         if viec:
             scan_controller.ghi_nhan_giao_hang(index, viec[0].id)
 
+    them = {"gioi_han_video_dai": gioi_han_video_dai} if gioi_han_video_dai else {}
     try:
         batch_id = scan_controller.start(nguon, source_type, on_result=sau_moi_video,
-                                         y_dinh_gui=y_dinh)
+                                         y_dinh_gui=y_dinh, **them)
     except DangChayRoi as e:                   # đang cập nhật / bản cũ: chưa bắt đầu gì
         st.error(f"Chưa bắt đầu: {e}")
+        return
+    except RuntimeError as e:                  # lô khác (phiên khác) đang chạy: không tạo lô trùng
+        st.warning(str(e))
         return
     job.update({
         "running": True, "pct": 0.0, "msg": "Đang chuẩn bị...", "results": [],
@@ -904,25 +918,11 @@ if job["running"]:
             job["error"] = scan_controller.error
 
         st.header("🔍 Đang quét video")
-        st.progress(
-            anh.batch_progress,
-            text=f"{anh.completed + anh.failed} / {anh.total} video — "
-                 f"{anh.batch_progress * 100:.0f}%",
-        )
-        b1, b2, b3, b4 = st.columns(4)
-        b1.metric("Hoàn tất", anh.completed)
-        b2.metric("Lỗi", anh.failed)
-        b3.metric("Đã chạy", _thoi_luong(anh.elapsed_seconds))
-        b4.metric("ETA", _thoi_luong(anh.eta_seconds))
-
-        if 0 < anh.current_index <= len(anh.videos):
-            v = anh.videos[anh.current_index - 1]
-            st.info(
-                f"**[{v.index}/{anh.total}] {v.title or v.nguon[:70]}**  \n"
-                f"Công đoạn: {TEN_PHASE_QUET.get(v.phase, v.phase)} · "
-                f"Đã chạy video: {_thoi_luong(v.elapsed)}  \n"
-                f"{v.message}"
-            )
+        # Chỉ số đo THẬT (ui_tien_do_quet): thanh lô đếm video đã xong; bước hiện tại chỉ có thanh
+        # khi có mẫu số đo được; nhịp sống tách khỏi tiến triển; nhật ký ngắn ngay trên trang.
+        ui_tien_do_quet.ve_tien_do_lo(
+            st, anh, TEN_PHASE_QUET,
+            gio=lambda t: datetime.fromtimestamp(t).strftime("%H:%M:%S"))
 
         st.dataframe(
             build_scan_status_dataframe(anh.videos, ui_gui.trang_thai_viec_lo(eng, anh.lo_id)),
@@ -1621,13 +1621,28 @@ with tab3:
                " ⚠️ «Giữ lại audio đã tải» đang tắt nên lượt quét lại sẽ phải tải lại."))
         if links and thieu_link:
             st.warning("Cần ít nhất 2 link khác nhau để tìm video gốc chung.")
+    ghvd, chua_xac_nhan_toan_bo = GHVD_TU_DONG, False
+    if not nguon_chung_bat:
+        ghvd = st.radio(
+            "Giới hạn quét video dài", list(NHAN_GHVD), format_func=NHAN_GHVD.get, index=0,
+            horizontal=True, key="gioi_han_video_dai",
+            help="Video dài hơn 6 giờ chỉ được TẢI và quét phần đầu — giới hạn đặt ngay ở đường tải, "
+                 "không tải trọn rồi cắt; phần đầu không thấy gì cũng KHÔNG tự tải tiếp. Video không "
+                 "quá 6 giờ quét như bình thường. Kết quả ghi rõ phần đã quét và phần chưa quét.")
+        if ghvd == GHVD_TOAN_BO:
+            st.warning("«Quét toàn bộ video» dùng cách cũ: video rất dài có thể phải tải hàng chục GB "
+                       "(video 66 giờ ≈ 18 GB) và chạy nhiều giờ.")
+            chua_xac_nhan_toan_bo = not st.checkbox(
+                "Tôi chủ động chọn quét toàn bộ video dài", key="xac_nhan_quet_toan_bo")
     dich_yt, tu_dong_yt = ui_gui.chon_dich(eng, key="quet_yt", nguon_chung=nguon_chung_bat)
     if st.button("🚀 Bắt đầu quét", type="primary",
-                 disabled=not links or not env["database"] or thieu_link):
+                 disabled=(not links or not env["database"] or thieu_link
+                           or chua_xac_nhan_toan_bo)):
         if nguon_chung_bat:
             chay_nguon_chung(links)
         else:
-            chay_quet(links, "youtube", dich_id=dich_yt, tu_dong=tu_dong_yt, tab_key="quet_yt")
+            chay_quet(links, "youtube", dich_id=dich_yt, tu_dong=tu_dong_yt, tab_key="quet_yt",
+                      gioi_han_video_dai=ghvd)
     if not env["database"]:
         st.warning("Chưa có kho vân tay — hãy làm tab «Kho clip gốc» trước.")
 

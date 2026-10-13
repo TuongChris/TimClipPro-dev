@@ -149,6 +149,8 @@ _LY_DO = {
     "huy": "đã huỷ",
     # Lượt TRỌN nhưng có điều kiện: hai lần tải độc lập cùng ngắn hơn lengthSeconds.
     "am_thanh_ngan_hon": "âm thanh YouTube ngắn hơn thời lượng video — đã tải lại kiểm",
+    "gioi_han_video_dai": "giới hạn quét video dài — chỉ quét phần đầu, phần sau chưa quét",
+    "thoi_luong_chua_ro": "YouTube không cho biết thời lượng — chưa xác nhận đã quét trọn",
 }
 
 

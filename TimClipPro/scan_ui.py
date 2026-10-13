@@ -112,6 +112,8 @@ GOI_Y_TOP1 = ("Kết quả Top-1 lấy từ phần đầu video (tìm nhanh): c�
               "Top-N lớn hơn 1, hoặc tắt `top1_tim_nhanh` trong `data/cau_hinh.json`.")
 GOI_Y_TANG_DAN = ("Quét tăng dần đã dừng sớm hoặc chỉ tải phần đầu: tắt «Quét tăng dần "
                   "cho video rất dài» ở thanh bên → «⚙️ Tham số» → «Mở để tinh chỉnh».")
+GOI_Y_VIDEO_DAI = ("Video dài chỉ được quét phần đầu theo «Giới hạn quét video dài»: phần sau CHƯA "
+                   "quét. Muốn quét thêm, chọn «6 giờ đầu» hoặc «Quét toàn bộ video» rồi quét lại.")
 
 
 def goi_y_quet_mot_phan(ket_qua: Sequence[Any], cau_hinh: Any = None) -> list:
@@ -145,6 +147,8 @@ def goi_y_quet_mot_phan(ket_qua: Sequence[Any], cau_hinh: Any = None) -> list:
         goi_y.append(GOI_Y_TOP1)
     if any(do_tang_dan(r) for r in ket_qua):
         goi_y.append(GOI_Y_TANG_DAN)
+    if any((getattr(r, "ly_do_pham_vi", "") or "") == "gioi_han_video_dai" for r in ket_qua):
+        goi_y.append(GOI_Y_VIDEO_DAI)
     return goi_y
 
 
