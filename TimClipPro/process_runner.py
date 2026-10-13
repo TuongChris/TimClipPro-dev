@@ -26,7 +26,7 @@ import subprocess
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 import psutil
@@ -541,6 +541,9 @@ class KetQuaLenh:
     timed_out: bool = False
     ly_do: str = ""            # "huy" | "im_lang" | "tran_tong" | ""
     elapsed_seconds: float = 0.0
+    # Giá trị CUỐI của từng khoá `-progress` (khi ``theo_doi_tien_do``) — không bị cắt như ``stdout``
+    # (chỉ giữ ``GIOI_HAN_STDOUT_KY_TU`` ký tự ĐẦU nên khối tiến độ cuối có thể không còn trong đó).
+    tien_do_cuoi: dict = field(default_factory=dict)
 
 
 def chay_lenh_media(
@@ -659,4 +662,5 @@ def chay_lenh_media(
         timed_out=ly_do in {"im_lang", "tran_tong"},
         ly_do=ly_do,
         elapsed_seconds=time.monotonic() - bat_dau,
+        tien_do_cuoi=dict(tien_do["gia_tri"]),
     )
