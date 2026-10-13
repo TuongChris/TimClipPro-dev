@@ -4845,6 +4845,12 @@ class Engine:
                 if not tong:
                     raise RuntimeError(f"Không đọc được thời lượng file: {path}")
                 kq.duration_s = tong
+                if source_type == "file":
+                    # File trong máy: thời lượng + phạm vi lên sổ tiến độ (YouTube tự ghi số của VIDEO ở
+                    # `_scan_youtube` — lượt quét lồng ở đây chỉ thấy file phần đầu, không được ghi đè).
+                    self._td(tieu_de=ten, thoi_luong_nguon_s=float(tong), pham_vi_tu_s=0.0,
+                             pham_vi_den_s=float(tong), che_do="File trong máy — quét như hiện tại",
+                             ghi=f"File trong máy dài {hhmmss(tong)}")
                 tong_am = self.do_dai_am_thanh(path)
                 if tong_am and tong_am < tong - DUNG_SAI_PHU_S:
                     pv.het_am_thanh = float(tong_am)

@@ -120,6 +120,29 @@ def test_dung_ghi_nhat_ky_va_video_bi_dung_khong_thanh_hoan_tat(eng, monkeypatch
     assert anh.tien_do.giai_doan == tdq.GD_HUY and nk[-1] == "Đã dừng theo yêu cầu."
 
 
+def test_quet_file_ghi_thoi_luong_va_pham_vi_len_so(tmp_path, monkeypatch):
+    """Đo trên Development 13/10: quét file trong máy hiện «Thời lượng nguồn: chưa biết» — chỉ đường
+    YouTube ghi số đó lên sổ."""
+    e = Engine(root=str(tmp_path), data_dir=str(tmp_path / "d"), out_dir=str(tmp_path / "r"))
+    p = tmp_path / "dai.opus"
+    p.write_bytes(b"x")
+    so = tdq.SoTienDo()
+    so.bat_dau_video(1, 1, str(p))
+    e._so_tien_do = so
+    monkeypatch.setattr(e, "require", lambda **k: None)
+    monkeypatch.setattr(e, "duration_of", lambda path: 7206.5)
+    monkeypatch.setattr(e, "do_dai_am_thanh", lambda path: None)
+    monkeypatch.setattr(e, "_cut_chunks", lambda *a, **k: ([str(tmp_path / "chunk_0000000.wav")], 7206.5))
+    monkeypatch.setattr(e, "_quet_tho", lambda *a, **k: [])
+    monkeypatch.setattr(e, "_merge", lambda tho: [])
+    monkeypatch.setattr(e, "_gan_chi_so", lambda ds, d: None)
+    monkeypatch.setattr(e, "_chon_loc", lambda ds, d: ([], []))
+    e.scan_media(str(p), luu_lich_su=False)
+    a = so.anh()
+    assert a.thoi_luong_nguon_s == 7206.5 and (a.pham_vi_tu_s, a.pham_vi_den_s) == (0.0, 7206.5)
+    assert a.che_do == "File trong máy — quét như hiện tại" and a.tieu_de == "dai.opus"
+
+
 def test_thong_bao_chuan_bi_tai_la_buoc_tai_khong_phai_metadata():
     assert doan_phase("65 Hours of SML MOVIE Marathon (65:01:54) — chuẩn bị tải audio...") == PHASE_TAI
 
