@@ -49,6 +49,21 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 4. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md` — chỉ dựa handoff + tài liệu, không audit toàn repo.
 
 ## Nhật ký
+### 2026-10-13 — giới hạn quét video dài + tiến độ thật + Dừng giết ffmpeg (fix/pc2/live-progress-smart-marathon, CHƯA đẩy)
+- Bối cảnh (Stable 12–13/10, video 65 giờ): «0/5 — 1%», «Đang lấy thông tin video» hàng chục phút — thật ra ffmpeg
+  (yt-dlp FFmpegFD, `download_ranges`) đang tải 3 giờ đầu ~17 KB/s và không phát tiến độ; Dừng không giết ffmpeg; mã cũ
+  không thấy đủ bằng chứng thì tải TRỌN 65 giờ.
+- Làm (worktree `C:\Dev\TimClipPro_Marathon`, từ `7a76e71`, KHÔNG chứa P0/Sheets): chế độ video dài theo LÔ (`engine.GHVD_*`,
+  >6 giờ → 3/6 giờ đầu, không bao giờ tự tải trọn, kiểm độ dài giải mã, bản đệm cụt tải lại 1 lần, không rõ thời lượng →
+  «chưa xác nhận»); `giam_sat_tai` (ffmpeg `-progress`; Dừng giết ffmpeg con; 180 s không thêm byte → lỗi «Mạng đứng»);
+  `tien_do_quet` + `ui_tien_do_quet` (số đo thật, nhịp ≠ tiến triển, ETA chỉ từ tốc độ đo, nhật ký 20 dòng); `scan_jobs` (tải
+  lại trang nhận lại lô đang chạy, không lô trùng; «chuẩn bị tải» = bước tải); lý do phạm vi mới ở V2/lịch sử/gợi ý; «Mã tab»
+  toàn chuỗi (Arrow). Watch/CLI/«một video gốc chung» giữ hành vi cũ (Watch chỉ bỏ qua âm tính QUÉT TRỌN).
+- Test (chặn mạng, cp1252): 48 mới (đỏ trên `7a76e71`); nhanh 2508 = 2506/2 bỏ qua/0 hỏng; chậm 18/18 (384 s); yt-dlp +
+  ffmpeg thật, máy chủ cục bộ: giới hạn 120 s/nguồn 30 phút kéo 11,3% byte, giải mã 120,02 s; Dừng hiệu lực 0,2 s, 0 ffmpeg
+  sót. Bằng chứng: `C:\Dev\pc2_test_runs\2026-10-13_marathon`. `test_app_scan_no_warnings` kiểm Arrow qua `caplog` = luôn xanh
+  (logger Streamlit `propagate=False`; đối chứng `test_ma_tab_arrow.py`). Chưa kiểm: YouTube thật (cần duyệt); kho SML của
+  Development chưa có vân tay. Launcher ngoài Git: `C:\Dev\TimClipPro_DevState\ChayTimClipPro_Dev_Marathon.bat` (8502).
 ### 2026-10-09 — test bảng mã cp1252 của health_check (nhánh fix/pc2/windows-health-encoding)
 - Làm: PC2 (cp1252) hỏng `test_chan_mang_truoc_khi_import`: test gọi thẳng `chan_mang()` rồi print tiếng Việt, bỏ
   `_utf8_dau_ra()` của `main()` — lỗi của test; production đúng (launcher ép UTF-8; `main` và `cli` đổi stdout). Chỉ
