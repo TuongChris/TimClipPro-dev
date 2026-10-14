@@ -3285,10 +3285,13 @@ class Engine:
         return ytdlp_chung.CauHinhMang.tu_config(self.config)
 
     def _canh_bao_cookie_chet(self, loi: BaseException) -> None:
-        """Ghi nhận việc phải bỏ cookie, để người dùng biết mà đi sửa gốc."""
+        """Ghi nhận việc chạy KHÔNG cookie dù đã cấu hình cookie, để người dùng biết mà đi sửa gốc — câu đi kèm MỌI kết
+        quả của lượt (``_scan_youtube`` gộp ``canh_bao_mang`` vào ghi chú)."""
         if ytdlp_chung.la_dau_hieu_cookie_can_js(loi):
-            # Cookie vẫn sống — máy thiếu bộ chạy JavaScript (ytdlp_chung.DAU_HIEU_COOKIE_CAN_JS): đừng bảo «hết hạn».
-            tin, su_kien = ytdlp_chung.CANH_BAO_COOKIE_CAN_JS, "event=cookie.can_js loi=%s"
+            # Cookie có thể vẫn sống — máy chưa giải được thử thách JavaScript (ytdlp_chung.kha_nang_js): đừng bảo «hết
+            # hạn»; câu nói rõ lượt này KHÔNG đăng nhập và thiếu gì.
+            tin, su_kien = str(loi), "event=cookie.khong_dang_nhap_js ly_do=%s"
+            loi = getattr(loi, "ly_do", "") or loi
         else:
             tin = ("Cookie YouTube đã hết hiệu lực — đang thử lại KHÔNG dùng cookie. "
                    "Hãy xoá trống ô đường dẫn cookie ở thanh bên → «🔐 Kết nối YouTube», "
@@ -3323,7 +3326,7 @@ class Engine:
             # is not available" — câu chữ dẫn người dùng đi sai hướng hoàn toàn. Tự lùi về
             # không-cookie thay vì để cả lượt quét chết.
             ket = ytdlp_chung.chay_kem_duong_lui_cookie(
-                self.cau_hinh_mang(), lay, khi_bo_cookie=bo_cookie)
+                self.cau_hinh_mang(), lay, khi_bo_cookie=bo_cookie, bo_ghi=bo_ghi)
             if not isinstance(ket, dict):
                 raise RuntimeError("yt-dlp không trả thông tin video.")
             if ket.get("_type") in ("playlist", "multi_video") or "entries" in ket:
@@ -3439,6 +3442,7 @@ class Engine:
             ghi_moc_tai(int(s.get("byte_dau_ra") or 0), s.get("audio_da_nhan_s"), dau_ra=True)
 
         phien = self.phien_youtube_hien_tai()
+        bo_ghi_tai = ytdlp_chung.BoGhiYtdlp(phien)
         # Tách phần riêng ra dict để dựng lại được tuỳ chọn với cấu hình mạng khác
         # (đường lui khi cookie hết hạn dựng lại toàn bộ opts, không sửa tại chỗ).
         # Số lần yt-dlp tự thử lại + nghỉ giữa chúng: bảng NGAN_SACH["download"] (một nơi).
@@ -3448,7 +3452,7 @@ class Engine:
             noplaylist=True,
             continuedl=True,          # đứt mạng thì lần sau tải tiếp
             progress_hooks=[hook],
-            logger=ytdlp_chung.BoGhiYtdlp(phien),
+            logger=bo_ghi_tai,
         )
         file_tien_do = None
         if gioi_han_giay:
@@ -3568,8 +3572,8 @@ class Engine:
         try:
             with giam_sat:
                 phien.chay("download",
-                           lambda: ytdlp_chung.chay_kem_duong_lui_cookie(goc, tai_voi,
-                                                                         khi_bo_cookie=bo_cookie),
+                           lambda: ytdlp_chung.chay_kem_duong_lui_cookie(goc, tai_voi, khi_bo_cookie=bo_cookie,
+                                                                         bo_ghi=bo_ghi_tai),
                            video_id=video_id, cancel_event=self.cancel_event, loi_huy=Cancelled,
                            bo_qua=(Cancelled, TaiAudioDungHinh))
         except (Cancelled, TaiAudioDungHinh):

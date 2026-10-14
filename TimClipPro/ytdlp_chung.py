@@ -21,10 +21,12 @@ ghi thẳng ra đĩa dạng thô.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import logging
 import os
-import threading
+import re
+import subprocess
 import time
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Optional
@@ -33,14 +35,19 @@ from typing import Any, Callable, Optional
 # các tên dưới đây giữ ở đây vì mã cũ và test tham chiếu qua `ytdlp_chung.*`.
 from truy_cap_youtube import (  # noqa: F401 — tái xuất
     DAU_CHI_TIET,
+    FORMAT_OR_EXTRACTOR_ERROR,
     MOC_CAT_HUONG_DAN,
     NGAN_SACH,
+    PLAYER_CLIENT_ERROR,
     RE_MA_MAU,
+    UNKNOWN_YOUTUBE_ERROR,
     LoiTruyCapYouTube,
     che_bi_mat,
     doc_cau_truc_cookie,
     go_ma_mau,
+    phan_loai_loi,
     tim_loi_truy_cap,
+    tom_tat_ky_thuat,
 )
 
 LOGGER = logging.getLogger("youtube.ytdlp")
@@ -272,6 +279,187 @@ def kiem_tra_file_cookie(duong_dan: str) -> None:
     _CACHE_COOKIE[khoa] = True
 
 
+# =====================================================================
+#  Bộ chạy JavaScript (EJS) — điều kiện để cookie đăng nhập dùng được
+# =====================================================================
+
+# yt-dlp 2026.08.19: có cookie đăng nhập thì CHỈ dùng các player client phải giải thử thách JavaScript của YouTube
+# (`web_embedded`, `tv_downgraded`, `web`); `visionos` — client của đường không-cookie đã nghiệm thu, không cần JS — không
+# nhận cookie. Giải thử thách cần HAI thứ (https://github.com/yt-dlp/yt-dlp/wiki/EJS):
+#   1. bộ chạy JS — ở đây Node.js ≥ 22; yt-dlp chỉ TỰ bật deno, nên phải truyền `js_runtimes` kèm đường dẫn;
+#   2. script giải từ gói `yt-dlp-ejs` ĐÚNG bản yt-dlp ghim (2026.08.19 → 0.8.0; khớp major.minor và băm) — bản script
+#      đi kèm yt-dlp thiếu thư viện cho node.
+# KHÔNG cho tải script từ GitHub/npm lúc chạy (`remote_components` để trống): mã được chạy phải nằm trong lock có băm.
+# Không có hai thứ đó, mọi request có cookie chắc chắn hỏng («The page needs to be reloaded» — yt-dlp issue 17389; ca
+# Stable 1.1.0 trên PC2 14/10/2026). Đo ngoại tuyến (cookie giả, chặn mạng): C:\Dev\pc2_test_tools\cookie_js.
+NODE_TOI_THIEU = (22, 0, 0)   # = yt_dlp.utils._jsruntime.NodeJsRuntime.MIN_SUPPORTED_VERSION (test giữ khớp)
+_RE_PHIEN_BAN_NODE = re.compile(r"v(\d+)\.(\d+)\.(\d+)")
+
+
+@dataclass(frozen=True)
+class KhaNangJs:
+    """Máy này có giải được thử thách JavaScript của YouTube không. Chỉ đường dẫn, số phiên bản và lý do — không bí mật."""
+
+    san_sang: bool
+    node: str = ""                # đường dẫn tuyệt đối tới node; rỗng = không thấy
+    node_phien_ban: str = ""
+    ejs_phien_ban: str = ""       # yt-dlp-ejs đã cài; rỗng = không có
+    ly_do: str = ""               # rỗng khi sẵn sàng; mệnh đề tiếng Việt khi chưa («máy thiếu …»)
+
+    def mo_ta(self) -> str:
+        if self.san_sang:
+            return f"Node.js {self.node_phien_ban} + yt-dlp-ejs {self.ejs_phien_ban}"
+        return self.ly_do
+
+
+def _tim_node() -> str:
+    """``node`` trên PATH — CHỈ thư mục tuyệt đối, KHÔNG thư mục hiện hành (khác ``shutil.which`` và ``_find_exe`` của
+    yt-dlp, vốn xét cả thư mục làm việc trên Windows: một node.exe lạ nằm ở đó sẽ được chạy) — rồi thư mục cài mặc định
+    của Node.js. Đường dẫn tìm được truyền thẳng cho yt-dlp nên yt-dlp không tự dò nữa."""
+    ten = "node.exe" if os.name == "nt" else "node"
+    cac_thu_muc = [d.strip().strip('"') for d in os.environ.get("PATH", "").split(os.pathsep)]
+    for bien in ("ProgramFiles", "ProgramW6432"):
+        if os.environ.get(bien):
+            cac_thu_muc.append(os.path.join(os.environ[bien], "nodejs"))
+    for thu_muc in cac_thu_muc:
+        if thu_muc and os.path.isabs(thu_muc) and os.path.isfile(os.path.join(thu_muc, ten)):
+            return os.path.join(thu_muc, ten)
+    return ""
+
+
+_CACHE_NODE: dict = {}
+
+
+def _phien_ban_node(duong_dan: str, chay: Callable = subprocess.run) -> str:
+    """``x.y.z`` của node (rỗng nếu không chạy được). Nhớ theo (đường dẫn, mtime, kích thước) — mỗi lượt yt-dlp có cookie
+    hỏi lại mà chỉ tốn một lần stat; nâng/gỡ Node là file đổi, hỏi lại thật. Không nhớ lần hỏng (vd. hết giờ)."""
+    try:
+        st = os.stat(duong_dan)
+    except OSError:
+        return ""
+    khoa = (duong_dan, st.st_mtime, st.st_size)
+    if khoa in _CACHE_NODE:
+        return _CACHE_NODE[khoa]
+    try:
+        ra = chay([duong_dan, "--version"], capture_output=True, text=True, timeout=15,
+                  creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    m = _RE_PHIEN_BAN_NODE.match((ra.stdout or "").strip())
+    if ra.returncode != 0 or not m:
+        return ""
+    _CACHE_NODE[khoa] = ".".join(m.groups())
+    return _CACHE_NODE[khoa]
+
+
+_CACHE_EJS: list = []
+
+
+def _kiem_ejs() -> tuple:
+    """``(bản yt-dlp-ejs đã cài, bản yt-dlp cần, lý do hỏng)`` theo ĐÚNG luật yt-dlp dùng khi nạp script
+    (``yt_dlp/extractor/youtube/jsc/_builtin/ejs.py``): gói nhìn qua ``yt_dlp.dependencies``, khớp major.minor, khớp băm
+    sha3-512 bản minified. Gói chỉ được nạp lúc import yt-dlp nên kết quả không đổi trong tiến trình — tính một lần."""
+    if _CACHE_EJS:
+        return _CACHE_EJS[0]
+    try:
+        from yt_dlp.dependencies import yt_dlp_ejs
+        from yt_dlp.extractor.youtube.jsc._builtin import vendor
+        can = str(vendor.VERSION)
+    except Exception:  # noqa: BLE001 — yt-dlp đổi cấu trúc nội bộ
+        kq = ("", "", "không đọc được yêu cầu EJS của bản yt-dlp đang cài")
+    else:
+        co = str(getattr(yt_dlp_ejs, "version", "") or "") if yt_dlp_ejs is not None else ""
+        if not co:
+            kq = ("", can, f"máy thiếu gói yt-dlp-ejs {can} (bản yt-dlp này cần đúng bản đó)")
+        elif co.split(".")[:2] != can.split(".")[:2]:
+            kq = (co, can, f"gói yt-dlp-ejs {co} không khớp bản yt-dlp cần ({can})")
+        else:
+            try:
+                import yt_dlp_ejs.yt.solver as giai
+
+                dung = all(hashlib.sha3_512(ham().encode()).hexdigest() == vendor.HASHES.get(ten)
+                           for ham, ten in ((giai.lib, "yt.solver.lib.min.js"), (giai.core, "yt.solver.core.min.js")))
+            except Exception:  # noqa: BLE001
+                dung = False
+            kq = (co, can, "" if dung else f"script của gói yt-dlp-ejs {co} sai băm so với bản yt-dlp kiểm")
+    _CACHE_EJS.append(kq)
+    return kq
+
+
+def kha_nang_js() -> KhaNangJs:
+    """Trạng thái HIỆN TẠI của máy, hỏi lại ở MỖI lượt yt-dlp có cookie — không nhớ lỗi cũ: vừa cài/nâng Node là lượt
+    sau dùng được cookie ngay; gỡ Node là lượt sau thôi gửi request đăng nhập chắc chắn hỏng."""
+    ejs_co, _ejs_can, loi_ejs = _kiem_ejs()
+    node = _tim_node()
+    pb = _phien_ban_node(node) if node else ""
+    toi_thieu = ".".join(map(str, NODE_TOI_THIEU[:1]))
+    ly_do = []
+    if not node:
+        ly_do.append(f"máy thiếu Node.js ≥ {toi_thieu} (không thấy node trên PATH)")
+    elif not pb:
+        ly_do.append(f"Node.js trên máy không chạy được («{node}» không trả phiên bản)")
+    elif tuple(int(x) for x in pb.split(".")) < NODE_TOI_THIEU:
+        ly_do.append(f"Node.js {pb} trên máy quá cũ (cần ≥ {toi_thieu})")
+    if loi_ejs:
+        ly_do.append(loi_ejs)
+    return KhaNangJs(san_sang=not ly_do, node=node, node_phien_ban=pb, ejs_phien_ban=ejs_co,
+                     ly_do="; ".join(ly_do))
+
+
+class CookieCanJs(RuntimeError):
+    """Cookie đăng nhập đã cấu hình nhưng máy chưa giải được thử thách JavaScript — KHÔNG có request nào được gửi.
+
+    ``ly_do``: mệnh đề lý do (``KhaNangJs.ly_do``). Không phải lỗi cookie, không phải YouTube từ chối
+    (``truy_cap_youtube`` nhận theo tên lớp → ``JS_CHALLENGE_ERROR``)."""
+
+    def __init__(self, thong_bao: str, ly_do: str = ""):
+        super().__init__(thong_bao)
+        self.ly_do = ly_do
+        self.chi_tiet = ly_do
+
+
+class LoiGiaiJs(RuntimeError):
+    """Có cookie, bộ chạy JS sẵn sàng, nhưng yt-dlp báo KHÔNG giải được thử thách JavaScript (n/sig) rồi không còn định
+    dạng nào: lỗi bộ giải với player hiện tại của YouTube — KHÔNG đổ cho cookie, KHÔNG tự bỏ đăng nhập.
+    ``chi_tiet``: lỗi gốc của yt-dlp + cảnh báo giải JS (đã che bí mật)."""
+
+    def __init__(self, thong_bao: str, chi_tiet: str = ""):
+        super().__init__(thong_bao)
+        self.chi_tiet = chi_tiet
+
+
+def thong_bao_cookie_can_js(kn: KhaNangJs) -> str:
+    """Câu cho thao tác có cookie bị chặn TRƯỚC khi gửi request (đường không có lùi không-cookie)."""
+    return (f"Cookie đăng nhập YouTube đã cấu hình nhưng chưa dùng được: {kn.ly_do}. Có cookie thì yt-dlp chỉ dùng các "
+            "player client phải giải thử thách JavaScript. Cài Node.js ≥ 22 và dùng bản Tool có gói yt-dlp-ejs, hoặc "
+            "xoá trống ô cookie ở «🔐 Kết nối YouTube» để chạy không đăng nhập. Chưa gửi request nào tới YouTube.")
+
+
+def thong_bao_khong_dang_nhap(kn: KhaNangJs) -> str:
+    """Câu đi kèm MỌI kết quả của lượt chạy không đăng nhập vì máy chưa giải được thử thách JavaScript."""
+    return (f"Đang quét KHÔNG đăng nhập YouTube: cookie đã cấu hình nhưng {kn.ly_do} — có cookie thì yt-dlp chỉ dùng "
+            "các player client phải giải thử thách JavaScript, nên cookie không dùng được. Kết quả này KHÔNG dùng phiên "
+            "đăng nhập. Muốn dùng cookie: cài Node.js ≥ 22 và dùng bản Tool có gói yt-dlp-ejs; muốn hết cảnh báo: xoá "
+            "trống ô cookie ở «🔐 Kết nối YouTube».")
+
+
+def thong_bao_giai_js_hong(kn: KhaNangJs) -> str:
+    return (f"Có cookie đăng nhập nhưng yt-dlp không giải được thử thách JavaScript của YouTube ({kn.mo_ta()}) nên "
+            "không còn định dạng nào — bộ giải có thể đã cũ so với player mới của YouTube (cần cập nhật yt-dlp và "
+            "yt-dlp-ejs). Cookie KHÔNG bị coi là hỏng và Tool KHÔNG tự bỏ đăng nhập; video này chưa được quét.")
+
+
+# Cảnh báo yt-dlp «không giải được thử thách JavaScript» (yt-dlp 2026.08.19 `_video.py`, `jsc/_director.py`). KHÔNG có
+# «No supported JavaScript runtime could be found»: đường không-cookie (visionos, không cần JS) gặp câu đó mỗi lượt.
+DAU_HIEU_JS_HONG = ("n challenge solving failed", "signature solving failed", "challenge solver",
+                    "challenge request")
+
+
+def la_canh_bao_js_hong(tin: Any) -> bool:
+    thap = go_ma_mau(tin).lower()
+    return any(d in thap for d in DAU_HIEU_JS_HONG)
+
+
 @dataclass(frozen=True)
 class CauHinhMang:
     """Mọi tham số mạng/xác thực dùng chung cho các lượt gọi yt-dlp.
@@ -365,6 +553,11 @@ class CauHinhMang:
         ``thao_tac`` ("metadata" | "listing" | "download"): số lần yt-dlp tự thử lại bên trong và
         thời gian nghỉ giữa chúng lấy từ MỘT bảng (``truy_cap_youtube.NGAN_SACH``) thay vì mỗi nơi
         gọi chép tay ``retries=10``. Bỏ trống = như cũ (để mặc định của yt-dlp).
+
+        Có cookie: bật Node.js làm bộ chạy JavaScript (``js_runtimes`` kèm đường dẫn — xem :func:`kha_nang_js`) cho MỌI
+        đường gọi. Máy chưa sẵn sàng thì ném :class:`CookieCanJs` TRƯỚC khi có request (trừ liệt kê kênh — không cần
+        player nên không cần JS); đường quét/tải lùi không-cookie ở :func:`chay_kem_duong_lui_cookie` trước đó. Không
+        cookie: KHÔNG đụng ``js_runtimes`` — đường đã nghiệm thu (visionos, không JS) giữ nguyên từng khoá.
         """
         opts: dict = {
             "quiet": True,
@@ -391,6 +584,12 @@ class CauHinhMang:
         tu_trinh_duyet = phan_tich_cookies_browser(self.cookies_browser)
         if tu_trinh_duyet:
             opts["cookiesfrombrowser"] = tu_trinh_duyet
+        if self.co_cookie:
+            kn = kha_nang_js()
+            if kn.san_sang:
+                opts["js_runtimes"] = {"node": {"path": kn.node}}
+            elif thao_tac != "listing":
+                raise CookieCanJs(thong_bao_cookie_can_js(kn), kn.ly_do)
         opts.update(them)
         return opts
 
@@ -409,12 +608,24 @@ class BoGhiYtdlp:
     Có ``logger`` thì yt-dlp gửi mọi thông báo vào đây thay vì in thẳng ra stderr; ta che bí mật
     trước khi ghi log. Dòng cookie hỏng do ``write_string`` in thẳng thì KHÔNG qua đây — cổng
     ``kiem_tra_file_cookie`` chặn từ đầu nguồn, ``nhat_ky.che_bi_mat`` che ở đầu ra.
+
+    Thứ ba: cảnh báo «không giải được thử thách JavaScript» (:data:`DAU_HIEU_JS_HONG`) — lỗi cuối của yt-dlp khi đó chỉ
+    là «Requested format is not available», trùng chữ ký cookie chết; :func:`chay_kem_duong_lui_cookie` đọc
+    :meth:`canh_bao_js_tu` để không đổ nhầm cho cookie.
     """
 
     def __init__(self, phien: Any = None):
         self.phien = phien
         self.loi: list = []
         self.canh_bao: list = []
+
+    @property
+    def so_canh_bao(self) -> int:
+        return len(self.canh_bao)
+
+    def canh_bao_js_tu(self, moc: int = 0) -> str:
+        """Cảnh báo giải JS hỏng ĐẦU TIÊN kể từ cảnh báo thứ ``moc`` (rỗng nếu không có) — đã che bí mật."""
+        return next((c for c in self.canh_bao[moc:] if la_canh_bao_js_hong(c)), "")
 
     def debug(self, msg: Any) -> None:
         pass
@@ -427,6 +638,8 @@ class BoGhiYtdlp:
         self.canh_bao.append(sach)
         if "cookies are no longer valid" in sach.lower() and self.phien is not None:
             self.phien.ghi_cookie_khong_hop_le()
+        if la_canh_bao_js_hong(sach) and self.phien is not None and hasattr(self.phien, "ghi_canh_bao_js"):
+            self.phien.ghi_canh_bao_js()
         LOGGER.info("event=ytdlp.warning msg=%s", sach)
 
     def error(self, msg: Any) -> None:
@@ -456,120 +669,67 @@ def la_dau_hieu_cookie_chet(loi: Any) -> bool:
     return any(d in thap for d in DAU_HIEU_COOKIE_CHET)
 
 
-# Cookie đăng nhập KHÔNG dùng được trên máy không có bộ chạy JavaScript — khác cookie chết: cookie vẫn sống, nhưng có
-# cookie thì yt-dlp 2026.08.19 chỉ dùng client cần JS (`web_embedded`, `tv_downgraded`, `web`) và LOẠI client không cần
-# JS (`visionos` — không hỗ trợ cookie). Máy không có JS (Stable PC2: không deno, không yt-dlp-ejs) thì không client nào
-# lấy được định dạng, và yt-dlp nêu lý do playability ĐẦU TIÊN — của `tv_downgraded` (yt-dlp issue 17389). Cấu hình
-# `player_client=default,web_embedded` cho đúng danh sách đó nên không cứu được. Đo ngoại tuyến 14/10/2026 trên PC2
-# (cookie giả, chặn mạng); test: `tests/test_cookie_can_js.py`.
-DAU_HIEU_COOKIE_CAN_JS = ("page needs to be reloaded",)
-
-CANH_BAO_COOKIE_CAN_JS = (
-    "Cookie đăng nhập YouTube không dùng được trên máy này: có cookie thì yt-dlp chỉ dùng các client cần bộ chạy "
-    "JavaScript (deno), mà máy chưa có — YouTube trả «The page needs to be reloaded». Đang quét KHÔNG cookie (cách "
-    "đã nghiệm thu). Muốn hết cảnh báo: xoá trống ô cookie ở thanh bên → «🔐 Kết nối YouTube».")
-
-
-class CookieCanJs(RuntimeError):
-    """Lượt đi thẳng không-cookie vì cấu hình cookie này vừa được chứng minh không dùng được trên máy
-    (:data:`DAU_HIEU_COOKIE_CAN_JS`); báo cho bên trên như một lần bỏ cookie."""
-
-
 def la_dau_hieu_cookie_can_js(loi: Any) -> bool:
-    """Lỗi này có phải «có cookie thì không player client nào dùng được» (máy thiếu bộ chạy JavaScript) không?"""
-    if isinstance(loi, CookieCanJs):
-        return True
-    thap = go_ma_mau(loi).lower()
-    return any(d in thap for d in DAU_HIEU_COOKIE_CAN_JS)
+    """Lượt này có chạy KHÔNG đăng nhập vì máy chưa giải được thử thách JavaScript không (:class:`CookieCanJs`)?"""
+    return isinstance(loi, CookieCanJs)
 
 
-class NhoBoCookie:
-    """Nhớ cấu hình cookie vừa được CHỨNG MINH không dùng được trên máy này (lỗi :data:`DAU_HIEU_COOKIE_CAN_JS` và bỏ
-    cookie thì chạy): trong ``song_giay``, mọi lượt dùng ĐÚNG cấu hình cookie đó đi thẳng đường không-cookie.
-
-    Vì sao phải nhớ: lỗi này của MÁY (thiếu bộ chạy JS), không của từng video — không nhớ thì mỗi video lại gửi một bộ
-    request đăng nhập chắc chắn hỏng, và khâu tải còn không lùi được vì lỗi cuối của vòng player client không mang câu
-    gốc. Hết hạn thì dò lại một lần (vd. máy vừa cài bộ chạy JS). Cookie chết KHÔNG đi qua đây: vẫn lùi từng lượt.
-    """
-
-    def __init__(self, song_giay: float = 1800.0, dong_ho: Callable[[], float] = time.monotonic):
-        self.song_giay = song_giay
-        self._dong_ho = dong_ho
-        self._khoa = threading.Lock()
-        self._luc: dict = {}
-
-    @staticmethod
-    def _khoa_cau_hinh(cau_hinh: "CauHinhMang") -> tuple:
-        return (cau_hinh.cookiefile.strip(), cau_hinh.cookies_browser.strip().lower())
-
-    def nho(self, cau_hinh: "CauHinhMang") -> None:
-        with self._khoa:
-            self._luc[self._khoa_cau_hinh(cau_hinh)] = self._dong_ho()
-
-    def con_nho(self, cau_hinh: "CauHinhMang") -> bool:
-        khoa = self._khoa_cau_hinh(cau_hinh)
-        with self._khoa:
-            luc = self._luc.get(khoa)
-            if luc is None:
-                return False
-            if self._dong_ho() - luc > self.song_giay:
-                del self._luc[khoa]
-                return False
-            return True
-
-    def quen(self) -> None:
-        with self._khoa:
-            self._luc.clear()
-
-
-NHO_BO_COOKIE = NhoBoCookie()
+# Lỗi cuối mà một bộ giải JS hỏng có thể gây ra (không còn định dạng / player client không trả gì). Bot, đăng nhập, 429,
+# video gỡ... giữ nguyên loại của chúng dù có cảnh báo JS đi kèm.
+_LOAI_CO_THE_DO_JS = frozenset({FORMAT_OR_EXTRACTOR_ERROR, PLAYER_CLIENT_ERROR, UNKNOWN_YOUTUBE_ERROR})
 
 
 def chay_kem_duong_lui_cookie(
     cau_hinh: "CauHinhMang",
     chay: Callable[["CauHinhMang"], Any],
     khi_bo_cookie: Optional[Callable[[BaseException], None]] = None,
-    nho: Optional[NhoBoCookie] = None,
+    bo_ghi: Optional[BoGhiYtdlp] = None,
 ) -> Any:
-    """Chạy ``chay(cau_hinh)``; cookie chết thì tự chạy lại KHÔNG cookie.
+    """Chạy ``chay(cau_hinh)`` với chính sách cookie MINH BẠCH — không bao giờ để người dùng tưởng đã đăng nhập khi
+    thật ra đang chạy không cookie.
 
-    Vì sao phải tự lùi thay vì chỉ báo lỗi: cookie YouTube hết hiệu lực rất thường
-    xuyên (xoay vòng phiên, đăng xuất, đổi mạng) và **hạn ghi trong file không phản
-    ánh điều đó** — file vẫn "còn 400 ngày" trong khi phiên đã chết. Nếu không lùi,
-    một cookie chết làm hỏng TOÀN BỘ việc quét cho tới khi người dùng tự đoán ra.
+    1. Có cookie mà máy CHƯA giải được thử thách JavaScript (:func:`kha_nang_js` — hỏi TRẠNG THÁI HIỆN TẠI của máy mỗi
+       lượt, không nhớ lỗi cũ): mọi request có cookie chắc chắn hỏng (yt-dlp 2026.08.19 chỉ dùng client cần JS khi có
+       cookie). Không gửi request đăng nhập nào; chạy không cookie và báo ``khi_bo_cookie(CookieCanJs)`` — câu nói rõ
+       «KHÔNG đăng nhập» và vì sao, đi kèm mọi kết quả.
+    2. Có cookie, máy sẵn sàng (Node.js + EJS), yt-dlp báo không giải được thử thách JS (cảnh báo trong ``bo_ghi`` kể từ
+       lượt này) rồi không còn định dạng: ném :class:`LoiGiaiJs` — lỗi bộ giải, KHÔNG phải cookie; không tự bỏ đăng nhập.
+    3. Cookie chết (:data:`DAU_HIEU_COOKIE_CHET` — YouTube chỉ còn trả storyboard): lùi không cookie như trước. Vì sao
+       phải tự lùi: cookie YouTube hết hiệu lực rất thường xuyên (xoay vòng phiên, đăng xuất, đổi mạng) và hạn ghi trong
+       file không phản ánh điều đó; không lùi thì một cookie chết làm hỏng TOÀN BỘ việc quét.
+    4. Mọi lỗi khác ném nguyên ra ngoài: video cần đăng nhập (tuổi, hội viên, riêng tư), YouTube đòi xác minh bot, 429,
+       lỗi player client («The page needs to be reloaded» khi máy đã có JS)... — KHÔNG lùi không cookie, để phiên phân
+       loại đúng và cầu dao dừng lô khi cần.
 
-    Có cookie mà không player client nào dùng được (máy thiếu bộ chạy JavaScript —
-    :data:`DAU_HIEU_COOKIE_CAN_JS`) cũng lùi như vậy, rồi NHỚ (``nho``, mặc định
-    :data:`NHO_BO_COOKIE`) để các lượt sau cùng cấu hình cookie đi thẳng không-cookie.
-
-    Chỉ lùi khi có cookie và lỗi đúng dấu hiệu; mọi lỗi khác ném nguyên ra ngoài để
-    không che mất nguyên nhân thật.
-
-    ``khi_bo_cookie``: gọi khi quyết định lùi, để bên trên ghi log/cảnh báo.
+    ``khi_bo_cookie``: gọi khi quyết định chạy không cookie, để bên trên ghi log/cảnh báo/số đo.
+    ``bo_ghi``: logger yt-dlp của lượt (để đọc cảnh báo giải JS); không có thì bỏ qua bước 2.
     """
-    if nho is None:
-        nho = NHO_BO_COOKIE
-    if cau_hinh.co_cookie and nho.con_nho(cau_hinh):
-        if khi_bo_cookie:
-            khi_bo_cookie(CookieCanJs(CANH_BAO_COOKIE_CAN_JS))
-        return chay(cau_hinh.bo_cookie())
+    if cau_hinh.co_cookie:
+        kn = kha_nang_js()
+        if not kn.san_sang:
+            if khi_bo_cookie:
+                khi_bo_cookie(CookieCanJs(thong_bao_khong_dang_nhap(kn), kn.ly_do))
+            return chay(cau_hinh.bo_cookie())
+    moc = bo_ghi.so_canh_bao if bo_ghi is not None else 0
     try:
         return chay(cau_hinh)
     except Exception as e:  # noqa: BLE001 — phân loại rồi mới quyết định
-        can_js = la_dau_hieu_cookie_can_js(e)
-        if not cau_hinh.co_cookie or not (can_js or la_dau_hieu_cookie_chet(e)):
+        if not cau_hinh.co_cookie:
+            raise
+        js = bo_ghi.canh_bao_js_tu(moc) if bo_ghi is not None else ""
+        if js and phan_loai_loi(e).category in _LOAI_CO_THE_DO_JS:
+            raise LoiGiaiJs(thong_bao_giai_js_hong(kha_nang_js()),
+                            chi_tiet=f"{tom_tat_ky_thuat(e, 200)} | {js[:200]}") from e
+        if not la_dau_hieu_cookie_chet(e):
             raise
         if khi_bo_cookie:
             khi_bo_cookie(e)
         try:
-            ket = chay(cau_hinh.bo_cookie())
+            return chay(cau_hinh.bo_cookie())
         except Exception:  # noqa: BLE001
             # Bỏ cookie vẫn hỏng => cookie không phải nguyên nhân. Ném lỗi GỐC để
             # người dùng thấy đúng vấn đề thật của video, không bị dẫn sai hướng.
             raise e from None
-        if can_js:
-            nho.nho(cau_hinh)
-        return ket
 
 
 class NhoClientTotNhat:

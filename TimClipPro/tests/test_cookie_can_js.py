@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Cookie đăng nhập trên máy KHÔNG có bộ chạy JavaScript không được làm hỏng cả lô quét.
+"""Cookie đăng nhập YouTube: DÙNG ĐƯỢC khi máy giải được thử thách JavaScript (Node.js ≥ 22 + gói yt-dlp-ejs), và MINH
+BẠCH khi không — không bao giờ để người dùng tưởng đã đăng nhập khi thật ra đang chạy không cookie.
 
 Ca thật 14/10/2026, Stable 1.1.0 trên PC2 sau khi đặt `ytdlp_cookies_browser = firefox`: MỌI video lỗi
 
@@ -8,189 +9,304 @@ Ca thật 14/10/2026, Stable 1.1.0 trên PC2 sau khi đặt `ytdlp_cookies_brows
 rồi cầu dao «lỗi trích xuất» dừng cả lô với lời khuyên «có thể yt-dlp cần cập nhật» — sai hướng.
 
 Cơ chế (yt-dlp 2026.08.19 — đúng bản trong lock; đo NGOẠI TUYẾN trên PC2, cookie GIẢ, chặn mạng:
-`C:\\Dev\\pc2_test_tools\\cookie_js\\kiem_client_cookie.py`):
+`C:\\Dev\\pc2_test_tools\\cookie_js\\kiem_node_ejs.py`):
 
 * không cookie → client `visionos` (KHÔNG cần JavaScript) — đường đã nghiệm thu;
-* có cookie đăng nhập → `web_embedded, tv_downgraded, web`, cả ba CẦN bộ chạy JavaScript; `visionos` bị yt-dlp
-  LOẠI vì không hỗ trợ cookie — không client nào vừa nhận cookie vừa không cần JS;
-* PC2 không có bộ chạy JS yt-dlp dùng được (không deno, node chưa bật, không gói yt-dlp-ejs) → không client nào
-  lấy được định dạng → yt-dlp nêu lý do playability ĐẦU TIÊN: của `tv_downgraded` (yt-dlp issue 17389).
-  Cấu hình maintainer gợi ý (`player_client=default,web_embedded`) cho ĐÚNG danh sách trên → không cứu được.
+* có cookie đăng nhập → `web_embedded, tv_downgraded, web`, cả ba phải giải thử thách JavaScript; `visionos` không
+  nhận cookie;
+* giải thử thách cần Node.js ≥ 22 (yt-dlp chỉ tự bật deno → phải truyền `js_runtimes`) + gói `yt-dlp-ejs` ĐÚNG bản
+  yt-dlp ghim (0.8.0). Stable 1.1.0 không có gói đó → không client nào lấy được định dạng → yt-dlp nêu lý do
+  playability ĐẦU TIÊN, của `tv_downgraded` (yt-dlp issue 17389).
 
-Nên: có cookie mà gặp lỗi này thì lùi về không-cookie như cookie chết, và NHỚ một lúc để không gửi lại bộ request
-đăng nhập chắc chắn hỏng cho từng video — khâu tải còn không mang câu gốc (lỗi cuối của vòng player client).
+Chính sách (`ytdlp_chung.chay_kem_duong_lui_cookie`): hỏi TRẠNG THÁI MÁY ở mỗi lượt — không nhớ lỗi cũ, không bộ nhớ
+dùng chung giữa các cấu hình/tài khoản; máy chưa sẵn sàng → KHÔNG gửi request đăng nhập nào, chạy không cookie và nói
+rõ «KHÔNG đăng nhập» trong MỌI kết quả; máy sẵn sàng → cookie + Node ở mọi đường gọi, mỗi lỗi giữ đúng loại của nó
+(xác minh bot, cần đăng nhập, player client, bộ giải JS) — không tự bỏ đăng nhập, không thành kết quả âm tính.
 """
 
 import pytest
 import yt_dlp
 
+import giam_sat_tai
+import scan_ui
 import truy_cap_youtube as t
 import ytdlp_chung as y
 from engine import Engine, Match, ScanResult, chu_ky_chinh_sach
 from kho_gia import ghi_kho
-from ytdlp_gia import YdlKichBan, info_mau
+from ytdlp_gia import AUTH, BOT, YdlKichBan, info_mau
 
 LOI_RELOAD = "ERROR: [youtube] {id}: The page needs to be reloaded."
-# Khâu tải có cookie: vòng player client hỏng hết, lỗi cuối KHÔNG mang câu gốc và không phải dấu hiệu cookie chết.
-LOI_TAI_CO_COOKIE = "ERROR: [youtube] {id}: Failed to extract any player response"
 LOI_COOKIE_CHET = "ERROR: [youtube] {id}: Requested format is not available"
+HOI_VIEN = "ERROR: [youtube] {id}: Join this channel to get access to members-only content like this video."
+CANH_BAO_N = ("[youtube] {id}: n challenge solving failed: Some formats may be missing. Ensure you have a supported "
+              "JavaScript runtime and challenge solver script distribution installed.")
+CANH_BAO_KHONG_JS_BINH_THUONG = (
+    "[youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another "
+    "runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config.")
 
 CO_COOKIE = y.CauHinhMang(cookies_browser="firefox")
 KHONG_COOKIE = y.CauHinhMang()
-# Bộ nhớ «bỏ cookie» (y.NHO_BO_COOKIE) sống ở mức module: conftest quên nó sau MỖI test.
+
+SAN_SANG = y.KhaNangJs(True, node=r"C:\gia\nodejs\node.exe", node_phien_ban="24.21.0", ejs_phien_ban="0.8.0")
+THIEU_EJS = y.KhaNangJs(False, node=r"C:\gia\nodejs\node.exe", node_phien_ban="24.21.0",
+                        ly_do="máy thiếu gói yt-dlp-ejs 0.8.0 (bản yt-dlp này cần đúng bản đó)")
+THIEU_NODE = y.KhaNangJs(False, ejs_phien_ban="0.8.0",
+                         ly_do="máy thiếu Node.js ≥ 22 (không thấy node trên PATH)")
+
+
+@pytest.fixture
+def may(monkeypatch):
+    """Đặt trạng thái máy (``ytdlp_chung.kha_nang_js``); đổi được giữa chừng như khi người dùng cài/gỡ Node."""
+    hien = {"kn": SAN_SANG}
+    monkeypatch.setattr(y, "kha_nang_js", lambda: hien["kn"])
+
+    def dat(kn):
+        hien["kn"] = kn
+
+    return dat
 
 
 def _loi(mau, ma="OPgD5wl0fAY"):
     return RuntimeError(mau.format(id=ma))
 
 
-# ---------------------------------------------------------------- nhận dạng
-
-def test_nhan_dien_loi_cookie_can_js():
-    assert y.la_dau_hieu_cookie_can_js(_loi(LOI_RELOAD))
-    assert y.la_dau_hieu_cookie_can_js("the page needs to be reloaded")
-
-
-@pytest.mark.parametrize("tin", [
-    LOI_COOKIE_CHET,
-    "ERROR: [youtube] {id}: Sign in to confirm you're not a bot.",
-    "ERROR: unable to download video data: HTTP Error 403: Forbidden",
-    "ERROR: [youtube] {id}: Video unavailable",
-    LOI_TAI_CO_COOKIE,
-])
-def test_khong_nham_loi_khac(tin):
-    assert not y.la_dau_hieu_cookie_can_js(_loi(tin))
-
-
-# ---------------------------------------------------------------- đường lui
-
-def test_co_cookie_gap_reload_thi_lui_ve_khong_cookie():
-    da_goi = []
-
+def _ghi_cookie(da_goi, loi_khi_co=None, ket="ok"):
+    """``chay(cau_hinh)`` giả: ghi lại có cookie hay không; có cookie thì ném ``loi_khi_co`` (nếu có)."""
     def chay(ch):
         da_goi.append(ch.co_cookie)
-        if ch.co_cookie:
-            raise _loi(LOI_RELOAD)
-        return "visionos"
-
-    assert y.chay_kem_duong_lui_cookie(CO_COOKIE, chay) == "visionos"
-    assert da_goi == [True, False]
+        if ch.co_cookie and loi_khi_co:
+            raise _loi(loi_khi_co)
+        return ket
+    return chay
 
 
-def test_bao_ben_tren_dung_nguyen_nhan():
-    nhan = []
+# ---------------------------------------------------------------- tuỳ chọn yt-dlp (mọi đường gọi)
 
-    def chay(ch):
-        if ch.co_cookie:
-            raise _loi(LOI_RELOAD)
-        return "ok"
-
-    y.chay_kem_duong_lui_cookie(CO_COOKIE, chay, khi_bo_cookie=nhan.append)
-    assert len(nhan) == 1 and y.la_dau_hieu_cookie_can_js(nhan[0])
+@pytest.mark.parametrize("thao_tac", ["metadata", "download", "listing", ""])
+def test_co_cookie_may_san_sang_bat_node_o_moi_thao_tac(may, thao_tac):
+    opts = CO_COOKIE.tuy_chon(thao_tac)
+    assert opts["js_runtimes"] == {"node": {"path": SAN_SANG.node}}
+    assert opts["cookiesfrombrowser"] == ("firefox", None, None, None)
+    assert "remote_components" not in opts, "không tải script giải từ GitHub/npm lúc chạy — chỉ gói trong lock"
 
 
-def test_nho_de_luot_sau_khong_gui_lai_request_dang_nhap():
-    """Lượt sau (vd. khâu tải của chính video đó) có cookie sẽ hỏng với câu KHÁC — vẫn phải đi thẳng không-cookie."""
-    y.chay_kem_duong_lui_cookie(
-        CO_COOKIE, lambda ch: (_ for _ in ()).throw(_loi(LOI_RELOAD)) if ch.co_cookie else "ok")
-    da_goi = []
-
-    def tai(ch):
-        da_goi.append(ch.co_cookie)
-        if ch.co_cookie:
-            raise _loi(LOI_TAI_CO_COOKIE)
-        return "đã tải"
-
-    assert y.chay_kem_duong_lui_cookie(CO_COOKIE, tai) == "đã tải"
-    assert da_goi == [False], "không gửi lại bộ request đăng nhập chắc chắn hỏng"
-
-
-def test_luot_nho_van_bao_ben_tren():
-    """Lô sau (phiên mới) đi thẳng không-cookie vẫn phải hiện cảnh báo vì sao bỏ cookie."""
-    y.chay_kem_duong_lui_cookie(
-        CO_COOKIE, lambda ch: (_ for _ in ()).throw(_loi(LOI_RELOAD)) if ch.co_cookie else "ok")
-    nhan = []
-    y.chay_kem_duong_lui_cookie(CO_COOKIE, lambda ch: "ok", khi_bo_cookie=nhan.append)
-    assert len(nhan) == 1 and y.la_dau_hieu_cookie_can_js(nhan[0])
-
-
-def test_nho_het_han_thi_do_lai():
-    gio = [1000.0]
-    nho = y.NhoBoCookie(song_giay=60.0, dong_ho=lambda: gio[0])
-
-    def chay(ch):
-        if ch.co_cookie:
-            raise _loi(LOI_RELOAD)
-        return "ok"
-
-    y.chay_kem_duong_lui_cookie(CO_COOKIE, chay, nho=nho)
-    da_goi = []
-    y.chay_kem_duong_lui_cookie(CO_COOKIE, lambda ch: da_goi.append(ch.co_cookie) or "ok", nho=nho)
-    assert da_goi == [False]
-    gio[0] += 61.0
-    da_goi.clear()
-    y.chay_kem_duong_lui_cookie(CO_COOKIE, lambda ch: da_goi.append(ch.co_cookie) or "ok", nho=nho)
-    assert da_goi == [True], "hết hạn nhớ thì dò lại cookie (vd. máy vừa cài bộ chạy JavaScript)"
-
-
-def test_nho_theo_dung_cau_hinh_cookie():
-    y.chay_kem_duong_lui_cookie(
-        CO_COOKIE, lambda ch: (_ for _ in ()).throw(_loi(LOI_RELOAD)) if ch.co_cookie else "ok")
-    for khac in (y.CauHinhMang(cookies_browser="chrome"), y.CauHinhMang(cookiefile="khac.txt")):
-        da_goi = []
-        y.chay_kem_duong_lui_cookie(khac, lambda ch: da_goi.append(ch.co_cookie) or "ok")
-        assert da_goi == [True], "cấu hình cookie khác chưa bị chứng minh là hỏng"
-
-
-def test_khong_nho_khi_bo_cookie_van_hong():
-    """Bỏ cookie vẫn hỏng => cookie không phải nguyên nhân: báo lỗi GỐC, không nhớ gì."""
-    def chay(ch):
-        if ch.co_cookie:
-            raise _loi(LOI_RELOAD)
-        raise _loi("ERROR: [youtube] {id}: Video unavailable")
-
-    with pytest.raises(RuntimeError, match="reloaded"):
-        y.chay_kem_duong_lui_cookie(CO_COOKIE, chay)
-    da_goi = []
-    y.chay_kem_duong_lui_cookie(CO_COOKIE, lambda ch: da_goi.append(ch.co_cookie) or "ok")
-    assert da_goi == [True]
-
-
-# ---------------------------------------------------------------- không đổi hành vi cũ
-
-def test_cookie_chet_giu_nguyen_hanh_vi_cu():
-    """Cookie chết: vẫn lùi TỪNG lượt như trước (không nhớ) — ngoài phạm vi bản sửa này."""
-    for _ in range(2):
-        da_goi = []
-
-        def chay(ch):
-            da_goi.append(ch.co_cookie)
-            if ch.co_cookie:
-                raise _loi(LOI_COOKIE_CHET)
-            return "ok"
-
-        assert y.chay_kem_duong_lui_cookie(CO_COOKIE, chay) == "ok"
-        assert da_goi == [True, False]
-
-
-def test_khong_cookie_gap_reload_thi_bao_nguyen_loi():
-    """Đường không-cookie đã nghiệm thu: lỗi đi thẳng ra, một lần gọi, không nhớ gì."""
-    dem = []
-
-    def chay(ch):
-        dem.append(ch.co_cookie)
-        raise _loi(LOI_RELOAD)
-
-    with pytest.raises(RuntimeError, match="reloaded"):
-        y.chay_kem_duong_lui_cookie(KHONG_COOKIE, chay)
-    assert dem == [False]
-
-
-def test_tuy_chon_khong_cookie_khong_doi():
-    """Không cookie: tuỳ chọn yt-dlp giữ nguyên từng khoá (không thêm player_client/extractor_args)."""
+@pytest.mark.parametrize("kn", [SAN_SANG, THIEU_EJS, THIEU_NODE])
+def test_khong_cookie_tuy_chon_giu_nguyen_tung_khoa(may, kn):
+    """Đường không-cookie đã nghiệm thu (visionos, không JS): không thêm js_runtimes/player_client/extractor_args."""
+    may(kn)
     assert KHONG_COOKIE.tuy_chon("metadata", noplaylist=True) == {
         "quiet": True, "no_warnings": True, "no_color": True, "socket_timeout": 30,
         **t.NGAN_SACH["metadata"].tuy_chon_yt_dlp(), "sleep_interval_requests": 1.0, "noplaylist": True}
+
+
+@pytest.mark.parametrize("thao_tac", ["metadata", "download"])
+def test_co_cookie_may_chua_san_sang_chan_truoc_moi_request(may, thao_tac):
+    """Đường không có lùi không-cookie (vd. chi tiết kênh, vá metadata, youtube-doctor): báo đúng lý do, chưa gửi gì."""
+    may(THIEU_EJS)
+    with pytest.raises(y.CookieCanJs) as ei:
+        CO_COOKIE.tuy_chon(thao_tac)
+    f = t.phan_loai_loi(ei.value)
+    assert f.category == t.JS_CHALLENGE_ERROR, "câu có chữ «cookie» vẫn không được thành lỗi cookie"
+    assert "thiếu gói yt-dlp-ejs 0.8.0" in f.human_message_vi and "Chưa gửi request" in f.human_message_vi
+
+
+def test_liet_ke_kenh_khong_can_js_nen_giu_cookie(may):
+    may(THIEU_NODE)
+    opts = CO_COOKIE.tuy_chon("listing")
+    assert opts["cookiesfrombrowser"][0] == "firefox" and "js_runtimes" not in opts
+
+
+# ---------------------------------------------------------------- chính sách cookie
+
+def test_may_chua_san_sang_chay_khong_cookie_va_noi_ro(may):
+    may(THIEU_EJS)
+    da_goi, nhan = [], []
+    assert y.chay_kem_duong_lui_cookie(CO_COOKIE, _ghi_cookie(da_goi), khi_bo_cookie=nhan.append) == "ok"
+    assert da_goi == [False], "không gửi request đăng nhập chắc chắn hỏng"
+    assert len(nhan) == 1 and isinstance(nhan[0], y.CookieCanJs)
+    assert "KHÔNG đăng nhập" in str(nhan[0]) and THIEU_EJS.ly_do in str(nhan[0])
+    assert nhan[0].ly_do == THIEU_EJS.ly_do
+
+
+def test_may_san_sang_dung_cookie(may):
+    da_goi, nhan = [], []
+    assert y.chay_kem_duong_lui_cookie(CO_COOKIE, _ghi_cookie(da_goi), khi_bo_cookie=nhan.append) == "ok"
+    assert da_goi == [True] and nhan == []
+
+
+def test_js_hoat_dong_tro_lai_thi_dung_cookie_ngay_khong_nho_loi_cu(may):
+    da_goi = []
+    may(THIEU_NODE)
+    y.chay_kem_duong_lui_cookie(CO_COOKIE, _ghi_cookie(da_goi))
+    may(SAN_SANG)                       # người dùng vừa cài Node.js
+    y.chay_kem_duong_lui_cookie(CO_COOKIE, _ghi_cookie(da_goi))
+    may(THIEU_NODE)                     # gỡ Node
+    y.chay_kem_duong_lui_cookie(CO_COOKIE, _ghi_cookie(da_goi))
+    assert da_goi == [False, True, False]
+
+
+def test_khong_con_bo_nho_dung_chung_giua_cau_hinh_hay_tai_khoan(may):
+    """Bản trước nhớ «bỏ cookie» 30 phút ở mức tiến trình: một lỗi cũ làm mọi phiên/tài khoản cùng cấu hình chạy không
+    cookie. Nay quyết định chỉ theo trạng thái máy LÚC ĐÓ."""
+    assert not hasattr(y, "NhoBoCookie") and not hasattr(y, "NHO_BO_COOKIE")
+    with pytest.raises(RuntimeError, match="reloaded"):
+        y.chay_kem_duong_lui_cookie(CO_COOKIE, _ghi_cookie([], LOI_RELOAD))
+    for cau_hinh in (CO_COOKIE, y.CauHinhMang(cookies_browser="chrome"), y.CauHinhMang(cookiefile="khac.txt")):
+        da_goi = []
+        y.chay_kem_duong_lui_cookie(cau_hinh, _ghi_cookie(da_goi))
+        assert da_goi == [True]
+
+
+def test_reload_khi_may_san_sang_la_loi_player_client_khong_tu_bo_dang_nhap(may):
+    da_goi, nhan = [], []
+    with pytest.raises(RuntimeError, match="reloaded") as ei:
+        y.chay_kem_duong_lui_cookie(CO_COOKIE, _ghi_cookie(da_goi, LOI_RELOAD), khi_bo_cookie=nhan.append)
+    assert da_goi == [True] and nhan == []
+    assert t.phan_loai_loi(ei.value).category == t.PLAYER_CLIENT_ERROR
+
+
+@pytest.mark.parametrize("mau,loai", [(BOT, t.BOT_CHALLENGE), (AUTH, t.AUTH_REQUIRED), (HOI_VIEN, t.AUTH_REQUIRED)])
+def test_bot_hay_video_can_dang_nhap_khong_lui_khong_cookie(may, mau, loai):
+    """Video cần đăng nhập (tuổi, hội viên) hay YouTube đòi xác minh: KHÔNG thử lại không cookie."""
+    da_goi = []
+    with pytest.raises(RuntimeError) as ei:
+        y.chay_kem_duong_lui_cookie(CO_COOKIE, _ghi_cookie(da_goi, mau))
+    assert da_goi == [True]
+    assert t.phan_loai_loi(ei.value).category == loai
+
+
+def test_bo_giai_js_hong_khong_do_cho_cookie(may):
+    """Máy «sẵn sàng» nhưng bộ giải không giải được player hiện tại: lỗi cuối «Requested format is not available»
+    trùng chữ ký cookie chết — cảnh báo n challenge cho biết đây là lỗi bộ giải, không phải cookie."""
+    bo_ghi = y.BoGhiYtdlp(t.PhienYouTube())
+    da_goi, nhan = [], []
+
+    def chay(ch):
+        da_goi.append(ch.co_cookie)
+        if ch.co_cookie:
+            bo_ghi.warning(CANH_BAO_N.format(id="OPgD5wl0fAY"))
+            raise _loi(LOI_COOKIE_CHET)
+        return "ok"
+
+    with pytest.raises(y.LoiGiaiJs) as ei:
+        y.chay_kem_duong_lui_cookie(CO_COOKIE, chay, khi_bo_cookie=nhan.append, bo_ghi=bo_ghi)
+    assert da_goi == [True] and nhan == [], "không tự bỏ đăng nhập"
+    f = t.phan_loai_loi(ei.value)
+    assert f.category == t.JS_CHALLENGE_ERROR
+    assert "KHÔNG bị coi là hỏng" in f.human_message_vi and "Node.js 24.21.0" in f.human_message_vi
+    assert "n challenge solving failed" in f.technical_summary and "Requested format" in f.technical_summary
+    assert bo_ghi.phien.tom_tat()["js_challenge_warnings"] == 1
+
+
+def test_canh_bao_js_cua_luot_truoc_khong_tinh_cho_luot_nay(may):
+    bo_ghi = y.BoGhiYtdlp()
+    bo_ghi.warning(CANH_BAO_N.format(id="luotTruoc01"))
+    da_goi = []
+    assert y.chay_kem_duong_lui_cookie(CO_COOKIE, _ghi_cookie(da_goi, LOI_COOKIE_CHET), bo_ghi=bo_ghi) == "ok"
+    assert da_goi == [True, False], "cookie chết: vẫn lùi như trước"
+
+
+def test_canh_bao_js_kem_loi_bot_van_la_bot(may):
+    bo_ghi = y.BoGhiYtdlp()
+
+    def chay(ch):
+        bo_ghi.warning(CANH_BAO_N.format(id="OPgD5wl0fAY"))
+        raise _loi(BOT)
+
+    with pytest.raises(RuntimeError) as ei:
+        y.chay_kem_duong_lui_cookie(CO_COOKIE, chay, bo_ghi=bo_ghi)
+    assert not isinstance(ei.value, y.LoiGiaiJs)
+    assert t.phan_loai_loi(ei.value).category == t.BOT_CHALLENGE
+
+
+def test_canh_bao_khong_js_cua_duong_khong_cookie_khong_phai_bo_giai_hong():
+    assert not y.la_canh_bao_js_hong(CANH_BAO_KHONG_JS_BINH_THUONG)
+    assert y.la_canh_bao_js_hong(CANH_BAO_N)
+    assert y.la_canh_bao_js_hong("[youtube] [jsc] Remote component challenge solver script (node) was skipped.")
+    assert y.la_canh_bao_js_hong('[youtube] [jsc:node] Error solving n challenge request using "node" provider')
+
+
+def test_cookie_chet_giu_nguyen_hanh_vi_cu(may):
+    for _ in range(2):
+        da_goi = []
+        assert y.chay_kem_duong_lui_cookie(CO_COOKIE, _ghi_cookie(da_goi, LOI_COOKIE_CHET)) == "ok"
+        assert da_goi == [True, False]
+
+
+@pytest.mark.parametrize("kn", [SAN_SANG, THIEU_EJS])
+def test_khong_cookie_loi_di_thang_ra_mot_lan(may, kn):
+    may(kn)
+    da_goi, nhan = [], []
+
+    def chay(ch):
+        da_goi.append(ch.co_cookie)
+        raise _loi(LOI_RELOAD)
+
+    with pytest.raises(RuntimeError, match="reloaded"):
+        y.chay_kem_duong_lui_cookie(KHONG_COOKIE, chay, khi_bo_cookie=nhan.append)
+    assert da_goi == [False] and nhan == []
+
+
+# ---------------------------------------------------------------- phân loại: không gộp tất cả thành lỗi cookie
+
+def test_bon_loai_loi_tach_rieng():
+    loai = {
+        "js": t.phan_loai_loi(y.CookieCanJs(y.thong_bao_cookie_can_js(THIEU_EJS), THIEU_EJS.ly_do)).category,
+        "client": t.phan_loai_loi(_loi(LOI_RELOAD)).category,
+        "cookie": t.phan_loai_loi(RuntimeError("The provided YouTube account cookies are no longer valid.")).category,
+        "bot": t.phan_loai_loi(_loi(BOT)).category,
+    }
+    assert loai == {"js": t.JS_CHALLENGE_ERROR, "client": t.PLAYER_CLIENT_ERROR,
+                    "cookie": t.COOKIE_INVALID_OR_EXPIRED, "bot": t.BOT_CHALLENGE}
+
+
+def test_nguong_cau_dao_va_doi_client_cho_loai_moi():
+    assert t.NGUONG_MO[t.JS_CHALLENGE_ERROR] == 2 and t.NGUONG_MO[t.PLAYER_CLIENT_ERROR] == 5
+    assert t.JS_CHALLENGE_ERROR in t.DUNG_DOI_CLIENT, "có cookie thì mọi client nhận cookie đều cần JS"
+    assert t.PLAYER_CLIENT_ERROR not in t.DUNG_DOI_CLIENT, "client khác có thể được"
+    # cli.py / youtube-doctor in «YouTube chặn truy cập» + mã 3 cho LOAI_TRUY_CAP — máy thiếu JS không phải YouTube chặn.
+    assert not ({t.JS_CHALLENGE_ERROR, t.PLAYER_CLIENT_ERROR} & t.LOAI_TRUY_CAP)
+
+
+# ---------------------------------------------------------------- phiên + giao diện: nói đúng chế độ
+
+def test_phien_ghi_khong_dang_nhap_khac_cookie_bi_tu_choi():
+    p = t.PhienYouTube()
+    p.ghi_lui_cookie(y.CookieCanJs(y.thong_bao_khong_dang_nhap(THIEU_EJS), THIEU_EJS.ly_do))
+    assert p.cookie_bi_tu_choi is False, "YouTube KHÔNG từ chối cookie — máy thiếu bộ giải"
+    so = p.tom_tat()
+    assert so["cookie_unusable_no_js"] == 1 and so["cookie_fallbacks"] == 0
+    assert so["cookie_unusable_reason"] == THIEU_EJS.ly_do
+    dong = scan_ui.dong_trang_thai_youtube(t.chan_doan_cookie("", cookies_browser="firefox"), p)
+    assert dong[0][0] == "warning" and "KHÔNG đăng nhập" in dong[0][1] and "xuất lại" not in dong[0][1]
+
+
+def test_cau_dao_mo_khi_dang_khong_dang_nhap_noi_ro():
+    p = t.PhienYouTube()
+    p.ghi_lui_cookie(y.CookieCanJs("x", THIEU_EJS.ly_do))
+    p.ghi_loi(_loi(BOT))
+    assert p.mo and "KHÔNG đăng nhập" in p.thong_bao_dung() and THIEU_EJS.ly_do in p.thong_bao_dung()
+
+
+def test_trang_thai_ui_noi_ro_dung_cookie_hay_khong():
+    cd = t.chan_doan_cookie("", cookies_browser="firefox")
+    dung = scan_ui.dong_trang_thai_youtube(cd, None, SAN_SANG)
+    assert dung[-1] == ("info", "Khi quét: DÙNG cookie đăng nhập — yt-dlp giải thử thách JavaScript bằng "
+                                "Node.js 24.21.0 + yt-dlp-ejs 0.8.0.")
+    khong = scan_ui.dong_trang_thai_youtube(cd, None, THIEU_EJS)
+    assert khong[-1][0] == "warning" and "CHƯA dùng được" in khong[-1][1] and "KHÔNG đăng nhập" in khong[-1][1]
+    assert scan_ui.dong_trang_thai_youtube(t.chan_doan_cookie(""), None, THIEU_EJS) == [
+        ("info", "Cookie: chưa cấu hình.")], "không cấu hình cookie thì không nói gì về JS"
+
+
+def test_engine_canh_bao_khong_dang_nhap(tmp_path):
+    e = Engine(root=str(tmp_path), data_dir=str(tmp_path / "d"), out_dir=str(tmp_path / "r"))
+    e.canh_bao_mang = []
+    loi = y.CookieCanJs(y.thong_bao_khong_dang_nhap(THIEU_EJS), THIEU_EJS.ly_do)
+    e._canh_bao_cookie_chet(loi)
+    e._canh_bao_cookie_chet(loi)
+    assert len(e.canh_bao_mang) == 1, "không lặp lại cùng một cảnh báo cho mỗi lượt"
+    assert "KHÔNG đăng nhập" in e.canh_bao_mang[0] and "hết hiệu lực" not in e.canh_bao_mang[0]
 
 
 # ---------------------------------------------------------------- cả lô quét thật (Engine + phiên + cầu dao)
@@ -230,30 +346,90 @@ def _eng(tmp_path, monkeypatch, ydl) -> Engine:
     return e
 
 
+def _co_cookie(opts) -> bool:
+    return bool(opts.get("cookiesfrombrowser") or opts.get("cookiefile"))
+
+
 def _theo_cookie(loi_khi_co_cookie, ket_khi_khong):
     def hanh_vi(phien, ma):
-        co = bool(phien.opts.get("cookiesfrombrowser") or phien.opts.get("cookiefile"))
-        return loi_khi_co_cookie if co else ket_khi_khong(ma)
+        return loi_khi_co_cookie if _co_cookie(phien.opts) else ket_khi_khong(ma)
     return hanh_vi
 
 
-def test_lo_6_video_co_cookie_firefox_khong_con_hong_hang_loat(tmp_path, monkeypatch):
+def test_lo_may_chua_san_sang_khong_gui_request_dang_nhap_va_noi_ro(tmp_path, monkeypatch, may):
+    """Đúng ca Stable 1.1.0 (thiếu gói yt-dlp-ejs): có cookie thì yt-dlp chắc chắn hỏng — không gửi request nào có
+    cookie, mỗi video đúng một lần lấy thông tin + một lần tải, MỌI kết quả ghi rõ «KHÔNG đăng nhập»."""
+    may(THIEU_EJS)
     ma = [f"vid{i:08d}" for i in range(6)]
     ydl = YdlKichBan(info={"*": _theo_cookie(LOI_RELOAD, info_mau)},
-                     tai={"*": _theo_cookie(LOI_TAI_CO_COOKIE, lambda _m: None)})
+                     tai={"*": _theo_cookie(LOI_RELOAD, lambda _m: None)})
     e = _eng(tmp_path, monkeypatch, ydl)
     ket = list(e.scan_iter([f"https://youtu.be/{m}" for m in ma]))
     assert [k.status for k in ket].count("error") == 0, [k.note for k in ket]
     assert all(k.matches for k in ket)
-    phien_co_cookie = [bool(o.get("cookiesfrombrowser")) for o in ydl.opts]
-    assert phien_co_cookie.count(True) == 1, "chỉ MỘT lượt đăng nhập chắc chắn hỏng cho cả lô"
-    assert ydl.dem("info") == 7 and ydl.dem("tai") == 6
-    assert any("JavaScript" in c for c in e.canh_bao_mang), e.canh_bao_mang
-    assert not any("hết hiệu lực" in c for c in e.canh_bao_mang), "cookie không chết — đừng dẫn sai hướng"
+    assert not any(_co_cookie(o) for o in ydl.opts), "không một request đăng nhập chắc chắn hỏng nào"
+    assert ydl.dem("info") == 6 and ydl.dem("tai") == 6
+    assert all("KHÔNG đăng nhập" in (k.note or "") and "yt-dlp-ejs" in (k.note or "") for k in ket)
+    assert not any("hết hiệu lực" in (k.note or "") for k in ket), "cookie không chết — đừng dẫn sai hướng"
+    phien = e.phien_youtube_cuoi
+    assert phien is not None and phien.cookie_bi_tu_choi is False and phien.khong_dang_nhap_ly_do
 
 
-def test_lo_khong_cookie_giu_nguyen_so_request(tmp_path, monkeypatch):
-    """Đường không-cookie đã nghiệm thu: mỗi video đúng một lần lấy thông tin + một lần tải, không cảnh báo."""
+def test_lo_may_san_sang_dung_cookie_va_node_moi_luot(tmp_path, monkeypatch, may):
+    ma = [f"vid{i:08d}" for i in range(3)]
+    ydl = YdlKichBan()
+    e = _eng(tmp_path, monkeypatch, ydl)
+    ket = list(e.scan_iter([f"https://youtu.be/{m}" for m in ma]))
+    assert [k.status for k in ket].count("error") == 0
+    assert ydl.dem("info") == 3 and ydl.dem("tai") == 3
+    assert all(_co_cookie(o) and o.get("js_runtimes") == {"node": {"path": SAN_SANG.node}} for o in ydl.opts)
+    assert not any("remote_components" in o for o in ydl.opts)
+    assert not any("KHÔNG đăng nhập" in (k.note or "") for k in ket)
+
+
+def test_lo_reload_mot_video_la_loi_truy_cap_khong_phai_am_tinh(tmp_path, monkeypatch, may):
+    ma = [f"vid{i:08d}" for i in range(3)]
+    ydl = YdlKichBan(info={ma[1]: LOI_RELOAD})
+    e = _eng(tmp_path, monkeypatch, ydl)
+    ket = list(e.scan_iter([f"https://youtu.be/{m}" for m in ma]))
+    assert [k.status for k in ket] == ["ok", "error", "ok"], [k.note for k in ket]
+    assert ket[1].loi_truy_cap is not None and ket[1].loi_truy_cap.category == t.PLAYER_CLIENT_ERROR
+    assert not ket[1].matches
+    lan_hoi = [(g, _co_cookie(o)) for g, o in zip(ydl.goi, ydl.opts) if g[1] == ma[1]]
+    assert lan_hoi == [(("info", ma[1], ""), True)], "một lần, có cookie — không tự thử lại không đăng nhập"
+    assert ma[1] not in e.ids_da_quet(), "video chưa quét không được tính là đã quét"
+
+
+def test_lo_bot_dung_ca_lo_khong_lui_khong_cookie(tmp_path, monkeypatch, may):
+    ma = [f"vid{i:08d}" for i in range(4)]
+    ydl = YdlKichBan(info={"*": BOT})
+    e = _eng(tmp_path, monkeypatch, ydl)
+    ket = list(e.scan_iter([f"https://youtu.be/{m}" for m in ma]))
+    assert len(ydl.goi) == 1 and _co_cookie(ydl.opts[0]), "một request rồi dừng — không thử lại không cookie"
+    assert ket[0].loi_truy_cap.category == t.BOT_CHALLENGE
+    assert all(k.loi_truy_cap.category == t.BLOCKED_BY_BREAKER for k in ket[1:])
+
+
+def test_lo_bo_giai_js_hong_dung_sau_hai_video_khong_bo_dang_nhap(tmp_path, monkeypatch, may):
+    def hong(phien, ma):
+        phien.opts["logger"].warning(CANH_BAO_N.format(id=ma))
+        return LOI_COOKIE_CHET
+
+    ma = [f"vid{i:08d}" for i in range(4)]
+    ydl = YdlKichBan(info={"*": hong})
+    e = _eng(tmp_path, monkeypatch, ydl)
+    ket = list(e.scan_iter([f"https://youtu.be/{m}" for m in ma]))
+    assert all(_co_cookie(o) for o in ydl.opts), "không tự bỏ đăng nhập"
+    assert ydl.dem("info") == 2, "cầu dao «JavaScript» mở sau hai video"
+    assert [k.loi_truy_cap.category for k in ket] == [t.JS_CHALLENGE_ERROR] * 2 + [t.BLOCKED_BY_BREAKER] * 2
+    assert not any("hết hiệu lực" in (k.note or "") for k in ket)
+
+
+@pytest.mark.parametrize("kn", [SAN_SANG, THIEU_EJS])
+def test_lo_khong_cookie_giu_nguyen_so_request(tmp_path, monkeypatch, may, kn):
+    """Đường không-cookie đã nghiệm thu: mỗi video đúng một lần lấy thông tin + một lần tải, không cảnh báo, không JS
+    — dù máy có sẵn Node/EJS hay không."""
+    may(kn)
     ma = [f"vid{i:08d}" for i in range(3)]
     ydl = YdlKichBan()
     e = _eng(tmp_path, monkeypatch, ydl)
@@ -261,15 +437,48 @@ def test_lo_khong_cookie_giu_nguyen_so_request(tmp_path, monkeypatch):
     ket = list(e.scan_iter([f"https://youtu.be/{m}" for m in ma]))
     assert [k.status for k in ket].count("error") == 0
     assert ydl.dem("info") == 3 and ydl.dem("tai") == 3
-    assert not any(o.get("cookiesfrombrowser") or o.get("cookiefile") for o in ydl.opts)
+    assert not any(_co_cookie(o) or "js_runtimes" in o for o in ydl.opts)
     assert e.canh_bao_mang == []
 
 
-def test_engine_canh_bao_cookie_can_js(tmp_path):
-    e = Engine(root=str(tmp_path), data_dir=str(tmp_path / "d"), out_dir=str(tmp_path / "r"))
-    e.canh_bao_mang = []
-    e._canh_bao_cookie_chet(_loi(LOI_RELOAD))
-    assert len(e.canh_bao_mang) == 1
-    assert "JavaScript" in e.canh_bao_mang[0] and "hết hiệu lực" not in e.canh_bao_mang[0]
-    e._canh_bao_cookie_chet(_loi(LOI_RELOAD))
-    assert len(e.canh_bao_mang) == 1, "không lặp lại cùng một cảnh báo cho mỗi video"
+# ---------------------------------------------------------------- tải phần đầu (Marathon): Range khối 10 MiB giữ nguyên
+
+class _YdlGhi:
+    def __init__(self):
+        self.opts: list = []
+
+    def __call__(self, opts):
+        self.opts.append(opts)
+
+        class _Phien:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def download(self, urls):
+                with open(opts["outtmpl"].replace("%(ext)s", "webm"), "wb") as f:
+                    f.write(b"audio gia")
+
+        return _Phien()
+
+
+@pytest.mark.parametrize("cookie", ["firefox", ""])
+def test_tai_phan_dau_giu_request_size_va_chi_bat_node_khi_co_cookie(tmp_path, monkeypatch, may, cookie):
+    e = Engine(root=str(tmp_path), data_dir=str(tmp_path / "data"), out_dir=str(tmp_path / "ra"))
+    e.config.ytdlp_player_clients = [""]
+    e.config.ytdlp_sleep_requests_s = 0.0
+    e.config.ytdlp_cookies_browser = cookie
+    ghi = _YdlGhi()
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", ghi)
+    monkeypatch.setattr(giam_sat_tai, "ffmpeg_chia_khoi_duoc", lambda: True, raising=False)
+    e.download_audio("https://youtu.be/v1", "v1", gioi_han_giay=10800)
+    opts = ghi.opts[-1]
+    assert opts["external_downloader_args"]["ffmpeg_i"] == ["-request_size", str(giam_sat_tai.KHOI_YEU_CAU_TAI)]
+    assert opts["external_downloader_args"]["ffmpeg_o"][0] == "-progress"
+    assert callable(opts["download_ranges"]) and opts["force_keyframes_at_cuts"] is False
+    if cookie:
+        assert opts["js_runtimes"] == {"node": {"path": SAN_SANG.node}}
+    else:
+        assert "js_runtimes" not in opts and not _co_cookie(opts)

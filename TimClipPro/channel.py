@@ -860,7 +860,7 @@ class ChannelSync:
         return phien.chay(
             "download",
             lambda: chay_kem_duong_lui_cookie(self.cau_hinh_mang, tai_voi,
-                                              khi_bo_cookie=phien.ghi_lui_cookie),
+                                              khi_bo_cookie=phien.ghi_lui_cookie, bo_ghi=bo_ghi),
             video_id=ma_tu_url(url),
             cancel_event=getattr(self, "_huy_luot_sync", None), loi_huy=DaHuyDongBo,
             bo_qua=(DaHuyDongBo,))

@@ -87,9 +87,20 @@ DINH_DANG = [
     "ERROR: [youtube] s5lLFCSzPn8: Requested format is not available. Use --list-formats for "
     "a list of available formats",
     "ERROR: [youtube] r9UeXL5-Yvk: No video formats found!; please report this issue",
-    "ERROR: [youtube] abcdefghijk: The page needs to be reloaded.",
-    "ERROR: [youtube] abcdefghijk: n challenge solving failed: Some formats may be missing.",
     "ERROR: [youtube] abcdefghijk: This video is DRM protected",
+]
+# Thử thách JavaScript (yt-dlp 2026.08.19 `_video.py` + `jsc/_director.py`) — 14/10: tách khỏi lỗi định dạng.
+THU_THACH_JS = [
+    "ERROR: [youtube] abcdefghijk: n challenge solving failed: Some formats may be missing.",
+    "WARNING: [youtube] abcdefghijk: Signature solving failed: Some formats may be missing. Ensure you have a "
+    "supported JavaScript runtime and challenge solver script distribution installed.",
+    "WARNING: [youtube] [jsc] Remote component challenge solver script (node) was skipped. It may be required to "
+    "solve JS challenges.",
+]
+# Player client: `tv_downgraded` UNPLAYABLE (yt-dlp issue 17389); có cookie mà client ép không nhận cookie.
+PLAYER_CLIENT = [
+    "ERROR: [youtube] abcdefghijk: The page needs to be reloaded.",
+    "ERROR: [youtube] abcdefghijk: Failed to extract any player response; please report this issue",
 ]
 TAI_HONG = [
     "Tải audio thất bại (không thấy file sau khi tải).",
@@ -107,6 +118,8 @@ BANG = ([(x, t.BOT_CHALLENGE) for x in BOT] + [(x, t.AUTH_REQUIRED) for x in AUT
         + [(x, t.HTTP_FORBIDDEN) for x in CAM_403]
         + [(x, t.TRANSIENT_NETWORK) for x in TAM_THOI]
         + [(x, t.FORMAT_OR_EXTRACTOR_ERROR) for x in DINH_DANG]
+        + [(x, t.JS_CHALLENGE_ERROR) for x in THU_THACH_JS]
+        + [(x, t.PLAYER_CLIENT_ERROR) for x in PLAYER_CLIENT]
         + [(x, t.PARTIAL_OR_CORRUPT_DOWNLOAD) for x in TAI_HONG]
         + [(x, t.UNKNOWN_YOUTUBE_ERROR) for x in KHONG_RO])
 

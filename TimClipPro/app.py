@@ -738,19 +738,22 @@ with st.sidebar:
             st.warning("Chưa thấy file cookie ở đường dẫn này — kiểm tra lại.")
         elif duong_dan or (c.ytdlp_cookies_browser or "").strip():
             st.success(
-                "Đã bật cookie. Các cách tải không dùng được cookie "
-                "(android, ios) sẽ tự động lùi xuống cuối danh sách."
+                "Đã cấu hình cookie (dùng được trên máy này hay không: xem «Trạng thái YouTube» "
+                "bên dưới). Các cách tải không dùng được cookie (android, ios) sẽ tự động lùi "
+                "xuống cuối danh sách."
             )
         st.caption(
             "⚠️ Cookie là chìa khoá vào tài khoản của bạn — đừng chia sẻ file đó, "
             "và nên dùng tài khoản phụ. Cookie có thể hết hạn sau vài tuần."
         )
         # Chỉ số đếm và trạng thái — không bao giờ hiện giá trị hay tên cookie, không gọi mạng.
+        # Có cookie thì nói rõ nó DÙNG được hay lượt quét sẽ chạy KHÔNG đăng nhập (máy thiếu Node.js/EJS).
+        cd_cookie = truy_cap_youtube.chan_doan_cookie(
+            c.ytdlp_cookiefile, cookies_browser=c.ytdlp_cookies_browser)
         st.markdown("**Trạng thái YouTube**")
         for muc_tt, cau_tt in dong_trang_thai_youtube(
-                truy_cap_youtube.chan_doan_cookie(
-                    c.ytdlp_cookiefile, cookies_browser=c.ytdlp_cookies_browser),
-                getattr(eng, "phien_youtube_cuoi", None)):
+                cd_cookie, getattr(eng, "phien_youtube_cuoi", None),
+                ytdlp_chung.kha_nang_js() if cd_cookie.cau_hinh else None):
             getattr(st, muc_tt)(cau_tt)
         st.caption("Kiểm sâu hơn (một request tới YouTube): `python cli.py youtube-doctor "
                    "--network <link video công khai>`.")

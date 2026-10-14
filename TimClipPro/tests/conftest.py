@@ -76,15 +76,28 @@ def _giu_nguyen_path():
         os.environ["PATH"] = cu
 
 
+@pytest.fixture()
+def kha_nang_js_that():
+    """Dùng phép kiểm THẬT của máy (``ytdlp_chung.kha_nang_js``: Node.js ≥ 22 + gói yt-dlp-ejs) thay cho bản giả mặc định
+    của ``_may_giai_duoc_js_gia`` — chỉ cho test về chính phép kiểm đó."""
+    import ytdlp_chung
+
+    return ytdlp_chung.kha_nang_js
+
+
 @pytest.fixture(autouse=True)
-def _quen_nho_bo_cookie():
-    """``ytdlp_chung.NHO_BO_COOKIE`` nhớ cấu hình cookie «không dùng được trên máy» ở mức MODULE (cả tiến trình, như
-    production). Test nào làm nó nhớ thì test SAU dùng cùng cấu hình cookie sẽ đi thẳng không-cookie — quên sau mỗi
-    test (tests/test_cookie_can_js.py)."""
-    yield
-    yc = sys.modules.get("ytdlp_chung")
-    if yc is not None and hasattr(yc, "NHO_BO_COOKIE"):
-        yc.NHO_BO_COOKIE.quen()
+def _may_giai_duoc_js_gia(request, monkeypatch):
+    """Cookie đăng nhập chỉ dùng được khi máy giải được thử thách JavaScript của YouTube — trạng thái của MÁY (có Node
+    không, venv có gói yt-dlp-ejs không), khác nhau giữa các máy chạy test. Mặc định GIẢ «sẵn sàng» như bản phát hành có
+    yt-dlp-ejs trên máy có Node.js, để test không phụ thuộc máy; test nào cần trạng thái khác thì tự đặt lại
+    (tests/test_cookie_can_js.py), test về phép kiểm thật thì xin fixture ``kha_nang_js_that``."""
+    if "kha_nang_js_that" in request.fixturenames:
+        return
+    import ytdlp_chung
+
+    gia = ytdlp_chung.KhaNangJs(True, node=r"C:\gia\nodejs\node.exe", node_phien_ban="24.0.0",
+                                ejs_phien_ban="0.8.0")
+    monkeypatch.setattr(ytdlp_chung, "kha_nang_js", lambda: gia)
 
 
 _DATA_CANH_MA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")

@@ -19,6 +19,7 @@ import shutil
 import sys
 
 import truy_cap_youtube as t
+import ytdlp_chung
 from ytdlp_chung import BoGhiYtdlp, CauHinhMang
 
 MA_THOAT_YOUTUBE_CHAN = 3
@@ -50,6 +51,14 @@ def _js_runtime() -> dict:
     return {ten: bool(shutil.which(ten)) for ten in ("deno", "node", "bun", "qjs")}
 
 
+def _kha_nang_js() -> dict:
+    """Cookie đăng nhập dùng được không: Node.js ≥ 22 + gói yt-dlp-ejs đúng bản (``ytdlp_chung.kha_nang_js`` — chạy
+    ``node --version`` trên máy, không gọi mạng; đúng phép kiểm yt-dlp làm trước khi dùng node)."""
+    kn = ytdlp_chung.kha_nang_js()
+    return {"san_sang": kn.san_sang, "node": kn.node, "node_phien_ban": kn.node_phien_ban,
+            "ejs_phien_ban": kn.ejs_phien_ban, "ly_do": kn.ly_do}
+
+
 def chan_doan(data_dir: str, url_mang: str = "") -> dict:
     """Bản chẩn đoán dạng dict (không bí mật). Chỉ gọi mạng khi có ``url_mang``."""
     ch = CauHinhMang.tu_file_cau_hinh(data_dir)
@@ -68,6 +77,7 @@ def chan_doan(data_dir: str, url_mang: str = "") -> dict:
         "he_dieu_hanh": platform.platform(terse=True),
         "yt_dlp": _yt_dlp(),
         "js_runtime": _js_runtime(),
+        "kha_nang_js": _kha_nang_js(),
         "ffmpeg": bool(shutil.which("ffmpeg")), "ffprobe": bool(shutil.which("ffprobe")),
         "cau_hinh_mang": {
             "network_timeout_s": ch.network_timeout_s,
@@ -137,6 +147,10 @@ def _in(kq: dict) -> None:
           f"{yd.get('goi_yt_dlp_ejs', '')}")
     js = kq["js_runtime"]
     print("JS runtime: " + ", ".join(f"{k}={'có' if v else 'không'}" for k, v in js.items()))
+    kn = kq["kha_nang_js"]
+    print("Cookie đăng nhập (cần giải thử thách JavaScript): " + (
+        f"DÙNG ĐƯỢC — Node.js {kn['node_phien_ban']} + yt-dlp-ejs {kn['ejs_phien_ban']}" if kn["san_sang"]
+        else f"CHƯA dùng được — {kn['ly_do']}; có cookie thì lượt quét chạy KHÔNG đăng nhập"))
     print(f"FFmpeg: {'có' if kq['ffmpeg'] else 'KHÔNG'} | FFprobe: "
           f"{'có' if kq['ffprobe'] else 'KHÔNG'}")
     m = kq["cau_hinh_mang"]

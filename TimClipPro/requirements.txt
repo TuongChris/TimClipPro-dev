@@ -9,6 +9,9 @@ joblib
 psutil
 # Tai YouTube / dong bo kenh
 yt-dlp
+# Script giai thu thach JavaScript (EJS) cho cookie dang nhap: PHAI dung ban yt-dlp ghim
+# (yt-dlp 2026.8.19 -> 0.8.0, xem requirements-lock.txt); can them Node.js >= 22 tren may.
+yt-dlp-ejs
 # Giao dien web chay local + xu ly bang
 streamlit
 pandas

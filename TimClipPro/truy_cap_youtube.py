@@ -43,6 +43,11 @@ HTTP_FORBIDDEN = "HTTP_FORBIDDEN"                   # 403 chưa đủ bằng ch�
 TRANSIENT_NETWORK = "TRANSIENT_NETWORK"             # hết giờ, đứt kết nối, DNS, 5xx
 COOKIE_INVALID_OR_EXPIRED = "COOKIE_INVALID_OR_EXPIRED"
 FORMAT_OR_EXTRACTOR_ERROR = "FORMAT_OR_EXTRACTOR_ERROR"
+# Thiếu bộ chạy JavaScript / gói EJS mà cookie đăng nhập cần, hoặc bộ giải thử thách JS của yt-dlp hỏng — lỗi của MÁY /
+# bộ công cụ, không phải cookie, không phải video (ytdlp_chung.CookieCanJs, ytdlp_chung.LoiGiaiJs).
+JS_CHALLENGE_ERROR = "JS_CHALLENGE_ERROR"
+# YouTube không trả định dạng cho các player client đã dùng («The page needs to be reloaded» — yt-dlp issue 17389).
+PLAYER_CLIENT_ERROR = "PLAYER_CLIENT_ERROR"
 PARTIAL_OR_CORRUPT_DOWNLOAD = "PARTIAL_OR_CORRUPT_DOWNLOAD"
 INVALID_INPUT = "INVALID_INPUT"                     # link không phải video / danh sách là TAB
 UNKNOWN_YOUTUBE_ERROR = "UNKNOWN_YOUTUBE_ERROR"
@@ -50,10 +55,12 @@ BLOCKED_BY_BREAKER = "BLOCKED_BY_BREAKER"           # chưa gửi request: cầu
 
 CAC_LOAI = (PERMANENT_UNAVAILABLE, AUTH_REQUIRED, BOT_CHALLENGE, RATE_LIMITED, HTTP_FORBIDDEN,
             TRANSIENT_NETWORK, COOKIE_INVALID_OR_EXPIRED, FORMAT_OR_EXTRACTOR_ERROR,
+            JS_CHALLENGE_ERROR, PLAYER_CLIENT_ERROR,
             PARTIAL_OR_CORRUPT_DOWNLOAD, INVALID_INPUT, UNKNOWN_YOUTUBE_ERROR,
             BLOCKED_BY_BREAKER)
 
-# Lỗi do PHÍA TRUY CẬP (YouTube từ chối, mạng, cookie) — khác lỗi của chính video.
+# Lỗi do PHÍA TRUY CẬP (YouTube từ chối, mạng, cookie) — khác lỗi của chính video. `cli.py`/youtube-doctor in «YouTube
+# chặn truy cập» + mã 3 cho nhóm này: thiếu bộ chạy JS (lỗi của MÁY) và lỗi player client giữ như lỗi định dạng (mã 1).
 LOAI_TRUY_CAP = frozenset({AUTH_REQUIRED, BOT_CHALLENGE, RATE_LIMITED, HTTP_FORBIDDEN,
                            TRANSIENT_NETWORK, COOKIE_INVALID_OR_EXPIRED, BLOCKED_BY_BREAKER})
 
@@ -120,10 +127,18 @@ _LOP_MANG = frozenset({"TimeoutError", "timeout", "ConnectionError", "Connection
                        "ConnectionAbortedError", "ConnectionRefusedError", "BrokenPipeError",
                        "TransportError", "IncompleteRead", "RemoteDisconnected", "URLError",
                        "SSLError", "ProxyError", "ReadTimeoutError"})
+# Thử thách JavaScript không giải được (cảnh báo của yt-dlp 2026.08.19 `_video.py`/`jsc/_director.py`, và câu của
+# JSInterp cũ). KHÔNG có "no supported javascript runtime": đó là cảnh báo BÌNH THƯỜNG của đường không-cookie (visionos
+# không cần JS). Lớp lỗi của `ytdlp_chung` (cookie cần JS mà máy thiếu / bộ giải hỏng) nhận theo TÊN LỚP.
+_JS = ("n challenge solving failed", "signature solving failed", "challenge solver", "challenge request",
+       "nsig extraction failed", "signature extraction failed")
+_LOP_JS = frozenset({"CookieCanJs", "LoiGiaiJs"})
+# YouTube không trả định dạng cho player client: `tv_downgraded` UNPLAYABLE «The page needs to be reloaded» (yt-dlp
+# issue 17389); có cookie mà mọi client yêu cầu đều không nhận cookie thì không còn client nào để hỏi.
+_CLIENT = ("page needs to be reloaded", "failed to extract any player response",
+           "no player clients have been requested")
 _DINH_DANG = ("requested format is not available", "no video formats found", "no formats found",
-              "page needs to be reloaded", "n challenge", "nsig extraction failed",
-              "signature extraction failed", "unable to extract",
-              "failed to extract any player response", "drm protected",
+              "n challenge", "unable to extract", "drm protected",
               "precondition check failed", "http error 400")
 _TAI_HONG = ("không thấy file sau khi tải", "did not get any data blocks",
              "downloaded file is empty", "content too short", "contenttooshort",
@@ -155,6 +170,13 @@ THONG_BAO = {
     FORMAT_OR_EXTRACTOR_ERROR: (
         "YouTube không trả định dạng âm thanh dùng được cho video này, hoặc yt-dlp không đọc được "
         "trang video. Video này chưa được quét."),
+    JS_CHALLENGE_ERROR: (
+        "Không giải được thử thách JavaScript của YouTube (yt-dlp cần Node.js ≥ 22 + gói yt-dlp-ejs, hoặc bộ "
+        "giải cần cập nhật). Đây không phải lỗi cookie hay lỗi video; video này chưa được quét."),
+    PLAYER_CLIENT_ERROR: (
+        "YouTube không trả định dạng cho các player client đã dùng («The page needs to be reloaded» — lỗi phía "
+        "YouTube với một số client, yt-dlp issue 17389). Không phải lỗi cookie hay mạng; video này chưa được "
+        "quét."),
     PARTIAL_OR_CORRUPT_DOWNLOAD: (
         "Tải về không trọn vẹn (file rỗng hoặc hỏng). Video này chưa được quét đầy đủ."),
     INVALID_INPUT: (
@@ -277,6 +299,9 @@ def _co(thap: str, cum: tuple) -> bool:
 
 
 def _xac_dinh_loai(thap: str, ma: Optional[int], lop: set) -> str:
+    if lop & _LOP_JS:
+        # Lỗi của ytdlp_chung, câu do tool viết: xét TRƯỚC mọi cụm chữ (câu có chữ «cookie» không được thành lỗi cookie).
+        return JS_CHALLENGE_ERROR
     if _co(thap, _BOT):
         return BOT_CHALLENGE
     if ma == 429 or _co(thap, _GIOI_HAN):
@@ -293,6 +318,10 @@ def _xac_dinh_loai(thap: str, ma: Optional[int], lop: set) -> str:
         return HTTP_FORBIDDEN
     if (ma is not None and 500 <= ma <= 599) or lop & _LOP_MANG or _co(thap, _MANG):
         return TRANSIENT_NETWORK
+    if _co(thap, _JS):
+        return JS_CHALLENGE_ERROR
+    if _co(thap, _CLIENT):
+        return PLAYER_CLIENT_ERROR
     if ma == 400 or _co(thap, _DINH_DANG):
         return FORMAT_OR_EXTRACTOR_ERROR
     if _co(thap, _TAI_HONG):
@@ -327,11 +356,17 @@ def phan_loai_loi(loi: Any, *, thao_tac: str = "", video_id: str = "", lan_thu: 
     thu_lai = loai == TRANSIENT_NETWORK or (
         loai == RATE_LIMITED and (ma == 429 or "429" in thap or "too many requests" in thap))
     thong_bao = THONG_BAO[loai]
+    tom_tat = tom_tat_ky_thuat(next((c for c in cac_cau if c), ""))
     if loai == COOKIE_INVALID_OR_EXPIRED and "LoiFileCookie" in lop:
         # Thông báo của cổng cookie chỉ nêu SỐ DÒNG, không nêu nội dung — an toàn để hiện.
         goc = next(x for x in chuoi if type(x).__name__ == "LoiFileCookie")
         thong_bao = f"Cookie cấu hình không dùng được: {go_ma_mau(goc)}"
-    tom_tat = tom_tat_ky_thuat(next((c for c in cac_cau if c), ""))
+    if loai == JS_CHALLENGE_ERROR and lop & _LOP_JS:
+        # Câu tiếng Việt do ytdlp_chung viết (lý do cụ thể: thiếu gì / bộ giải hỏng) — không bí mật; phần kỹ thuật
+        # (lỗi gốc của yt-dlp + cảnh báo giải JS) nằm ở `chi_tiet`.
+        goc = next(x for x in chuoi if type(x).__name__ in _LOP_JS)
+        thong_bao = go_ma_mau(goc)
+        tom_tat = tom_tat_ky_thuat(getattr(goc, "chi_tiet", "") or "")
     return YoutubeAccessFailure(
         category=loai, operation=thao_tac, video_id=str(video_id or ""), retryable=thu_lai,
         auth_related=loai in (AUTH_REQUIRED, BOT_CHALLENGE, COOKIE_INVALID_OR_EXPIRED),
@@ -616,13 +651,18 @@ NGUONG_MO = {
     HTTP_FORBIDDEN: 3,                # "403 lặp lại"
     TRANSIENT_NETWORK: 3,             # mạng sập: dừng thay vì đốt cả lô
     FORMAT_OR_EXTRACTOR_ERROR: 5,     # yt-dlp/YouTube hỏng hàng loạt
+    # Máy thiếu bộ chạy JS/EJS (cấu hình: mọi thao tác hỏng y hệt, chưa gửi request) hoặc bộ giải hỏng với player
+    # hiện tại của YouTube (player chung cho mọi video) — hai lần liên tiếp là đủ biết.
+    JS_CHALLENGE_ERROR: 2,
+    PLAYER_CLIENT_ERROR: 5,           # từng video có thể khác (vd. client nhúng bị chủ video tắt)
     UNKNOWN_YOUTUBE_ERROR: 5,
 }
 
 # Lỗi mà đổi player client KHÔNG cứu được — dừng đường lui client ngay (CLAUDE.md 6c: bot-check
-# đánh ở khâu trích xuất cho MỌI client). 403/định dạng thì vẫn đổi client như mục 6.
+# đánh ở khâu trích xuất cho MỌI client). 403/định dạng thì vẫn đổi client như mục 6. Thử thách JS: có cookie thì
+# mọi client nhận cookie đều cần JS. Lỗi player client: client khác có thể được — vẫn đổi.
 DUNG_DOI_CLIENT = frozenset({BOT_CHALLENGE, AUTH_REQUIRED, RATE_LIMITED, PERMANENT_UNAVAILABLE,
-                             COOKIE_INVALID_OR_EXPIRED, INVALID_INPUT})
+                             COOKIE_INVALID_OR_EXPIRED, INVALID_INPUT, JS_CHALLENGE_ERROR})
 
 _LY_DO_DUNG = {
     BOT_CHALLENGE: ("xác minh", "YouTube yêu cầu xác minh không phải bot cho địa chỉ mạng này. "
@@ -638,18 +678,25 @@ _LY_DO_DUNG = {
     TRANSIENT_NETWORK: ("mạng", "Mạng liên tục lỗi. Kiểm tra kết nối rồi chạy lại."),
     FORMAT_OR_EXTRACTOR_ERROR: ("trích xuất", "YouTube/yt-dlp lỗi hàng loạt; có thể yt-dlp cần "
                                 "cập nhật."),
+    JS_CHALLENGE_ERROR: ("JavaScript", ""),
+    PLAYER_CLIENT_ERROR: ("player client", "YouTube liên tục không trả định dạng cho các player client "
+                          "(«The page needs to be reloaded» — lỗi phía YouTube, yt-dlp issue 17389). Chạy lại "
+                          "sau; nếu đang dùng cookie, có thể thử không đăng nhập (xoá trống ô cookie)."),
     UNKNOWN_YOUTUBE_ERROR: ("lặp", "YouTube liên tục trả lỗi chưa phân loại được."),
 }
 
 TRUONG_SO_DO = ("youtube_operations", "metadata_requests", "download_attempts",
                 "listing_requests", "retries", "auth_failures", "bot_challenges", "rate_limited",
                 "http_403", "transient", "permanent_unavailable", "format_errors",
+                "js_challenge_errors", "player_client_errors",
                 "cookie_invalid", "other_failures", "cookie_fallbacks",
-                "cookie_rejected_warnings", "client_fallbacks", "skipped_by_breaker")
+                "cookie_rejected_warnings", "cookie_unusable_no_js", "js_challenge_warnings",
+                "client_fallbacks", "skipped_by_breaker")
 _DEM_THEO_LOAI = {AUTH_REQUIRED: "auth_failures", BOT_CHALLENGE: "bot_challenges",
                   RATE_LIMITED: "rate_limited", HTTP_FORBIDDEN: "http_403",
                   TRANSIENT_NETWORK: "transient", PERMANENT_UNAVAILABLE: "permanent_unavailable",
                   FORMAT_OR_EXTRACTOR_ERROR: "format_errors",
+                  JS_CHALLENGE_ERROR: "js_challenge_errors", PLAYER_CLIENT_ERROR: "player_client_errors",
                   COOKIE_INVALID_OR_EXPIRED: "cookie_invalid"}
 _DEM_YEU_CAU = {"metadata": "metadata_requests", "download": "download_attempts",
                 "listing": "listing_requests"}
@@ -702,6 +749,9 @@ class PhienYouTube:
         self._so = {k: 0 for k in TRUONG_SO_DO}
         self._su_kien: list = []
         self.cookie_bi_tu_choi = False
+        # Có cookie nhưng lượt này chạy KHÔNG đăng nhập vì máy chưa giải được thử thách JavaScript (lý do cụ thể) —
+        # KHÁC `cookie_bi_tu_choi` (YouTube từ chối phiên): đừng bảo người dùng xuất lại cookie.
+        self.khong_dang_nhap_ly_do = ""
         self.bat_dau = time.time()
 
     # ---------- trạng thái ----------
@@ -725,7 +775,9 @@ class PhienYouTube:
         if not chi_tiet:
             chi_tiet = f.human_message_vi
         them = f" (gặp {self._so_lan_mo} lần liên tiếp)" if self._so_lan_mo > 1 else ""
-        return (f"Đã dừng yêu cầu mới tới YouTube để tránh lặp lỗi {chu_de}{them}: {chi_tiet} "
+        khong_dn = (f" Lượt này quét KHÔNG đăng nhập: cookie đã cấu hình nhưng {self.khong_dang_nhap_ly_do}."
+                    if self.khong_dang_nhap_ly_do else "")
+        return (f"Đã dừng yêu cầu mới tới YouTube để tránh lặp lỗi {chu_de}{them}: {chi_tiet}{khong_dn} "
                 "Kết quả đã có vẫn được giữ; các video chưa quét KHÔNG được tính là đã quét.")
 
     def that_bai_bo_qua(self, video_id: str = "", thao_tac: str = "") -> YoutubeAccessFailure:
@@ -760,8 +812,17 @@ class PhienYouTube:
                 self._so[ten] += 1
 
     def ghi_lui_cookie(self, loi: Any = None) -> None:
-        """Có cookie thì hỏng, bỏ cookie thì thử lại: dấu hiệu YouTube không chấp nhận cookie."""
+        """Lượt này chạy KHÔNG cookie dù đã cấu hình cookie.
+
+        ``ytdlp_chung.CookieCanJs`` (nhận theo tên lớp — module này thuần): máy chưa giải được thử thách JavaScript nên
+        không gửi request đăng nhập nào — KHÔNG phải YouTube từ chối cookie. Còn lại (có cookie thì hỏng, bỏ cookie thì
+        thử lại): dấu hiệu YouTube không chấp nhận cookie."""
         with self._lock:
+            if type(loi).__name__ == "CookieCanJs":
+                self._so["cookie_unusable_no_js"] += 1
+                self.khong_dang_nhap_ly_do = str(getattr(loi, "ly_do", "") or "máy chưa giải được thử thách "
+                                                 "JavaScript của YouTube")
+                return
             self._so["cookie_fallbacks"] += 1
             self.cookie_bi_tu_choi = True
 
@@ -770,6 +831,12 @@ class PhienYouTube:
         with self._lock:
             self._so["cookie_rejected_warnings"] += 1
             self.cookie_bi_tu_choi = True
+
+    def ghi_canh_bao_js(self) -> None:
+        """yt-dlp báo không giải được thử thách JavaScript (n/sig) — chỉ để thấy trong số đo; lỗi được phân loại ở
+        nơi biết lượt đó có cookie hay không (``ytdlp_chung.chay_kem_duong_lui_cookie``)."""
+        with self._lock:
+            self._so["js_challenge_warnings"] += 1
 
     def ghi_doi_client(self) -> None:
         """Một lượt player client thất bại (đường lui sẽ thử client khác nếu còn)."""
@@ -876,5 +943,6 @@ class PhienYouTube:
             so["breaker_open"] = self._mo_boi is not None
             so["breaker_category"] = self._mo_boi.category if self._mo_boi else ""
             so["cookie_rejected"] = self.cookie_bi_tu_choi
+            so["cookie_unusable_reason"] = self.khong_dang_nhap_ly_do
             so["elapsed_s"] = round(time.time() - self.bat_dau, 3)
         return so

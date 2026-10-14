@@ -43,12 +43,14 @@ from common_original import (
 )
 
 
-def dong_trang_thai_youtube(cd: Any, phien: Any = None) -> list:
+def dong_trang_thai_youtube(cd: Any, phien: Any = None, js: Any = None) -> list:
     """Các dòng ``(mức, câu)`` cho mục «Trạng thái YouTube» ở thanh bên.
 
     ``mức`` ∈ success/info/warning/error. ``cd``: ``truy_cap_youtube.ChanDoanCookie`` (chỉ số
     đếm — không giá trị, không tên cookie). ``phien``: phiên YouTube của lượt chạy gần nhất
-    (``Engine.phien_youtube_cuoi``) hoặc ``None``. Không đọc file, không gọi mạng.
+    (``Engine.phien_youtube_cuoi``) hoặc ``None``. ``js``: ``ytdlp_chung.KhaNangJs`` (máy có giải
+    được thử thách JavaScript — điều kiện để cookie dùng được) hoặc ``None``. Không đọc file, không
+    gọi mạng.
     """
     ra: list = []
     if phien is not None and getattr(phien, "mo", False) is True:
@@ -57,6 +59,10 @@ def dong_trang_thai_youtube(cd: Any, phien: Any = None) -> list:
         ra.append(("warning", "Cookie cấu hình không được YouTube chấp nhận ở lượt gần nhất — "
                               "tool đã tự chạy lại không cookie. Hãy xuất lại file cookie, hoặc "
                               "xoá trống ô cookie."))
+    elif phien is not None and getattr(phien, "khong_dang_nhap_ly_do", ""):
+        # Không phải YouTube từ chối cookie: máy chưa giải được thử thách JavaScript — đừng bảo xuất lại cookie.
+        ra.append(("warning", "Lượt gần nhất quét KHÔNG đăng nhập: cookie đã cấu hình nhưng "
+                              f"{phien.khong_dang_nhap_ly_do}."))
     elif phien is not None and phien.tom_tat().get("youtube_operations"):
         ra.append(("success", "Lượt gần nhất: truy cập YouTube bình thường."))
     if not cd.cau_hinh:
@@ -79,6 +85,14 @@ def dong_trang_thai_youtube(cd: Any, phien: Any = None) -> list:
                    f"{cd.so_dong_hong} dòng hỏng{f' ở dòng {dong}' if dong else ''}"
                    f"{'' if cd.co_tieu_de else ', thiếu dòng tiêu đề Netscape'}) — yt-dlp sẽ "
                    "từ chối; hãy xuất lại bằng tiện ích trình duyệt."))
+    if cd.cau_hinh and js is not None:
+        if getattr(js, "san_sang", False):
+            ra.append(("info", "Khi quét: DÙNG cookie đăng nhập — yt-dlp giải thử thách JavaScript bằng "
+                               f"{js.mo_ta()}."))
+        else:
+            ra.append(("warning", f"Cookie đăng nhập CHƯA dùng được trên máy này: {js.ly_do}. Lượt quét sẽ chạy "
+                                  "KHÔNG đăng nhập và ghi rõ điều đó trong kết quả. Muốn dùng cookie: cài Node.js ≥ 22 "
+                                  "và dùng bản Tool có gói yt-dlp-ejs; muốn hết cảnh báo: xoá trống ô cookie."))
     return ra
 
 
