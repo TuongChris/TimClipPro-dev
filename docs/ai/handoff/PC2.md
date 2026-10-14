@@ -49,32 +49,26 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 4. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md` — chỉ dựa handoff + tài liệu, không audit toàn repo.
 
 ## Nhật ký
-### 2026-10-14 — cookie đăng nhập trên máy không có bộ chạy JavaScript (nhánh fix/pc2/youtube-cookie-js-fallback, CHƯA đẩy)
-- Bối cảnh: Stable 1.1.0 đặt `ytdlp_cookies_browser = firefox` → MỌI video «The page needs to be reloaded»; cầu dao trích xuất
-  dừng lô sau 5 video với lời khuyên «có thể yt-dlp cần cập nhật» (sai hướng).
-- Cơ chế (yt-dlp 2026.08.19; đo NGOẠI TUYẾN trên PC2, cookie giả, chặn mạng — `C:\Dev\pc2_test_tools\cookie_js`): có cookie
-  đăng nhập → client `web_embedded, tv_downgraded, web` (đều cần JS), `visionos` bị loại (không hỗ trợ cookie); không client nào
-  vừa nhận cookie vừa không cần JS; PC2 không có bộ chạy JS yt-dlp dùng được (không deno; node có nhưng chưa bật; không gói
-  yt-dlp-ejs). `player_client=default,web_embedded` (yt-dlp#17389) cho đúng danh sách đó → không cứu được.
-- Sửa (`6ebdc72`, `ea12a28`, từ `ec1ff71`): đường lui cookie dùng chung nhận lỗi này → lùi không-cookie (visionos, đã nghiệm thu) +
-  nhớ 30 phút theo cấu hình cookie (`NhoBoCookie`); cảnh báo nói đúng «thiếu JavaScript». Cookie chết/không-cookie giữ nguyên.
-- Test (chặn mạng, cp1252): mới 19 (14 đỏ trước sửa; lô 6 video qua Engine + phiên + cầu dao thật), đột biến 8/8, vùng YouTube
-  549/549, nhanh 2537 = 2535/2/0. Bằng chứng: `C:\Dev\pc2_test_runs\2026-10-14_cookie_js`. Chưa gửi request YouTube thật nào.
-- Tiếp: duyệt đẩy + PR → PC1 review, build/ký 1.1.1. Cookie thật sự chạy cần bộ chạy JS (node có sẵn) + gói yt-dlp-ejs trong lock —
-  quyết định riêng của PC1. Tạm trên Stable: xoá trống ô cookie («🔐 Kết nối YouTube») → đường không-cookie.
-### 2026-10-13 — video dài: giới hạn quét + tiến độ thật + Dừng giết ffmpeg + tải phần đầu nhanh (marathon, CHƯA đẩy)
-- Bối cảnh (Stable, video 65 giờ): «0/5 — 1%» hàng chục phút — ffmpeg (yt-dlp FFmpegFD) tải 3 giờ đầu ~17 KB/s, không phát
-  tiến độ; Dừng không giết ffmpeg; mã cũ không thấy đủ bằng chứng thì tải TRỌN 65 giờ.
-- Làm (worktree `C:\Dev\TimClipPro_Marathon`, từ `7a76e71`, KHÔNG P0/Sheets): video dài theo LÔ (`engine.GHVD_*`, >6 giờ →
-  3/6 giờ đầu, không tự tải trọn, kiểm gói audio CUỐI — không tin `format.duration`, đệm cụt tải lại 1 lần); `giam_sat_tai`
-  (`-progress`; Dừng giết ffmpeg; 180 s không thêm byte → «Mạng đứng»); `tien_do_quet`/`ui_tien_do_quet` (số đo thật, nhịp ≠
-  tiến triển, ETA từ tốc độ đo); `scan_jobs` nhận lại lô khi tải lại trang; «Mã tab» toàn chuỗi. Watch/CLI giữ hành vi cũ.
-- `13f9511` tải phần đầu CHẬM (pilot thật OPgD5wl0fAY 66 giờ: 2,03×, 3 giờ đầu mất 1 giờ 30): ffmpeg xin MỘT `Range: bytes=0-`,
-  googlevideo nhả theo nhịp phát; yt-dlp tải thường xin khối 10 MiB. Sửa: ffmpeg `-request_size 10485760` (tuỳ chọn ĐẦU VÀO;
-  ffmpeg cũ thiếu → cách cũ + ghi rõ). A/B thật (người dùng duyệt): một yêu cầu mở 0,7× → khối 10 MiB 1280×, 2400,01 s đủ.
-- Test (chặn mạng, cp1252): nhanh 2508 = 2506/2/0, chậm 18/18 (ở `53c8f3a`); `13f9511`: đỏ 7/8 → xanh 12/12 (Range thật, máy
-  chủ hãm kiểu googlevideo), hồi quy liên quan 482/482. Development 8502 (`ChayTimClipPro_Dev_Marathon.bat`, ngoài Git), kho
-  SML 779 clip (vân tay trong DevState). Bằng chứng: `C:\Dev\pc2_test_runs\2026-10-13_marathon*`, `…_tai_nhanh`.
-- Nghiệm thu thật 16:02–16:05 (duyệt; Development 8502, SML 779): tải 3 giờ 9,0 s, âm thanh đủ 10800,01 s, cắt 15 s, khớp 146 s;
-  tổng 3 phút 03; 5 kết quả = lượt trước, mốc lệch ≤ 0,094 s; phạm vi «Một phần 0–3 giờ»; outbox 0. Tiếp: duyệt đẩy + PR.
-- Mục cũ hơn (2026-10-09): `docs/ai/handoff/LICH_SU_PC2.md`.
+### 2026-10-14 — cookie đăng nhập YouTube chạy bằng Node.js + yt-dlp-ejs (nhánh fix/pc2/youtube-cookie-js-fallback, CHƯA đẩy)
+- Bối cảnh: Stable 1.1.0 + `ytdlp_cookies_browser = firefox` → MỌI video «The page needs to be reloaded», cầu dao khuyên sai «có
+  thể yt-dlp cần cập nhật». Bản đầu (`6ebdc72`, `ea12a28`) chỉ lùi không-cookie + nhớ 30 phút — người dùng KHÔNG muốn (YouTube từng
+  đòi xác minh khi không cookie): mục tiêu là DÙNG ĐƯỢC phiên đăng nhập, minh bạch khi không dùng được.
+- Cơ chế (yt-dlp 2026.08.19, đo NGOẠI TUYẾN trên PC2 — `C:\Dev\pc2_test_tools\cookie_js\kiem_node_ejs.py`): có cookie → chỉ client
+  phải giải thử thách JS (`web_embedded, tv_downgraded, web`); giải cần Node.js ≥ 22 (yt-dlp chỉ tự bật deno → `js_runtimes`) +
+  gói `yt-dlp-ejs` ĐÚNG bản yt-dlp ghim (0.8.0, khớp băm; script đi kèm yt-dlp thiếu thư viện cho node). PC2: Node 24.21.0 có sẵn;
+  Stable thiếu gói EJS. `web_embedded`/`tv_downgraded` không đòi PO token cho HTTPS (audio-only); `tv_downgraded` lỗi phía YouTube.
+- Làm (`4795b18`, trên `3e98131`; mục này ở commit sau): `ytdlp_chung.kha_nang_js` (node trên PATH — bỏ thư mục hiện hành — + phiên bản + EJS
+  đúng bản/băm; hỏi lại MỖI lượt, không nhớ lỗi cũ; bỏ `NhoBoCookie`); có cookie → `js_runtimes` node ở MỌI đường gọi, không
+  `remote_components`; máy chưa sẵn sàng → quét/tải KHÔNG cookie, không gửi request đăng nhập, mọi kết quả ghi «KHÔNG đăng nhập»;
+  đường khác ném `CookieCanJs` trước request. Loại lỗi mới `JS_CHALLENGE_ERROR` (ngưỡng 2) + `PLAYER_CLIENT_ERROR` (ngưỡng 5); bot,
+  cần đăng nhập, player client, bộ giải hỏng: KHÔNG tự bỏ đăng nhập. Thanh bên + youtube-doctor nói cookie DÙNG được hay không.
+  Lock + `yt-dlp-ejs==0.8.0` (sinh bằng `release_tool.py lock` từ môi trường mới: khác lock cũ ĐÚNG một dòng).
+- Môi trường RIÊNG: `C:\Dev\TimClipPro_CookieFix\TimClipPro\.venv` (54 gói lock + yt-dlp-ejs + pytest/ruff, `--require-hashes`,
+  không mạng); wheel `C:\Dev\wheelhouse_pc2_ejs` (PyPI, 53 443 byte, sha256 `79300e5f…bdb4`). Venv chung của clone KHÔNG đổi.
+- Test (chặn mạng, cp1252): cookie/Node/EJS 57 (venv thiếu EJS: 56 + 1 bỏ qua đúng lý do), đột biến 21/21, YouTube + Watch +
+  Marathon 675/675, nhanh 2582 = 2580/2/0, chậm tải phần đầu thật (Range) 5/5. Trước/sau, lô 6 video (`do_truoc_sau.py`): 1.1.0
+  0/6; bản trước 6/6 nhưng 0 lượt đăng nhập; bản mới 6/6, 12/12 lượt CÓ đăng nhập; thiếu EJS 6/6, 0 request cookie, ghi rõ.
+  Bằng chứng: `C:\Dev\pc2_test_runs\2026-10-14_cookie_node_ejs`. Chưa gửi request YouTube thật nào.
+- Tiếp: duyệt đẩy + PR → PC1: lock có băm (thêm wheel yt-dlp-ejs) → runtime MỚI (lock đổi → runtime_id đổi; CapNhat.bat dựng venv
+  mới, tải gói từ PyPI) → build/ký 1.1.1. Pilot thật (1 video công khai, cookie Firefox) CHỜ duyệt. Tạm trên 1.1.0: xoá ô cookie.
+- Mục cũ hơn (2026-10-13, 2026-10-09): `docs/ai/handoff/LICH_SU_PC2.md`.
