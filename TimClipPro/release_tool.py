@@ -12,6 +12,7 @@
     release_tool.py ky-uy-quyen --yeu-cau <file> --khoa <khoá riêng> --tin-cay <trusted_keys.json> --ra <file>
     release_tool.py kiem-uy-quyen --uy-quyen <file> --tin-cay <trusted_keys.json> [--yeu-cau <file>]
     release_tool.py them-khoa-danh-sach --uy-quyen <file> --tin-cay release/trusted_keys.json   (sau khi ghi danh)
+    release_tool.py go-khoa-danh-sach --key-id <id> --tin-cay release/trusted_keys.json        (khoá bị lộ)
     (tao-khoa / ky-uy-quyen: NGƯỜI DÙNG tự gõ mật khẩu trong console — docs/UY_QUYEN_KHOA.md)
     release_tool.py kiem-sau-ky --dir <thư mục tag đã ký> --tin-cay <trusted_keys.json> [--key-id <id>] [--commit <sha>]
     release_tool.py feed --dir <thư mục tag đã ký> --tin-cay <trusted_keys.json> --out <thư mục>   ZIP phân phối + SHA256SUMS
@@ -26,6 +27,11 @@ ZIP tất định (thứ tự, thời điểm, quyền cố định) → cùng c
 
 from __future__ import annotations
 
+import sys
+
+if __name__ == "__main__":
+    sys.dont_write_bytecode = True        # trước mọi import khác: không sinh __pycache__ (kể cả trong cây release)
+
 import base64
 import hashlib
 import io
@@ -33,7 +39,6 @@ import json
 import os
 import re
 import subprocess
-import sys
 import tarfile
 import tempfile
 import zipfile
@@ -263,6 +268,12 @@ def sign(thu_muc_tag: str, khoa_rieng_pem: str, *, mat_khau: bytes = None) -> st
         raise LoiPhatHanh("Khoá ký phải là Ed25519.")
     with open(os.path.join(thu_muc_tag, mu.TEN_MANIFEST), "rb") as f:
         raw_m = f.read()
+    try:                                   # chỉ ký MANIFEST hợp lệ — byte tuỳ ý có thể là nội dung khác (vd. uỷ quyền
+        mu.doc_manifest(raw_m)             # có tiền tố miền) mà chữ ký sẽ thành hợp lệ ở nơi khác
+    except mu.LoiCapNhat as e:
+        raise LoiPhatHanh(f"manifest.json không phải manifest hợp lệ — KHÔNG ký ({e}).") from None
+    if not raw_m.startswith(b"{"):
+        raise LoiPhatHanh("manifest.json phải bắt đầu bằng «{» — KHÔNG ký.")
     raw_pub = k.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
     sig = {"thuat_toan": "ed25519", "key_id": mu.tao_key_id(raw_pub),
            "chu_ky_b64": base64.b64encode(k.sign(raw_m)).decode()}
@@ -468,6 +479,10 @@ def them_khoa_danh_sach(raw_uy_quyen: bytes, tin_cay: str) -> dict:
         raise LoiPhatHanh(f"Uỷ quyền không hợp lệ với danh sách này: {e}") from None
     if nd["khoa_moi"]["key_id"] in tin:
         raise LoiPhatHanh(f"Khoá {nd['khoa_moi']['key_id']} đã có trong danh sách.")
+    with open(tin_cay, "rb") as f:
+        thu_hoi = json.loads(f.read().decode("utf-8-sig")).get("thu_hoi") or []
+    if any(isinstance(x, dict) and x.get("key_id") == nd["khoa_moi"]["key_id"] for x in thu_hoi):
+        raise LoiPhatHanh(f"Khoá {nd['khoa_moi']['key_id']} đã bị thu hồi khỏi danh sách — không thêm lại (tạo khoá mới).")
     if not set(nd["khoa_hien_co"]) <= set(tin):
         raise LoiPhatHanh("Danh sách thiếu khoá mà máy đích đang tin — không phải danh sách của bản cài này.")
     with open(tin_cay, "rb") as f:
@@ -476,14 +491,42 @@ def them_khoa_danh_sach(raw_uy_quyen: bytes, tin_cay: str) -> dict:
         "key_id": nd["khoa_moi"]["key_id"], "ed25519_pub_b64": nd["khoa_moi"]["ed25519_pub_b64"],
         "ghi_chu": f"Khoá phát hành TimClipPro kênh Stable — máy {nd['ten_may']}; ghi danh theo uỷ quyền "
                    f"{nd['ma_uy_quyen'][:8]} của khoá {nd['ky_boi']} ({nd['tao_luc'][:10]})"}]
-    tam = f"{tin_cay}.tmp-{os.getpid()}"
-    with open(tam, "x", encoding="utf-8", newline="\n") as f:
-        json.dump(d, f, ensure_ascii=False, indent=1)
-        f.write("\n")
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tam, tin_cay)
+    _ghi_danh_sach(tin_cay, d)
     return {"khoa": sorted(mu.doc_khoa_tin_cay(tin_cay)), "them": nd["khoa_moi"]["key_id"]}
+
+
+def _ghi_danh_sach(tin_cay: str, d: dict) -> None:
+    import uuid
+
+    tam = f"{tin_cay}.tmp-{uuid.uuid4().hex[:8]}"
+    try:
+        with open(tam, "x", encoding="utf-8", newline="\n") as f:
+            json.dump(d, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tam, tin_cay)
+    finally:
+        if os.path.exists(tam):
+            os.remove(tam)
+
+
+def go_khoa_danh_sach(key_id: str, tin_cay: str) -> dict:
+    """GỠ một khoá (vd. bị lộ) khỏi danh sách khoá công khai CỦA REPO — verify, kiem-sau-ky, feed, bộ kit không tin nó
+    nữa; ghi vào «thu_hoi» của danh sách (them-khoa-danh-sach từ chối thêm lại). Không gỡ khoá cuối cùng. Trên máy đã
+    cài: ``uy_quyen_khoa.py hoan-tac`` (khoá đã ghi danh) hoặc bootstrap lại (khoá gốc của bộ kit)."""
+    tin = mu.doc_khoa_tin_cay(tin_cay)
+    if key_id not in tin:
+        raise LoiPhatHanh(f"Khoá {key_id} không có trong danh sách.")
+    if len(tin) == 1:
+        raise LoiPhatHanh("Không gỡ khoá cuối cùng — danh sách sẽ không còn khoá nào được tin.")
+    with open(tin_cay, "rb") as f:
+        d = json.loads(f.read().decode("utf-8-sig"))
+    d["khoa"] = [x for x in d["khoa"] if not (isinstance(x, dict) and x.get("key_id") == key_id)]
+    d["thu_hoi"] = list(d.get("thu_hoi") or []) + [
+        {"key_id": key_id, "luc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}]
+    _ghi_danh_sach(tin_cay, d)
+    return {"khoa": sorted(mu.doc_khoa_tin_cay(tin_cay)), "go": key_id}
 
 
 def _co_console() -> bool:
@@ -531,7 +574,11 @@ def kiem_sau_ky(thu_muc_tag: str, tin_cay: str, *, key_id: str = "", commit: str
         raw_m = f.read()
     with open(os.path.join(thu_muc_tag, mu.TEN_CHU_KY), "rb") as f:
         raw_s = f.read()
-    kid = mu.kiem_chu_ky(raw_m, raw_s, mu.doc_khoa_tin_cay(tin_cay))
+    import uy_quyen_khoa as uq
+
+    tin = mu.doc_khoa_tin_cay(tin_cay)
+    kid = mu.kiem_chu_ky(raw_m, raw_s, tin)
+    k["danh_sach_khong_co_khoa_yeu"] = not any(uq.la_khoa_yeu(r) for r in uq._raw_cac_khoa(tin).values())
     sig = json.loads(raw_s)
     k["chu_ky_dinh_dang"] = (set(sig) == {"thuat_toan", "key_id", "chu_ky_b64"} and sig["thuat_toan"] == "ed25519"
                              and len(base64.b64decode(sig["chu_ky_b64"], validate=True)) == 64)
@@ -663,7 +710,7 @@ _PIN = re.compile(r"^([A-Za-z0-9_.\-]+==[^\s\\]+)", re.M)
 
 
 def dung_kit(repo: str, commit: str, lock_launcher: bytes, tin_cay: str, out_zip: str, *,
-             cho_khoa_thu: bool = False) -> dict:
+             cho_khoa_thu: bool = False, danh_sach: str = "") -> dict:
     """Bộ bootstrap (cài MỚI một máy managed): 6 file mã + 2 tài liệu = ĐÚNG blob git của ``commit``,
     ``launcher-lock.txt`` CÓ BĂM (pin = lock trong commit), ``trusted_keys.json`` (CHỈ khoá công khai; khoá THỬ bị từ
     chối trừ khi ``cho_khoa_thu`` — kit diễn tập). ZIP tất định (giờ = giờ commit). Không ghi đè."""
@@ -684,9 +731,28 @@ def dung_kit(repo: str, commit: str, lock_launcher: bytes, tin_cay: str, out_zip
     except bootstrap.LoiBootstrap as e:
         raise LoiPhatHanh(str(e)) from None
     khoa = mu.doc_khoa_tin_cay(tin_cay)
-    if not cho_khoa_thu and any("THỬ" in str(k.get("ghi_chu") or "").upper()
-                                for k in json.loads(tc.decode("utf-8-sig")).get("khoa", [])):
-        raise LoiPhatHanh("trusted_keys.json có KHOÁ THỬ — không dựng kit thật (diễn tập: cho_khoa_thu).")
+    import uy_quyen_khoa as uq
+
+    if any(uq.la_khoa_yeu(r) for r in uq._raw_cac_khoa(khoa).values()):
+        raise LoiPhatHanh("trusted_keys.json có khoá yếu (điểm bậc nhỏ) — không dựng kit.")
+    if not cho_khoa_thu:
+        if any("THỬ" in str(k.get("ghi_chu") or "").upper() for k in json.loads(tc.decode("utf-8-sig")).get("khoa", [])):
+            raise LoiPhatHanh("trusted_keys.json có KHOÁ THỬ — không dựng kit thật (diễn tập: cho_khoa_thu).")
+        try:
+            if danh_sach:                        # chỉ định rõ (cẩn thận: đừng trỏ vào chính file --tin-cay vừa sửa)
+                goc_ds = uq._raw_cac_khoa(mu.doc_khoa_tin_cay(danh_sach))
+            else:                                # mặc định: bản ĐÃ COMMIT (đã qua PR) ở HEAD của repo
+                with tempfile.TemporaryDirectory(prefix="timclip_ds_") as tam:
+                    p_ds = os.path.join(tam, "trusted_keys.json")
+                    with open(p_ds, "wb") as f:
+                        f.write(_git(repo, "show", "HEAD:release/trusted_keys.json"))
+                    goc_ds = uq._raw_cac_khoa(mu.doc_khoa_tin_cay(p_ds))
+        except (mu.LoiCapNhat, subprocess.CalledProcessError) as e:
+            raise LoiPhatHanh(f"Không đọc được danh sách khoá công khai đang tin ({type(e).__name__}).") from None
+        la = [k for k, r in uq._raw_cac_khoa(khoa).items() if goc_ds.get(k) != r]
+        if la:
+            raise LoiPhatHanh(f"Khoá {', '.join(la)} không có trong release/trusted_keys.json (bản đã commit) — kit "
+                              "thật chỉ tin khoá công khai đang tin của repo.")
     tep["trusted_keys.json"] = tc
     pin_lock = sorted(_PIN.findall(lock_launcher.decode("utf-8")))
     pin_commit = sorted(_PIN.findall(_git(repo, "show", f"{commit_day_du}:{THU_MUC_MA}/launcher-lock.txt")
@@ -818,6 +884,9 @@ def main(argv=None) -> int:
     a = sub.add_parser("them-khoa-danh-sach", help="thêm khoá vào release/trusted_keys.json theo uỷ quyền đã ký")
     a.add_argument("--uy-quyen", required=True)
     a.add_argument("--tin-cay", required=True)
+    a = sub.add_parser("go-khoa-danh-sach", help="gỡ khoá (vd. bị lộ) khỏi release/trusted_keys.json")
+    a.add_argument("--key-id", required=True)
+    a.add_argument("--tin-cay", required=True)
     a = sub.add_parser("kiem-sau-ky", help="kiểm bản vừa ký (y hệt PC2 + thử phá trên bản sao)")
     a.add_argument("--dir", required=True)
     a.add_argument("--tin-cay", required=True)
@@ -835,6 +904,7 @@ def main(argv=None) -> int:
     a.add_argument("--tin-cay", required=True)
     a.add_argument("--out", required=True)
     a.add_argument("--dien-tap", action="store_true", help="cho phép khoá THỬ (kit diễn tập, không giao máy thật)")
+    a.add_argument("--danh-sach", default="", help="danh sách khoá công khai đang tin (mặc định release/trusted_keys.json)")
     ns = ap.parse_args(argv)
     try:
         if ns.lenh in ("tao-khoa", "ky-uy-quyen") and not _co_console():
@@ -845,7 +915,7 @@ def main(argv=None) -> int:
             kq = tao_khoa_phat_hanh(ns.thu_muc, mat_khau=_hoi_mat_khau_moi(), ten_may=ns.ten_may)
             for t, v in kq["tu_kiem"].items():
                 print(f"  {'ĐẠT' if v else 'LỖI'}  {t}")
-            print(f"key_id: {kq['key_id']}   (ghi lại 8 ký tự cuối: {kq['key_id'][-8:]})")
+            print(f"key_id: {kq['key_id']}   (gửi ĐỦ 16 ký tự này cho máy ký uỷ quyền qua tin nhắn của bạn)")
             print(f"khoá công khai: {kq['khoa_cong_khai']}")
             dat = all(kq["tu_kiem"].values())
             print("KẾT QUẢ:", "ĐẠT — khoá đã tạo và tự kiểm." if dat else "CÓ LỖI — chưa dùng khoá này, báo Claude.")
@@ -867,17 +937,20 @@ def main(argv=None) -> int:
                 raise LoiPhatHanh(f"Yêu cầu không hợp lệ: {e}") from None
             print("=" * 72)
             print(" KÝ UỶ QUYỀN ghi danh khoá phát hành mới")
-            print(f"   khoá mới      : {yc['khoa_moi']['key_id']}   (máy {yc['ten_may']}, tự ký hợp lệ)")
+            print(f"   khoá mới      : (máy {yc['ten_may']}, yêu cầu tự ký hợp lệ) — key_id KHÔNG hiện ở đây: gõ theo tin "
+                  "nhắn máy kia báo")
             print(f"   máy đích tin  : {', '.join(yc['khoa_hien_co'])}; đang chạy {yc['ban_dang_chay'] or '(chưa có)'}")
             print(f"   trust store máy đích {'TRÙNG' if yc['trust_store_sha256'] == sha_tc else 'KHÁC'} file "
                   f"--tin-cay ({yc['trust_store_sha256'][:12]}…)")
             print("=" * 72)
             try:
-                go = input(f"Gõ 8 ký tự CUỐI của khoá mới ({yc['khoa_moi']['key_id'][:8]}…) — so với số máy kia báo: ")
+                go = input("Gõ ĐỦ 16 ký tự key_id của khoá mới mà máy kia báo cho bạn: ")
             except EOFError:
                 go = ""
-            if go.strip().lower() != yc["khoa_moi"]["key_id"][-8:]:
-                raise LoiPhatHanh("Không khớp — chưa ký gì.")
+            if go.strip().lower() != yc["khoa_moi"]["key_id"]:
+                raise LoiPhatHanh("key_id KHÔNG khớp yêu cầu trên repo — chưa ký gì (yêu cầu có thể đã bị tráo; báo chủ "
+                                  "dự án).")
+            print(f"   khớp: {yc['khoa_moi']['key_id']}")
             mk = getpass.getpass("Mật khẩu khoá ký: ").encode("utf-8")
             try:
                 raw = ky_uy_quyen(raw_yc, ns.khoa, ns.tin_cay, mat_khau=mk, han_ngay=ns.han_ngay)
@@ -898,6 +971,10 @@ def main(argv=None) -> int:
             t = kiem_uy_quyen(raw, ns.tin_cay, raw_yeu_cau=raw_yc)
             print(f"ĐẠT: uỷ quyền {t['ma_uy_quyen']} — khoá {t['khoa_moi']} ({t['ten_may']}), ký bởi {t['ky_boi']} "
                   f"(đang tin), hết hạn {t['het_han']}" + ("; khớp yêu cầu" if raw_yc is not None else ""))
+            return 0
+        if ns.lenh == "go-khoa-danh-sach":
+            kq = go_khoa_danh_sach(ns.key_id, ns.tin_cay)
+            print(f"ĐÃ GỠ {kq['go']} — danh sách còn tin: {', '.join(kq['khoa'])}")
             return 0
         if ns.lenh == "them-khoa-danh-sach":
             with open(ns.uy_quyen, "rb") as f:
@@ -922,7 +999,7 @@ def main(argv=None) -> int:
         if ns.lenh == "kit":
             with open(ns.lock_launcher, "rb") as f:
                 lk = f.read()
-            kq = dung_kit(ns.repo, ns.commit, lk, ns.tin_cay, ns.out, cho_khoa_thu=ns.dien_tap)
+            kq = dung_kit(ns.repo, ns.commit, lk, ns.tin_cay, ns.out, cho_khoa_thu=ns.dien_tap, danh_sach=ns.danh_sach)
             print(f"KIT: {kq['zip']} sha256 {kq['zip_sha256']} — commit {kq['commit']}, khoá {', '.join(kq['khoa'])}")
             return 0
         if ns.lenh == "khoa-thu":

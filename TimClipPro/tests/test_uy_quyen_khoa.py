@@ -84,7 +84,19 @@ def may(tmp_path):
     pc2 = _dung_cai_dat(tmp_path, "pc2", k1)
     tin_cay_k1 = mu.doc_khoa_tin_cay(pc2["tc"])                 # danh sách khoá CÔNG KHAI phía PC1 giữ
     return {"k1": k1, "k2": k2, "k3": k3, "id2": uq.tao_key_id(_raw(k2)), "pc2": pc2,
-            "tin_cay_k1": tin_cay_k1, "tmp": tmp_path}
+            "tin_cay_k1": tin_cay_k1, "tmp": tmp_path, "pub2": _ghi_khoa_cong_khai(tmp_path / "pc2" / "khoa", k2)}
+
+
+def _ghi_khoa_cong_khai(thu_muc, k) -> str:
+    """Như ``khoa_cong_khai_<id>.json`` mà ``tao-khoa`` để lại trong thư mục khoá CỦA máy (ngoài repo)."""
+    os.makedirs(thu_muc, exist_ok=True)
+    kid = uq.tao_key_id(_raw(k))
+    p = os.path.join(str(thu_muc), f"khoa_cong_khai_{kid}.json")
+    with open(p, "w", encoding="utf-8") as f:
+        json.dump({"khoa": [{"key_id": kid, "ed25519_pub_b64": _b64(_raw(k))}]}, f)
+    with open(os.path.join(str(thu_muc), f"khoa_rieng_phat_hanh_{kid}.pem"), "wb") as f:
+        f.write(b"CHO GIU CHO - khong phai khoa that\n")      # công cụ chỉ kiểm file khoá riêng CÓ MẶT, không đọc
+    return p
 
 
 def _byte(p):
@@ -116,13 +128,15 @@ def _uy_quyen(may, raw_yc=None, *, ky=None, tin_cay=None, bay_gio=BAY_GIO, han_n
                            khoa_tin_cay=tin_cay or may["tin_cay_k1"], bay_gio=bay_gio, han_ngay=han_ngay)
 
 
-def _ghi_danh(may, raw_uq, cai=None, *, dong_y=True, bay_gio=BAY_GIO + timedelta(hours=1), **kw):
+def _ghi_danh(may, raw_uq, cai=None, *, dong_y=True, bay_gio=BAY_GIO + timedelta(hours=1), khoa_cong_khai=None,
+              **kw):
     hoi = []
 
     def xac_nhan(tom_tat):
         hoi.append(tom_tat)
         return dong_y
-    kq = uq.ghi_danh((cai or may["pc2"])["goc"], raw_uq, xac_nhan=xac_nhan, bay_gio=bay_gio, **kw)
+    kq = uq.ghi_danh((cai or may["pc2"])["goc"], raw_uq, khoa_cong_khai=khoa_cong_khai or may["pub2"],
+                     xac_nhan=xac_nhan, bay_gio=bay_gio, **kw)
     return kq, hoi
 
 
@@ -259,7 +273,7 @@ def _gia_mao(may):
         "khoa_moi_tu_uy_quyen": _ky_lai(_sua_noi_dung(raw, ky_boi=may["id2"]), k2),
         "doi_khoa_moi_sau_ky": _sua_noi_dung(raw, khoa_moi={"key_id": may["k3"].key_id,
                                                            "ed25519_pub_b64": _b64(may["k3"].raw)}),
-        "gia_han_sau_ky": _sua_noi_dung(raw, het_han="2027-12-31T00:00:00Z"),
+        "gia_han_sau_ky": _sua_noi_dung(raw, het_han="2026-11-29T08:00:00Z"),       # +45 ngày: hợp lệ về hạn
         "lat_1_bit_chu_ky": lat_bit,
         "k3_ky_mao_key_id_k1": json.dumps(k3_ky_ten_k1).encode(),
         "ky_nham_mien_yeu_cau": _ky_lai(raw, may["k1"].rieng, uq.MIEN_YEU_CAU),
@@ -276,6 +290,13 @@ def _gia_mao(may):
     }
 
 
+LY_DO_GIA_MAO = {"khoa_la_ky": "KHÔNG được tin", "khoa_moi_tu_uy_quyen": "tự uỷ quyền",
+                 "doi_khoa_moi_sau_ky": "KHÔNG hợp lệ", "gia_han_sau_ky": "KHÔNG hợp lệ", "lat_1_bit_chu_ky": "KHÔNG hợp lệ",
+                 "k3_ky_mao_key_id_k1": "KHÔNG hợp lệ", "ky_nham_mien_yeu_cau": "KHÔNG hợp lệ",
+                 "chu_ky_manifest_dung_lai": "KHÔNG hợp lệ", "doi_loai": "Sai loại", "trung_khoa_json": "trùng khoá JSON",
+                 "qua_lon": "quá lớn", "khong_phai_json": "hỏng", "thieu_truong": "thiếu/thừa"}
+
+
 @pytest.mark.parametrize("ca", ["khoa_la_ky", "khoa_moi_tu_uy_quyen", "doi_khoa_moi_sau_ky", "gia_han_sau_ky",
                                 "lat_1_bit_chu_ky", "k3_ky_mao_key_id_k1", "ky_nham_mien_yeu_cau",
                                 "chu_ky_manifest_dung_lai", "doi_loai", "trung_khoa_json", "qua_lon",
@@ -283,7 +304,7 @@ def _gia_mao(may):
 def test_uy_quyen_gia_mao_bi_tu_choi_khong_doi_gi(may, ca):
     raw = _gia_mao(may)[ca]
     truoc = _cay(may["pc2"]["goc"])
-    with pytest.raises(uq.LoiUyQuyen):
+    with pytest.raises(uq.LoiUyQuyen, match=LY_DO_GIA_MAO[ca]):
         _ghi_danh(may, raw)
     assert _cay(may["pc2"]["goc"]) == {k: v for k, v in truoc.items()}        # không file nào đổi/thêm
     assert not os.path.exists(os.path.join(may["pc2"]["goc"], "launcher", uq.THU_MUC_SAO_LUU))
@@ -424,8 +445,10 @@ def test_hoan_tac_ve_ban_sao_luu(may):
     hoi = []
     kq2 = uq.hoan_tac(may["pc2"]["goc"], kq["sao_luu"], xac_nhan=lambda t: hoi.append(t) or True)
     assert kq2["trang_thai"] == "DA_HOAN_TAC" and hoi[0]["go_bo"] == [may["id2"]]
-    assert _byte(may["pc2"]["tc"]) == truoc
     assert set(mu.doc_khoa_tin_cay(may["pc2"]["tc"])) == {may["k1"].key_id}
+    sau = json.loads(_byte(may["pc2"]["tc"]))
+    assert sau["khoa"] == json.loads(truoc)["khoa"]                    # mục khoá PC1 giữ nguyên
+    assert [x["key_id"] for x in sau["thu_hoi"]] == [may["id2"]]       # khoá gỡ ghi vào danh sách thu hồi
 
 
 def test_hoan_tac_bi_chan_khi_ban_dang_chay_do_khoa_se_go_ky(may):
@@ -470,7 +493,7 @@ def test_cli_chay_rieng_khong_sinh_pycache_khong_doi_cay_release(may, tmp_path):
     truoc = _cay(pc2["goc"])
     cong_cu = os.path.join(MA, "uy_quyen_khoa.py")
     env = {k: v for k, v in os.environ.items() if not k.startswith("PYTHON")}
-    for doi_so in (["xem", "--goc", pc2["goc"]], ["ghi-danh", "--goc", pc2["goc"], "--uy-quyen", p_uq]):
+    for doi_so in (["xem", "--goc", pc2["goc"]], ["ghi-danh", "--goc", pc2["goc"], "--uy-quyen", p_uq, "--khoa-cong-khai", may["pub2"]]):
         r = subprocess.run([sys.executable, "-I", cong_cu, *doi_so], capture_output=True, text=True,
                            encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL, env=env, timeout=120)
         if doi_so[0] == "xem":
@@ -511,7 +534,8 @@ def test_launcher_ban_bootstrap_e49340d_doc_va_kiem_duoc_trust_store_sau_ghi_dan
     L = uq.nap_launcher(cai["goc"])
     raw_yc = uq.tao_yeu_cau(k2, ten_may="PC2", cai_dat=uq.doc_cai_dat(cai["goc"], L), bay_gio=BAY_GIO)
     raw = uq.tao_uy_quyen(raw_yc, k1.rieng, khoa_tin_cay=mu.doc_khoa_tin_cay(cai["tc"]), bay_gio=BAY_GIO)
-    kq = uq.ghi_danh(cai["goc"], raw, xac_nhan=lambda t: True, bay_gio=BAY_GIO)
+    kq = uq.ghi_danh(cai["goc"], raw, khoa_cong_khai=_ghi_khoa_cong_khai(tmp_path / "e49" / "khoa", k2),
+                     xac_nhan=lambda t: True, bay_gio=BAY_GIO)
     assert kq["trang_thai"] == "DA_GHI_DANH"
     assert set(L.mu.doc_khoa_tin_cay(cai["tc"])) == {k1.key_id, uq.tao_key_id(_raw(k2))}
 
@@ -599,7 +623,7 @@ def test_lenh_can_nguoi_go_tu_choi_khi_khong_co_console(may, tmp_path, dau_vao, 
     doi_so = {"tao-khoa": ["release_tool.py", "tao-khoa", "--thu-muc", str(tmp_path / "khoa"), "--ten-may", "PC2"],
               "ky-uy-quyen": ["release_tool.py", "ky-uy-quyen", "--yeu-cau", gia, "--khoa", gia, "--tin-cay", pc2["tc"],
                               "--ra", str(tmp_path / "uq.json")],
-              "ghi-danh": ["uy_quyen_khoa.py", "ghi-danh", "--goc", pc2["goc"], "--uy-quyen", gia],
+              "ghi-danh": ["uy_quyen_khoa.py", "ghi-danh", "--goc", pc2["goc"], "--uy-quyen", gia, "--khoa-cong-khai", gia],
               "hoan-tac": ["uy_quyen_khoa.py", "hoan-tac", "--goc", pc2["goc"], "--sao-luu", gia],
               "yeu-cau": ["uy_quyen_khoa.py", "yeu-cau", "--goc", pc2["goc"], "--khoa-rieng", gia, "--ten-may", "PC2",
                           "--ra", str(tmp_path / "yc.json")]}[lenh]
@@ -694,3 +718,146 @@ def _yeu_cau_bo_kiem_ban(may):
     L = uq.nap_launcher(may["pc2"]["goc"])
     tt = uq.doc_cai_dat(may["pc2"]["goc"], L, kiem_ban=False)
     return uq.tao_yeu_cau(may["k2"], ten_may="PC2", cai_dat=tt, bay_gio=BAY_GIO)
+
+
+# ---------------------------------------------------------------------------
+#  Review độc lập lượt 1 (14/10): P1-1, P2-1, P2-2, P3 khoá bậc nhỏ, nhật ký hỏng
+# ---------------------------------------------------------------------------
+
+def test_uy_quyen_hop_le_cho_khoa_KHONG_phai_cua_may_nay_bi_tu_choi(may):
+    """P1-1: kẻ tráo yêu cầu trên đường đi (PR) bằng khoá của mình (mài trùng vài ký tự key_id) — PC1 ký thật — máy đích
+    vẫn từ chối vì khoá được uỷ quyền KHÁC đúng 32 byte khoá công khai do tao-khoa để lại trên CHÍNH máy này."""
+    raw = _uy_quyen(may, _yeu_cau(may, khoa=may["k3"].rieng))       # yêu cầu tự ký hợp lệ, nhưng của khoá k3
+    truoc = _cay(may["pc2"]["goc"])
+    with pytest.raises(uq.LoiUyQuyen, match="KHÔNG khớp khoá công khai của máy này"):
+        _ghi_danh(may, raw)
+    assert _cay(may["pc2"]["goc"]) == truoc
+
+
+def test_khoa_cong_khai_cua_may_phai_dung_mot_khoa_hop_le(may, tmp_path):
+    hai = tmp_path / "hai.json"
+    hai.write_text(json.dumps({"khoa": [{"key_id": k.key_id, "ed25519_pub_b64": _b64(k.raw)}
+                                        for k in (may["k1"], may["k3"])]}), encoding="utf-8")
+    for p in (str(hai), str(tmp_path / "khong_co.json")):
+        with pytest.raises(uq.LoiUyQuyen, match="khoá công khai của máy"):
+            _ghi_danh(may, _uy_quyen(may), khoa_cong_khai=p)
+
+
+def test_hoan_tac_xong_khong_dung_lai_duoc_uy_quyen_va_khoa_bi_thu_hoi(may):
+    """P2-1: sau hoàn tác, uỷ quyền cũ (còn hạn) không dùng lại được; uỷ quyền MỚI cho khoá đã thu hồi cũng bị từ chối."""
+    raw = _uy_quyen(may)
+    kq, _ = _ghi_danh(may, raw)
+    uq.hoan_tac(may["pc2"]["goc"], kq["sao_luu"], xac_nhan=lambda t: True)
+    sau = _byte(may["pc2"]["tc"])
+    with pytest.raises(uq.LoiUyQuyen, match="THU HỒI"):
+        _ghi_danh(may, raw)
+    moi = _uy_quyen(may, _yeu_cau(may))                               # yêu cầu mới trên trust store hiện tại
+    with pytest.raises(uq.LoiUyQuyen, match="THU HỒI"):
+        _ghi_danh(may, moi)
+    assert _byte(may["pc2"]["tc"]) == sau
+
+
+def test_hoan_tac_chi_nhan_ban_sao_luu_cua_cong_cu_va_khong_go_khoa_goc(may):
+    """P2-2: file tập con bất kỳ (vd. khoa_cong_khai của PC2) không dùng để hoàn tác được; không bao giờ gỡ khoá gốc của
+    bộ kit (mục không có bản ghi «ghi_danh»)."""
+    kq, _ = _ghi_danh(may, _uy_quyen(may))
+    sau = _byte(may["pc2"]["tc"])
+    with pytest.raises(uq.LoiUyQuyen, match="trust_backups"):
+        uq.hoan_tac(may["pc2"]["goc"], may["pub2"], xac_nhan=lambda t: True)
+    ngoai = os.path.join(may["tmp"], "pc2", "trusted_keys_ban_cu.json")    # đúng mẫu tên nhưng NGOÀI trust_backups
+    shutil.copyfile(kq["sao_luu"], ngoai)
+    with pytest.raises(uq.LoiUyQuyen, match="trust_backups"):
+        uq.hoan_tac(may["pc2"]["goc"], ngoai, xac_nhan=lambda t: True)
+    gia = os.path.join(os.path.dirname(kq["sao_luu"]), "trusted_keys_gia_chi_khoa_pc2.json")
+    shutil.copyfile(may["pub2"], gia)
+    with pytest.raises(uq.LoiUyQuyen, match="khoá gốc"):
+        uq.hoan_tac(may["pc2"]["goc"], gia, xac_nhan=lambda t: True)
+    assert _byte(may["pc2"]["tc"]) == sau
+
+
+# Mã hoá các điểm bậc nhỏ (torsion) của Ed25519 — danh sách chặn của libsodium (ge25519_has_small_order).
+DIEM_BAC_NHO = ["0000000000000000000000000000000000000000000000000000000000000000",
+                "0100000000000000000000000000000000000000000000000000000000000000",
+                "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05",
+                "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a",
+                "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"]
+
+
+@pytest.mark.parametrize("hex_diem", DIEM_BAC_NHO)
+def test_khoa_bac_nho_bi_tu_choi(hex_diem):
+    """P3: khoá công khai bậc nhỏ «xác minh» mọi chữ ký R=điểm đơn vị, S=0 — không bao giờ được vào trust store."""
+    raw = bytes.fromhex(hex_diem)
+    assert uq.la_khoa_yeu(raw)
+    with pytest.raises(uq.LoiUyQuyen, match="yếu"):
+        uq.doc_khoa_cong_khai({"key_id": uq.tao_key_id(raw), "ed25519_pub_b64": _b64(raw)})
+
+
+def test_khoa_that_va_diem_co_so_khong_bi_coi_la_yeu():
+    co_so = bytes.fromhex("5866666666666666666666666666666666666666666666666666666666666666")
+    assert not uq.la_khoa_yeu(co_so)
+    assert uq._giai_ma_diem(co_so)[0] == \
+        15112221349535400772501151409588531511454012693041857206046113283949847762202      # x của điểm cơ sở B
+    for _ in range(50):
+        assert not uq.la_khoa_yeu(_raw(Ed25519PrivateKey.generate()))
+
+
+def test_nhat_ky_cap_nhat_hong_thi_khong_ghi_danh(may):
+    """Review P3: nhật ký cập nhật HỎNG = cần kiểm tay (như bộ cập nhật) — không coi là rảnh."""
+    raw = _uy_quyen(may)
+    with open(os.path.join(may["pc2"]["goc"], "update_state", "journal.json"), "w", encoding="utf-8") as f:
+        f.write("{hong")
+    truoc = _byte(may["pc2"]["tc"])
+    with pytest.raises(uq.LoiUyQuyen, match="hỏng"):
+        _ghi_danh(may, raw)
+    assert _byte(may["pc2"]["tc"]) == truoc
+
+
+# ---------------------------------------------------------------------------
+#  Review độc lập lượt 2 (P3)
+# ---------------------------------------------------------------------------
+
+def test_khoa_cong_khai_cua_may_trong_repo_hoac_khong_canh_khoa_rieng_bi_tu_choi(may, tmp_path):
+    """Kẻ tráo yêu cầu có thể gửi kèm file khoá công khai CỦA HẮN trong repo — file của máy phải nằm ngoài mọi bản clone
+    git và cạnh khoá riêng cùng key_id (thư mục khoá do tao-khoa tạo)."""
+    k3 = may["k3"].rieng
+    raw = _uy_quyen(may, _yeu_cau(may, khoa=k3))
+    clone = tmp_path / "clone"
+    os.makedirs(clone / ".git")
+    trong_repo = _ghi_khoa_cong_khai(clone / "release" / "trust", k3)
+    with pytest.raises(uq.LoiUyQuyen, match="NGOÀI repo"):
+        _ghi_danh(may, raw, khoa_cong_khai=trong_repo)
+    le = tmp_path / "le"
+    p = _ghi_khoa_cong_khai(le, k3)
+    os.remove(os.path.join(str(le), f"khoa_rieng_phat_hanh_{uq.tao_key_id(_raw(k3))}.pem"))
+    with pytest.raises(uq.LoiUyQuyen, match="khoá riêng"):
+        _ghi_danh(may, raw, khoa_cong_khai=p)
+    assert set(mu.doc_khoa_tin_cay(may["pc2"]["tc"])) == {may["k1"].key_id}
+
+
+def test_hoan_tac_tu_choi_hard_link_trong_trust_backups(may, tmp_path):
+    kq, _ = _ghi_danh(may, _uy_quyen(may))
+    ngoai = tmp_path / "ngoai.json"
+    shutil.copyfile(kq["sao_luu"], ngoai)
+    lien_ket = os.path.join(os.path.dirname(kq["sao_luu"]), "trusted_keys_lien_ket.json")
+    os.link(str(ngoai), lien_ket)
+    with pytest.raises(uq.LoiUyQuyen, match="liên kết"):
+        uq.hoan_tac(may["pc2"]["goc"], lien_ket, xac_nhan=lambda t: True)
+
+
+def test_go_khoa_khoi_danh_sach_repo(may, tmp_path):
+    """Khoá bị lộ phải rời CẢ danh sách khoá công khai của repo (verify, kiem-sau-ky, feed, kit dùng danh sách đó)."""
+    ds = tmp_path / "trusted_keys.json"
+    ds.write_bytes(_byte(may["pc2"]["tc"]))
+    rt.them_khoa_danh_sach(_uy_quyen(may), str(ds))
+    muc_k1 = json.loads(ds.read_text(encoding="utf-8"))["khoa"][0]
+    kq = rt.go_khoa_danh_sach(may["id2"], str(ds))
+    assert kq["khoa"] == [may["k1"].key_id] and kq["go"] == may["id2"]
+    d = json.loads(ds.read_text(encoding="utf-8"))
+    assert d["khoa"] == [muc_k1] and [x["key_id"] for x in d["thu_hoi"]] == [may["id2"]]
+    with pytest.raises(rt.LoiPhatHanh, match="không có"):
+        rt.go_khoa_danh_sach(may["id2"], str(ds))
+    with pytest.raises(rt.LoiPhatHanh, match="cuối cùng"):
+        rt.go_khoa_danh_sach(may["k1"].key_id, str(ds))
+    with pytest.raises(rt.LoiPhatHanh, match="thu hồi"):
+        rt.them_khoa_danh_sach(_uy_quyen(may), str(ds))       # khoá đã gỡ không thêm lại được qua danh sách repo
+    assert [p.name for p in tmp_path.iterdir() if ".tmp-" in p.name] == []

@@ -53,7 +53,7 @@ def test_kiem_sau_ky_bao_sai_khoa_mong_doi_hoac_sai_commit(ban_ky):
 
 
 def test_kiem_sau_ky_tu_choi_ban_bi_sua_sau_ky_va_thu_muc_thua_file(ban_ky):
-    with open(os.path.join(ban_ky["goc"], "ghi_chu.txt"), "w") as f:
+    with open(os.path.join(ban_ky["goc"], "ghi_chu.txt"), "w", encoding="utf-8") as f:
         f.write("thừa")
     assert not rt.kiem_sau_ky(ban_ky["goc"], ban_ky["tin_cay"])["kiem"]["thu_muc_dung_4_file"]
     os.remove(os.path.join(ban_ky["goc"], "ghi_chu.txt"))
@@ -129,16 +129,19 @@ def test_kit_that_tu_choi_khoa_thu_lock_chua_bam_va_lech_pin(tmp_path):
     with pytest.raises(rt.LoiPhatHanh, match="KHOÁ THỬ"):
         rt.dung_kit(REPO, E49, lk, tin_cay, str(tmp_path / "a.zip"))
     d = json.load(open(tin_cay, encoding="utf-8"))
-    d["khoa"][0]["ghi_chu"] = "Khoá phát hành — PC2"
-    that = tmp_path / "that.json"
-    that.write_text(json.dumps(d), encoding="utf-8")
+    d["khoa"][0]["ghi_chu"] = "Khoá phát hành — PC2"                 # khoá lạ KHÔNG ghi chữ «THỬ» (review P3)
+    la = tmp_path / "la.json"
+    la.write_text(json.dumps(d), encoding="utf-8")
+    with pytest.raises(rt.LoiPhatHanh, match="release/trusted_keys.json"):
+        rt.dung_kit(REPO, E49, lk, str(la), str(tmp_path / "e.zip"))
+    that = os.path.join(REPO, "release", "trusted_keys.json")          # danh sách khoá công khai đang tin của repo
     with pytest.raises(rt.LoiPhatHanh, match="thiếu băm"):
-        rt.dung_kit(REPO, E49, lk.replace(b"--hash=sha256:" + b"b" * 64, b""), str(that), str(tmp_path / "b.zip"))
+        rt.dung_kit(REPO, E49, lk.replace(b"--hash=sha256:" + b"b" * 64, b""), that, str(tmp_path / "b.zip"))
     with pytest.raises(rt.LoiPhatHanh, match="pin"):
-        rt.dung_kit(REPO, E49, lk.replace(b"cryptography==50.0.0", b"cryptography==49.0.0"), str(that),
+        rt.dung_kit(REPO, E49, lk.replace(b"cryptography==50.0.0", b"cryptography==49.0.0"), that,
                     str(tmp_path / "c.zip"))
-    assert rt.dung_kit(REPO, E49, lk, str(that), str(tmp_path / "d.zip"))["khoa"] == list(mu.doc_khoa_tin_cay(str(that)))
-    assert not any(os.path.exists(tmp_path / f"{x}.zip") for x in "abc")
+    assert rt.dung_kit(REPO, E49, lk, that, str(tmp_path / "d.zip"))["khoa"] == sorted(mu.doc_khoa_tin_cay(that))
+    assert not any(os.path.exists(tmp_path / f"{x}.zip") for x in "abce")
 
 
 @pytest.mark.skipif(os.name != "nt" or not __import__("shutil").which("powershell.exe"), reason="cần PowerShell")
@@ -170,3 +173,47 @@ def test_khoi_powershell_chay_that_ba_ca(ban_ky):
     hong.write_bytes(bytes(b))
     o3 = chay("zip_hong", str(hong), str(tmp / "Feed2"))
     assert o3.startswith("ZIP SAI MA BAM") and not os.listdir(tmp / "Feed2")
+
+
+def test_sign_chi_ky_manifest_hop_le(ban_ky, tmp_path):
+    """Review P2-3: «sign» ký đúng byte của manifest.json — nếu file đó là nội dung uỷ quyền (tiền tố miền) thì chữ ký
+    thành chữ ký uỷ quyền hợp lệ, vượt qua bước ky-uy-quyen. Không phải manifest hợp lệ → từ chối, không ghi chữ ký."""
+    import uy_quyen_khoa as uq
+
+    goc = tmp_path / "stable-9.9.9"
+    goc.mkdir()
+    (goc / mu.TEN_MANIFEST).write_bytes(uq.MIEN_UY_QUYEN + uq.chuan_hoa({"loai": uq.LOAI_UY_QUYEN}))
+    khoa_rieng, _ = rt.tao_khoa_thu(str(tmp_path / "k"))
+    with pytest.raises((rt.LoiPhatHanh, mu.LoiCapNhat)):
+        rt.sign(str(goc), khoa_rieng)
+    assert not (goc / mu.TEN_CHU_KY).exists()
+
+
+def test_kiem_sau_ky_bat_khoa_yeu_trong_danh_sach(ban_ky):
+    d = json.load(open(ban_ky["tin_cay"], encoding="utf-8"))
+    raw = bytes.fromhex("01" + "00" * 31)
+    import base64
+
+    import uy_quyen_khoa as uq
+
+    d["khoa"].append({"key_id": uq.tao_key_id(raw), "ed25519_pub_b64": base64.b64encode(raw).decode()})
+    p = ban_ky["tmp"] / "co_khoa_yeu.json"
+    p.write_text(json.dumps(d), encoding="utf-8")
+    kq = rt.kiem_sau_ky(ban_ky["goc"], str(p))
+    assert not kq["dat"] and not kq["kiem"]["danh_sach_khong_co_khoa_yeu"]
+
+
+@pytest.mark.skipif(not _co_commit(E49), reason="cần repo git có commit e49340d")
+def test_kit_doi_chieu_danh_sach_DA_COMMIT_khong_phai_file_dang_sua(tmp_path):
+    """Review lượt 2: danh sách mặc định là release/trusted_keys.json của HEAD (đã qua PR) — sửa file cây làm việc (thêm
+    khoá lạ) rồi dùng chính file đó làm --tin-cay KHÔNG qua được."""
+    _, tin_cay = rt.tao_khoa_thu(str(tmp_path / "khoa"))
+    lk = _lock_launcher_co_bam()
+    goc = json.load(open(os.path.join(REPO, "release", "trusted_keys.json"), encoding="utf-8"))
+    la = json.load(open(tin_cay, encoding="utf-8"))["khoa"][0]
+    la["ghi_chu"] = "Khoá phát hành — máy lạ"
+    sua = tmp_path / "trusted_keys_da_sua.json"
+    sua.write_text(json.dumps({"khoa": goc["khoa"] + [la]}), encoding="utf-8")
+    with pytest.raises(rt.LoiPhatHanh, match="release/trusted_keys.json"):
+        rt.dung_kit(REPO, E49, lk, str(sua), str(tmp_path / "a.zip"))
+    assert not os.path.exists(tmp_path / "a.zip")

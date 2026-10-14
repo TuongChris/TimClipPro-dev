@@ -363,19 +363,28 @@ def ghi_danh_ca(f_moi):
     tt = uq.doc_cai_dat(GOC, L)
     raw_yc = uq.tao_yeu_cau(k_moi, ten_may=g.get("ten_may", "PC2"), cai_dat=tt)
     raw_uq = uq.tao_uy_quyen(raw_yc, k_ky, khoa_tin_cay=L.mu.doc_khoa_tin_cay(os.path.join(KIT, "trusted_keys.json")))
-    for ten, b in (("yeu_cau.json", raw_yc), ("uy_quyen.json", raw_uq)):
+    raw_pub = k_moi.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    kid_moi = uq.tao_key_id(raw_pub)
+    p_pub = os.path.join(BC, f"khoa_cong_khai_{kid_moi}.json")        # như tao-khoa để lại trong thư mục khoá của máy
+    for ten, b in (("yeu_cau.json", raw_yc), ("uy_quyen.json", raw_uq),
+                   (f"khoa_cong_khai_{kid_moi}.json", json.dumps({"khoa": [{"key_id": kid_moi,
+                    "ed25519_pub_b64": __import__("base64").b64encode(raw_pub).decode()}]}).encode()),
+                   (f"khoa_rieng_phat_hanh_{kid_moi}.pem", b"CHO GIU CHO - khoa rieng that o file cau hinh\n")):
         with open(os.path.join(BC, ten), "wb") as f:
             f.write(b)
     if CFG.get("khoa_la_pem"):
         k_la = pem(CFG["khoa_la_pem"])
         try:
-            uq.ghi_danh(GOC, uq._ky(json.loads(raw_uq)["noi_dung"], k_la, uq.MIEN_UY_QUYEN), xac_nhan=lambda t: True)
+            nd = {**json.loads(raw_uq)["noi_dung"], "ky_boi": uq.tao_key_id(k_la.public_key().public_bytes(
+                serialization.Encoding.Raw, serialization.PublicFormat.Raw))}
+            uq.ghi_danh(GOC, uq._ky(nd, k_la, uq.MIEN_UY_QUYEN), khoa_cong_khai=p_pub, xac_nhan=lambda t: True)
             gia = "CHẤP NHẬN (SAI)"
         except uq.LoiUyQuyen as e:
             gia = f"từ chối: {e}"
-        ca("G1a", "uỷ quyền GIẢ (khoá lạ ký cùng nội dung)", "bị từ chối, launcher không đổi", gia,
-           gia.startswith("từ chối") and anh_chup(os.path.join(GOC, "launcher")) == lc_truoc)
-    kq = uq.ghi_danh(GOC, raw_uq, xac_nhan=lambda t: True)
+        ca("G1a", "uỷ quyền GIẢ (khoá lạ tự ký, ky_boi = chính nó)", "bị từ chối «KHÔNG được tin», launcher không đổi",
+           gia, gia.startswith("từ chối") and "KHÔNG được tin" in gia
+           and anh_chup(os.path.join(GOC, "launcher")) == lc_truoc)
+    kq = uq.ghi_danh(GOC, raw_uq, khoa_cong_khai=p_pub, xac_nhan=lambda t: True)
     lc_sau = anh_chup(os.path.join(GOC, "launcher"))
     doi = khac(lc_truoc, lc_sau)
     sao_luu = [k for k in doi if k.startswith(f"{uq.THU_MUC_SAO_LUU}/")]
@@ -387,7 +396,7 @@ def ghi_danh_ca(f_moi):
        and not [k for k in lc_sau if "__pycache__" in k and k not in lc_truoc]
        and anh_chup(os.path.join(GOC, "releases")) == rel_truoc)
     try:
-        uq.ghi_danh(GOC, raw_uq, xac_nhan=lambda t: True)
+        uq.ghi_danh(GOC, raw_uq, khoa_cong_khai=p_pub, xac_nhan=lambda t: True)
         lai = "CHẤP NHẬN (SAI)"
     except uq.LoiUyQuyen as e:
         lai = f"từ chối: {e}"

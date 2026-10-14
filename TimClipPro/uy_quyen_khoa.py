@@ -7,6 +7,7 @@ Chạy trên máy có cài đặt (PC2), do CHỦ MÁY gõ trong cửa sổ cons
     <python>                 -I -B uy_quyen_khoa.py yeu-cau  --goc C:\\TimClipPro --khoa-rieng <pem> --ten-may PC2
                                                              --ra <file yêu cầu .json>
     <python>                 -I -B uy_quyen_khoa.py ghi-danh --goc C:\\TimClipPro --uy-quyen <file uỷ quyền .json>
+                                                             --khoa-cong-khai <khoa_cong_khai_<key_id>.json của máy>
     <python>                 -I -B uy_quyen_khoa.py hoan-tac --goc C:\\TimClipPro --sao-luu <file sao lưu>
 
 Phía máy đang được tin (PC1): ``release_tool.py ky-uy-quyen`` (ký) và ``release_tool.py kiem-uy-quyen`` (kiểm).
@@ -159,8 +160,60 @@ def _doc_json_chat(raw: bytes, ten: str, gioi_han: int = GIOI_HAN_FILE) -> dict:
     return d
 
 
+_P = 2 ** 255 - 19
+_D = (-121665 * pow(121666, _P - 2, _P)) % _P
+_SQRT_M1 = pow(2, (_P - 1) // 4, _P)
+
+
+def _giai_ma_diem(raw: bytes):
+    """Giải mã điểm Ed25519 theo RFC 8032 §5.1.3 → ``(x, y)``; mã hoá không chuẩn / không phải điểm → ``None``."""
+    if len(raw) != 32:
+        return None
+    y = int.from_bytes(raw, "little")
+    dau, y = y >> 255, y & ((1 << 255) - 1)
+    if y >= _P:
+        return None
+    u, v = (y * y - 1) % _P, (_D * y * y + 1) % _P
+    x = (u * pow(v, 3, _P) * pow(u * pow(v, 7, _P), (_P - 5) // 8, _P)) % _P
+    vx2 = (v * x * x) % _P
+    if vx2 == (-u) % _P:
+        x = (x * _SQRT_M1) % _P
+    elif vx2 != u:
+        return None
+    if x == 0 and dau:
+        return None
+    if (x & 1) != dau:
+        x = _P - x
+    return x, y
+
+
+def _cong_diem(a: tuple, b: tuple) -> tuple:
+    """Cộng hai điểm (toạ độ mở rộng X, Y, Z, T; đường cong a = -1)."""
+    x1, y1, z1, t1 = a
+    x2, y2, z2, t2 = b
+    pa = (y1 - x1) * (y2 - x2) % _P
+    pb = (y1 + x1) * (y2 + x2) % _P
+    pc = t1 * 2 * _D * t2 % _P
+    pd = z1 * 2 * z2 % _P
+    e, f, g, h = pb - pa, pd - pc, pd + pc, pb + pa
+    return e * f % _P, g * h % _P, f * g % _P, e * h % _P
+
+
+def la_khoa_yeu(raw: bytes) -> bool:
+    """Khoá công khai KHÔNG dùng được: không giải mã được, mã hoá không chuẩn, hoặc điểm BẬC NHỎ (8·P = điểm đơn vị) —
+    khoá bậc nhỏ «xác minh» được chữ ký giả (R = điểm đơn vị, S = 0) cho MỌI nội dung, kể cả manifest."""
+    d = _giai_ma_diem(raw)
+    if d is None:
+        return True
+    x, y = d
+    p = (x, y, 1, x * y % _P)
+    for _ in range(3):
+        p = _cong_diem(p, p)
+    return p[0] % _P == 0 and (p[1] - p[2]) % _P == 0
+
+
 def doc_khoa_cong_khai(muc) -> tuple:
-    """``{"key_id", "ed25519_pub_b64"}`` → ``(key_id, raw 32 byte)``; khoá phải là điểm Ed25519 hợp lệ."""
+    """``{"key_id", "ed25519_pub_b64"}`` → ``(key_id, raw 32 byte)``; khoá phải là điểm Ed25519 hợp lệ, không bậc nhỏ."""
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
     try:
@@ -171,6 +224,8 @@ def doc_khoa_cong_khai(muc) -> tuple:
         raise LoiUyQuyen("khoa_moi", "Khoá công khai hỏng (không phải khoá Ed25519 32 byte).") from None
     if len(raw) != 32 or not _HEX16.match(key_id) or key_id != tao_key_id(raw):
         raise LoiUyQuyen("khoa_moi", "key_id không khớp khoá công khai.")
+    if la_khoa_yeu(raw):
+        raise LoiUyQuyen("khoa_yeu", "Khoá công khai yếu (điểm bậc nhỏ / mã hoá không chuẩn) — từ chối.")
     return key_id, raw
 
 
@@ -461,7 +516,8 @@ def doc_cai_dat(goc: str, L, *, kiem_ban: bool = True) -> CaiDatDich:
 
 @contextlib.contextmanager
 def _giu_khoa_cap_nhat(cd, L, viec: str):
-    """Cùng khoá HĐH với bộ cập nhật (``update_state/updater.lock``) — không đổi trust store khi đang cập nhật."""
+    """Cùng khoá HĐH với bộ cập nhật (``update_state/updater.lock``) — không đổi trust store khi đang cập nhật. Nhật ký
+    cập nhật đang DỞ hoặc HỎNG (bộ cập nhật coi là cần kiểm tay) → dừng."""
     os.makedirs(cd.update_state, exist_ok=True)
     k = L.khoa.KhoaTienTrinh(cd.file_trang_thai("updater.lock"), viec)
     try:
@@ -469,7 +525,11 @@ def _giu_khoa_cap_nhat(cd, L, viec: str):
     except L.khoa.DangChayRoi:
         raise LoiUyQuyen("ban", "Bộ cập nhật đang chạy trên máy này — đợi xong rồi chạy lại.") from None
     try:
-        nk = L.mu.doc_json(cd.file_trang_thai("journal.json"), bat_buoc_hop_le=False) or {}
+        try:
+            nk = L.mu.doc_json(cd.file_trang_thai("journal.json")) or {}
+        except L.mu.LoiCapNhat:
+            raise LoiUyQuyen("nhat_ky_hong", "Nhật ký cập nhật hỏng — chạy «launcher.py doctor» và kiểm tay; không đổi "
+                                             "trust store khi chưa rõ trạng thái cập nhật.") from None
         if isinstance(nk, dict) and nk.get("trang_thai") in _DANG_DO:
             raise LoiUyQuyen("dang_do", f"Lượt cập nhật trước còn dở ({nk.get('trang_thai')}) — mở TimClipPro.bat "
                                         "hoặc chạy CapNhat.bat để launcher khôi phục xong rồi chạy lại.")
@@ -573,10 +633,67 @@ def _raw_cac_khoa(khoa: dict) -> dict:
     return {k: v.public_bytes(Encoding.Raw, PublicFormat.Raw) for k, v in khoa.items()}
 
 
-def ghi_danh(goc: str, raw_uy_quyen: bytes, *, xac_nhan: Callable[[dict], bool],
+def _tra_lai(tt: CaiDatDich, sao_luu: str) -> str:
+    """Sau lỗi giữa lúc ghi: ghi lại byte cũ rồi ĐỌC LẠI kiểm. Trả câu mô tả trạng thái thật (không đoán)."""
+    try:
+        _ghi_nguyen_tu(tt.duong_dan_tin_cay, tt.byte_tin_cay)
+        with open(tt.duong_dan_tin_cay, "rb") as f:
+            if f.read() == tt.byte_tin_cay:
+                return "đã TRẢ LẠI trust store cũ (đúng từng byte)."
+    except OSError as e:
+        return (f"KHÔNG trả lại được ({type(e).__name__}) — chép tay {sao_luu} về launcher/trusted_keys.json rồi chạy "
+                "«launcher.py doctor».")
+    return f"trust store KHÔNG khớp bản cũ sau khi trả lại — chép tay {sao_luu} về launcher/trusted_keys.json."
+
+
+def _trong_ban_clone_git(p: str) -> bool:
+    hien = os.path.abspath(p)
+    while True:
+        if os.path.exists(os.path.join(hien, ".git")):
+            return True
+        cha = os.path.dirname(hien)
+        if cha == hien:
+            return False
+        hien = cha
+
+
+def _doc_khoa_cua_may(duong_dan: str, L) -> bytes:
+    """Khoá công khai do ``tao-khoa`` để lại trong thư mục khoá CỦA máy này → 32 byte. Đây là đối chiếu danh tính quyết
+    định: uỷ quyền chỉ ghi danh được ĐÚNG khoá tạo trên máy này (yêu cầu có thể bị tráo trên đường đi). File phải nằm
+    NGOÀI mọi bản clone git (kẻ tráo yêu cầu có thể gửi kèm file của hắn trong repo) và CẠNH khoá riêng cùng key_id
+    (chỉ kiểm có mặt — không đọc khoá riêng)."""
+    p = os.path.abspath(duong_dan)
+    if _trong_ban_clone_git(p):
+        raise LoiUyQuyen("khoa_may", "File khoá công khai của máy phải nằm trong thư mục khoá của máy, NGOÀI repo (không "
+                                     "nằm trong bản clone git nào).")
+    try:
+        khoa = L.mu.doc_khoa_tin_cay(p)
+    except L.mu.LoiCapNhat:
+        khoa = {}
+    if len(khoa) != 1:
+        raise LoiUyQuyen("khoa_may", "File khoá công khai của máy phải có ĐÚNG một khoá hợp lệ (khoa_cong_khai_<key_id>"
+                                     ".json do «release_tool.py tao-khoa» tạo trong thư mục khoá của máy này).")
+    kid = next(iter(khoa))
+    if not os.path.isfile(os.path.join(os.path.dirname(p), f"khoa_rieng_phat_hanh_{kid}.pem")):
+        raise LoiUyQuyen("khoa_may", "Không thấy khoá riêng cùng key_id cạnh file khoá công khai — dùng đúng file trong "
+                                     "thư mục khoá do tao-khoa tạo (chỉ kiểm có mặt, không đọc khoá riêng).")
+    raw = _raw_cac_khoa(khoa)[kid]
+    if la_khoa_yeu(raw):
+        raise LoiUyQuyen("khoa_yeu", "Khoá công khai của máy là khoá yếu — từ chối.")
+    return raw
+
+
+def _thu_hoi(byte_tin_cay: bytes) -> list:
+    d = json.loads(byte_tin_cay.decode("utf-8-sig"))
+    ds = d.get("thu_hoi") if isinstance(d, dict) else None
+    return [x for x in ds if isinstance(x, dict)] if isinstance(ds, list) else []
+
+
+def ghi_danh(goc: str, raw_uy_quyen: bytes, *, khoa_cong_khai: str, xac_nhan: Callable[[dict], bool],
              bay_gio: Optional[datetime] = None, diem_dung: Optional[Callable[[str], None]] = None) -> dict:
-    """Ghi danh khoá mới theo uỷ quyền. ``xac_nhan(tóm_tắt) -> bool``: chủ máy xác nhận (CLI: gõ trong console).
-    Trả ``{"trang_thai": "DA_GHI_DANH", "khoa", "sao_luu", ...}``; mọi từ chối → ``LoiUyQuyen``, không đổi gì."""
+    """Ghi danh khoá mới theo uỷ quyền. ``khoa_cong_khai``: file khoá công khai do ``tao-khoa`` để lại trên CHÍNH máy này
+    — khoá được uỷ quyền phải trùng ĐÚNG 32 byte. ``xac_nhan(tóm_tắt) -> bool``: chủ máy xác nhận ý định (CLI: gõ trong
+    console). Trả ``{"trang_thai": "DA_GHI_DANH", "khoa", "sao_luu", ...}``; mọi từ chối → ``LoiUyQuyen``, không đổi gì."""
     dung = diem_dung or (lambda _t: None)
     now = _bay_gio(bay_gio)
     goc = os.path.abspath(goc)
@@ -585,38 +702,43 @@ def ghi_danh(goc: str, raw_uy_quyen: bytes, *, xac_nhan: Callable[[dict], bool],
     with _giu_khoa_cap_nhat(cd, L, "ghi danh khoá tin cậy"):
         tt = doc_cai_dat(goc, L)
         nd = doc_uy_quyen(raw_uy_quyen, tt.khoa, bay_gio=now)
+        if any(x.get("key_id") == nd["khoa_moi"]["key_id"] or x.get("ma_uy_quyen") == nd["ma_uy_quyen"]
+               for x in _thu_hoi(tt.byte_tin_cay)):
+            raise LoiUyQuyen("thu_hoi", f"Khoá {nd['khoa_moi']['key_id']} / uỷ quyền này đã bị THU HỒI trên máy này — "
+                                        "không ghi danh lại (tạo khoá mới nếu cần).")
         kiem_rang_buoc(nd, cai_dat_sha256=tt.cai_dat_sha256, trust_store_sha256=tt.sha_tin_cay,
                        khoa_hien_co=list(tt.khoa))
+        raw_moi = base64.b64decode(nd["khoa_moi"]["ed25519_pub_b64"])
+        if _doc_khoa_cua_may(khoa_cong_khai, L) != raw_moi:
+            raise LoiUyQuyen("khoa_may", f"Khoá được uỷ quyền ({nd['khoa_moi']['key_id']}) KHÔNG khớp khoá công khai của "
+                                         "máy này — uỷ quyền không dành cho khoá tạo trên máy này. DỪNG, báo chủ dự án "
+                                         "(yêu cầu có thể đã bị tráo trên đường đi).")
         don = _don_tam(tt.duong_dan_tin_cay)
         tom_tat = {"khoa_moi": nd["khoa_moi"]["key_id"], "ten_may": nd["ten_may"], "ky_boi": nd["ky_boi"],
                    "khoa_hien_co": sorted(tt.khoa), "ban_dang_chay": tt.ban_dang_chay,
                    "ban_dang_chay_ky_boi": tt.ban_dang_chay_ky_boi, "het_han": nd["het_han"],
-                   "ma_uy_quyen": nd["ma_uy_quyen"]}
+                   "ma_uy_quyen": nd["ma_uy_quyen"], "khoa_cong_khai_may": os.path.abspath(khoa_cong_khai)}
         if not xac_nhan(dict(tom_tat)):
             raise LoiUyQuyen("huy", "Chủ máy không xác nhận — chưa đổi gì.")
         dung("truoc_sao_luu")
         sao_luu = _sao_luu(tt, now, "truoc_ghi_danh", (f"uy_quyen_{nd['ma_uy_quyen']}.json", raw_uy_quyen))
         dung("sau_sao_luu")
-        mong = {**_raw_cac_khoa(tt.khoa), nd["khoa_moi"]["key_id"]: base64.b64decode(nd["khoa_moi"]["ed25519_pub_b64"])}
+        mong = {**_raw_cac_khoa(tt.khoa), nd["khoa_moi"]["key_id"]: raw_moi}
         try:
             _ghi_nguyen_tu(tt.duong_dan_tin_cay, _trust_store_moi(tt.byte_tin_cay, nd, now), dung)
             dung("sau_thay")
             _kiem_sau_ghi(tt, L, mong)
         except Exception as e:  # noqa: BLE001 — mọi lỗi sau khi bắt đầu ghi → trả lại byte cũ
-            _ghi_nguyen_tu(tt.duong_dan_tin_cay, tt.byte_tin_cay)
-            with open(tt.duong_dan_tin_cay, "rb") as f:
-                tra_lai = f.read() == tt.byte_tin_cay
-            raise LoiUyQuyen("kiem_sau_ghi", f"Ghi danh KHÔNG thành: {e} — "
-                             + ("đã TRẢ LẠI trust store cũ (đúng từng byte)." if tra_lai
-                                else f"KHÔNG trả lại được — chép tay {sao_luu} về launcher/trusted_keys.json.")
-                             ) from None
+            raise LoiUyQuyen("kiem_sau_ghi", f"Ghi danh KHÔNG thành: {e} — {_tra_lai(tt, sao_luu)}") from None
     return {"trang_thai": "DA_GHI_DANH", "khoa": sorted(mong), "sao_luu": sao_luu, "don_file_tam": don, **tom_tat}
 
 
 def hoan_tac(goc: str, duong_dan_sao_luu: str, *, xac_nhan: Callable[[dict], bool],
              bay_gio: Optional[datetime] = None, diem_dung: Optional[Callable[[str], None]] = None) -> dict:
-    """Trả trust store về một bản sao lưu TRƯỚC đó (chỉ GỠ khoá, không thêm). Từ chối nếu bản đang chạy (hoặc
-    bản đã chốt) do khoá sắp gỡ ký — gỡ khi đó làm launcher không còn xác minh được bản đang chạy."""
+    """GỠ (các) khoá đã ghi danh, trở về tập khoá của một bản sao lưu DO CÔNG CỤ NÀY tạo trong
+    ``launcher/trust_backups/``. Chỉ gỡ khoá có bản ghi «ghi_danh» (không bao giờ gỡ khoá gốc của bộ kit); khoá gỡ
+    được ghi vào danh sách «thu_hoi» của trust store (byte đổi) → uỷ quyền cũ và mọi uỷ quyền cho khoá đó bị từ chối về
+    sau. Từ chối nếu bản đang chạy (hoặc bản đã chốt) do khoá sắp gỡ ký."""
     dung = diem_dung or (lambda _t: None)
     now = _bay_gio(bay_gio)
     goc = os.path.abspath(goc)
@@ -624,11 +746,21 @@ def hoan_tac(goc: str, duong_dan_sao_luu: str, *, xac_nhan: Callable[[dict], boo
     cd = _dung_cai_dat(goc, L)
     with _giu_khoa_cap_nhat(cd, L, "hoàn tác khoá tin cậy"):
         tt = doc_cai_dat(goc, L)
+        thu_muc_sl = os.path.realpath(os.path.join(goc, "launcher", THU_MUC_SAO_LUU))
+        p_sl = os.path.realpath(os.path.abspath(duong_dan_sao_luu))
+        if os.path.normcase(os.path.dirname(p_sl)) != os.path.normcase(thu_muc_sl) or \
+                not os.path.basename(p_sl).startswith("trusted_keys_") or not p_sl.endswith(".json"):
+            raise LoiUyQuyen("sao_luu", "Chỉ hoàn tác về bản sao lưu do công cụ tạo: launcher/trust_backups/"
+                                        "trusted_keys_*.json của chính cài đặt này.")
         try:
-            with open(duong_dan_sao_luu, "rb") as f:
-                b_sl = f.read(GIOI_HAN_TIN_CAY + 1)
-            khoa_sl = L.mu.doc_khoa_tin_cay(duong_dan_sao_luu)
-        except (OSError, L.mu.LoiCapNhat) as e:
+            lien_ket = os.stat(p_sl).st_nlink > 1
+        except OSError:
+            lien_ket = False
+        if lien_ket:
+            raise LoiUyQuyen("sao_luu", "Bản sao lưu là liên kết cứng (hard link) tới file khác — từ chối.")
+        try:
+            khoa_sl = L.mu.doc_khoa_tin_cay(p_sl)
+        except L.mu.LoiCapNhat as e:
             raise LoiUyQuyen("sao_luu", f"Không đọc được bản sao lưu ({e}).") from None
         raw_sl, raw_ht = _raw_cac_khoa(khoa_sl), _raw_cac_khoa(tt.khoa)
         if any(raw_ht.get(k) != v for k, v in raw_sl.items()):
@@ -637,6 +769,12 @@ def hoan_tac(goc: str, duong_dan_sao_luu: str, *, xac_nhan: Callable[[dict], boo
         go_bo = sorted(set(raw_ht) - set(raw_sl))
         if not go_bo:
             raise LoiUyQuyen("sao_luu", "Bản sao lưu trùng tập khoá hiện tại — không có gì để hoàn tác.")
+        d_ht = json.loads(tt.byte_tin_cay.decode("utf-8-sig"))
+        ban_ghi = {str(x.get("key_id")): x.get("ghi_danh") for x in d_ht.get("khoa") or [] if isinstance(x, dict)}
+        goc_kit = [k for k in go_bo if not isinstance(ban_ghi.get(k), dict)]
+        if goc_kit:
+            raise LoiUyQuyen("khoa_goc", f"Không gỡ khoá gốc của bộ kit ({', '.join(goc_kit)}) — hoàn tác chỉ gỡ khoá đã "
+                                         "ghi danh bằng uỷ quyền.")
         for ten in ("current.json", "last_good.json"):
             p = L.mu.doc_json(cd.file_trang_thai(ten), bat_buoc_hop_le=False) or {}
             rel = str(p.get("release") or "") if isinstance(p, dict) else ""
@@ -651,21 +789,30 @@ def hoan_tac(goc: str, duong_dan_sao_luu: str, *, xac_nhan: Callable[[dict], boo
                 raise LoiUyQuyen("dang_dung", f"Bản {p.get('phien_ban', '?')} ({ten}) do khoá sắp gỡ ký (hoặc không "
                                               "xác minh được bằng bản sao lưu) — cập nhật lên bản do khoá còn lại ký "
                                               "trước khi gỡ.") from None
-        tom_tat = {"go_bo": go_bo, "con_lai": sorted(raw_sl), "sao_luu": duong_dan_sao_luu}
+        tom_tat = {"go_bo": go_bo, "con_lai": sorted(raw_sl), "sao_luu": p_sl}
         if not xac_nhan(dict(tom_tat)):
             raise LoiUyQuyen("huy", "Chủ máy không xác nhận — chưa đổi gì.")
+        with open(p_sl, "rb") as f:
+            d_moi = json.loads(f.read().decode("utf-8-sig"))
+        thu_hoi = _thu_hoi(tt.byte_tin_cay)
+        thu_hoi += [{"key_id": k, "ma_uy_quyen": str((ban_ghi.get(k) or {}).get("ma_uy_quyen") or ""),
+                     "luc": _thoi_diem(now)} for k in go_bo]
+        d_moi["thu_hoi"] = thu_hoi
         _don_tam(tt.duong_dan_tin_cay)
         truoc = _sao_luu(tt, now, "truoc_hoan_tac")
         dung("sau_sao_luu")
         try:
-            _ghi_nguyen_tu(tt.duong_dan_tin_cay, b_sl, dung)
+            _ghi_nguyen_tu(tt.duong_dan_tin_cay, (json.dumps(d_moi, ensure_ascii=False, indent=1) + "\n")
+                           .encode("utf-8"), dung)
             dung("sau_thay")
             _kiem_sau_ghi(tt, L, raw_sl)
+            with open(tt.duong_dan_tin_cay, "rb") as f:
+                if not set(go_bo) <= {x.get("key_id") for x in _thu_hoi(f.read())}:
+                    raise LoiUyQuyen("kiem_sau_ghi", "Danh sách thu hồi đọc lại thiếu khoá vừa gỡ.")
         except Exception as e:  # noqa: BLE001
-            _ghi_nguyen_tu(tt.duong_dan_tin_cay, tt.byte_tin_cay)
-            raise LoiUyQuyen("kiem_sau_ghi", f"Hoàn tác KHÔNG thành: {e} — đã TRẢ LẠI trust store trước hoàn tác.") \
-                from None
-    return {"trang_thai": "DA_HOAN_TAC", "khoa": sorted(raw_sl), "sao_luu_truoc_hoan_tac": truoc, **tom_tat}
+            raise LoiUyQuyen("kiem_sau_ghi", f"Hoàn tác KHÔNG thành: {e} — {_tra_lai(tt, truoc)}") from None
+    return {"trang_thai": "DA_HOAN_TAC", "khoa": sorted(raw_sl), "sao_luu_truoc_hoan_tac": truoc,
+            "thu_hoi": [x["key_id"] for x in thu_hoi], **tom_tat}
 
 
 def xem(goc: str) -> dict:
@@ -743,6 +890,7 @@ def main(argv=None) -> int:
     a = sub.add_parser("ghi-danh")
     a.add_argument("--goc", required=True)
     a.add_argument("--uy-quyen", required=True)
+    a.add_argument("--khoa-cong-khai", required=True, help="khoa_cong_khai_<key_id>.json trong thư mục khoá của máy này")
     a = sub.add_parser("hoan-tac")
     a.add_argument("--goc", required=True)
     a.add_argument("--sao-luu", required=True)
@@ -809,8 +957,10 @@ def main(argv=None) -> int:
                 print(f"   khoá đang tin: {', '.join(t['khoa_hien_co'])} — GIỮ NGUYÊN")
                 print(f"   bản đang chạy: {t['ban_dang_chay'] or '(chưa có)'}")
                 print("=" * 72)
-                return _hoi_go(f"Gõ 8 ký tự CUỐI của khoá mới ({t['khoa_moi'][:8]}…) để xác nhận: ", t["khoa_moi"][-8:])
-            kq = ghi_danh(ns.goc, raw, xac_nhan=xac_nhan)
+                print("   khoá mới TRÙNG khoá công khai tạo trên máy này (đã đối chiếu đủ 32 byte):")
+                print(f"     {t['khoa_cong_khai_may']}")
+                return _hoi_go("Gõ GHI DANH (chữ in hoa, không dấu) để ghi danh khoá này: ", "GHI DANH")
+            kq = ghi_danh(ns.goc, raw, khoa_cong_khai=ns.khoa_cong_khai, xac_nhan=xac_nhan)
             print(f"ĐÃ GHI DANH: trust store tin {len(kq['khoa'])} khoá: {', '.join(kq['khoa'])}")
             print(f"  sao lưu bản cũ: {kq['sao_luu']}")
             print("  Kiểm: chạy «launcher.py doctor» — mục «Khoá tin cậy» phải báo số khoá mới.")
@@ -818,8 +968,7 @@ def main(argv=None) -> int:
         if ns.lenh == "hoan-tac":
             def xac_nhan(t: dict) -> bool:
                 print(f"HOÀN TÁC trust store về bản sao lưu: gỡ {', '.join(t['go_bo'])}; còn {', '.join(t['con_lai'])}")
-                return _hoi_go(f"Gõ 8 ký tự CUỐI của khoá sẽ gỡ ({t['go_bo'][0][:8]}…) để xác nhận: ",
-                               t["go_bo"][0][-8:])
+                return _hoi_go("Gõ HOAN TAC (chữ in hoa, không dấu) để gỡ khoá trên: ", "HOAN TAC")
             kq = hoan_tac(ns.goc, ns.sao_luu, xac_nhan=xac_nhan)
             print(f"ĐÃ HOÀN TÁC: trust store tin {', '.join(kq['khoa'])}; bản trước hoàn tác lưu ở "
                   f"{kq['sao_luu_truoc_hoan_tac']}")
