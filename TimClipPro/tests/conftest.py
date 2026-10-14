@@ -76,6 +76,17 @@ def _giu_nguyen_path():
         os.environ["PATH"] = cu
 
 
+@pytest.fixture(autouse=True)
+def _quen_nho_bo_cookie():
+    """``ytdlp_chung.NHO_BO_COOKIE`` nhớ cấu hình cookie «không dùng được trên máy» ở mức MODULE (cả tiến trình, như
+    production). Test nào làm nó nhớ thì test SAU dùng cùng cấu hình cookie sẽ đi thẳng không-cookie — quên sau mỗi
+    test (tests/test_cookie_can_js.py)."""
+    yield
+    yc = sys.modules.get("ytdlp_chung")
+    if yc is not None and hasattr(yc, "NHO_BO_COOKIE"):
+        yc.NHO_BO_COOKIE.quen()
+
+
 _DATA_CANH_MA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 _DATA_CANH_MA_CO_SAN = os.path.exists(_DATA_CANH_MA)
 

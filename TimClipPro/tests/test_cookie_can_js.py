@@ -37,17 +37,7 @@ LOI_COOKIE_CHET = "ERROR: [youtube] {id}: Requested format is not available"
 
 CO_COOKIE = y.CauHinhMang(cookies_browser="firefox")
 KHONG_COOKIE = y.CauHinhMang()
-
-
-@pytest.fixture(autouse=True)
-def _quen_truoc_sau():
-    """Bộ nhớ «bỏ cookie» sống ở mức module — không để rò giữa các test."""
-    nho = getattr(y, "NHO_BO_COOKIE", None)
-    if nho is not None:
-        nho.quen()
-    yield
-    if nho is not None:
-        nho.quen()
+# Bộ nhớ «bỏ cookie» (y.NHO_BO_COOKIE) sống ở mức module: conftest quên nó sau MỖI test.
 
 
 def _loi(mau, ma="OPgD5wl0fAY"):
