@@ -1,0 +1,3 @@
+# Dữ liệu phát hành: byte phải GIỐNG HỆT bản đã ký/đã băm (lock có băm, khoá công khai, wheel, yêu cầu/uỷ quyền có
+# chữ ký) — KHÔNG đổi xuống dòng khi checkout (máy đặt core.autocrlf=true sẽ biến LF thành CRLF → sai băm).
+release/** -text

@@ -122,6 +122,8 @@ CHO_PHEP_EPOCH = {
 CHO_PHEP_TIMEDELTA_DAYS = {
     # nhat_ky.py: cửa sổ giữ log N ngày, không liên quan ngày đăng video.
     "nhat_ky.py",
+    # uy_quyen_khoa.py: hạn dùng của uỷ quyền ghi danh khoá (30/90 ngày), không liên quan ngày đăng video.
+    "uy_quyen_khoa.py",
 }
 
 

@@ -1,0 +1,22 @@
+{
+ "name": "integration-current: chi fast-forward, khong xoa",
+ "target": "branch",
+ "enforcement": "active",
+ "conditions": {
+  "ref_name": {
+   "include": [
+    "refs/heads/integration/current"
+   ],
+   "exclude": []
+  }
+ },
+ "rules": [
+  {
+   "type": "deletion"
+  },
+  {
+   "type": "non_fast_forward"
+  }
+ ],
+ "bypass_actors": []
+}

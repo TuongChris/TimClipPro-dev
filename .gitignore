@@ -39,3 +39,10 @@ desktop.ini
 # Claude Code — ghi chú/cấu hình RIÊNG từng máy, không đồng bộ qua Git (docs/ai/GIT_WORKFLOW.md)
 CLAUDE.local.md
 .claude/settings.local.json
+
+# Khoá ký / chứng chỉ — KHÔNG BAO GIỜ vào Git ở bất kỳ thư mục nào (khoá riêng mỗi máy nằm ngoài repo)
+*.pem
+*.key
+*.p12
+*.pfx
+khoa_rieng*

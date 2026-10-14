@@ -1,0 +1,41 @@
+#!/bin/sh
+# pre-push TimClipPro — CẢ HAI MÁY (PC1, PC2 ngang quyền). Bản gốc: release/git-hooks/pre-push trong repo
+# (cài: docs/ai/GIT_WORKFLOW.md «Hook pre-push»). Chặn NHẦM, không thay duyệt của người dùng.
+# Cho: feature/pc1/*, feature/pc2/*, fix/pc1/*, fix/pc2/* (không force, không xoá); integration/current CHỈ
+# fast-forward tới ĐÚNG đầu một nhánh việc đã có trên remote (đã đẩy để mở PR).
+# Chặn: mọi tag (tag stable-* chỉ do «gh release create» tạo khi người dùng duyệt phát hành), xoá ref, force-push,
+# nhánh ngoài quy ước, tạo mới integration/current.
+remote="$1"
+z=0000000000000000000000000000000000000000
+while read lref lsha rref rsha; do
+  case "$rref" in
+    refs/heads/feature/pc1/*|refs/heads/feature/pc2/*|refs/heads/fix/pc1/*|refs/heads/fix/pc2/*) ;;
+    refs/heads/integration/current) ;;
+    refs/tags/*)
+      echo "pre-push: CHẶN tag $rref — tag stable-* chỉ tạo bằng «gh release create» khi người dùng duyệt phát hành" >&2
+      exit 1 ;;
+    *)
+      echo "pre-push: CHẶN $rref — chỉ đẩy feature|fix/pc1|pc2/* và integration/current (fast-forward)" >&2
+      exit 1 ;;
+  esac
+  if [ "$lsha" = "$z" ]; then
+    echo "pre-push: CHẶN xoá $rref" >&2
+    exit 1
+  fi
+  if [ "$rsha" != "$z" ] && ! git merge-base --is-ancestor "$rsha" "$lsha" 2>/dev/null; then
+    echo "pre-push: CHẶN force-push $rref (git fetch trước nếu remote có commit mới)" >&2
+    exit 1
+  fi
+  if [ "$rref" = "refs/heads/integration/current" ]; then
+    if [ "$rsha" = "$z" ]; then
+      echo "pre-push: CHẶN tạo mới integration/current" >&2
+      exit 1
+    fi
+    if ! git for-each-ref --format='%(objectname)' "refs/remotes/$remote/feature/" "refs/remotes/$remote/fix/" \
+        | grep -qx "$lsha"; then
+      echo "pre-push: CHẶN integration/current -> $lsha: không phải ĐẦU một nhánh việc trên $remote (đẩy nhánh + PR trước, rồi git fetch $remote)" >&2
+      exit 1
+    fi
+  fi
+done
+exit 0
