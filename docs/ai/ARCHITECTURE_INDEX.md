@@ -11,6 +11,9 @@ chạm file) — không phải audit lại mã. Thêm/xoá/đổi vai trò modul
   `.claude/launch.json` — xem trước: CHỈ gắn vào Development đang chạy ở cổng 8502, không tự khởi động (D-19).
 - Gói Stable chỉ chứa mã chạy trong `TimClipPro/` (bỏ `tests/`, `docs/`, `apps_script/`, `.bat`, `CLAUDE.md`...):
   `release_tool.chon_file_phat_hanh`.
+- `release/` — dữ liệu phát hành CÔNG KHAI, byte giữ nguyên (`.gitattributes`): `trusted_keys.json` (khoá công khai
+  đang tin), `locks/` (lock CÓ BĂM runtime + launcher), `wheels/` (docopt), `git-hooks/pre-push` (dùng chung hai máy),
+  `github/` (ruleset đề xuất), `trust/` (yêu cầu/uỷ quyền ghi danh khoá) — D-23…D-25.
 
 ## Điểm vào
 | Lối vào | Gọi gì | Ghi chú |
@@ -23,7 +26,9 @@ chạm file) — không phải audit lại mã. Thêm/xoá/đổi vai trò modul
 | `kiemtra.bat` | import + pytest + AppTest | cổng kiểm 1 lệnh |
 | `launcher.py app/watch/cli/update/doctor` | cài đặt managed (PC2) | nằm NGOÀI release |
 | `bootstrap.py` | dựng cài đặt managed mới | bộ cài one-click PC2 gọi nó |
-| `release_tool.py lock/build/sign/verify/publish` | phát hành Stable trên PC1 | `publish` chỉ in lệnh; `khoa-thu` chỉ tạo khoá THỬ |
+| `release_tool.py lock/build/sign/verify/kiem-sau-ky/feed/kit/publish` | phát hành Stable trên PC1 HOẶC PC2 | `publish` chỉ in lệnh; `khoa-thu` chỉ tạo khoá THỬ; `tao-khoa`/`ky-uy-quyen` người dùng gõ mật khẩu |
+| `uy_quyen_khoa.py xem/yeu-cau/ghi-danh/hoan-tac` | ghi danh khoá ký vào trust store của cài đặt managed | người dùng chạy (console thật); nạp launcher ĐÃ CÀI |
+| `tests/dien_tap_phat_hanh.py <cau_hinh.json>` | diễn tập cập nhật trong sandbox managed | chạy tay trước khi phân phối (không phải pytest) |
 
 ## Module — bảng gốc (chuyển nguyên văn từ `TimClipPro/CLAUDE.md` bản e49340d)
 
@@ -46,7 +51,8 @@ chạm file) — không phải audit lại mã. Thêm/xoá/đổi vai trò modul
 | `launcher.py` | Điểm vào ổn định của cài đặt managed (app/watch/cli/update/doctor) — nằm NGOÀI release | Đổi cách mở/chạy bản managed |
 | `ui_cap_nhat.py` | «ℹ️ Phiên bản và cập nhật» (chỉ đọc + hoãn) | Đổi giao diện cập nhật |
 | `bootstrap.py` | Dựng cài đặt managed MỚI cho PC2 (định danh riêng, launcher, khoá tin cậy, lịch xem trước) | Đổi quy trình cài PC2 |
-| `release_tool.py` | Phát hành Stable trên PC1: build từ git tree, ký, verify, publish (chỉ in lệnh), lock | Đổi quy trình phát hành |
+| `release_tool.py` | Phát hành Stable trên PC1 hoặc PC2: build từ git tree, ký, verify, kiểm sau ký, ZIP feed, bộ kit, lock; khoá mỗi máy (`tao-khoa`), ký/kiểm uỷ quyền | Đổi quy trình phát hành |
+| `uy_quyen_khoa.py` | Ghi danh khoá ký vào trust store của MỘT cài đặt managed theo uỷ quyền có chữ ký (yêu cầu tự ký, ràng buộc cài đặt + trust store, ghi nguyên tử, hoàn tác) | Đổi cách tin khoá mới (`docs/UY_QUYEN_KHOA.md`) |
 | `danh_sach_video.py` | Liệt kê tên video thật của một kho (chỉ đọc, offline) rồi ghi đè lên trang tính riêng | Đổi cách kiểm kê kho / cột danh sách |
 | `app.py` | Giao diện Streamlit 7 tab | Đổi giao diện |
 | `cli.py` | Giao diện dòng lệnh, dùng chung engine | Thêm lệnh tự động hoá |
@@ -146,6 +152,8 @@ YouTube — dùng bảng module ở trên.
 | `MANAGED_HIEU_NANG.md` | Managed runtime / PC2 | 46 | f4d3cb7 2026-10-08 |  |
 | `MANAGED_RUNTIME_DESIGN.md` | Managed runtime / PC2 | 308 | 6461327 2026-10-08 |  |
 | `MANAGED_UPDATE.md` | Managed runtime / PC2 | 200 | 6461327 2026-10-08 |  |
+| `UY_QUYEN_KHOA.md` | Managed runtime / phát hành | — | 2026-10-14 | hai máy ngang quyền ký: giao thức ghi danh khoá (Phase A + thiết kế) |
+| `PHAT_HANH_HAI_MAY.md` | Managed runtime / phát hành | — | 2026-10-14 | quy trình phát hành + khôi phục, chạy trên PC1 hoặc PC2 |
 | `INSTALL_WINDOWS.md` | Máy legacy | 199 | 448b467 2026-08-07 |  |
 | `TRIEN_KHAI_MAY_PHU.md` | Máy legacy | 165 | 1682ce6 2026-08-08 |  |
 | `TU_CAP_NHAT.md` | Máy legacy | 119 | 451e382 2026-08-19 |  |

@@ -5,10 +5,10 @@
 > Dòng nhập (import) cuối file làm Claude tự nạp handoff của ĐÚNG máy này mỗi phiên.
 
 Máy: <PC1 | PC2> · hostname: <kết quả lệnh `hostname`>
-Vai trò: <PC1: phát triển, tích hợp, review, ký Stable | PC2: vận hành Stable + clone phát triển riêng>
-Quyền GitHub: <PC1: push lên `private` khi người dùng duyệt; `origin` PUBLIC chỉ fetch | PC2 giai đoạn 1: Deploy Key
-CHỈ ĐỌC | PC2 giai đoạn 2: ghi CẢ repo — chỉ `git push private fix/pc2/<tên>:fix/pc2/<tên>` khi người dùng duyệt; hook `pre-push`
-cục bộ: <đã cài / chưa cài>>
+Vai trò (D-23, hai máy ngang quyền): <PC2: máy CHÍNH — phát triển, tích hợp, ký, phát hành, vận hành Stable 8501 |
+PC1: máy DỰ PHÒNG — cùng quyền>
+Quyền GitHub: <git push `private` (repo PUBLIC) + `gh` đăng nhập tài khoản chủ repo; mọi push/gộp/phát hành khi người
+dùng duyệt; hook `pre-push` dùng chung (`release/git-hooks/pre-push`): <đã cài / chưa cài>; PC1: `origin` PUBLIC chỉ fetch>
 HEAD: không ghi ở đây — mỗi phiên `git fetch private` và so với `private/integration/current`.
 Development: <PC1: không chạy server | PC2: cổng 8502, launcher <đường dẫn ngoài Git> có `--server.port=8502` ghi rõ,
 data/output thử <…> — không bao giờ 8501, không `C:\TimClipPro_State`, không cookie/`google_key.json` thật>.
@@ -17,8 +17,9 @@ data/output thử <…> — không bao giờ 8501, không `C:\TimClipPro_State`,
 - Clone/worktree này: <…>
 - KHÔNG được sửa: <PC1: worktree production Tool_Quet | PC2: C:\TimClipPro, C:\TimClipPro_State, C:\TimClipPro_Feed>
 - Python 3.12 gốc: <…>; venv phát triển: `TimClipPro\.venv` của clone này.
-- (Chỉ PC1) Thư mục khoá ký: <…> — KHÔNG đọc, không in, không chép, không đưa vào lệnh.
-- (Chỉ PC1) Bộ phát hành Stable và bằng chứng các vòng: <…>
+- Thư mục khoá ký CỦA MÁY NÀY: <PC1: D:\TimClipPro_KhoaPhatHanh | PC2: C:\TimClipPro_KhoaPhatHanh> — KHÔNG đọc, không in,
+  không chép, không đưa vào lệnh; key_id: <…> (công khai).
+- Python có `cryptography` cho công cụ phát hành: <…>; thư mục bộ phát hành + bằng chứng các vòng: <…>
 
 ## Chặn kỹ thuật kèm theo (tuỳ chọn)
 `.claude/settings.local.json` (cũng không commit) có thể thêm luật chặn riêng máy, ví dụ

@@ -10,8 +10,9 @@ artifact TỔNG HỢP ký bằng khoá thử sinh lúc chạy, không mạng.
 ## 1. Luồng
 
 ```
-PC1: commit đã test → release_tool build (git tree chính xác) → ký manifest (khoá phát hành)
-     → CHỦ DỰ ÁN DUYỆT → tạo GitHub Release (tag stable-X.Y.Z, không draft/pre-release)   ← bước có duyệt
+Máy phát hành (PC2 chính / PC1 dự phòng — docs/PHAT_HANH_HAI_MAY.md): commit đã test → release_tool build (git tree
+     chính xác) → CHỦ DỰ ÁN DUYỆT → ký manifest (khoá CỦA MÁY ĐÓ) → kiem-sau-ky → feed → diễn tập
+     → GitHub Release (tag stable-X.Y.Z, không draft/pre-release)                           ← một điểm duyệt
 PC2: launcher update prepare  (tải manifest+chữ ký → XÁC MINH → tải gói → băm → giải nén an toàn
                                → kiểm từng file → runtime tại đường dẫn cuối → health staging) = STAGED
      launcher update apply    (rút cổng → chờ rảnh CÓ HẠN → backup → migration tự động an toàn
@@ -56,7 +57,9 @@ chuyển, không xoá gì (`HUONG_DAN_PC2.md` §9). Test: `tests/test_bo_cuc_thu
 
 * Chữ ký Ed25519 (thư viện `cryptography`) trên ĐÚNG các byte `manifest.json`; file chữ ký
   `{"thuat_toan":"ed25519","key_id","chu_ky_b64"}`. Khoá công khai tin cậy cài lúc bootstrap
-  (`trusted_keys.json`, `key_id = sha256(khoá)[:16]`), không bao giờ lấy từ manifest. Không có nhánh "bỏ
+  (`trusted_keys.json`, `key_id = sha256(khoá)[:16]`), không bao giờ lấy từ manifest. Trust store tin NHIỀU khoá (mỗi
+  máy phát hành một khoá, chọn theo `key_id` của chữ ký); thêm khoá vào một cài đặt đang chạy CHỈ qua uỷ quyền có chữ
+  ký của khoá đang tin (`uy_quyen_khoa.py`, `docs/UY_QUYEN_KHOA.md`) — launcher, release đã ký, định danh không đổi. Không có nhánh "bỏ
   chữ ký khi lỗi"; nguồn thư mục (USB/kiểm thử) cũng phải qua chữ ký.
 * Chọn bản: tag `stable-X.Y.Z` (số nguyên, so theo số), không draft/pre-release, manifest ký nói
   `kenh=stable`, đúng phiên bản của tag, đúng `ung_dung`, đúng nền tảng; > bản đang chạy (không hạ bản, không

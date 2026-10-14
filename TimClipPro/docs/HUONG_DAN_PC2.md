@@ -95,6 +95,12 @@ pilot được duyệt** (thay `<MÃ_HỒ_SƠ_ĐÍCH>`). Lịch chạy không c�
   ly ở lần thứ 3. Lịch sử không bao giờ bị khôi phục mù — bản sao lưu trước mỗi lần cập nhật nằm ở
   `D:\TimClipPro_State\backups\`.
 
+### Khoá ký phát hành của máy này (một lần — PC2 phát hành độc lập)
+Máy này có khoá ký riêng (`C:\TimClipPro_KhoaPhatHanh`, mật khẩu do bạn gõ) và được ghi danh vào trust store bằng uỷ
+quyền có chữ ký của khoá đang tin — chỉ chạy các file `.bat` Claude chuẩn bị, gõ trong cửa sổ đó (`docs/UY_QUYEN_KHOA.md`).
+Sau ghi danh: `launcher.py doctor` báo «Khoá tin cậy: 2 khoá». Không sửa tay `launcher\trusted_keys.json`; bản sao
+lưu tự động nằm ở `launcher\trust_backups\`.
+
 ## 7. KHÔNG làm
 
 * Không chép kho, `lichsu.db`, hàng đợi, cookie, khoá từ PC1 sang.

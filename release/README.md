@@ -5,7 +5,7 @@ Không bao giờ đặt khoá riêng, mật khẩu, định danh cài đặt, đ
 
 | Đường dẫn | Là gì | Sửa bằng |
 |---|---|---|
-| `trusted_keys.json` | khoá CÔNG KHAI đang được tin (verify trước phân phối; trust store của bộ kit cài mới) | `release_tool.py them-khoa-danh-sach` (theo uỷ quyền đã ký) — không sửa tay |
+| `trusted_keys.json` | khoá CÔNG KHAI đang được tin (verify trước phân phối; trust store của bộ kit cài mới) | `release_tool.py them-khoa-danh-sach` (theo uỷ quyền đã ký) / `go-khoa-danh-sach` (khoá bị lộ) — không sửa tay |
 | `locks/requirements-lock.txt` | lock runtime CÓ BĂM của bản Stable mới nhất | `release_tool.py lock` + PR |
 | `locks/launcher-lock.txt` | lock CÓ BĂM môi trường launcher (bộ kit) | khi đổi `TimClipPro/launcher-lock.txt` |
 | `wheels/docopt-0.6.2-py2.py3-none-any.whl` | wheel không có trên PyPI (băm có trong lock) | hiếm |

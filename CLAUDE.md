@@ -1,7 +1,8 @@
 # TimClipPro — điểm vào cho Claude Code (PC1 và PC2)
 
-Repo dùng chung cho hai máy: **PC1** phát triển, tích hợp, review và ký bản Stable; **PC2** vận hành bản Stable và có
-một clone phát triển riêng. File này cố ý ngắn: quy tắc phiên làm việc + chỗ tìm thông tin.
+Repo dùng chung cho hai máy NGANG QUYỀN (D-23): **PC2** = máy phát triển + phát hành CHÍNH (và vận hành Stable 8501),
+**PC1** = máy DỰ PHÒNG. Máy nào cũng phát triển, review, tích hợp, build, ký (khoá RIÊNG của máy đó), phát hành.
+File này cố ý ngắn: quy tắc phiên làm việc + chỗ tìm thông tin.
 - Ngữ cảnh dự án và bất biến chung: `TimClipPro/CLAUDE.md` (tự nạp khi đọc/sửa file trong `TimClipPro/`).
 - Bất biến theo module: `.claude/rules/` (tự nạp khi đọc/sửa file khớp: matcher, Sheets/outbox, updater).
 - Ghi chú RIÊNG của từng máy: `CLAUDE.local.md` (không vào Git; mẫu `docs/ai/CLAUDE.local.md.mau`).
@@ -25,21 +26,25 @@ Trạng thái chung hiện tại (tự nạp):
 
 ## Nhánh (chi tiết: `docs/ai/GIT_WORKFLOW.md`)
 - `integration/current` — nguồn tích hợp đã kiểm; chỉ nhận thay đổi đã review + test xanh, không commit thẳng.
-- `feature/pc1/<tên>` — việc của PC1. `fix/pc2/<tên>` — sửa lỗi phát hiện trên PC2. Tạo KHÔNG gắn upstream vào
+- `feature|fix/pc1/<tên>` — việc của PC1; `feature|fix/pc2/<tên>` — việc của PC2. Tạo KHÔNG gắn upstream vào
   integration: `git switch --no-track -c <nhánh> private/integration/current`. Đẩy luôn ghi đủ
-  `git push private <nhánh>:<nhánh>` (PC1 đặt `push.default=upstream`: thiếu `:<nhánh>` thì git đẩy vào upstream).
-- Bản Stable chỉ chuẩn bị từ commit đã nghiệm thu trên `integration/current`, và chỉ ký trên PC1.
+  `git push private <nhánh>:<nhánh>` (máy đặt `push.default=upstream`: thiếu `:<nhánh>` thì git đẩy vào upstream).
+- Bản Stable chỉ build từ commit đã nghiệm thu trên `integration/current`; máy nào cũng ký được bằng khoá CỦA NÓ —
+  quy trình + MỘT điểm duyệt: `TimClipPro/docs/PHAT_HANH_HAI_MAY.md`.
 
 ## Không bao giờ (muốn đổi: sửa quy ước này qua PR được người dùng duyệt)
 - Chạy Development hay preview ở cổng 8501 (Stable PC2, production PC1), hay thêm cấu hình TỰ KHỞI ĐỘNG vào
   `.claude/launch.json` — Development chỉ cổng 8502 bằng launcher riêng máy; file đó chỉ GẮN vào 8502.
-- Claude đọc/ghi `C:\TimClipPro`, `C:\TimClipPro_State`, `C:\TimClipPro_Feed` (chỉ launcher/updater do người dùng chạy).
-- PC2 đẩy `integration/current`, tag, force-push, xoá nhánh trên remote, tạo release.
+- Claude đọc/ghi `C:\TimClipPro`, `C:\TimClipPro_State`, `C:\TimClipPro_Feed` (chỉ launcher/updater/công cụ do NGƯỜI DÙNG
+  chạy), hay thư mục khoá ký `C:\TimClipPro_KhoaPhatHanh`, `D:\TimClipPro_KhoaPhatHanh`.
+- Force-push, xoá nhánh/tag trên remote, đẩy tag bằng git, gắn lại/tái dùng tag, `--no-verify`.
 
 ## Cấm, trừ khi người dùng duyệt rõ trong phiên này
-- Push (kể cả lên `private`), force-push, tạo/sửa remote, tag hay release. `origin` của PC1 là repo PUBLIC.
+- Push (kể cả lên `private` — repo PUBLIC), gộp vào `integration/current`, tạo/sửa remote, release, đổi cấu hình
+  GitHub (ruleset, khoá deploy). `origin` của PC1 cũng PUBLIC (chỉ fetch).
 - Sửa production PC1 (`Tool_Quet` đang chạy thật).
-- Đọc, in hay chép khoá ký riêng, mật khẩu, cookie, `google_key.json`, link Google Sheet thật.
+- Đọc, in hay chép khoá ký riêng, mật khẩu, cookie, `google_key.json`, link Google Sheet thật. Bước cần mật khẩu (tạo
+  khoá, ký bản, ký uỷ quyền) và bước đổi trust store (ghi danh / hoàn tác) do NGƯỜI DÙNG chạy qua `.bat` trong console.
 - Gọi Google Sheets/YouTube thật, đăng ký Task Scheduler, xoá/ghi đè `db.pklz`, `lichsu.db`, `downloaded.txt`,
   `clips_meta.json`.
 - Đưa vào Git: dữ liệu runtime, kho vân tay, dữ liệu khách hàng, credentials, auto-memory/transcript của Claude,

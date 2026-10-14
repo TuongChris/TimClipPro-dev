@@ -4,6 +4,8 @@ Mở Claude Code ở GỐC clone/worktree (nơi có `CLAUDE.md` gốc và `CLAUD
 không mở ở thư mục cha — mở ở thư mục cha thì Claude không tự nạp ngữ cảnh của repo. Gõ `/context` để thấy file nào đã
 nạp. Dán một mẫu dưới đây, thay phần `<…>`. Không mẫu nào ghi cứng HEAD: mỗi phiên tự hỏi remote.
 
+Hai máy NGANG QUYỀN (D-23): PC2 = máy chính, PC1 = dự phòng; mẫu hai máy giống nhau trừ tên nhánh và đường dẫn.
+
 ## PC1
 ```text
 Phiên PC1. Task: <mô tả ngắn / dán brief>.
@@ -14,15 +16,15 @@ chạy test theo TEST_MATRIX; xong cập nhật handoff/PC1.md và commit trên 
 Không push, không sửa production, không đụng khoá ký khi mình chưa duyệt.
 ```
 
-## PC2 (giai đoạn 2 — Deploy Key có quyền ghi; chỉ `fix/pc2/*` khi được duyệt)
+## PC2 (máy chính — ngang quyền PC1)
 ```text
-Phiên PC2 (clone C:\Dev\Tool_Quet). Task: <triệu chứng + cách tái hiện; KHÔNG dán dữ liệu thật, link khách hàng, cookie>.
+Phiên PC2 (clone C:\Dev\Tool_Quet). Task: <triệu chứng + cách tái hiện / tính năng; KHÔNG dán dữ liệu thật, cookie>.
 Làm theo «Mỗi phiên» trong CLAUDE.md: git fetch private và so HEAD với private/integration/current; đọc
-docs/ai/handoff/PC2.md; chỉ đọc module liên quan, không audit toàn repo. Không đọc/ghi C:\TimClipPro,
-C:\TimClipPro_State, C:\TimClipPro_Feed; Development chỉ cổng 8502 bằng launcher PC2, không đụng Stable 8501; test chỉ
-dùng dữ liệu synthetic + thư mục tạm. Nhánh: git switch --no-track -c fix/pc2/<tên> private/integration/current; xong
-cập nhật handoff/PC2.md, commit. Chỉ push khi mình duyệt, sau khi quét: git push private fix/pc2/<tên>:fix/pc2/<tên>;
-KHÔNG push integration/current, tag hay force-push. PR do mình hoặc PC1 mở (GIT_WORKFLOW.md «Pull Request và gộp»).
+docs/ai/handoff/PC2.md; chỉ đọc module liên quan, không audit toàn repo. Không đọc/ghi C:\TimClipPro*,
+C:\TimClipPro_KhoaPhatHanh; Development chỉ cổng 8502, không đụng Stable 8501; test chỉ dữ liệu synthetic + thư mục tạm.
+Nhánh: git switch --no-track -c feature/pc2/<tên> (hoặc fix/pc2/<tên>) private/integration/current; xong cập nhật
+handoff/PC2.md, commit. Khi mình duyệt: quét, push nhánh, gh pr create, review (PC1 nếu đang làm, không thì agent ngữ
+cảnh mới + test), gộp fast-forward (GIT_WORKFLOW.md). Phát hành: TimClipPro/docs/PHAT_HANH_HAI_MAY.md — MỘT điểm duyệt.
 ```
 
 ## PC2 — phiên thiết lập đầu tiên (chưa có clone; mở Claude Code ở thư mục trống `C:\Dev`)

@@ -13,7 +13,13 @@
       "Edit(**/db.pklz)",
       "Edit(**/lichsu.db)",
       "Edit(**/downloaded.txt)",
-      "Edit(**/clips_meta.json)"
+      "Edit(**/clips_meta.json)",
+      "Read(//c/TimClipPro_KhoaPhatHanh/**)",
+      "Edit(//c/TimClipPro_KhoaPhatHanh/**)",
+      "Read(//d/TimClipPro_KhoaPhatHanh/**)",
+      "Edit(//d/TimClipPro_KhoaPhatHanh/**)",
+      "Read(**/khoa_rieng*.pem)",
+      "Edit(**/trusted_keys.json)"
     ]
   }
 }

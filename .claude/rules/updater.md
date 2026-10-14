@@ -21,6 +21,11 @@ paths:
   - "TimClipPro/tests/test_launcher*.py"
   - "TimClipPro/tests/test_bootstrap*.py"
   - "TimClipPro/tests/test_release_tool*.py"
+  - "TimClipPro/uy_quyen_khoa.py"
+  - "TimClipPro/tests/test_uy_quyen_khoa.py"
+  - "TimClipPro/tests/dien_tap_phat_hanh.py"
+  - "TimClipPro/tests/test_git_hook_pre_push.py"
+  - "release/**"
   - "TimClipPro/tests/test_runtime_*.py"
   - "TimClipPro/tests/test_bo_cuc_thu_muc.py"
   - "TimClipPro/tests/test_hai_may_gia_lap.py"
@@ -36,21 +41,27 @@ paths:
 Tự nạp khi đọc/sửa file khớp `paths` ở trên. Bất biến chung vẫn ở `TimClipPro/CLAUDE.md`.
 
 ## An toàn — luôn đúng
-- Khoá ký phát hành CHỈ ở PC1, ngoài repo và ngoài OneDrive: không đọc, không in, không chép, không đưa vào lệnh.
-  Bước cần mật khẩu (tạo khoá, ký) do NGƯỜI DÙNG tự gõ trong cửa sổ console riêng; Claude không bao giờ thấy mật khẩu.
-  `release_tool.py khoa-thu` chỉ tạo khoá THỬ — không bao giờ dùng cho bản giao PC2.
+- Mỗi máy (PC1, PC2) một khoá ký phát hành RIÊNG, ngoài repo và ngoài OneDrive (`<ổ>:\TimClipPro_KhoaPhatHanh`); khoá
+  riêng không rời máy của nó: không đọc, không in, không chép, không đưa vào lệnh. Bước cần mật khẩu (`tao-khoa`, `sign`,
+  `ky-uy-quyen`) và bước đổi trust store (`uy_quyen_khoa.py ghi-danh`/`hoan-tac`) do NGƯỜI DÙNG tự gõ trong console
+  riêng (công cụ từ chối khi stdin không phải console thật — chống nhầm, KHÔNG phải rào chắn: Claude không tự chạy các
+  lệnh đó, kể cả qua console ảo). `release_tool.py khoa-thu` chỉ tạo khoá THỬ — không bao giờ
+  dùng cho bản giao máy vận hành.
 - Không nới kiểm chữ ký, băm, bố cục hay khoá tin cậy để «cho chạy được»: PC2 phải TỪ CHỐI gói, lock, khoá sai.
 - PC2: không ghi vào `C:\TimClipPro`, `C:\TimClipPro_State`, `C:\TimClipPro_Feed`; cập nhật chỉ qua launcher do người
   dùng chạy. Test dùng thư mục tạm, không bao giờ trỏ vào cài đặt thật.
 - Stable chỉ build từ commit đã nghiệm thu trên `integration/current` (`release_tool.py build` đọc object git, không
-  đọc cây làm việc); `publish` chỉ in lệnh. Gói giao PC2 bắt buộc lock CÓ BĂM (`--require-hashes`).
-- Launcher chưa có đường xoay khoá tin cậy: đổi khoá = bootstrap lại PC2 (`docs/ai/DECISIONS.md` D-13).
+  đọc cây làm việc); `publish` chỉ in lệnh. Gói giao máy vận hành bắt buộc lock CÓ BĂM (`release/locks/`).
+- Thêm khoá tin cậy: CHỈ qua uỷ quyền có chữ ký (`uy_quyen_khoa.py`, `docs/UY_QUYEN_KHOA.md`, D-23) — không sửa tay
+  `trusted_keys.json`, không đưa trust store vào release, không đổi launcher. `release/**` giữ nguyên byte (lock, khoá
+  công khai, hook): đừng đổi xuống dòng.
 
 ## Test (chi tiết: `docs/ai/TEST_MATRIX.md`, hàng «Updater / cài đặt / phát hành»)
 - Trước khi build Stable: suite nhanh + chậm (có `test_hai_may_gia_lap.py`) trên runtime dựng từ lock có băm.
 
 ## Tài liệu (`TimClipPro/docs/`)
-`MANAGED_UPDATE.md`, `MANAGED_RUNTIME_DESIGN.md`, `MANAGED_HIEU_NANG.md`, `HUONG_DAN_PC2.md`, `KE_HOACH_PILOT_PC2.md`;
+`MANAGED_UPDATE.md`, `UY_QUYEN_KHOA.md`, `PHAT_HANH_HAI_MAY.md`, `MANAGED_RUNTIME_DESIGN.md`, `MANAGED_HIEU_NANG.md`,
+`HUONG_DAN_PC2.md`, `KE_HOACH_PILOT_PC2.md`;
 đường cũ của máy legacy: `TU_CAP_NHAT.md`, `TRIEN_KHAI_MAY_PHU.md`.
 
 Phần dưới đây chuyển NGUYÊN VĂN từ `TimClipPro/CLAUDE.md` (bản e49340d); tên hàm/test tính từ `TimClipPro/`.

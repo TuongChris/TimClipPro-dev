@@ -4,10 +4,44 @@ Mỗi mục: quyết định · vì sao · bằng chứng (commit / tài liệu)
 rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không có tiền tố là `TimClipPro/docs/…`.
 
 ## Đang chờ người dùng quyết
-- **P-2 PC1 production lên e49340d** — lược đồ `lichsu.db` v2 → v4; cần sao lưu + duyệt riêng.
-- **P-3 Lock có băm vào repo** — hiện chỉ nằm trong bộ phát hành Stable trên PC1; repo giữ lock chưa băm.
+- **P-2 PC1 production lên bản managed** — lược đồ `lichsu.db` v2 → v4; cần sao lưu + duyệt riêng.
 - **P-4 Lịch sử repo public** — có dữ liệu cần xử lý (chi tiết ngoài Git); đóng repo public hay viết lại lịch sử đều
   cần duyệt (force-push đang bị cấm).
+- **P-5 Bật ruleset GitHub** (`release/github/*.json`, D-25) — một lệnh `gh api`, chủ repo duyệt.
+
+## D-25 Hook `pre-push` dùng chung + ruleset GitHub đề xuất (2026-10-14) — thay hook «chỉ fix/pc2» của D-18
+Quyết định: một hook cho CẢ HAI máy (`release/git-hooks/pre-push`): cho `feature|fix/pc1|pc2/*`; `integration/current`
+CHỈ fast-forward tới ĐÚNG đầu một nhánh việc đã đẩy (đã có PR); chặn tag (tag `stable-*` chỉ do `gh release create` sinh
+khi công bố), xoá, force-push, nhánh lạ, tạo mới integration. Máy chủ: ruleset chặn xoá + force-push `integration/current`
+và tag `stable-*` bất biến — KHÔNG «require pull request» (chặn gộp fast-forward bằng push; nút Merge đổi SHA).
+Vì sao: hai máy ngang quyền thì quy ước tên nhánh không đủ; hook chặn nhầm cục bộ, ruleset chặn ở máy chủ cho mọi khoá.
+Bằng chứng: `tests/test_git_hook_pre_push.py` (repo tạm, 9 ca); ruleset chưa bật (P-5).
+
+## D-24 Lock có băm + wheel docopt + khoá công khai vào repo (2026-10-14) — giải quyết P-3
+Quyết định: `release/locks/requirements-lock.txt` (= lock trong gói 1.1.1 đã ký, sha `f955a328…`),
+`release/locks/launcher-lock.txt` (= lock của bộ kit 1.0.0), `release/wheels/docopt-0.6.2-py2.py3-none-any.whl` (băm có
+trong lock), `release/trusted_keys.json` (khoá công khai đang tin); `.gitattributes` giữ nguyên byte (`release/** -text`).
+Vì sao: máy nào cũng phải build được bản Stable mà không cần thư mục phát hành của máy kia.
+Bằng chứng: build lại 1.1.1 từ `dc29b33` CHỈ bằng repo → gói giống từng byte bản đã công bố (`510f39a6…`), 14/10 PC1.
+
+## D-23 PC1 và PC2 NGANG QUYỀN phát hành; mỗi máy một khoá ký (2026-10-14) — thay D-13 (khoá chỉ ở PC1), D-10 (phát hành chỉ ở PC1)
+Quyết định (người dùng): PC2 = máy phát triển + phát hành CHÍNH, PC1 = DỰ PHÒNG; cả hai được phát triển, review, tích
+hợp, build, ký, phát hành. Khoá riêng không rời máy của nó; PC2 tạo khoá trên PC2. Trust store của cài đặt managed (đã
+tin nhiều khoá) được THÊM khoá PC2 bằng uỷ quyền có chữ ký của khoá đang tin, ràng buộc khoá / cài đặt (băm định danh) /
+trust store (băm byte) / hạn — `uy_quyen_khoa.py`, `release_tool.py ky-uy-quyen`. Không đổi launcher, không bootstrap
+lại, không bản phát hành mới. Sau lần ký uỷ quyền đó PC1 KHÔNG còn bắt buộc cho việc phát hành.
+Vì sao: một máy giữ khoá duy nhất = điểm hỏng đơn; launcher hiện có đã đủ khả năng tin nhiều khoá.
+Bằng chứng: `TimClipPro/docs/UY_QUYEN_KHOA.md` §1 (Phase A), `tests/test_uy_quyen_khoa.py`, diễn tập sandbox 19/19 (khoá
+THỬ đóng vai hai máy, launcher `e49340d`, bootstrap + `CapNhat.bat` thật), 14/10 PC1.
+
+## D-22 Repo `TimClipPro-dev` PUBLIC (người dùng, 13/10/2026; xác nhận 14/10) — thay một phần D-16
+Quyết định của người dùng, không phải sự cố. Hệ quả: mọi push/PR/release là công khai → quét bí mật trước MỖI lần đẩy;
+asset GitHub Release tải được không cần đăng nhập. Tên remote `private` giữ nguyên.
+
+## D-21 Stable phân phối bằng GitHub Release (2026-10-13) — thay D-14 (ZIP qua RustDesk)
+Quyết định: asset `TimClipPro_Feed_stable-X.Y.Z.zip` (4 file đã ký, STORED, tất định) + `SHA256SUMS_X.Y.Z.txt` + khối
+PowerShell trong ghi chú (kiểm băm → giải nén → «SAN SANG») → `CapNhat.bat`. Không USB/RustDesk.
+Bằng chứng: Release `stable-1.1.0` (`b00c315f…`), `stable-1.1.1` (`2f813e87…`); diễn tập bằng đúng gói tải về 23/23.
 
 ## D-20 Stable 1.0.0 cài lên PC2 trước tái audit (người dùng, báo 09/10) — thay một phần D-13
 Sự kiện/quyết định của người dùng: Stable 1.0.0 (từ e49340d) đã cài và chạy trên PC2, cổng 8501 — sớm hơn điều kiện

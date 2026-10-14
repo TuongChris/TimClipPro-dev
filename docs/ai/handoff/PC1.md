@@ -4,29 +4,42 @@ Giữ file ≤ 80 dòng. Mục mới thêm lên ĐẦU «Nhật ký» (mẫu: `d
 sang `docs/ai/handoff/LICH_SU_PC1.md`. Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
 ## Máy
-- Vai trò: phát triển, tích hợp, review, ký Stable. Hostname `DESKTOP-UIQUSEM`.
+- Vai trò (D-23, từ 14/10): máy DỰ PHÒNG, NGANG QUYỀN PC2 — phát triển, review, tích hợp, ký (khoá `8aa5baa6c8f225f9`,
+  `D:\TimClipPro_KhoaPhatHanh`), phát hành. Hostname `DESKTOP-UIQUSEM`.
 - Production (đang chạy thật, KHÔNG sửa, không checkout lại khi chưa duyệt): worktree chính `Tool_Quet` trong thư mục
   OneDrive `ToolQuet`, HEAD `6dc3f9d` (detached). Mọi worktree khác dùng chung `.git` của nó.
-- Worktree phát triển mới: đặt ở `D:\TimClipPro_Dev\<tên>` (ngoài OneDrive; nhánh tạo bằng `--no-track` từ
-  `private/integration/current`). 15 worktree cũ `ToolQuet\Tool_Quet_*`
-  là của các vòng trước — nội dung đều đã nằm trong e49340d, riêng `nguon-chung-ca-lo`/`sua-vung-final` (a602891) đã
-  được tích hợp bằng commit khác (3218aff, d67ce31). Dọn chúng = việc riêng, cần duyệt.
+- Worktree phát triển: `D:\TimClipPro_Dev\<tên>` (ngoài OneDrive; nhánh `--no-track` từ `private/integration/current`).
+  15 worktree cũ `ToolQuet\Tool_Quet_*` của các vòng trước — dọn = việc riêng, cần duyệt.
 - Bằng chứng mỗi vòng (ngoài Git): `D:\TimClipPro_<Vòng>\<thời điểm>\checkpoints\CHECKPOINT.md`.
-- Đường dẫn cục bộ khác (khoá ký, bộ phát hành, Python): `CLAUDE.local.md` của PC1 (không vào Git).
-- Remote: `private` (`TimClipPro-dev`, PRIVATE) để push; `origin` (PUBLIC) chỉ fetch — push bị chặn bằng pushurl giả.
-  PR của PC2: PC1 review + gộp fast-forward (`docs/ai/GIT_WORKFLOW.md` «Pull Request và gộp»).
+- Remote: `private` (`TimClipPro-dev`, PUBLIC) để push; `origin` (PUBLIC) chỉ fetch — push bị chặn bằng pushurl giả.
+  Hook `pre-push` dùng chung (`release/git-hooks/pre-push`): CHƯA cài trên PC1 (đề xuất, một lệnh `cp`).
 - Cổng: production `ChayTool.bat` dùng 8501; PC1 không chạy server Development.
 
 ## Tiếp theo
-1. Chờ PC2 nghiệm thu bản 10/10 (`handoff/PC2.md` «Tiếp theo» 1): fetch + fast-forward, Development 8502, Stable 8501
-   độc lập, test hồi quy + smoke, hook `pre-push`. Preview gắn 8502 CHƯA PASS tới khi PC2 báo.
-2. Nhận bằng chứng cài Stable từ PC2 → đóng C7 trong `CURRENT_STATE.md`.
-3. Gửi e49340d đi tái audit độc lập.
-4. Pilot thật có kiểm soát (Sheets/YouTube trên PC2) — chỉ khi người dùng duyệt.
-5. Sao lưu khoá ký ra USB khi có USB.
-6. (Tuỳ, cần duyệt) dọn nhánh đã gộp trên remote khi máy kia không còn dùng.
+1. (LẦN CUỐI PC1 bắt buộc) Khi người dùng báo «PC2 đã gửi yêu cầu ghi danh khoá …»: chạy
+   `D:\TimClipPro_PC2Authority\20261014_222039\scripts\p_ky_uy_quyen_pc1.sh chuan-bi feature/pc2/khoa-ky-pc2` (kiểm
+   yêu cầu tự ký, trust store PC2 = byte bộ kit `a37dc9b6…`, khoá đang tin = `8aa5…`) → người dùng nhấp đúp
+   `KY_UY_QUYEN_PC2.bat` (gõ 8 ký tự cuối khoá PC2 + mật khẩu khoá PC1) → `… sau-ky` (kiem-uy-quyen, commit) → đẩy
+   `feature/pc1/uy-quyen-pc2` (người dùng duyệt). Sau bước này PC1 không còn bắt buộc cho phát hành.
+2. Đề xuất người dùng duyệt: bật ruleset GitHub (`release/github/`); cài hook dùng chung trên PC1.
+3. Còn từ trước: tái audit độc lập `e49340d`; C7 (bằng chứng Stable PC2); sao lưu khoá ký (`KEY_BACKUP =
+   DEFERRED_BY_USER`); dọn worktree cũ + sandbox `D:\` (~11 GB vòng 1.1.1, ~2 GB vòng này) khi người dùng bảo.
 
 ## Nhật ký
+### 2026-10-14 — Hai máy ngang quyền phát hành: ghi danh khoá PC2 bằng uỷ quyền (nhánh feature/pc1/dual-release-authority)
+- Phase A (đọc mã): trust store `{"khoa":[…]}` đã tin NHIỀU khoá (chọn theo `key_id` của chữ ký); nằm ngoài release,
+  launcher đọc mỗi lần chạy; launcher PC2 = 5 file của `e49340d` (không đổi tới `dc29b33`) → không cần đổi launcher.
+- Làm (`bd17691` mã + test + `release/`; `c1f96fa` sửa theo review): `uy_quyen_khoa.py` (yêu cầu tự ký → uỷ quyền ký bởi khoá đang tin, ràng buộc
+  băm định danh cài đặt + băm trust store + hạn; ghi danh nguyên tử bằng parser launcher ĐÃ CÀI; hoàn tác), `release_tool`
+  `tao-khoa / ky-uy-quyen / kiem-uy-quyen / them-khoa-danh-sach / kiem-sau-ky / feed / kit`, hook `pre-push` dùng chung,
+  ruleset đề xuất, lock có băm + docopt + khoá công khai vào `release/` (D-21…D-25); tài liệu GIT_WORKFLOW, CURRENT_STATE…
+- Kiểm: 103 ca test mới (đỏ trước khi có mã/sửa; cp1252 cũng xanh); đột biến 43/43; build lại 1.1.1 CHỈ từ repo = gói
+  đã công bố (`510f39a6…`); diễn tập sandbox 19/19 (kit `e49340d` + 1.1.0 đã công bố, khoá THỬ vai PC1/PC2/lạ: trước
+  ghi danh bị bỏ qua → ghi danh → quay về → cập nhật lên bản «PC2» ký → khoá lạ bị bỏ qua; dữ liệu giữ byte); nhanh
+  2702/8/0, chậm 19/19, ruff sạch, 6 test `.gitignore` trong worktree. Review độc lập 2 lượt (agent): lượt 1 — 1 P1
+  (danh tính khoá chỉ 32 bit) + 4 P2 (dùng lại sau hoàn tác, hoàn tác gỡ được khoá gốc, `sign` ký byte tuỳ ý, test
+  cp1252) → đã sửa; lượt 2 — chỉ P3 → đã sửa (còn ghi chú: `icacls` nằm trong `.bat` của prompt PC2).
+- Bằng chứng: `D:\TimClipPro_PC2Authority\20261014_222039\` (CHECKPOINT, logs/, evidence/, e2e/).
 ### 2026-10-14 — Review CookieFix (PR #4) + sửa F1/F3 trước Stable 1.1.1 (nhánh feature/pc1/cookiefix-f1-f3)
 - Review PR #4 (PC2, `8bd69a7`): không P0/P1; P2 F1, P3 F2–F8. Người dùng chọn sửa F1 + F3 trước khi phát hành.
 - Làm (`15e4f88`, `7c60af5` sau review phần sửa): `chay_kem_duong_lui_cookie(bo_qua=…)` — Dừng/mạng đứng đi thẳng
@@ -65,13 +78,3 @@ sang `docs/ai/handoff/LICH_SU_PC1.md`. Không ghi bí mật, link Sheet thật, 
   `private=true`, ref duy nhất `refs/heads/integration/current` = `9b763be`, 0 tag; thử push nhầm `origin` → bị chặn.
 - Chưa kiểm: `/context` trong phiên thật (CLI lồng chưa đăng nhập).
 - Bằng chứng: `D:\TimClipPro_SharedContext\20261009_111332\` (logs/kiem_sau_push.txt, evidence/quet_truoc_push.json).
-### 2026-10-09 — Ngữ cảnh chung PC1/PC2 (nhánh feature/pc1/ai-shared-context)
-- Làm: inventory chỉ đọc (Git, worktree, remote, tài liệu); `CLAUDE.md` gốc, `docs/ai/*`, `.claude/rules/*`,
-  `.claude/settings.json`; chuẩn hoá `TimClipPro/CLAUDE.md` 782 → 198 dòng (phần dài chuyển nguyên
-  văn); tạo nhánh local `integration/current` = e49340d. Không push, không đổi remote, production giữ 6dc3f9d.
-- Kiểm: kiem_tai_lieu 9/9 ĐẠT (phủ 646/646 dòng có chữ; 79 glob rule khớp; 138/138 file test đúng một vùng; 0 bí mật, đối chứng dương 14/14); quét lịch sử commit `b05a74d`: 0 phát hiện mới; suite nhanh trên cây `b05a74d`: 2445 đạt / 8 bỏ qua / 0 hỏng; chậm `test_hai_may_gia_lap.py` 1/1; rào chắn: sạch
-- Bằng chứng: `D:\TimClipPro_SharedContext\20261009_111332\` (CHECKPOINT, evidence/).
-- Tiếp theo: mục «Tiếp theo» ở trên.
-### 2026-10-09 — Bộ cài one-click PC2 (ngoài repo)
-- ZIP `b0847ea7…caa8` (129.649.071 B), 65 file; thử 13/13 trong thư mục sạch (máy không có Windows Sandbox).
-- Bằng chứng: `D:\TimClipPro_StableRelease\20261008_132859\` (oneclick/, evidence/thu_oneclick_lan3.json).
