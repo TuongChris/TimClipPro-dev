@@ -12,6 +12,7 @@ Thêm/đổi tên file test → thêm vào bảng «Chọn test theo vùng» tro
 | `b627af0` (10/10/2026, review PR #1) | PC1; runtime lock có băm, Python 3.12.10; bản sao cây; chặn mạng | 2460 thu thập = 2452 đạt / 8 bỏ qua / 0 hỏng (283 s) | — | test CŨ ép cp1252 → 1 hỏng (`UnicodeEncodeError`); `test_health_check.py` MỚI 12/12 ở UTF-8 và 12/12 khi cha cp1252 |
 | `8bd69a7` (14/10/2026, review PR #4 CookieFix) | PC1; runtime lock có băm 1.1.1 (`py312-f955a32807a9` = lock 1.0.0 + yt-dlp-ejs 0.8.0), Python 3.12.10, Node.js 22.22.0; bản sao cây; chặn mạng + chặn đọc hồ sơ trình duyệt | 2582 thu thập = 2574 đạt / 8 bỏ qua / 0 hỏng | 19/19 (484 s) | ruff sạch; 6 test `.gitignore` trong worktree đạt |
 | `15e4f88` (14/10/2026, sửa F1/F3 — nhánh `feature/pc1/cookiefix-f1-f3`) | như dòng trên | 2599 thu thập = 2591 đạt / 8 bỏ qua / 0 hỏng (329 s) | 19/19 (522 s) | 17 test mới: cả 17 đỏ trên mã `8bd69a7` → xanh; đột biến 6/6 bị bắt; ruff sạch |
+| `7c60af5` (14/10/2026, sửa theo review phần sửa — mã cuối của Stable 1.1.1) | như dòng trên | 2607 thu thập = 2599 đạt / 8 bỏ qua / 0 hỏng (294 s) | 19/19 (455 s) | 25 ca test mới: cả 25 đỏ trên mã `8bd69a7` → xanh; đột biến 8/9 (còn lại: đường không tới được); ruff sạch; 6 test `.gitignore` trong worktree đạt |
 
 Bằng chứng (ngoài Git): PC1 — junit `test_fast_rt_kiem.xml`, `test_slow_rt_kiem.xml` trong thư mục vòng phát hành Stable
 08/10 và `pr1_*.xml` của vòng 10/10; PC2 — junit trong `C:\Dev\pc2_test_runs\` (handoff PC2). Số ở đây phải lấy từ

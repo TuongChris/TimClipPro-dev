@@ -29,10 +29,11 @@ sang `docs/ai/handoff/LICH_SU_PC1.md`. Không ghi bí mật, link Sheet thật, 
 ## Nhật ký
 ### 2026-10-14 — Review CookieFix (PR #4) + sửa F1/F3 trước Stable 1.1.1 (nhánh feature/pc1/cookiefix-f1-f3)
 - Review PR #4 (PC2, `8bd69a7`): không P0/P1; P2 F1, P3 F2–F8. Người dùng chọn sửa F1 + F3 trước khi phát hành.
-- Làm (`15e4f88`): `chay_kem_duong_lui_cookie(bo_qua=…)` — Dừng/mạng đứng đi thẳng ra ở lượt đầu và lượt lùi
-  không-cookie; `download_audio` truyền `bo_qua` của phiên; bỏ UNKNOWN khỏi tập «có thể do JS»; câu «node không chạy
-  được» không còn đường dẫn; chi tiết `LoiGiaiJs` che `X:\Users\<tên>` (`an_thu_muc_nguoi_dung`).
-- Kiểm: 17 test mới (cả 17 đỏ trên mã `8bd69a7`, xanh sau sửa), đột biến 6/6; nhanh 2591/8/0, chậm 19/19, ruff sạch.
+- Làm (`15e4f88`, `7c60af5` sau review phần sửa): `chay_kem_duong_lui_cookie(bo_qua=…)` — Dừng/mạng đứng đi thẳng
+  ra ở lượt đầu và lượt lùi không-cookie; mọi lời gọi truyền `bo_qua` của phiên; bỏ UNKNOWN khỏi tập «có thể do JS»;
+  câu «node không chạy được» không còn đường dẫn; chi tiết `LoiGiaiJs` che `X:\Users\<tên>` (`an_thu_muc_nguoi_dung`).
+- Kiểm: 25 ca test mới (cả 25 đỏ trên mã `8bd69a7`), đột biến 8/9 (còn lại = đường không tới được); review độc lập
+  phần sửa 2 lượt (agent): không P0/P1/P2; nhanh 2599/8/0, chậm 19/19 (455 s), ruff sạch.
 - Bằng chứng: `D:\TimClipPro_Release111\20261014_154558\` (vòng review: `…\20261014_135520\`).
 ### 2026-10-10 — PR #1 PC2 + quy trình chung giai đoạn 2 + preview an toàn (nhánh feature/pc1/shared-workflow-preview)
 - Làm: review + gộp fast-forward PR #1 của PC2 (`b627af0`, chỉ test + handoff); tài liệu chung: giai đoạn 2, gộp PR,
