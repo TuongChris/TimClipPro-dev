@@ -3569,11 +3569,14 @@ class Engine:
         # phiên: cầu dao mở thì không gửi request; lỗi được phân loại thành câu tiếng Việt
         # (`LoiTruyCapYouTube`) và ghi vào cầu dao. Khâu tải KHÔNG có vòng thử lại ngoài —
         # chạy lại cả danh sách client sẽ đụng `.part` của client khác (xem `don_file_do_dang`).
+        # Dừng / mạng đứng đi thẳng ra ở MỌI lớp (đường lui client, đường lui cookie, phiên) — không thành lỗi YouTube
+        # hay «lỗi JavaScript» khi trước đó có cảnh báo giải JS (review F1).
         try:
             with giam_sat:
                 phien.chay("download",
                            lambda: ytdlp_chung.chay_kem_duong_lui_cookie(goc, tai_voi, khi_bo_cookie=bo_cookie,
-                                                                         bo_ghi=bo_ghi_tai),
+                                                                         bo_ghi=bo_ghi_tai,
+                                                                         bo_qua=(Cancelled, TaiAudioDungHinh)),
                            video_id=video_id, cancel_event=self.cancel_event, loi_huy=Cancelled,
                            bo_qua=(Cancelled, TaiAudioDungHinh))
         except (Cancelled, TaiAudioDungHinh):

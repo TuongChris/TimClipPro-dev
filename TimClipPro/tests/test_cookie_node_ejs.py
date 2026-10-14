@@ -162,6 +162,20 @@ def test_kha_nang_js_tung_truong_hop(monkeypatch, kha_nang_js_that, node, pb, ej
         assert kn.mo_ta() == f"Node.js {pb} + yt-dlp-ejs 0.8.0"
 
 
+def test_ly_do_node_khong_chay_duoc_khong_mang_duong_dan_may(monkeypatch, kha_nang_js_that):
+    """Review F3 (PC1 14/10/2026): ``ly_do`` đi vào GHI CHÚ kết quả (lịch sử, CSV, Google Sheets) qua câu «KHÔNG đăng
+    nhập» và câu chặn cookie — chỉ nói lệnh, không đường dẫn node (thường nằm trong thư mục người dùng Windows)."""
+    duong = r"C:\Users\Ten Nguoi Dung\AppData\Roaming\nvm\v22.12.0\node.exe"
+    monkeypatch.setattr(y, "_tim_node", lambda: duong)
+    monkeypatch.setattr(y, "_phien_ban_node", lambda _p: "")
+    monkeypatch.setattr(y, "_kiem_ejs", lambda: ("0.8.0", "0.8.0", ""))
+    kn = kha_nang_js_that()
+    assert not kn.san_sang and kn.node == duong, "đường dẫn vẫn giữ cho việc chạy yt-dlp và youtube-doctor trên máy"
+    for cau in (kn.ly_do, kn.mo_ta(), y.thong_bao_khong_dang_nhap(kn), y.thong_bao_cookie_can_js(kn)):
+        assert "không chạy được" in cau and "node --version" in cau, cau
+        assert duong not in cau and "Ten Nguoi Dung" not in cau and "AppData" not in cau, cau
+
+
 def test_kiem_ejs_dung_luat_cua_yt_dlp(monkeypatch, kha_nang_js_that):
     from yt_dlp.dependencies import yt_dlp_ejs
     from yt_dlp.extractor.youtube.jsc._builtin import vendor

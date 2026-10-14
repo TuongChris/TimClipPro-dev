@@ -31,7 +31,7 @@ import giam_sat_tai
 import scan_ui
 import truy_cap_youtube as t
 import ytdlp_chung as y
-from engine import Engine, Match, ScanResult, chu_ky_chinh_sach
+from engine import Cancelled, Engine, Match, ScanResult, TaiAudioDungHinh, chu_ky_chinh_sach
 from kho_gia import ghi_kho
 from ytdlp_gia import AUTH, BOT, YdlKichBan, info_mau
 
@@ -247,6 +247,88 @@ def test_khong_cookie_loi_di_thang_ra_mot_lan(may, kn):
     assert da_goi == [False] and nhan == []
 
 
+# ---------------------------------------------------------------- Dừng / mạng đứng / lỗi máy KHÔNG thành «lỗi JavaScript»
+# Review F1 (PC1 14/10/2026): bộ giải JS hỏng MỘT PHẦN (một client cảnh báo, client khác vẫn tải) rồi người dùng bấm Dừng,
+# ffmpeg đứng hay đĩa đầy — lỗi đó bị đổi thành LoiGiaiJs: phiên ghi JS_CHALLENGE_ERROR (cầu dao ngưỡng 2: hai lần Dừng
+# là dừng cả lô), bỏ qua nhánh dọn file dở của Dừng, lịch sử ghi «bộ giải JS hỏng» thay vì «đã huỷ».
+
+LOI_DUNG = (Cancelled, TaiAudioDungHinh)       # đúng `bo_qua` của Engine.download_audio
+MANG_DUNG = ("Mạng đứng: 180 giây ffmpeg không ghi thêm dữ liệu audio nào (file đã có 12,0 MB) — đã dừng lượt tải. "
+             "Kiểm kết nối mạng rồi quét lại.")
+
+
+def _hong_sau_canh_bao_js(bo_ghi, loi, khi_dang_xu_ly=None):
+    """``chay(cau_hinh)`` giả: yt-dlp đã cảnh báo giải JS hỏng trong lượt này, rồi lượt dừng vì ``loi`` (không do JS).
+
+    ``khi_dang_xu_ly``: lỗi yt-dlp đang được xử lý khi ``loi`` nổ ra (thành ``__context__``) — Engine đổi lỗi tải thành
+    ``Cancelled`` khi người dùng đã bấm Dừng, dù yt-dlp lúc đó báo gì (kể cả «không còn định dạng»)."""
+    def chay(_ch):
+        bo_ghi.warning(CANH_BAO_N.format(id="OPgD5wl0fAY"))
+        if khi_dang_xu_ly is None:
+            raise loi
+        try:
+            raise _loi(khi_dang_xu_ly)
+        except RuntimeError:
+            raise loi
+    return chay
+
+
+@pytest.mark.parametrize("loi", [Cancelled(), TaiAudioDungHinh(MANG_DUNG)], ids=["dung", "mang_dung"])
+def test_dung_sau_canh_bao_js_di_thang_ra_dung_doi_tuong(may, loi):
+    bo_ghi = y.BoGhiYtdlp(t.PhienYouTube())
+    nhan = []
+    with pytest.raises(type(loi)) as ei:
+        y.chay_kem_duong_lui_cookie(CO_COOKIE, _hong_sau_canh_bao_js(bo_ghi, loi, LOI_COOKIE_CHET),
+                                    khi_bo_cookie=nhan.append, bo_ghi=bo_ghi, bo_qua=LOI_DUNG)
+    assert ei.value is loi, "lớp bo_qua đi thẳng ra, không bị đổi thành LoiGiaiJs"
+    assert nhan == [], "Dừng không phải lý do bỏ đăng nhập"
+
+
+def _mot_lan_dung(phien):
+    bo_ghi = y.BoGhiYtdlp(phien)
+    chay = _hong_sau_canh_bao_js(bo_ghi, Cancelled(), LOI_COOKIE_CHET)
+    with pytest.raises(Cancelled):
+        phien.chay("download",
+                   lambda: y.chay_kem_duong_lui_cookie(CO_COOKIE, chay, bo_ghi=bo_ghi, bo_qua=LOI_DUNG),
+                   video_id="OPgD5wl0fAY", loi_huy=Cancelled, bo_qua=LOI_DUNG)
+
+
+def test_hai_lan_dung_lien_tiep_sau_canh_bao_js_khong_mo_cau_dao(may):
+    phien = t.PhienYouTube()
+    _mot_lan_dung(phien)
+    _mot_lan_dung(phien)
+    so = phien.tom_tat()
+    assert not phien.mo and so["breaker_open"] is False
+    assert so["js_challenge_errors"] == 0 and so["breaker_events"] == []
+    assert so["js_challenge_warnings"] == 2, "cảnh báo JS vẫn được đếm — chỉ lỗi cuối không bị đổ cho JS"
+
+
+def test_loi_chua_phan_loai_sau_canh_bao_js_giu_nguyen_loi_goc(may):
+    """Đĩa đầy (hay lỗi máy chưa phân loại — UNKNOWN) sau cảnh báo JS: không có bằng chứng là do JS → giữ lỗi gốc, đúng
+    loại của nó, như đường không-cookie."""
+    bo_ghi = y.BoGhiYtdlp(t.PhienYouTube())
+    loi = OSError(28, "No space left on device")
+    with pytest.raises(OSError) as ei:
+        y.chay_kem_duong_lui_cookie(CO_COOKIE, _hong_sau_canh_bao_js(bo_ghi, loi), bo_ghi=bo_ghi)
+    assert ei.value is loi
+    assert t.phan_loai_loi(ei.value).category == t.UNKNOWN_YOUTUBE_ERROR
+
+
+def test_dung_trong_luot_lui_khong_cookie_van_la_dung(may):
+    """Cookie chết → lùi không cookie; bấm Dừng trong lượt lùi: không được ném lỗi GỐC (cookie chết) thay cho Dừng."""
+    da_goi, loi = [], Cancelled()
+
+    def chay(ch):
+        da_goi.append(ch.co_cookie)
+        if ch.co_cookie:
+            raise _loi(LOI_COOKIE_CHET)
+        raise loi
+
+    with pytest.raises(Cancelled) as ei:
+        y.chay_kem_duong_lui_cookie(CO_COOKIE, chay, bo_qua=LOI_DUNG)
+    assert ei.value is loi and da_goi == [True, False]
+
+
 # ---------------------------------------------------------------- phân loại: không gộp tất cả thành lỗi cookie
 
 def test_bon_loai_loi_tach_rieng():
@@ -439,6 +521,139 @@ def test_lo_khong_cookie_giu_nguyen_so_request(tmp_path, monkeypatch, may, kn):
     assert ydl.dem("info") == 3 and ydl.dem("tai") == 3
     assert not any(_co_cookie(o) or "js_runtimes" in o for o in ydl.opts)
     assert e.canh_bao_mang == []
+
+
+def test_lo_bam_dung_sau_canh_bao_js_ghi_da_huy_khong_ghi_loi_js(tmp_path, monkeypatch, may):
+    """Review F1 cả lô: bấm Dừng khi video đang tải (sau cảnh báo JS) → kết quả «Đã hủy theo yêu cầu.», không phải lỗi
+    truy cập «JavaScript»; cầu dao không ghi lỗi nào; lô dừng như mọi lần bấm Dừng."""
+    giu = {}
+
+    def dung(phien, ma):
+        phien.opts["logger"].warning(CANH_BAO_N.format(id=ma))
+        giu["e"].cancel()                       # người dùng bấm Dừng → luồng giám sát giết ffmpeg → yt-dlp báo lỗi
+        return "ERROR: ffmpeg exited with code 1"
+
+    ma = [f"vid{i:08d}" for i in range(3)]
+    ydl = YdlKichBan(tai={"*": dung})
+    e = giu["e"] = _eng(tmp_path, monkeypatch, ydl)
+    ket = list(e.scan_iter([f"https://youtu.be/{m}" for m in ma]))
+    assert len(ket) == 1 and ydl.dem("tai") == 1, "Dừng: không thử client khác, không sang video sau"
+    assert ket[0].note == "Đã hủy theo yêu cầu." and ket[0].ly_do_pham_vi == "huy"
+    assert ket[0].loi_truy_cap is None
+    so = e.phien_youtube_cuoi.tom_tat()
+    assert so["js_challenge_errors"] == 0 and so["breaker_open"] is False
+
+
+class _YdlDungSauCanhBaoJs:
+    """yt-dlp giả cho ``Engine.download_audio`` tải PHẦN ĐẦU (qua ffmpeg): cảnh báo giải JS hỏng, ghi ``.part``, rồi
+    người dùng bấm Dừng — luồng giám sát giết ffmpeg nên yt-dlp ném lỗi ``loi_ytdlp``."""
+
+    def __init__(self, eng, loi_ytdlp):
+        self.eng, self.loi_ytdlp = eng, loi_ytdlp
+
+    def __call__(self, opts):
+        eng, loi_ytdlp = self.eng, self.loi_ytdlp
+
+        class _Phien:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def download(self, urls):
+                opts["logger"].warning(CANH_BAO_N.format(id="v1"))
+                with open(opts["outtmpl"].replace("%(ext)s", "webm") + ".part", "wb") as f:
+                    f.write(b"audio do dang")
+                eng.cancel()
+                raise yt_dlp.utils.DownloadError(loi_ytdlp)
+
+        return _Phien()
+
+
+@pytest.mark.parametrize("loi_ytdlp", ["ERROR: ffmpeg exited with code 1", LOI_COOKIE_CHET.format(id="v1")],
+                         ids=["ffmpeg_bi_giet", "khong_con_dinh_dang"])
+def test_tai_phan_dau_bam_dung_sau_canh_bao_js_la_huy_va_don_file_do(tmp_path, monkeypatch, may, loi_ytdlp):
+    """Ngữ nghĩa Dừng giữ nguyên: ``Cancelled`` ra khỏi ``download_audio`` (dù yt-dlp lúc đó báo gì) và nhánh dọn file
+    dở của bản tải một phần vẫn chạy (lỗi JS ném ra trước đây đi vòng qua nhánh đó)."""
+    e = Engine(root=str(tmp_path), data_dir=str(tmp_path / "data"), out_dir=str(tmp_path / "ra"))
+    e.config.ytdlp_sleep_requests_s = 0.0
+    e.config.ytdlp_cookies_browser = "firefox"
+    phien = t.PhienYouTube()
+    monkeypatch.setattr(e, "phien_youtube_hien_tai", lambda: phien)
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", _YdlDungSauCanhBaoJs(e, loi_ytdlp))
+    monkeypatch.setattr(giam_sat_tai, "ffmpeg_chia_khoi_duoc", lambda: True, raising=False)
+    with pytest.raises(Cancelled):
+        e.download_audio("https://youtu.be/v1", "v1", gioi_han_giay=10800)
+    assert not list((tmp_path / "data").rglob("*.part")), "Dừng: file dở của bản tải một phần phải được dọn"
+    so = phien.tom_tat()
+    assert so["js_challenge_errors"] == 0 and not phien.mo
+
+
+# ---------------------------------------------------------------- ghi chú kết quả không mang đường dẫn máy (review F3)
+
+NODE_NGUOI_DUNG = r"C:\Users\Ten Nguoi Dung\AppData\Roaming\nvm\v22.12.0\node.exe"
+
+
+def _chu_trong_db(duong_db) -> str:
+    import contextlib
+    import sqlite3
+
+    with contextlib.closing(sqlite3.connect(duong_db)) as db:
+        bang = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+        return "\n".join(str(o) for b in bang for dong in db.execute(f'SELECT * FROM "{b}"') for o in dong)
+
+
+def test_lo_node_khong_chay_duoc_ghi_chu_lich_su_csv_khong_mang_duong_dan(tmp_path, monkeypatch, kha_nang_js_that):
+    """Node có nhưng ``--version`` hỏng (hết giờ, file hỏng): câu «KHÔNG đăng nhập» đi vào GHI CHÚ mọi kết quả → lịch sử,
+    CSV dọc/ngang, cột ghi chú của Google Sheets. Đường dẫn node thường nằm trong thư mục người dùng Windows (nvm,
+    %APPDATA%) — câu chỉ được nói «node --version», không đường dẫn, không tên người dùng."""
+    monkeypatch.setattr(y, "_tim_node", lambda: NODE_NGUOI_DUNG)
+    monkeypatch.setattr(y, "_phien_ban_node", lambda _p: "")
+    monkeypatch.setattr(y, "_kiem_ejs", lambda: ("0.8.0", "0.8.0", ""))
+    ma = [f"vid{i:08d}" for i in range(2)]
+    ydl = YdlKichBan()
+    e = _eng(tmp_path, monkeypatch, ydl)
+    ket = list(e.scan_iter([f"https://youtu.be/{m}" for m in ma]))
+    assert len(ket) == 2 and not any(_co_cookie(o) for o in ydl.opts), "máy chưa sẵn sàng: không gửi cookie"
+    assert all("KHÔNG đăng nhập" in (k.note or "") and "node --version" in k.note for k in ket), [k.note for k in ket]
+    noi = [*(k.note for k in ket), str(e.to_rows(ket)), str(e.to_rows_ngang(ket)), _chu_trong_db(e.sqlite_file),
+           str(e.phien_youtube_cuoi.tom_tat()), e.phien_youtube_cuoi.thong_bao_dung()]
+    for chu in noi:
+        assert "Ten Nguoi Dung" not in chu and "AppData" not in chu and NODE_NGUOI_DUNG not in chu
+
+
+def test_bo_giai_js_hong_chi_tiet_che_thu_muc_nguoi_dung(may):
+    """Chi tiết kỹ thuật của LoiGiaiJs (lỗi yt-dlp + cảnh báo giải JS) cũng đi vào ghi chú kết quả; cảnh báo có thể mang
+    lỗi của Node kèm đường dẫn trong thư mục người dùng → che thành «~», giữ phần còn lại để chẩn đoán."""
+    bo_ghi = y.BoGhiYtdlp(t.PhienYouTube())
+    canh_bao = ('[youtube] [jsc:node] Error solving n challenge request using "node" provider: Error running node '
+                "process (returncode: 1): Error: EPERM: operation not permitted, open "
+                r"'C:\Users\Ten Nguoi Dung\AppData\Local\Temp\jsc.js'.")
+
+    def chay(_ch):
+        bo_ghi.warning(canh_bao)
+        raise _loi(LOI_COOKIE_CHET)
+
+    with pytest.raises(y.LoiGiaiJs) as ei:
+        y.chay_kem_duong_lui_cookie(CO_COOKIE, chay, bo_ghi=bo_ghi)
+    f = t.phan_loai_loi(ei.value)
+    assert "Error solving n challenge request" in f.technical_summary and "~" in f.technical_summary
+    for chu in (f.technical_summary, str(t.LoiTruyCapYouTube(f)), y.giai_thich_loi(t.LoiTruyCapYouTube(f), True)):
+        assert "Ten Nguoi Dung" not in chu and "Users" not in chu
+
+
+@pytest.mark.parametrize("vao,ra", [
+    (r"open 'C:\Users\Ten Nguoi Dung\AppData\x.js'", r"open '~\AppData\x.js'"),
+    (r"open 'C:\\Users\\Ten\\AppData\\x.js'", r"open '~\\AppData\\x.js'"),
+    ("file:///C:/Users/Ten/AppData/x.js", "file:///~/AppData/x.js"),
+    (r"D:\Documents and Settings\Ten\x", r"~\x"),
+    ("https://github.com/yt-dlp/yt-dlp/wiki/EJS", "https://github.com/yt-dlp/yt-dlp/wiki/EJS"),
+    (r"C:\TimClipPro\runtimes\py312\x.js", r"C:\TimClipPro\runtimes\py312\x.js"),
+])
+def test_che_thu_muc_nguoi_dung(vao, ra):
+    assert y.an_thu_muc_nguoi_dung(vao) == ra
+    assert y.an_thu_muc_nguoi_dung(ra) == ra, "luỹ đẳng"
 
 
 # ---------------------------------------------------------------- tải phần đầu (Marathon): Range khối 10 MiB giữ nguyên

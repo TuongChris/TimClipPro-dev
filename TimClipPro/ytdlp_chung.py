@@ -393,11 +393,13 @@ def kha_nang_js() -> KhaNangJs:
     node = _tim_node()
     pb = _phien_ban_node(node) if node else ""
     toi_thieu = ".".join(map(str, NODE_TOI_THIEU[:1]))
+    # `ly_do` đi vào GHI CHÚ kết quả (lịch sử, CSV, Google Sheets): không bao giờ chứa đường dẫn — node thường nằm trong
+    # thư mục người dùng Windows (nvm, %APPDATA%). Đường dẫn chỉ ở `node` (chạy yt-dlp, youtube-doctor trên máy).
     ly_do = []
     if not node:
         ly_do.append(f"máy thiếu Node.js ≥ {toi_thieu} (không thấy node trên PATH)")
     elif not pb:
-        ly_do.append(f"Node.js trên máy không chạy được («{node}» không trả phiên bản)")
+        ly_do.append("Node.js trên máy không chạy được («node --version» không trả phiên bản)")
     elif tuple(int(x) for x in pb.split(".")) < NODE_TOI_THIEU:
         ly_do.append(f"Node.js {pb} trên máy quá cũ (cần ≥ {toi_thieu})")
     if loi_ejs:
@@ -675,8 +677,19 @@ def la_dau_hieu_cookie_can_js(loi: Any) -> bool:
 
 
 # Lỗi cuối mà một bộ giải JS hỏng có thể gây ra (không còn định dạng / player client không trả gì). Bot, đăng nhập, 429,
-# video gỡ... giữ nguyên loại của chúng dù có cảnh báo JS đi kèm.
-_LOAI_CO_THE_DO_JS = frozenset({FORMAT_OR_EXTRACTOR_ERROR, PLAYER_CLIENT_ERROR, UNKNOWN_YOUTUBE_ERROR})
+# video gỡ... giữ nguyên loại của chúng dù có cảnh báo JS đi kèm. KHÔNG có lỗi chưa phân loại (UNKNOWN): đĩa đầy, lỗi máy…
+# sau một cảnh báo JS không có bằng chứng nào là do JS (review F1, PC1 14/10/2026).
+_LOAI_CO_THE_DO_JS = frozenset({FORMAT_OR_EXTRACTOR_ERROR, PLAYER_CLIENT_ERROR})
+
+# Thư mục người dùng Windows — mang TÊN người dùng: «X:\Users\<tên>» (cả «\\» của repr Python và «/»).
+_RE_THU_MUC_NGUOI_DUNG = re.compile(
+    r"(?i)\b[a-z]:(?:\\{1,2}|/)(?:users|documents and settings)(?:\\{1,2}|/)[^\\/\"'\r\n]+")
+
+
+def an_thu_muc_nguoi_dung(van_ban: Any) -> str:
+    """Thay thư mục người dùng (mang tên người dùng Windows) bằng «~» trong chữ của yt-dlp/Node đi vào GHI CHÚ kết quả
+    (lịch sử, CSV, Google Sheets); phần còn lại của đường dẫn giữ để chẩn đoán. Luỹ đẳng."""
+    return _RE_THU_MUC_NGUOI_DUNG.sub("~", str(van_ban or ""))
 
 
 def chay_kem_duong_lui_cookie(
@@ -684,6 +697,7 @@ def chay_kem_duong_lui_cookie(
     chay: Callable[["CauHinhMang"], Any],
     khi_bo_cookie: Optional[Callable[[BaseException], None]] = None,
     bo_ghi: Optional[BoGhiYtdlp] = None,
+    bo_qua: tuple = (),
 ) -> Any:
     """Chạy ``chay(cau_hinh)`` với chính sách cookie MINH BẠCH — không bao giờ để người dùng tưởng đã đăng nhập khi
     thật ra đang chạy không cookie.
@@ -703,6 +717,9 @@ def chay_kem_duong_lui_cookie(
 
     ``khi_bo_cookie``: gọi khi quyết định chạy không cookie, để bên trên ghi log/cảnh báo/số đo.
     ``bo_ghi``: logger yt-dlp của lượt (để đọc cảnh báo giải JS); không có thì bỏ qua bước 2.
+    ``bo_qua``: các lớp ngoại lệ đi THẲNG ra, không phân loại, không lùi (``Cancelled``, mạng đứng…) — truyền đúng
+    ``bo_qua`` của ``PhienYouTube.chay`` bao ngoài: bấm Dừng sau một cảnh báo JS không được thành «lỗi JavaScript»
+    (cầu dao ngưỡng 2) hay thành lỗi cookie của lượt lùi.
     """
     if cau_hinh.co_cookie:
         kn = kha_nang_js()
@@ -713,19 +730,23 @@ def chay_kem_duong_lui_cookie(
     moc = bo_ghi.so_canh_bao if bo_ghi is not None else 0
     try:
         return chay(cau_hinh)
+    except bo_qua:
+        raise
     except Exception as e:  # noqa: BLE001 — phân loại rồi mới quyết định
         if not cau_hinh.co_cookie:
             raise
         js = bo_ghi.canh_bao_js_tu(moc) if bo_ghi is not None else ""
         if js and phan_loai_loi(e).category in _LOAI_CO_THE_DO_JS:
             raise LoiGiaiJs(thong_bao_giai_js_hong(kha_nang_js()),
-                            chi_tiet=f"{tom_tat_ky_thuat(e, 200)} | {js[:200]}") from e
+                            chi_tiet=an_thu_muc_nguoi_dung(f"{tom_tat_ky_thuat(e, 200)} | {js[:200]}")) from e
         if not la_dau_hieu_cookie_chet(e):
             raise
         if khi_bo_cookie:
             khi_bo_cookie(e)
         try:
             return chay(cau_hinh.bo_cookie())
+        except bo_qua:
+            raise
         except Exception:  # noqa: BLE001
             # Bỏ cookie vẫn hỏng => cookie không phải nguyên nhân. Ném lỗi GỐC để
             # người dùng thấy đúng vấn đề thật của video, không bị dẫn sai hướng.
