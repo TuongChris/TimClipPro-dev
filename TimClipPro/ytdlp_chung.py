@@ -24,6 +24,7 @@ from __future__ import annotations
 import io
 import logging
 import os
+import threading
 import time
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Optional
@@ -455,10 +456,80 @@ def la_dau_hieu_cookie_chet(loi: Any) -> bool:
     return any(d in thap for d in DAU_HIEU_COOKIE_CHET)
 
 
+# Cookie đăng nhập KHÔNG dùng được trên máy không có bộ chạy JavaScript — khác cookie chết: cookie vẫn sống, nhưng có
+# cookie thì yt-dlp 2026.08.19 chỉ dùng client cần JS (`web_embedded`, `tv_downgraded`, `web`) và LOẠI client không cần
+# JS (`visionos` — không hỗ trợ cookie). Máy không có JS (Stable PC2: không deno, không yt-dlp-ejs) thì không client nào
+# lấy được định dạng, và yt-dlp nêu lý do playability ĐẦU TIÊN — của `tv_downgraded` (yt-dlp issue 17389). Cấu hình
+# `player_client=default,web_embedded` cho đúng danh sách đó nên không cứu được. Đo ngoại tuyến 14/10/2026 trên PC2
+# (cookie giả, chặn mạng); test: `tests/test_cookie_can_js.py`.
+DAU_HIEU_COOKIE_CAN_JS = ("page needs to be reloaded",)
+
+CANH_BAO_COOKIE_CAN_JS = (
+    "Cookie đăng nhập YouTube không dùng được trên máy này: có cookie thì yt-dlp chỉ dùng các client cần bộ chạy "
+    "JavaScript (deno), mà máy chưa có — YouTube trả «The page needs to be reloaded». Đang quét KHÔNG cookie (cách "
+    "đã nghiệm thu). Muốn hết cảnh báo: xoá trống ô cookie ở thanh bên → «🔐 Kết nối YouTube».")
+
+
+class CookieCanJs(RuntimeError):
+    """Lượt đi thẳng không-cookie vì cấu hình cookie này vừa được chứng minh không dùng được trên máy
+    (:data:`DAU_HIEU_COOKIE_CAN_JS`); báo cho bên trên như một lần bỏ cookie."""
+
+
+def la_dau_hieu_cookie_can_js(loi: Any) -> bool:
+    """Lỗi này có phải «có cookie thì không player client nào dùng được» (máy thiếu bộ chạy JavaScript) không?"""
+    if isinstance(loi, CookieCanJs):
+        return True
+    thap = go_ma_mau(loi).lower()
+    return any(d in thap for d in DAU_HIEU_COOKIE_CAN_JS)
+
+
+class NhoBoCookie:
+    """Nhớ cấu hình cookie vừa được CHỨNG MINH không dùng được trên máy này (lỗi :data:`DAU_HIEU_COOKIE_CAN_JS` và bỏ
+    cookie thì chạy): trong ``song_giay``, mọi lượt dùng ĐÚNG cấu hình cookie đó đi thẳng đường không-cookie.
+
+    Vì sao phải nhớ: lỗi này của MÁY (thiếu bộ chạy JS), không của từng video — không nhớ thì mỗi video lại gửi một bộ
+    request đăng nhập chắc chắn hỏng, và khâu tải còn không lùi được vì lỗi cuối của vòng player client không mang câu
+    gốc. Hết hạn thì dò lại một lần (vd. máy vừa cài bộ chạy JS). Cookie chết KHÔNG đi qua đây: vẫn lùi từng lượt.
+    """
+
+    def __init__(self, song_giay: float = 1800.0, dong_ho: Callable[[], float] = time.monotonic):
+        self.song_giay = song_giay
+        self._dong_ho = dong_ho
+        self._khoa = threading.Lock()
+        self._luc: dict = {}
+
+    @staticmethod
+    def _khoa_cau_hinh(cau_hinh: "CauHinhMang") -> tuple:
+        return (cau_hinh.cookiefile.strip(), cau_hinh.cookies_browser.strip().lower())
+
+    def nho(self, cau_hinh: "CauHinhMang") -> None:
+        with self._khoa:
+            self._luc[self._khoa_cau_hinh(cau_hinh)] = self._dong_ho()
+
+    def con_nho(self, cau_hinh: "CauHinhMang") -> bool:
+        khoa = self._khoa_cau_hinh(cau_hinh)
+        with self._khoa:
+            luc = self._luc.get(khoa)
+            if luc is None:
+                return False
+            if self._dong_ho() - luc > self.song_giay:
+                del self._luc[khoa]
+                return False
+            return True
+
+    def quen(self) -> None:
+        with self._khoa:
+            self._luc.clear()
+
+
+NHO_BO_COOKIE = NhoBoCookie()
+
+
 def chay_kem_duong_lui_cookie(
     cau_hinh: "CauHinhMang",
     chay: Callable[["CauHinhMang"], Any],
     khi_bo_cookie: Optional[Callable[[BaseException], None]] = None,
+    nho: Optional[NhoBoCookie] = None,
 ) -> Any:
     """Chạy ``chay(cau_hinh)``; cookie chết thì tự chạy lại KHÔNG cookie.
 
@@ -467,24 +538,38 @@ def chay_kem_duong_lui_cookie(
     ánh điều đó** — file vẫn "còn 400 ngày" trong khi phiên đã chết. Nếu không lùi,
     một cookie chết làm hỏng TOÀN BỘ việc quét cho tới khi người dùng tự đoán ra.
 
+    Có cookie mà không player client nào dùng được (máy thiếu bộ chạy JavaScript —
+    :data:`DAU_HIEU_COOKIE_CAN_JS`) cũng lùi như vậy, rồi NHỚ (``nho``, mặc định
+    :data:`NHO_BO_COOKIE`) để các lượt sau cùng cấu hình cookie đi thẳng không-cookie.
+
     Chỉ lùi khi có cookie và lỗi đúng dấu hiệu; mọi lỗi khác ném nguyên ra ngoài để
     không che mất nguyên nhân thật.
 
     ``khi_bo_cookie``: gọi khi quyết định lùi, để bên trên ghi log/cảnh báo.
     """
+    if nho is None:
+        nho = NHO_BO_COOKIE
+    if cau_hinh.co_cookie and nho.con_nho(cau_hinh):
+        if khi_bo_cookie:
+            khi_bo_cookie(CookieCanJs(CANH_BAO_COOKIE_CAN_JS))
+        return chay(cau_hinh.bo_cookie())
     try:
         return chay(cau_hinh)
     except Exception as e:  # noqa: BLE001 — phân loại rồi mới quyết định
-        if not cau_hinh.co_cookie or not la_dau_hieu_cookie_chet(e):
+        can_js = la_dau_hieu_cookie_can_js(e)
+        if not cau_hinh.co_cookie or not (can_js or la_dau_hieu_cookie_chet(e)):
             raise
         if khi_bo_cookie:
             khi_bo_cookie(e)
         try:
-            return chay(cau_hinh.bo_cookie())
+            ket = chay(cau_hinh.bo_cookie())
         except Exception:  # noqa: BLE001
             # Bỏ cookie vẫn hỏng => cookie không phải nguyên nhân. Ném lỗi GỐC để
             # người dùng thấy đúng vấn đề thật của video, không bị dẫn sai hướng.
             raise e from None
+        if can_js:
+            nho.nho(cau_hinh)
+        return ket
 
 
 class NhoClientTotNhat:
