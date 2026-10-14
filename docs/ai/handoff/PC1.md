@@ -27,6 +27,13 @@ sang `docs/ai/handoff/LICH_SU_PC1.md`. Không ghi bí mật, link Sheet thật, 
 6. (Tuỳ, cần duyệt) dọn nhánh đã gộp trên remote khi máy kia không còn dùng.
 
 ## Nhật ký
+### 2026-10-14 — Review CookieFix (PR #4) + sửa F1/F3 trước Stable 1.1.1 (nhánh feature/pc1/cookiefix-f1-f3)
+- Review PR #4 (PC2, `8bd69a7`): không P0/P1; P2 F1, P3 F2–F8. Người dùng chọn sửa F1 + F3 trước khi phát hành.
+- Làm (`15e4f88`): `chay_kem_duong_lui_cookie(bo_qua=…)` — Dừng/mạng đứng đi thẳng ra ở lượt đầu và lượt lùi
+  không-cookie; `download_audio` truyền `bo_qua` của phiên; bỏ UNKNOWN khỏi tập «có thể do JS»; câu «node không chạy
+  được» không còn đường dẫn; chi tiết `LoiGiaiJs` che `X:\Users\<tên>` (`an_thu_muc_nguoi_dung`).
+- Kiểm: 17 test mới (cả 17 đỏ trên mã `8bd69a7`, xanh sau sửa), đột biến 6/6; nhanh 2591/8/0, chậm 19/19, ruff sạch.
+- Bằng chứng: `D:\TimClipPro_Release111\20261014_154558\` (vòng review: `…\20261014_135520\`).
 ### 2026-10-10 — PR #1 PC2 + quy trình chung giai đoạn 2 + preview an toàn (nhánh feature/pc1/shared-workflow-preview)
 - Làm: review + gộp fast-forward PR #1 của PC2 (`b627af0`, chỉ test + handoff); tài liệu chung: giai đoạn 2, gộp PR,
   lấy bản mới/xung đột, hai máy + cp1252 (D-18, D-19); `.claude/launch.json` → chỉ gắn vào 8502, `autoVerify` false;
@@ -67,6 +74,3 @@ sang `docs/ai/handoff/LICH_SU_PC1.md`. Không ghi bí mật, link Sheet thật, 
 ### 2026-10-09 — Bộ cài one-click PC2 (ngoài repo)
 - ZIP `b0847ea7…caa8` (129.649.071 B), 65 file; thử 13/13 trong thư mục sạch (máy không có Windows Sandbox).
 - Bằng chứng: `D:\TimClipPro_StableRelease\20261008_132859\` (oneclick/, evidence/thu_oneclick_lan3.json).
-### 2026-10-08 — Stable 1.0.0 ký thật từ e49340d (ngoài repo)
-- C1–C6 ĐẠT: khoá thật `8aa5baa6c8f225f9`; lock có băm; gói/manifest/chữ ký; kit; cài mới thử 29/29; test trên runtime
-  lock 2445/8/0 + chậm 14/14. Giữ ở PC1 chờ tái audit e49340d.
