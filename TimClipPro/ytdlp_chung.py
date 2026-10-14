@@ -681,9 +681,13 @@ def la_dau_hieu_cookie_can_js(loi: Any) -> bool:
 # sau một cảnh báo JS không có bằng chứng nào là do JS (review F1, PC1 14/10/2026).
 _LOAI_CO_THE_DO_JS = frozenset({FORMAT_OR_EXTRACTOR_ERROR, PLAYER_CLIENT_ERROR})
 
-# Thư mục người dùng Windows — mang TÊN người dùng: «X:\Users\<tên>» (cả «\\» của repr Python và «/»).
+# Thư mục người dùng Windows — mang TÊN người dùng: «X:\Users\<tên>» (cả «\\» của repr Python và «/»). Tên có thể có dấu
+# cách, dấu nháy (O'Brien, O'Đức); dừng ở dấu phân cách đường dẫn, nháy đóng (nháy không đứng trước chữ/số), « | » (chỗ
+# ghép chi tiết), «…» (chỗ cắt), xuống dòng hay hết chuỗi — không nuốt phần chẩn đoán phía sau (review 14/10). Lookahead
+# chỉ xét tối đa một dấu cách → tuyến tính theo độ dài chuỗi.
 _RE_THU_MUC_NGUOI_DUNG = re.compile(
-    r"(?i)\b[a-z]:(?:\\{1,2}|/)(?:users|documents and settings)(?:\\{1,2}|/)[^\\/\"'\r\n]+")
+    r"(?i)\b[a-z]:(?:\\{1,2}|/)(?:users|documents and settings)(?:\\{1,2}|/)"
+    r"[^\\/\"\r\n|…]+?(?= ?[|…]|[\\/\"\r\n]|'(?!\w)|$)")
 
 
 def an_thu_muc_nguoi_dung(van_ban: Any) -> str:

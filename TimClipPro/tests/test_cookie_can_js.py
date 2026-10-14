@@ -523,15 +523,17 @@ def test_lo_khong_cookie_giu_nguyen_so_request(tmp_path, monkeypatch, may, kn):
     assert e.canh_bao_mang == []
 
 
-def test_lo_bam_dung_sau_canh_bao_js_ghi_da_huy_khong_ghi_loi_js(tmp_path, monkeypatch, may):
+@pytest.mark.parametrize("loi_ytdlp", ["ERROR: ffmpeg exited with code 1", LOI_COOKIE_CHET],
+                         ids=["ffmpeg_bi_giet", "khong_con_dinh_dang"])
+def test_lo_bam_dung_sau_canh_bao_js_ghi_da_huy_khong_ghi_loi_js(tmp_path, monkeypatch, may, loi_ytdlp):
     """Review F1 cả lô: bấm Dừng khi video đang tải (sau cảnh báo JS) → kết quả «Đã hủy theo yêu cầu.», không phải lỗi
-    truy cập «JavaScript»; cầu dao không ghi lỗi nào; lô dừng như mọi lần bấm Dừng."""
+    truy cập «JavaScript» — dù yt-dlp lúc đó báo gì; cầu dao không ghi lỗi nào; lô dừng như mọi lần bấm Dừng."""
     giu = {}
 
     def dung(phien, ma):
         phien.opts["logger"].warning(CANH_BAO_N.format(id=ma))
         giu["e"].cancel()                       # người dùng bấm Dừng → luồng giám sát giết ffmpeg → yt-dlp báo lỗi
-        return "ERROR: ffmpeg exited with code 1"
+        return loi_ytdlp
 
     ma = [f"vid{i:08d}" for i in range(3)]
     ydl = YdlKichBan(tai={"*": dung})
@@ -623,22 +625,27 @@ def test_lo_node_khong_chay_duoc_ghi_chu_lich_su_csv_khong_mang_duong_dan(tmp_pa
         assert "Ten Nguoi Dung" not in chu and "AppData" not in chu and NODE_NGUOI_DUNG not in chu
 
 
-def test_bo_giai_js_hong_chi_tiet_che_thu_muc_nguoi_dung(may):
-    """Chi tiết kỹ thuật của LoiGiaiJs (lỗi yt-dlp + cảnh báo giải JS) cũng đi vào ghi chú kết quả; cảnh báo có thể mang
-    lỗi của Node kèm đường dẫn trong thư mục người dùng → che thành «~», giữ phần còn lại để chẩn đoán."""
+@pytest.mark.parametrize("loi_ytdlp,canh_bao,dau_hieu", [
+    (LOI_COOKIE_CHET,
+     '[youtube] [jsc:node] Error solving n challenge request using "node" provider: Error running node process '
+     r"(returncode: 1): Error: EPERM: operation not permitted, open 'C:\Users\Ten Nguoi Dung\AppData\Local\Temp\jsc.js'.",
+     "Error solving n challenge request"),
+    # thư mục người dùng ở CUỐI lỗi yt-dlp, không dấu phân cách theo sau: không được nuốt cả cảnh báo JS phía sau « | »
+    (LOI_COOKIE_CHET + r" (cwd C:\Users\Ten Nguoi Dung", CANH_BAO_N, "n challenge solving failed"),
+], ids=["duong_dan_trong_canh_bao", "duong_dan_cuoi_loi_ytdlp"])
+def test_bo_giai_js_hong_chi_tiet_che_thu_muc_nguoi_dung(may, loi_ytdlp, canh_bao, dau_hieu):
+    """Chi tiết kỹ thuật của LoiGiaiJs (lỗi yt-dlp + cảnh báo giải JS) cũng đi vào ghi chú kết quả; chữ của yt-dlp/Node có
+    thể mang đường dẫn trong thư mục người dùng → che thành «~», giữ phần còn lại để chẩn đoán."""
     bo_ghi = y.BoGhiYtdlp(t.PhienYouTube())
-    canh_bao = ('[youtube] [jsc:node] Error solving n challenge request using "node" provider: Error running node '
-                "process (returncode: 1): Error: EPERM: operation not permitted, open "
-                r"'C:\Users\Ten Nguoi Dung\AppData\Local\Temp\jsc.js'.")
 
     def chay(_ch):
-        bo_ghi.warning(canh_bao)
-        raise _loi(LOI_COOKIE_CHET)
+        bo_ghi.warning(canh_bao.format(id="OPgD5wl0fAY"))
+        raise _loi(loi_ytdlp)
 
     with pytest.raises(y.LoiGiaiJs) as ei:
         y.chay_kem_duong_lui_cookie(CO_COOKIE, chay, bo_ghi=bo_ghi)
     f = t.phan_loai_loi(ei.value)
-    assert "Error solving n challenge request" in f.technical_summary and "~" in f.technical_summary
+    assert dau_hieu in f.technical_summary and "~" in f.technical_summary, f.technical_summary
     for chu in (f.technical_summary, str(t.LoiTruyCapYouTube(f)), y.giai_thich_loi(t.LoiTruyCapYouTube(f), True)):
         assert "Ten Nguoi Dung" not in chu and "Users" not in chu
 
@@ -650,6 +657,13 @@ def test_bo_giai_js_hong_chi_tiet_che_thu_muc_nguoi_dung(may):
     (r"D:\Documents and Settings\Ten\x", r"~\x"),
     ("https://github.com/yt-dlp/yt-dlp/wiki/EJS", "https://github.com/yt-dlp/yt-dlp/wiki/EJS"),
     (r"C:\TimClipPro\runtimes\py312\x.js", r"C:\TimClipPro\runtimes\py312\x.js"),
+    # review (P3): không nuốt phần chẩn đoán sau tên; tên có dấu nháy không lộ đuôi; tên bị cắt «…»; nháy đóng ngay sau tên
+    (r"cwd C:\Users\Admin | [youtube] Error solving n challenge request", r"cwd ~ | [youtube] Error solving n challenge request"),
+    (r"open 'C:\Users\O'Brien\AppData\x.js'", r"open '~\AppData\x.js'"),
+    (r"open 'C:\Users\O'Đức\AppData\x.js'", r"open '~\AppData\x.js'"),
+    ("C:\\Users\\Ten'2", "~"),
+    ("lỗi C:\\Users\\Ten Ngu… | [youtube] x", "lỗi ~… | [youtube] x"),
+    ("open 'C:\\\\Users\\\\Admin'. Next", "open '~'. Next"),
 ])
 def test_che_thu_muc_nguoi_dung(vao, ra):
     assert y.an_thu_muc_nguoi_dung(vao) == ra

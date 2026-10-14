@@ -3326,7 +3326,7 @@ class Engine:
             # is not available" — câu chữ dẫn người dùng đi sai hướng hoàn toàn. Tự lùi về
             # không-cookie thay vì để cả lượt quét chết.
             ket = ytdlp_chung.chay_kem_duong_lui_cookie(
-                self.cau_hinh_mang(), lay, khi_bo_cookie=bo_cookie, bo_ghi=bo_ghi)
+                self.cau_hinh_mang(), lay, khi_bo_cookie=bo_cookie, bo_ghi=bo_ghi, bo_qua=(Cancelled,))
             if not isinstance(ket, dict):
                 raise RuntimeError("yt-dlp không trả thông tin video.")
             if ket.get("_type") in ("playlist", "multi_video") or "entries" in ket:
