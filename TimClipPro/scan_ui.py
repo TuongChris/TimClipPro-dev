@@ -89,14 +89,30 @@ def dong_trang_thai_youtube(cd: Any, phien: Any = None, js: Any = None) -> list:
                    f"{'' if cd.co_tieu_de else ', thiếu dòng tiêu đề Netscape'}) — yt-dlp sẽ "
                    "từ chối; hãy xuất lại bằng tiện ích trình duyệt."))
     if cd.cau_hinh and js is not None:
-        if getattr(js, "san_sang", False):
-            ra.append(("info", "Khi quét: DÙNG cookie đăng nhập — yt-dlp giải thử thách JavaScript bằng "
-                               f"{js.mo_ta()}. Đã CẤU HÌNH chưa có nghĩa là YouTube CHẤP NHẬN phiên đăng nhập — kết "
-                               "quả mỗi lượt đồng bộ ghi rõ đã xác minh hay chưa."))
-        else:
+        # Nguồn FILE thì tool đọc được nội dung: chỉ nói «DÙNG cookie đăng nhập» khi file qua được cổng cấu trúc VÀ có
+        # cookie tài khoản (sự cố 15/10/2026: file không có LOGIN_INFO/SAPISID mà vẫn nói dùng đăng nhập). Trình duyệt:
+        # tool không mở profile để kiểm, giữ câu cũ.
+        la_file = getattr(cd, "nguon", "") == "file"
+        if not getattr(js, "san_sang", False):
             ra.append(("warning", f"Cookie đăng nhập CHƯA dùng được trên máy này: {js.ly_do}. Lượt quét sẽ chạy "
                                   "KHÔNG đăng nhập và ghi rõ điều đó trong kết quả. Muốn dùng cookie: cài Node.js ≥ 22 "
                                   "và dùng bản Tool có gói yt-dlp-ejs; muốn hết cảnh báo: xoá trống ô cookie."))
+        elif la_file and cd.trang_thai != _tc.COOKIE_FILE_STRUCTURALLY_VALID:
+            # Thiếu / không đọc được / sai cấu trúc: cổng `ytdlp_chung.kiem_tra_file_cookie` ném LoiFileCookie trước
+            # request đầu → COOKIE_INVALID_OR_EXPIRED, cầu dao ngưỡng 1.
+            ra.append(("warning", "Khi quét: KHÔNG đăng nhập được bằng file cookie này (xem dòng trên) — lượt quét sẽ "
+                                  f"dừng với lỗi cookie, dù máy đã sẵn sàng giải thử thách JavaScript bằng {js.mo_ta()}. "
+                                  "Hãy xuất lại cookies.txt từ trình duyệt đang đăng nhập YouTube, hoặc xoá trống ô "
+                                  "cookie để quét không đăng nhập."))
+        elif la_file and not cd.co_cookie_dang_nhap:
+            ra.append(("warning", "Khi quét: KHÔNG đăng nhập — file cookie nạp được và máy đã sẵn sàng giải thử thách "
+                                  f"JavaScript bằng {js.mo_ta()}, nhưng file KHÔNG có cookie đăng nhập YouTube (thiếu "
+                                  "LOGIN_INFO / SAPISID) nên lượt quét chạy như CHƯA đăng nhập. Muốn quét có đăng nhập: "
+                                  "xuất lại cookies.txt từ trình duyệt đang đăng nhập YouTube."))
+        else:
+            ra.append(("info", "Khi quét: DÙNG cookie đăng nhập — yt-dlp giải thử thách JavaScript bằng "
+                               f"{js.mo_ta()}. Đã CẤU HÌNH chưa có nghĩa là YouTube CHẤP NHẬN phiên đăng nhập — kết "
+                               "quả mỗi lượt đồng bộ ghi rõ đã xác minh hay chưa."))
     return ra
 
 
