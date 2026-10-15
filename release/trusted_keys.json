@@ -4,6 +4,11 @@
    "key_id": "8aa5baa6c8f225f9",
    "ed25519_pub_b64": "HdOql7r3ZeEJoN8hm6hB7UxNSjo7wWkNrjIwuxb14/c=",
    "ghi_chu": "Khoá phát hành TimClipPro kênh Stable — tạo 2026-10-08 trên PC1"
+  },
+  {
+   "key_id": "d02702dd741c3e4f",
+   "ed25519_pub_b64": "ZtXkLr8QOo1sp1YAPpsqheIcUlGl36b3f58Kfnd5dq4=",
+   "ghi_chu": "Khoá phát hành TimClipPro kênh Stable — máy PC2; ghi danh theo uỷ quyền a893c182 của khoá 8aa5baa6c8f225f9 (2026-10-15)"
   }
  ]
 }
