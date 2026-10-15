@@ -1,0 +1,26 @@
+{
+ "chu_ky": {
+  "chu_ky_b64": "UcqBiQMIOFUeoyQhZbRFfzcOHbPMvVQrNhZiflj3a8Ca8JRCVvW27miA+p2K1mzurszgSi/4nVIuWZwuuUTjDg==",
+  "key_id": "d02702dd741c3e4f",
+  "thuat_toan": "ed25519"
+ },
+ "noi_dung": {
+  "ban_dang_chay": "1.1.1",
+  "cai_dat_sha256": "15ffb36044c67468184e9876afb974bc001df8476260a703da5a3ea193263942",
+  "dinh_dang": 1,
+  "khoa_hien_co": [
+   "8aa5baa6c8f225f9"
+  ],
+  "khoa_moi": {
+   "ed25519_pub_b64": "ZtXkLr8QOo1sp1YAPpsqheIcUlGl36b3f58Kfnd5dq4=",
+   "key_id": "d02702dd741c3e4f"
+  },
+  "loai": "yeu_cau_them_khoa_tin_cay",
+  "ma_yeu_cau": "0da7f23550af49cdadfe7f3e3ca4009c",
+  "phien_ban_launcher": 1,
+  "tao_luc": "2026-10-15T01:18:12Z",
+  "ten_may": "PC2",
+  "trust_store_sha256": "a37dc9b6391ec59a3ee872da7b0e56847a92123833dc099dbe0bcf2b6e2fd76b",
+  "ung_dung": "TimClipPro"
+ }
+}
