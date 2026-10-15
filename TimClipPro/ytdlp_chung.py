@@ -824,13 +824,14 @@ class NhoClientTotNhat:
     nên nhớ nhầm thì chỉ chậm hơn một chút chứ không bao giờ làm hỏng việc tải.
     """
 
-    def __init__(self, song_giay: float = 1800.0):
+    def __init__(self, song_giay: float = 1800.0, dong_ho: Callable[[], float] = time.monotonic):
         self.song_giay = song_giay
+        self._dong_ho = dong_ho
         self._client: Optional[str] = None
         self._luc: float = 0.0
 
     def _con_han(self) -> bool:
-        return self._client is not None and (time.monotonic() - self._luc) < self.song_giay
+        return self._client is not None and (self._dong_ho() - self._luc) < self.song_giay
 
     def sap_xep(self, clients: list) -> list:
         """Đưa client đã biết là tải được lên đầu, giữ nguyên thứ tự còn lại."""
@@ -840,8 +841,12 @@ class NhoClientTotNhat:
         return [self._client] + [c for c in ds if c != self._client]
 
     def ghi_nhan(self, client: str) -> None:
-        self._client = client
-        self._luc = time.monotonic()
+        """Mốc tính từ lúc HỌC client. Tải được liên tục bằng client đang nhớ KHÔNG gia hạn — trước đây mỗi lần tải
+        được lại đặt lại mốc nên một lượt đồng bộ dài không bao giờ dò lại (15/10: một lần 403 → cả 88 video đi
+        `android`, mp4 CÓ HÌNH). Hết hạn mà dò lại vẫn phải lùi về chính client đó thì học lại, sang chu kỳ mới."""
+        if client != self._client or not self._con_han():
+            self._client = client
+            self._luc = self._dong_ho()
 
     def quen(self) -> None:
         self._client = None
