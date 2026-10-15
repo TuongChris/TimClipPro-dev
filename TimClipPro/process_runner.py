@@ -555,6 +555,7 @@ def chay_lenh_media(
     theo_doi_tien_do: bool = False,
     them_co_tien_do: bool = True,
     env: Optional[dict[str, str]] = None,
+    khi_tien_do: Optional[Callable[[dict], None]] = None,
 ) -> KetQuaLenh:
     """Chạy một lệnh media ngắn trong nhóm process riêng, có huỷ và timeout.
 
@@ -562,6 +563,10 @@ def chay_lenh_media(
     ``out_time``/``total_size`` đổi là một nhịp tiến triển. ``im_lang_toi_da_s`` chỉ
     tính khoảng KHÔNG có nhịp nào. ``them_co_tien_do`` tự chèn
     ``-progress pipe:1 -nostats`` ngay sau tên chương trình.
+
+    ``khi_tien_do`` (chỉ khi ``theo_doi_tien_do``): gọi với bản sao các khoá tiến độ mỗi khi FFmpeg kết thúc một
+    khối ``progress=`` (~2 lần/giây), từ luồng đọc stdout, NGOÀI khoá; lỗi trong callback bị nuốt — không ảnh hưởng
+    lệnh đang chạy hay watchdog im lặng.
 
     Không ném lỗi vì returncode khác 0 — người gọi quyết định; huỷ/timeout đánh dấu
     trên kết quả để tầng trên ném ``Cancelled`` hay báo lỗi đúng loại.
@@ -599,6 +604,12 @@ def chay_lenh_media(
                         if tien_do["gia_tri"].get(khoa_tien_do) != gia_tri:
                             tien_do["gia_tri"][khoa_tien_do] = gia_tri
                             tien_do["moc"] = time.monotonic()
+                        ban_sao = dict(tien_do["gia_tri"]) if (khi_tien_do and khoa_tien_do == "progress") else None
+                    if ban_sao is not None:
+                        try:
+                            khi_tien_do(ban_sao)
+                        except Exception:  # noqa: BLE001 — số đo phụ, không được làm hỏng lệnh media
+                            pass
             if so_ky_tu_stdout[0] < GIOI_HAN_STDOUT_KY_TU:
                 phan_stdout.append(dong)
                 so_ky_tu_stdout[0] += len(dong)

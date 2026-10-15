@@ -55,6 +55,8 @@ from scan_ui import (
     tom_tat_dong_bo_kenh,
 )
 from channel import ChannelSync
+from tien_do_dong_bo import SoDongBo
+from ui_tien_do_dong_bo import dong_hieu_suat, ve_tien_do_dong_bo
 from sheets import SheetsExporter
 
 st.set_page_config(page_title="TimClip Pro — Tìm video gốc trong video dài",
@@ -970,6 +972,14 @@ if job["running"]:
                      key="dung_nguon_chung"):
             common_controller.cancel()
             st.warning("Đã gửi yêu cầu dừng; bằng chứng đã có vẫn được giữ.")
+    elif job["kind"] == "channel" and st.session_state.get("so_dong_bo") is not None:
+        # Chỉ ĐỌC ảnh chụp của sổ tiến độ (worker ghi) — không đụng job thread, cờ huỷ hay khoá.
+        ve_tien_do_dong_bo(st, st.session_state.so_dong_bo.anh())
+        if st.button("⏹️ Dừng lại", type="secondary"):
+            eng.cancel()
+            st.warning("Đã gửi yêu cầu dừng, chờ một chút...")
+        st.caption("Cửa sổ này tự cập nhật. Bạn có thể để yên và làm việc khác, "
+                   "nhưng đừng đóng cửa sổ đen phía sau.")
     else:
         st.header("⏳ Đang xử lý...")
         st.progress(job["pct"], text=f"{job['pct']*100:.0f}%")
@@ -979,7 +989,8 @@ if job["running"]:
             st.warning("Đã gửi yêu cầu dừng, chờ một chút...")
         st.caption("Cửa sổ này tự cập nhật. Bạn có thể để yên và làm việc khác, "
                    "nhưng đừng đóng cửa sổ đen phía sau.")
-    time.sleep(0.75)
+    # Đồng bộ kênh: sổ tiến độ đã gộp nhịp (byte 4 lần/giây, FFmpeg 2 lần/giây) — vẽ lại 1 lần/giây là đủ.
+    time.sleep(1.0 if job["kind"] == "channel" else 0.75)
     st.rerun()
 
 # Tác vụ vừa xong → hiện kết quả
@@ -989,7 +1000,7 @@ if not job["running"] and (job["results"] or job["error"]):
     elif job["kind"] == "channel":
         r = job["results"]
         # Tiêu đề + số đếm theo TRẠNG THÁI THẬT của lượt (scan_ui.tom_tat_dong_bo_kenh): chỉ xanh khi đã tải đủ.
-        for muc_dbk, cau_dbk in tom_tat_dong_bo_kenh(r):
+        for muc_dbk, cau_dbk in tom_tat_dong_bo_kenh(r) + dong_hieu_suat(r.get("hieu_suat")):
             getattr(st, muc_dbk)(cau_dbk)
         if r["loi"]:
             st.warning(f"Video lỗi ({len(r['loi'])}, hiện tối đa 10):\n\n- " + "\n- ".join(r["loi"][:10]))
@@ -1176,9 +1187,11 @@ with tab0:
                  disabled=not (kenh_url and st.session_state.kho_dir)):
         # Truyền cả player_clients lẫn cấu hình mạng (cookie, giãn nhịp) để mọi mẹo
         # trong data\cau_hinh.json có tác dụng cho cả đồng bộ kênh, không chỉ cho quét.
+        # Sổ tiến độ MỚI cho mỗi lượt: worker ghi, màn tiến độ chỉ đọc ảnh chụp (ui_tien_do_dong_bo).
+        st.session_state.so_dong_bo = SoDongBo()
         cs = ChannelSync(st.session_state.kho_dir.strip('" '),
                          player_clients=list(eng.config.ytdlp_player_clients),
-                         cau_hinh_mang=eng.cau_hinh_mang())
+                         cau_hinh_mang=eng.cau_hinh_mang(), theo_doi=st.session_state.so_dong_bo)
         chay_nen("channel", cs.sync, kenh_url.strip(), gioi_han or None,
                  cancel_check=lambda: eng.cancel_event.is_set(), thu_lai_han_che=thu_lai_han_che)
 

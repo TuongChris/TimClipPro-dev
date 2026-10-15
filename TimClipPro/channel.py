@@ -35,6 +35,7 @@ import ytdlp_chung
 from luu_tru import cap_nhat_json, doc_json_an_toan, ghi_json_an_toan, khoa_json
 from process_runner import IM_LANG_FFMPEG_S, TRAN_FFPROBE_S, chay_lenh_media
 from publication_date import resolve_publication_date
+from tien_do_dong_bo import GD_LUU, GD_NEN, GD_TRICH_XUAT, GD_XAC_MINH, SoDongBo
 from truy_cap_youtube import (
     AGE_RESTRICTED,
     INVALID_INPUT,
@@ -340,7 +341,8 @@ class ChannelSync:
     def __init__(self, dest: str, network_timeout_s: Optional[int] = None,
                  player_clients: Optional[list] = None,
                  cau_hinh_mang: Optional[CauHinhMang] = None,
-                 phien_youtube: Optional[PhienYouTube] = None):
+                 phien_youtube: Optional[PhienYouTube] = None,
+                 theo_doi: Optional[SoDongBo] = None):
         # Mặc định là None chứ KHÔNG phải NETWORK_TIMEOUT_S: nếu để giá trị cứng thì
         # mọi lượt khởi tạo đều ghi đè timeout mà người dùng đã đặt trong cau_hinh.json
         # lên 30 giây, và không cách nào phân biệt "người gọi chỉ định 30" với
@@ -385,6 +387,12 @@ class ChannelSync:
         # Một đối tượng = một lượt (một nút bấm, một lệnh CLI): một cầu dao. YouTube chặn ở video
         # đầu thì không gửi thêm request nào cho hàng trăm video còn lại.
         self.phien = phien_youtube or PhienYouTube()
+        # Tiến độ + hiệu suất có cấu trúc của lượt (giao diện đọc ảnh chụp, worker chỉ ghi) — luôn có, kể cả CLI.
+        self.theo_doi = theo_doi if theo_doi is not None else SoDongBo()
+        # (đường dẫn đã chuẩn hoá, kích thước, mtime_ns, độ dài) của file VỪA kiểm bằng FFprobe rồi đặt vào kho: dùng lại
+        # độ dài đó thay cho một lần FFprobe thứ hai trên CHÍNH file ấy (cùng kích thước + mtime = cùng nội dung).
+        self._do_dai_vua_kiem: Optional[tuple] = None
+        self._lan_kiem_cuoi: Optional[tuple] = None
 
     # ---------- metadata ----------
 
@@ -838,7 +846,8 @@ class ChannelSync:
         import yt_dlp
 
         phien = self.phien
-        bo_ghi = BoGhiYtdlp(phien)
+        td = self.theo_doi
+        bo_ghi = BoGhiYtdlp(phien, khi_thong_diep=td.thong_diep_ytdlp)
 
         def chay(rieng: dict):
             phien.dem_yeu_cau("download")
@@ -874,7 +883,8 @@ class ChannelSync:
                 cau_hinh.player_clients(self.player_clients), chay,
                 cau_hinh.tuy_chon("download", logger=bo_ghi, **rieng),
                 truoc_khi_thu_lai=don_file_do_dang, bo_nho=self.nho_client,
-                khi_that_bai=lambda _ten, _loi: phien.ghi_doi_client(),
+                khi_that_bai=lambda ten, _loi: (phien.ghi_doi_client(), td.doi_client(ten)),
+                khi_thanh_cong=lambda ten, _da_thu: td.client_thanh_cong(ten),
                 # Bị nghi là bot/đòi đăng nhập/429/video gỡ: đổi client cũng vô ích (mục 6c).
                 dung_ngay=phien.nen_dung_doi_client)
 
@@ -890,6 +900,33 @@ class ChannelSync:
             video_id=ma_tu_url(url),
             cancel_event=getattr(self, "_huy_luot_sync", None), loi_huy=DaHuyDongBo,
             bo_qua=(DaHuyDongBo,))
+
+    def _ghi_do_dai_vua_kiem(self, tam: str, dich: str) -> None:
+        """Sau khi đặt ``tam`` (đã kiểm) vào ``dich``: nhớ độ dài FFprobe vừa đo kèm kích thước + mtime của ``dich``.
+        Không bao giờ ném lỗi — thiếu thì chỉ mất phần dùng lại (đo lại bằng FFprobe như trước)."""
+        self._do_dai_vua_kiem = None
+        try:
+            lan = self._lan_kiem_cuoi
+            if lan and lan[0] == tam and lan[1] is not None:
+                st = os.stat(dich)
+                self._do_dai_vua_kiem = (os.path.normcase(os.path.abspath(dich)), st.st_size, st.st_mtime_ns,
+                                         float(lan[1]))
+        except Exception:  # noqa: BLE001
+            self._do_dai_vua_kiem = None
+
+    def _do_dai_file_vua_dat(self, path: str) -> Optional[float]:
+        """Độ dài của file VỪA đặt vào kho: dùng lại số FFprobe đã đo trên chính file đó (cùng đường dẫn, kích thước,
+        mtime) — không thì đo lại bằng ``do_dai_media`` như trước."""
+        nho = self._do_dai_vua_kiem
+        self._do_dai_vua_kiem = None
+        try:
+            if nho and nho[0] == os.path.normcase(os.path.abspath(path)):
+                st = os.stat(path)
+                if (st.st_size, st.st_mtime_ns) == (nho[1], nho[2]):
+                    return nho[3]
+        except OSError:
+            pass
+        return do_dai_media(path)
 
     @staticmethod
     def kiem_file_audio(path: str, tham_chieu_s: float = 0.0) -> tuple:
@@ -918,6 +955,8 @@ class ChannelSync:
 
         Huỷ, FFmpeg treo hay mã thoát lỗi thì ném luôn — không có gì để kiểm.
         """
+        td = self.theo_doi
+        td.giai_doan(GD_NEN, ffmpeg_tong_s=float(tham_chieu_s) if tham_chieu_s and tham_chieu_s > 0 else None)
         r = chay_lenh_media(
             ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", nguon,
              "-vn", "-ac", "1", "-ar", AUDIO_RATE,
@@ -925,6 +964,7 @@ class ChannelSync:
             cancel_event=cancel_event,
             theo_doi_tien_do=True,
             im_lang_toi_da_s=IM_LANG_FFMPEG_S,
+            khi_tien_do=td.tien_do_ffmpeg,
         )
         if r.cancelled:
             raise DaHuyDongBo("Đã huỷ theo yêu cầu trong lúc nén audio.")
@@ -934,7 +974,10 @@ class ChannelSync:
                 f"{IM_LANG_FFMPEG_S:.0f} giây.")
         if r.returncode != 0:
             raise RuntimeError(f"Nén audio thất bại: {r.stderr.strip()[:200]}")
-        return self.kiem_file_audio(tam, tham_chieu_s)[1]
+        td.giai_doan(GD_XAC_MINH)
+        do_dai, ly_do = self.kiem_file_audio(tam, tham_chieu_s)
+        self._lan_kiem_cuoi = (tam, do_dai) if not ly_do else None
+        return ly_do
 
     @staticmethod
     def _nguon_ngan_bat_thuong(do_dai, tham_chieu_s) -> bool:
@@ -1023,14 +1066,19 @@ class ChannelSync:
         đúng file tạm của lượt này; file nguồn tốt trong kho không bị đụng.
         """
         os.makedirs(self.tmp_dir, exist_ok=True)
+        td = self.theo_doi
+        self._lan_kiem_cuoi = None
 
         def tai_nguon(vid: str, thu_muc: str) -> tuple:
             os.makedirs(thu_muc, exist_ok=True)
+            td.giai_doan(GD_TRICH_XUAT)
             info = self._tai_thu_tung_client(v.url, dict(
                 format="ba/b",
                 outtmpl=os.path.join(thu_muc, "%(id)s.%(ext)s"),
                 # Số lần yt-dlp tự thử lại + nghỉ giữa chúng: bảng NGAN_SACH["download"].
                 noplaylist=True, continuedl=True,
+                # Chỉ ĐO (byte, tốc độ, định dạng) — hook không bao giờ ném lỗi, không đổi cách huỷ.
+                progress_hooks=[td.hook_tai],
             ))
             tho = [os.path.join(thu_muc, f) for f in os.listdir(thu_muc)
                    if f.startswith(vid + ".") and not f.endswith((".part", ".ytdl"))
@@ -1042,6 +1090,7 @@ class ChannelSync:
         def do_dai_nguon_tieng(path: str) -> Optional[float]:
             # Đo LUỒNG TIẾNG: client `android` tải video tiến trình, hình dài hơn tiếng thì
             # `do_dai_media` (luồng dài nhất) báo độ dài của hình (phản biện vòng 3).
+            td.giai_doan(GD_XAC_MINH)
             return do_dai_luong_tieng(path) or do_dai_media(path)
 
         info, nguon = tai_nguon(v.id, self.tmp_dir)
@@ -1092,6 +1141,7 @@ class ChannelSync:
                 # File cùng tên đang có (nếu có) chưa được xác nhận: giữ một bản trong
                 # `_hong/` TRƯỚC, rồi mới thay. Thay thất bại thì gỡ bản phụ đó — bản gốc
                 # vẫn nằm nguyên tại chỗ, lượt sau làm lại được (không kẹt "mất file").
+                td.giai_doan(GD_LUU)
                 ban_hong = (self._luu_vao_hong(dich, v.id, giu_ban_goc=True)
                             if os.path.exists(dich) else "")
                 try:
@@ -1104,6 +1154,7 @@ class ChannelSync:
                         f"Không đặt được file vào kho ({type(e).__name__}: {e}). Bản cũ "
                         "giữ nguyên tại chỗ; lần đồng bộ sau sẽ thử lại.") from e
                 da_cong_bo = True
+                self._ghi_do_dai_vua_kiem(tam, dich)
                 if ban_hong:
                     self._da_cach_ly.append(os.path.basename(dich))
             if ngan_that_su:
@@ -1182,7 +1233,9 @@ class ChannelSync:
             if progress:
                 progress(max(0.0, min(1.0, pct)), msg)
 
+        td = self.theo_doi
         bao(0.0, "Đang lấy danh sách video của kênh...")
+        td.liet_ke()
         ds, da_gap = [], set()
         # Danh sách phát có thể lặp CÙNG một video: tải hai lần thì lần sau từng cách ly
         # nhầm bản tốt của lần trước.
@@ -1195,6 +1248,7 @@ class ChannelSync:
                 ds.append(v)
         if not ds:
             raise RuntimeError("Không lấy được video nào từ kênh. Kiểm tra lại link kênh.")
+        td.liet_ke_xong(len(ds))
 
         self._don_tam_cu()
         self._da_cach_ly = []
@@ -1221,10 +1275,14 @@ class ChannelSync:
             # File trên đĩa chỉ tính là "đã có" khi đã được xác nhận (audit TCP-10). Trước
             # đây cứ có tên `[ID].opus` là bỏ qua — kể cả file 0 byte do lần nén lỗi để lại.
             try:
+                def bao_kiem(i, n, ten):
+                    td.kiem(i, n)
+                    bao(0.01, f"Kiểm file trên đĩa {i}/{n}: {ten[:50]}")
+
+                td.kiem(0, len(ds))
                 tep = self.kiem_tep_tren_dia(
                     {v.id: v.duration for v in ds},
-                    progress=lambda i, n, ten: bao(
-                        0.01, f"Kiểm file trên đĩa {i}/{n}: {ten[:50]}"),
+                    progress=bao_kiem,
                     cancel_check=cancel_check,
                 )
             except DaHuyDongBo:
@@ -1266,6 +1324,8 @@ class ChannelSync:
             can_tai = [v for v in con if v.id not in so_han_che] + [v for v in con if v.id in so_han_che]
             bao(0.02, f"Kênh có {len(ds)} video — {len(can_tai)} video mới cần tải"
                 + (f" (bỏ qua {kq['han_che_bo_qua']} video đã biết bị hạn chế)." if kq["han_che_bo_qua"] else "."))
+            td.ke_hoach(da_co=kq["bo_qua"], can_tai=kq["can_tai"], han_che_bo_qua=kq["han_che_bo_qua"],
+                        se_thu=len(can_tai))
 
             for i, v in enumerate(can_tai):
                 if cancel_check and cancel_check():
@@ -1279,10 +1339,12 @@ class ChannelSync:
                     break
                 bao(0.02 + 0.96 * i / max(1, len(can_tai)),
                     f"[{i+1}/{len(can_tai)}] {v.title[:60]}")
+                td.video_bat_dau(i + 1, len(can_tai), v.id, v.title)
                 try:
                     f, v = self._tai_va_nen(v)
                     ngay = valid_upload_date(v.upload_date)
-                    do_dai = do_dai_media(f)
+                    # Độ dài FFprobe vừa đo trên CHÍNH file này lúc kiểm (cùng kích thước + mtime) — không đo lần hai.
+                    do_dai = self._do_dai_file_vua_dat(f)
                     entry = {
                         "id": v.id, "title": v.title,
                         # upload_date giữ tên cũ để bản đọc metadata cũ vẫn chạy;
@@ -1307,10 +1369,15 @@ class ChannelSync:
                     # đè cả file bằng bản đọc từ đầu lượt sync (audit TCP-03).
                     # Thứ tự: file đã kiểm → metadata → archive. Đứt giữa chừng thì lượt
                     # sau đối soát tại chỗ được (`_doi_soat`), không phải tải lại.
+                    td.giai_doan(GD_LUU)
                     self.cap_nhat_meta({os.path.basename(f): entry}, thay_ca_entry=True)
                     self._mark_done(v.id)
                     kq["moi"] += 1
                     da_tai_luot_nay.add(v.id)
+                    byte_nen = None
+                    with contextlib.suppress(OSError):
+                        byte_nen = os.path.getsize(f)
+                    td.video_xong("moi", media_s=do_dai, byte_nen=byte_nen)
                     for ten_cu, _ in nghi.get(v.id, []):
                         cu = os.path.join(self.dest, ten_cu)
                         if os.path.exists(cu) and os.path.normcase(cu) != os.path.normcase(f):
@@ -1328,6 +1395,7 @@ class ChannelSync:
                     # và nói rõ trường hợp nào là YouTube chặn chứ không phải tool hỏng.
                     # Video lỗi KHÔNG vào archive/metadata (chỉ ghi sau khi tải + kiểm xong) — lượt sau thử lại.
                     f_loi = self.phien.ghi_loi(e, "download", v.id)
+                    td.video_xong("loi", loai=f_loi.category, ly_do=f_loi.human_message_vi)
                     kq["so_loi"] += 1
                     if f_loi.category == AGE_RESTRICTED:
                         kq["gioi_han_tuoi"] += 1
@@ -1362,6 +1430,9 @@ class ChannelSync:
                     self._ghi_so_han_che(han_che_moi, da_tai_luot_nay)
                 except Exception as e:  # noqa: BLE001 — sổ phụ: không ghi được thì lượt sau chỉ thử lại
                     loi.append(f"Không ghi được sổ video bị hạn chế ({TEP_HAN_CHE}): {e}")
+            td.dang_nhap(cau_xt)
+            td.ket_thuc(kq["trang_thai"], kq["chan_youtube"])
+            kq["hieu_suat"] = td.tom_tat()
             # Chỉ dọn thư mục tạm CỦA LƯỢT NÀY.
             shutil.rmtree(self.tmp_dir, ignore_errors=True)
             with contextlib.suppress(OSError):

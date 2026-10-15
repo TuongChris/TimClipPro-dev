@@ -661,10 +661,13 @@ class BoGhiYtdlp:
     :meth:`canh_bao_js_tu` để không đổ nhầm cho cookie.
     """
 
-    def __init__(self, phien: Any = None):
+    def __init__(self, phien: Any = None, khi_thong_diep: Optional[Callable[[str], None]] = None):
         self.phien = phien
         self.loi: list = []
         self.canh_bao: list = []
+        # Thông điệp tiến trình của yt-dlp (`to_screen` → `logger.debug`, vd. «[download] Sleeping 3.2 seconds») cho
+        # bộ đo tiến độ — chỉ chuyển tiếp, không ghi log, lỗi trong callback bị nuốt.
+        self.khi_thong_diep = khi_thong_diep
 
     @property
     def so_canh_bao(self) -> int:
@@ -675,7 +678,11 @@ class BoGhiYtdlp:
         return next((c for c in self.canh_bao[moc:] if la_canh_bao_js_hong(c)), "")
 
     def debug(self, msg: Any) -> None:
-        pass
+        if self.khi_thong_diep is not None:
+            try:
+                self.khi_thong_diep(str(msg)[:200])
+            except Exception:  # noqa: BLE001 — số đo phụ
+                pass
 
     def info(self, msg: Any) -> None:
         pass

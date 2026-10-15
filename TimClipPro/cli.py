@@ -438,6 +438,9 @@ def _main():
             print(f"Đăng nhập YouTube: {r['xac_thuc']['cau']}")
         if r.get("canh_bao_cookie"):
             print(r["canh_bao_cookie"])
+        from ui_tien_do_dong_bo import dong_hieu_suat
+        for _muc, cau in dong_hieu_suat(r.get("hieu_suat")):
+            print(cau)
         if r["loi"]:
             print("Lỗi:", *r["loi"][:10], sep="\n  - ")
         if r.get("nghi_hong"):
