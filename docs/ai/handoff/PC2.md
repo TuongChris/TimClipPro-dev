@@ -21,14 +21,29 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 - Dữ liệu: PC2 tự xây; KHÔNG chép dữ liệu từ PC1. Test chỉ dùng dữ liệu synthetic/thư mục tạm.
 
 ## Tiếp theo
-1. Quay lại phát triển tính năng Tool Quét Video (nhánh `feature|fix/pc2/<tên>` từ `private/integration/current`).
-   Phát hành bản sau: `TimClipPro/docs/PHAT_HANH_HAI_MAY.md` (ký bằng khoá PC2; công cụ `.bat` đã thử nằm ngoài Git trên PC2).
+1. PR `fix/pc2/youtube-channel-sync-auth` (đồng bộ kênh: xác thực, cầu dao từng video, PARTIAL/BLOCKED, chặn trộn kho):
+   review (máy kia hoặc agent ngữ cảnh mới) → người dùng duyệt gộp FF → (tuỳ) MỘT lượt chẩn đoán mạng, video công khai,
+   chỉ khi người dùng cho phép → bản vá theo `TimClipPro/docs/PHAT_HANH_HAI_MAY.md` (ký khoá PC2). Trên Stable sau cập
+   nhật: xoá trống MỘT trong hai ô cookie; tạo kho riêng cho kênh vừa đồng bộ, không «Bổ sung» vào kho SML.
 2. Hỏi người dùng: bật ruleset GitHub (`release/github/`) — chưa bật.
 3. Còn mở từ trước: C7 (người dùng tự lấy kết quả `launcher.py doctor` của Stable); `git user.name/email` riêng cho commit
    PC2 (người dùng quyết); nghiệm thu preview 8502 khi tiện.
 4. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-10-15 — đồng bộ kênh YouTube: xác thực + cầu dao từng video + PARTIAL/BLOCKED + chặn trộn kho (fix/pc2/youtube-channel-sync-auth)
+- Sự cố Stable 1.1.1: kênh nhiều video giới hạn tuổi → 3 lỗi «confirm your age» liên tiếp mở cầu dao AUTH_REQUIRED (ngưỡng
+  3), 1.189 video chưa thử mà banner xanh «Đồng bộ xong»; cấu hình có CẢ file cookie lẫn trình duyệt; kho đang chọn ≠ thư
+  mục vừa đồng bộ. Gốc: (1) tuổi/hội viên (lỗi TỪNG video) chung loại với «cần đăng nhập»; (2) đưa cả hai nguồn → yt-dlp
+  gộp hai hũ rồi `save_cookies` GHI hũ gộp vào file cookie; (3) banner chỉ xét `da_huy`; (4) «Bổ sung» thư mục khác ghi đè
+  thư mục của kho + trộn clip.
+- Sửa: `AGE_RESTRICTED`/`MEMBERS_ONLY` (ngưỡng hàng loạt 20; AUTH_REQUIRED 3; bot/429/cookie hỏng vẫn 1); MỘT nguồn cookie
+  (có file → chỉ file) + cảnh báo; `trang_thai_dang_nhap` (DA_XAC_MINH chỉ khi đã gửi cookie tài khoản + có thành công +
+  không bị thu hồi — chỉ xét TÊN cookie); sync có `trang_thai` DAY_DU/MOT_PHAN/BI_CHAN/DA_HUY + có sẵn/mới/lỗi/chưa thử;
+  UI/CLI chỉ xanh khi DAY_DU; engine từ chối «Bổ sung» thư mục khác kho đã có vân tay TRƯỚC mọi ghi; hướng dẫn tạo kho riêng.
+- Test (chặn mạng, cp1252, venv lock 1.1.1 + EJS): file mới 23 — mã cũ 19 hỏng/4 đạt, sau sửa 23/23; đột biến 14/14 bị
+  bắt; nhanh 2742 = 2740/2/0; chậm 19/19 (396 s); ruff sạch. Không gọi YouTube/Google. Bằng chứng + mô tả PR ngoài Git:
+  `2026-10-15_channel_sync`. Launcher Development riêng worktree (8502, ngoài Git) đã tạo, CHƯA chạy.
 ### 2026-10-15 — chuyển quyền phát hành HOÀN TẤT: ghi danh khoá PC2 + dry-run phát hành độc lập (PC1 tắt)
 - PC1 ký uỷ quyền MỘT lần (`889ec35`, `release/trust/uy_quyen_PC2_d02702dd741c3e4f.json`, sha256 `5e4dd6a5…`, mã `a893c182…`,
   hết hạn 2026-11-14): PC2 kiểm `kiem-uy-quyen` ĐẠT + kiểm Ed25519 độc lập 17/17 (chữ ký PC1, tự ký PC2, đủ 32 byte, 6 ràng
