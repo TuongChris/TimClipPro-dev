@@ -13,24 +13,41 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 - Development: cổng 8502, launcher RIÊNG ngoài Git — `--server.port=8502` ghi rõ, `--server.address=127.0.0.1`,
   `TIMCLIP_DEV_MODE=1`, data/output thử, không cookie/`google_key.json` thật; KHÔNG chạy `ChayTool.bat`, `CapNhat.bat`,
   `GiamSat.bat` trong clone. Preview: `.claude/launch.json` chỉ gắn 8502.
-- GitHub: Deploy Key «PC2 PC_Office read-only» (tên cũ; quyền GHI cả repo) cho git; `gh` đăng nhập tài khoản chủ repo:
-  CHƯA. Hook `pre-push` dùng chung `release/git-hooks/pre-push`: CHƯA cài (thay hook cũ «chỉ fix/pc2»).
-- Khoá ký phát hành PC2: CHƯA tạo — sẽ ở `C:\TimClipPro_KhoaPhatHanh` (ngoài repo; Claude không đọc), mật khẩu người dùng
-  gõ; ghi danh vào trust store bằng uỷ quyền PC1 ký MỘT lần (`TimClipPro/docs/UY_QUYEN_KHOA.md`).
+- GitHub: Deploy Key «PC2 PC_Office read-only» (tên cũ; quyền GHI cả repo) cho git; `gh`: CHƯA cài / chưa đăng nhập
+  (15/10). Hook `pre-push` dùng chung `release/git-hooks/pre-push`: ĐÃ cài 15/10 (thử `--dry-run`: chặn nhánh lạ + tag,
+  cho `fix/pc2/*`, `feature/pc2/*`).
+- Khoá ký phát hành PC2: ĐÃ TẠO 15/10, key_id `d02702dd741c3e4f`, ở `C:\TimClipPro_KhoaPhatHanh` (ngoài repo; chỉ tài khoản
+  người dùng + SYSTEM; Claude không đọc), mật khẩu người dùng gõ; CHƯA ghi danh — chờ uỷ quyền PC1 ký MỘT lần
+  (`TimClipPro/docs/UY_QUYEN_KHOA.md`).
 - Dữ liệu: PC2 tự xây; KHÔNG chép dữ liệu từ PC1. Test chỉ dùng dữ liệu synthetic/thư mục tạm.
 
 ## Tiếp theo
-1. Thiết lập phát hành độc lập (prompt người dùng gửi; PC1 chuẩn bị 14/10): review PR của nhánh
-   `feature/pc1/dual-release-authority` trên PC2 → `gh auth login --web` (người dùng) → hook mới →
-   `TAO_KHOA_VA_YEU_CAU_PC2.bat` (người dùng gõ mật khẩu) → đẩy `feature/pc2/khoa-ky-pc2` + PR nháp → CHỜ PC1 ký uỷ quyền
-   (`feature/pc1/uy-quyen-pc2`) → `GHI_DANH_KHOA_PC2.bat` → `release_tool.py them-khoa-danh-sach` → dry-run phát hành
-   (build 1.1.1 từ repo = `510f39a6…`, ký khoá PC2, `kiem-sau-ky`, `feed`, `tests/dien_tap_phat_hanh.py`) → gộp fast-forward.
+1. Thiết lập phát hành độc lập (prompt người dùng gửi; PC1 chuẩn bị 14/10). XONG 15/10: review PR #6 trên PC2, hook mới,
+   khoá PC2 + yêu cầu ghi danh (nhánh `feature/pc2/khoa-ky-pc2`). CÒN: `gh auth login --web` (người dùng) → PR nháp →
+   CHỜ PC1 ký uỷ quyền (`feature/pc1/uy-quyen-pc2`) → `GHI_DANH_KHOA_PC2.bat` → `release_tool.py them-khoa-danh-sach` →
+   dry-run phát hành, PC1 tắt (build 1.1.1 từ repo = `510f39a6…`, ký khoá PC2, `kiem-sau-ky`, `feed`,
+   `tests/dien_tap_phat_hanh.py`; bản ký thử KHÔNG công bố) → gộp fast-forward.
 2. Hỏi người dùng: bật ruleset GitHub (`release/github/`).
 3. Còn mở từ trước: C7 (người dùng tự lấy kết quả `launcher.py doctor` của Stable); `git user.name/email` riêng cho commit
    PC2 (người dùng quyết); nghiệm thu preview 8502 khi tiện.
 4. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-10-15 — review độc lập PR #6 + khoá phát hành PC2 + yêu cầu ghi danh (nhánh feature/pc2/khoa-ky-pc2)
+- Review PR #6 (`c81326b`) trên PC2, không dùng số của PC1: không P0/P1. Nhanh 2708/2/0, chậm 19/19, ruff sạch. Đột biến
+  PC2 tự chọn 20 chốt an toàn: 19 bị bắt; M17 (bỏ so key_id gõ ở CLI `ky-uy-quyen`) sống → thêm test CLI (commit test
+  trên nhánh này), nay bị bắt. Build lại 1.1.1 từ `dc29b33` chỉ bằng repo = gói `510f39a6…` trùng byte; `verify` +
+  `kiem-sau-ky` bản 1.1.1 đã công bố 10/10. `release/trusted_keys.json` = trust store bộ kit đã cài PC2 (`a37dc9b6…`);
+  launcher đã cài = blob `e49340d`, đọc trust store mỗi lần chạy. Ruleset GitHub hiện KHÔNG có (API công khai) — chưa bật.
+- Khoá PC2: người dùng chạy `.bat` (công cụ = blob `c81326b`; venv từ `release/locks/launcher-lock.txt` cài offline có băm;
+  thư mục khoá chỉ tài khoản người dùng + SYSTEM, tắt thừa kế; thử giả 24/24) → key_id `d02702dd741c3e4f`, Ed25519
+  `ZtXkLr8QOo1sp1YAPpsqheIcUlGl36b3f58Kfnd5dq4=`. Yêu cầu `release/trust/yeu_cau_PC2_d02702dd741c3e4f.json` (nguyên byte,
+  sha256 `4bc80809…`): tự ký đúng; khoá trùng đủ 32 byte khoá công khai do `tao-khoa` để lại; khoá đang tin
+  `8aa5baa6c8f225f9`; trust store `a37dc9b6…`; bản 1.1.1; chỉ chứa BĂM định danh cài đặt.
+- P3 để lại: D-21/P-5/P-6 trùng số với nhánh LOCAL `fix/pc2/loop-alias-p0` (đánh số lại khi tích hợp P0); mẫu `.bat` tạo
+  khoá/ghi danh chưa nằm trong repo (PC2 có bản đã thử, ngoài Git).
+- Tiếp: PC1 ký uỷ quyền MỘT lần (đối chiếu ĐỦ khoá công khai base64, không chỉ key_id) → PC2 `ghi-danh` (người dùng) →
+  dry-run khoá PC2 thật, PC1 tắt → gộp. Bằng chứng ngoài Git trên PC2: `2026-10-15_release_authority`.
 ### 2026-10-14 — cookie đăng nhập YouTube chạy bằng Node.js + yt-dlp-ejs (nhánh fix/pc2/youtube-cookie-js-fallback, CHƯA đẩy)
 - Bối cảnh: Stable 1.1.0 + `ytdlp_cookies_browser = firefox` → MỌI video «The page needs to be reloaded», cầu dao khuyên sai «có
   thể yt-dlp cần cập nhật». Bản đầu (`6ebdc72`, `ea12a28`) chỉ lùi không-cookie + nhớ 30 phút — người dùng KHÔNG muốn (YouTube từng
