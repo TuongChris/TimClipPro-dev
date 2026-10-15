@@ -298,6 +298,71 @@ def test_nho_client_tu_quen_de_do_lai():
     assert n.sap_xep(["", "android"]) == ["", "android"], "hết hạn thì quay về thứ tự mong muốn"
 
 
+def test_nho_client_tai_duoc_lien_tuc_van_do_lai_dinh_ky():
+    """Sự cố 15/10 (lượt đồng bộ kênh thật trên Development 8502): MỘT lần 403 ở client mặc định → `android` (chỉ có mp4
+    CÓ HÌNH) được nhớ, và mỗi lần tải được lại GIA HẠN mốc 30 phút → cả lượt 88 video không dò lại client có định dạng
+    chỉ-tiếng lần nào. Mốc tính từ lúc HỌC client; hết hạn mà dò lại vẫn phải lùi về client đó thì mới học lại."""
+    gio = [0.0]
+    n = y.NhoClientTotNhat(song_giay=1800.0, dong_ho=lambda: gio[0])
+    ds = ["", "android"]
+    n.ghi_nhan("android")
+    for t in (600.0, 1200.0, 1790.0):           # tải được liên tục bằng android trong 30 phút đầu
+        gio[0] = t
+        assert n.sap_xep(ds)[0] == "android"
+        n.ghi_nhan("android")
+    gio[0] = 1801.0
+    assert n.sap_xep(ds) == ["", "android"], "quá 30 phút kể từ lúc HỌC → dò lại thứ tự mong muốn"
+    n.ghi_nhan("android")                        # dò lại vẫn hỏng → lùi android → học lại, chu kỳ mới
+    gio[0] = 1801.0 + 1700.0
+    assert n.sap_xep(ds)[0] == "android"
+    gio[0] = 1801.0 + 1801.0
+    assert n.sap_xep(ds)[0] == "", "chu kỳ sau vẫn dò lại"
+    n.ghi_nhan("")                               # client mặc định tải được lại → nhớ nó (thứ tự mong muốn)
+    assert n.sap_xep(ds) == ["", "android"]
+
+
+def test_nho_client_doi_sang_client_khac_ngay_khi_client_dang_nho_hong():
+    """Còn hạn nhưng client đang nhớ hỏng và client khác cứu được → nhớ client mới ngay (không đợi hết hạn)."""
+    gio = [0.0]
+    n = y.NhoClientTotNhat(song_giay=1800.0, dong_ho=lambda: gio[0])
+    n.ghi_nhan("android")
+    gio[0] = 100.0
+    n.ghi_nhan("tv")
+    assert n.sap_xep(["", "android", "tv"]) == ["tv", "", "android"]
+    gio[0] = 1850.0
+    assert n.sap_xep(["", "android", "tv"])[0] == "tv", "mốc của tv tính từ lúc học tv (100 s)"
+    gio[0] = 1901.0
+    assert n.sap_xep(["", "android", "tv"])[0] == ""
+
+
+def test_thu_tung_client_mot_lan_403_khong_khoa_ca_luot_vao_client_co_hinh():
+    """Chuỗi video như lượt đồng bộ 15/10: video 1 client mặc định 403 ở khâu tải → `android`; video 2 (10 phút sau) đi
+    thẳng `android`; video 3 (31 phút sau lúc học) dò lại client mặc định — tải được thì quay về định dạng chỉ-tiếng."""
+    gio = [0.0]
+    n = y.NhoClientTotNhat(song_giay=1800.0, dong_ho=lambda: gio[0])
+    da, hong = [], {"mặc định"}
+
+    def chay(opts):
+        ten = (opts.get("extractor_args", {}).get("youtube", {}).get("player_client") or [""])[0] or "mặc định"
+        da.append(ten)
+        if ten in hong:
+            raise RuntimeError("ERROR: unable to download video data: HTTP Error 403: Forbidden")
+        return ten
+
+    ds = ["", "android", "tv"]
+    assert y.thu_tung_client(ds, chay, {}, bo_nho=n) == "android"
+    hong.clear()                                 # 403 chỉ là nhất thời
+    gio[0] = 600.0
+    assert y.thu_tung_client(ds, chay, {}, bo_nho=n) == "android"
+    gio[0] = 1200.0
+    assert y.thu_tung_client(ds, chay, {}, bo_nho=n) == "android"
+    gio[0] = 1801.0
+    assert y.thu_tung_client(ds, chay, {}, bo_nho=n) == "mặc định", "đã quá 30 phút kể từ lúc học android"
+    gio[0] = 1900.0
+    assert y.thu_tung_client(ds, chay, {}, bo_nho=n) == "mặc định"
+    assert da == ["mặc định", "android", "android", "android", "mặc định", "mặc định"]
+
+
 def test_nho_client_bo_qua_client_khong_con_trong_danh_sach():
     n = y.NhoClientTotNhat()
     n.ghi_nhan("mweb")
