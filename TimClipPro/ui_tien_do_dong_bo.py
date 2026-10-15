@@ -92,7 +92,8 @@ def dong_video(anh: AnhDongBo) -> list:
     ra.append(("giai_doan", f"Giai đoạn: {gd} — {thoi_luong(troi)} • cả video {thoi_luong(anh.luc_anh - v.bat_dau)}",
                None))
     if v.giai_doan == GD_CHO and v.nghi_du_kien_s:
-        ra.append(("chu", f"Nghỉ giãn nhịp {v.nghi_du_kien_s:.1f} giây theo cấu hình (giảm nguy cơ bị nghi là bot).", None))
+        ra.append(("chu", f"Nghỉ {v.nghi_du_kien_s:.1f} giây {v.nghi_ly_do or 'theo cấu hình giãn nhịp'} trước khi tải "
+                          "(giảm nguy cơ bị nghi là bot).", None))
     if v.byte_tai is not None or v.giai_doan == GD_TAI:
         chu = f"Tải {mb(v.byte_tai)}" + (f" / {mb(v.byte_tong)}" if v.byte_tong else "") + \
             f" • {toc_do_mb(v.toc_do_tai)}" + (f" • còn {thoi_luong(v.eta_tai_s)}" if v.eta_tai_s else "")
@@ -146,7 +147,8 @@ def dong_hieu_suat(hs: Optional[dict]) -> list:
 
     cau = (f"Hiệu suất: {hs.get('video_moi_gio') or '—'} video/giờ"
            + (f", {hs['media_gio_moi_gio']} giờ audio/giờ" if hs.get("media_gio_moi_gio") else "")
-           + f"; tải {mb(hs.get('byte_tai'))}, sau nén {mb(hs.get('byte_nen'))}; trung vị mỗi video: tải {tv(GD_TAI)}, "
+           + f"; tải {mb(hs.get('byte_tai'))} (các lượt tải hoàn tất), sau nén {mb(hs.get('byte_nen'))}; trung vị mỗi "
+             f"video: tải {tv(GD_TAI)}, "
              f"nén {tv(GD_NEN)}, kiểm {tv('VERIFYING')}, hỏi YouTube {tv('EXTRACTING')}, nghỉ {tv(GD_CHO)}.")
     ra = [("info", cau)]
     ng = hs.get("diem_nghen")
@@ -172,7 +174,7 @@ def ve_tien_do_dong_bo(st: Any, anh: AnhDongBo) -> None:
             c.metric(nhan, gia_tri, help=ghi_chu or None)
     for loai, chu, ty in dong_video(anh):
         if loai == "tieu_de":
-            st.markdown(f"**{chu}**")
+            st.text(chu)             # tiêu đề video là dữ liệu ngoài — không diễn giải markdown/LaTeX
         elif loai in ("tai", "nen") and ty is not None:
             st.progress(float(ty), text=chu)
         elif loai == "canh_bao":

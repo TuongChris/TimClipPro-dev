@@ -56,7 +56,9 @@ ETA_TOI_THIEU_VIDEO = 5    # dưới số video đã xét này: «Đang ước t
 ETA_TOI_THIEU_S = 60.0
 ETA_HE_SO_EWMA = 0.2
 ETA_LECH_TOI_DA = 2.0      # EWMA lệch trung vị gần đây quá ×2 → tốc độ đang đổi mạnh → «Đang ước tính»
-_RE_NGHI = re.compile(r"^\[download\] Sleeping ([0-9]+(?:\.[0-9]+)?) seconds")
+# «[download] Sleeping 3.2 seconds …» (nghỉ trước khi tải), «[youtube] Sleeping 1.0 seconds …» (giữa request), «Sleeping …» (chờ
+# thử lại HTTP) — mọi dòng nghỉ của yt-dlp 2026.08.19.
+_RE_NGHI = re.compile(r"^(\[[^\]]+\] )?Sleeping ([0-9]+(?:\.[0-9]+)?) seconds(.*)$")
 
 
 def _bach_phan_vi(ds: list, p: float) -> Optional[float]:
@@ -91,6 +93,7 @@ class AnhVideo:
     toc_do_tai: Optional[float] = None   # byte/giây (yt-dlp đo trên byte thật)
     eta_tai_s: Optional[float] = None
     nghi_du_kien_s: Optional[float] = None
+    nghi_ly_do: str = ""
     dinh_dang: str = ""                  # vd. "251 webm opus (audio)" / "18 mp4 avc1+mp4a (CÓ HÌNH)"
     chi_audio: Optional[bool] = None     # None = chưa biết
     client: str = ""
@@ -221,6 +224,7 @@ class SoDongBo:
         self._nhip_tai = 0.0
         self._nhip_ffmpeg = 0.0
         self._ffmpeg_moc: Optional[float] = None
+        self._nghi_trong_gd = 0.0          # giây nghỉ yt-dlp đã báo trong giai đoạn hiện tại
 
     # ---------- nội bộ ----------
 
@@ -230,12 +234,18 @@ class SoDongBo:
             self._su_kien.append(SuKien(self._now(), noi_dung))
 
     def _dong_gd(self) -> None:
-        """Cộng thời gian giai đoạn hiện tại của video vào bộ đếm của video."""
+        """Cộng thời gian giai đoạn hiện tại của video vào bộ đếm của video; phần NGHỈ yt-dlp đã báo trong giai đoạn
+        (nghỉ giữa request, chờ thử lại) được tính vào WAITING thay vì giai đoạn đó."""
         v = self._anh.video
         if v is None or self._gd_moc is None:
             return
+        troi = max(0.0, self._mono() - self._gd_moc)
+        nghi = min(self._nghi_trong_gd, troi)
+        self._nghi_trong_gd = 0.0
         if v.giai_doan in GD_THEO_VIDEO:
-            self._gd_video[v.giai_doan] = self._gd_video.get(v.giai_doan, 0.0) + max(0.0, self._mono() - self._gd_moc)
+            self._gd_video[v.giai_doan] = self._gd_video.get(v.giai_doan, 0.0) + troi - nghi
+            if nghi:
+                self._gd_video[GD_CHO] = self._gd_video.get(GD_CHO, 0.0) + nghi
         self._gd_moc = self._mono()
 
     def _an_toan(ham):  # noqa: N805 — trang trí nội bộ
@@ -295,6 +305,7 @@ class SoDongBo:
         self._gd_video = {}
         self._gd_moc = self._video_moc = self._mono()
         self._nhip_tai = 0.0         # cập nhật tải ĐẦU TIÊN của video mới luôn được nhận (mang định dạng)
+        self._nghi_trong_gd = 0.0
         self._anh = replace(self._anh, video=AnhVideo(
             chi_so=int(chi_so), tong=int(tong), video_id=str(video_id)[:20], tieu_de=str(tieu_de or "")[:TRAN_TIEU_DE],
             giai_doan=GD_TRICH_XUAT, bat_dau=now, giai_doan_bat_dau=now), giai_doan_luot=GD_TRICH_XUAT)
@@ -314,17 +325,32 @@ class SoDongBo:
             v = replace(v, **{k: val for k, val in truong.items() if hasattr(v, k)})
         self._anh = replace(self._anh, video=v, giai_doan_luot=gd)
 
-    @_an_toan
     def thong_diep_ytdlp(self, msg: str) -> None:
-        """Thông điệp ``to_screen`` của yt-dlp (qua ``logger.debug``): chỉ nhận dòng NGHỈ giãn nhịp của chính yt-dlp."""
+        """Thông điệp ``to_screen`` của yt-dlp (qua ``logger.debug``): chỉ nhận dòng NGHỈ của chính yt-dlp. Lọc bằng chuỗi
+        TRƯỚC khi lấy khoá — dòng tiến trình tải đến rất dày. Không bao giờ ném lỗi."""
+        try:
+            if "Sleeping" not in msg:
+                return
+        except Exception:  # noqa: BLE001
+            return
+        self._ghi_nghi(str(msg))
+
+    @_an_toan
+    def _ghi_nghi(self, msg: str) -> None:
         v = self._anh.video
-        m = _RE_NGHI.match(str(msg or ""))
+        m = _RE_NGHI.match(msg.strip())
         if v is None or not m:
             return
+        s = float(m.group(2))
+        if not (m.group(1) or "").startswith("[download]"):
+            # Nghỉ giữa request (`sleep_interval_requests`, «[youtube] Sleeping…») / chờ thử lại HTTP: không đổi giai đoạn,
+            # chỉ chuyển phần giây đã báo sang WAITING khi giai đoạn hiện tại khép lại.
+            self._nghi_trong_gd += s
+            return
         self._dong_gd()
-        s = float(m.group(1))
+        ly_do = "theo yêu cầu của trang" if "required by the site" in (m.group(3) or "") else "theo cấu hình giãn nhịp"
         self._anh = replace(self._anh, video=replace(v, giai_doan=GD_CHO, giai_doan_bat_dau=self._now(),
-                                                     nghi_du_kien_s=s), giai_doan_luot=GD_CHO)
+                                                     nghi_du_kien_s=s, nghi_ly_do=ly_do), giai_doan_luot=GD_CHO)
 
     def hook_tai(self, d: dict) -> None:
         """``progress_hooks`` của yt-dlp — gộp nhịp NGOÀI khoá (gọi rất dày). Không bao giờ ném lỗi."""
@@ -380,13 +406,17 @@ class SoDongBo:
 
     @_an_toan
     def doi_client(self, ten: str = "") -> None:
+        """Gọi NGAY TRƯỚC lần thử với client kế tiếp (``thu_tung_client(truoc_khi_thu_lai=…)``) — chỉ khi thật sự đổi."""
         v = self._anh.video
         self._nhip_tai = 0.0
         if v is not None:
-            self._anh = replace(self._anh, video=replace(v, so_doi_client=v.so_doi_client + 1, byte_tai=None,
-                                                         byte_tong=None, dinh_dang="", chi_audio=None))
+            self._dong_gd()
+            self._anh = replace(self._anh, video=replace(
+                v, giai_doan=GD_TRICH_XUAT, giai_doan_bat_dau=self._now(), so_doi_client=v.so_doi_client + 1,
+                byte_tai=None, byte_tong=None, dinh_dang="", chi_audio=None, so_audio_san_co=None, so_dinh_dang=None),
+                giai_doan_luot=GD_TRICH_XUAT)
         self._anh = replace(self._anh, doi_client_tong=self._anh.doi_client_tong + 1)
-        self._ghi(f"Đổi player client sau lỗi ({ten or 'mặc định'}).")
+        self._ghi("Thử player client khác" + (f" sau lỗi ở client {ten}" if ten else "") + ".")
 
     @_an_toan
     def client_thanh_cong(self, ten: str) -> None:
@@ -456,7 +486,7 @@ class SoDongBo:
         thong_ke = {gd: ThongKe(len(ds), _bach_phan_vi(ds, 0.5), _bach_phan_vi(ds, 0.95), tong.get(gd, 0.0))
                     for gd, ds in mau.items()}
         thong_ke["LUOT_VIDEO_S"] = ThongKe(a.da_xet, None, None, tong["LUOT_VIDEO_S"] + dang_video_s)
-        eta, ly_do, tin_cay = _uoc_tinh(a, chu_ky, ewma)
+        eta, ly_do, tin_cay = _uoc_tinh(a, chu_ky, ewma, dang_video_s)
         return replace(a, thong_ke=thong_ke, eta_s=eta, eta_ly_do=ly_do, eta_tin_cay=tin_cay, su_kien=su_kien,
                        luc_anh=self._now())
 
@@ -492,7 +522,7 @@ def _tron(x: Optional[float]) -> Optional[float]:
     return None if x is None else round(x, 2)
 
 
-def _uoc_tinh(a: AnhDongBo, chu_ky: list, ewma: Optional[float]) -> tuple:
+def _uoc_tinh(a: AnhDongBo, chu_ky: list, ewma: Optional[float], dang_video_s: float = 0.0) -> tuple:
     """``(eta giây | None, lý do khi None, độ tin cậy)`` — EWMA của CHU KỲ thật giữa các video xét xong."""
     if a.trang_thai != TT_DANG_CHAY:
         return None, "Lượt đã kết thúc.", ""
@@ -509,7 +539,8 @@ def _uoc_tinh(a: AnhDongBo, chu_ky: list, ewma: Optional[float]) -> tuple:
         return None, "Đang ước tính — tốc độ đang thay đổi mạnh (vd. loạt video bị hạn chế / video dài).", ""
     tb = statistics.fmean(chu_ky)
     lech = statistics.pstdev(chu_ky) / tb if tb > 0 else 0.0
-    return con * ewma, "", ("cao" if len(chu_ky) >= 15 and lech < 0.5 else "trung bình")
+    # Đếm lùi trong lúc xử lý video hiện tại (đã tính trong `con`).
+    return max(0.0, con * ewma - dang_video_s), "", ("cao" if len(chu_ky) >= 15 and lech < 0.5 else "trung bình")
 
 
 def _mo_ta_dinh_dang(info: dict) -> dict:

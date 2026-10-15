@@ -43,6 +43,7 @@ from truy_cap_youtube import (
     LoiTruyCapYouTube,
     PhienYouTube,
     YoutubeAccessFailure,
+    che_bi_mat,
     la_muc_khong_phai_video,
     ma_tu_url,
 )
@@ -878,12 +879,18 @@ class ChannelSync:
                         with contextlib.suppress(OSError):
                             os.remove(os.path.join(goc, ten))
 
+        client_loi = [""]
+
+        def truoc_khi_doi_client() -> None:
+            don_file_do_dang()
+            td.doi_client(client_loi[0])      # chỉ đếm khi THẬT SỰ thử client kế (không đếm lỗi cuối / dừng ngay)
+
         def tai_voi(cau_hinh):
             return thu_tung_client(
                 cau_hinh.player_clients(self.player_clients), chay,
                 cau_hinh.tuy_chon("download", logger=bo_ghi, **rieng),
-                truoc_khi_thu_lai=don_file_do_dang, bo_nho=self.nho_client,
-                khi_that_bai=lambda ten, _loi: (phien.ghi_doi_client(), td.doi_client(ten)),
+                truoc_khi_thu_lai=truoc_khi_doi_client, bo_nho=self.nho_client,
+                khi_that_bai=lambda ten, _loi: (phien.ghi_doi_client(), client_loi.__setitem__(0, ten)),
                 khi_thanh_cong=lambda ten, _da_thu: td.client_thanh_cong(ten),
                 # Bị nghi là bot/đòi đăng nhập/429/video gỡ: đổi client cũng vô ích (mục 6c).
                 dung_ngay=phien.nen_dung_doi_client)
@@ -907,10 +914,12 @@ class ChannelSync:
         self._do_dai_vua_kiem = None
         try:
             lan = self._lan_kiem_cuoi
-            if lan and lan[0] == tam and lan[1] is not None:
+            if lan and len(lan) == 4 and lan[0] == tam and lan[1] is not None:
                 st = os.stat(dich)
-                self._do_dai_vua_kiem = (os.path.normcase(os.path.abspath(dich)), st.st_size, st.st_mtime_ns,
-                                         float(lan[1]))
+                # File trong kho phải TRÙNG bản tạm lúc kiểm (kích thước + mtime) — không thì đo lại như trước.
+                if (st.st_size, st.st_mtime_ns) == (lan[2], lan[3]):
+                    self._do_dai_vua_kiem = (os.path.normcase(os.path.abspath(dich)), st.st_size, st.st_mtime_ns,
+                                             float(lan[1]))
         except Exception:  # noqa: BLE001
             self._do_dai_vua_kiem = None
 
@@ -976,7 +985,12 @@ class ChannelSync:
             raise RuntimeError(f"Nén audio thất bại: {r.stderr.strip()[:200]}")
         td.giai_doan(GD_XAC_MINH)
         do_dai, ly_do = self.kiem_file_audio(tam, tham_chieu_s)
-        self._lan_kiem_cuoi = (tam, do_dai) if not ly_do else None
+        self._lan_kiem_cuoi = None
+        if not ly_do:
+            # Định danh của ĐÚNG bản vừa kiểm (os.replace sang kho giữ nguyên kích thước + mtime).
+            with contextlib.suppress(OSError):
+                st = os.stat(tam)
+                self._lan_kiem_cuoi = (tam, do_dai, st.st_size, st.st_mtime_ns)
         return ly_do
 
     @staticmethod
@@ -1186,9 +1200,17 @@ class ChannelSync:
         ``thu_lai_han_che``: thử lại cả video đã biết bị hạn chế (``TEP_HAN_CHE``) dù cách đăng nhập không đổi — thử
         SAU các video chưa biết, vẫn chịu trần hàng loạt của cầu dao.
         """
-        with KhoaTienTrinh(os.path.join(self.dest, TEN_KHOA_DONG_BO),
-                           "đồng bộ kênh vào kho này"):
-            return self._sync_da_khoa(url, limit, progress, cancel_check, thu_lai_han_che)
+        try:
+            with KhoaTienTrinh(os.path.join(self.dest, TEN_KHOA_DONG_BO),
+                               "đồng bộ kênh vào kho này"):
+                return self._sync_da_khoa(url, limit, progress, cancel_check, thu_lai_han_che)
+        except BaseException as e:
+            # Lỗi TRƯỚC vòng tải (liệt kê bị chặn, kênh rỗng, kho đang bận…) — đóng sổ tiến độ, không để «đang chạy».
+            # Chỉ đo đạc: không bao giờ che lỗi gốc.
+            with contextlib.suppress(Exception):
+                if self.theo_doi.anh().trang_thai == "RUNNING":
+                    self.theo_doi.ket_thuc("BI_CHAN", che_bi_mat(go_ma_mau(str(e)))[:300] or type(e).__name__)
+            raise
 
     # ---------- sổ video bị hạn chế (TEP_HAN_CHE) ----------
 

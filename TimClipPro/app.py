@@ -973,8 +973,13 @@ if job["running"]:
             common_controller.cancel()
             st.warning("Đã gửi yêu cầu dừng; bằng chứng đã có vẫn được giữ.")
     elif job["kind"] == "channel" and st.session_state.get("so_dong_bo") is not None:
-        # Chỉ ĐỌC ảnh chụp của sổ tiến độ (worker ghi) — không đụng job thread, cờ huỷ hay khoá.
-        ve_tien_do_dong_bo(st, st.session_state.so_dong_bo.anh())
+        # Chỉ ĐỌC ảnh chụp của sổ tiến độ (worker ghi) — không đụng job thread, cờ huỷ hay khoá. Vẽ lỗi thì lùi về
+        # màn chung: tự cập nhật + nút Dừng không bao giờ mất vì một lỗi hiển thị.
+        try:
+            ve_tien_do_dong_bo(st, st.session_state.so_dong_bo.anh())
+        except Exception:  # noqa: BLE001
+            st.progress(job["pct"], text=f"{job['pct']*100:.0f}%")
+            st.info(job["msg"] or "Đang khởi động...")
         if st.button("⏹️ Dừng lại", type="secondary"):
             eng.cancel()
             st.warning("Đã gửi yêu cầu dừng, chờ một chút...")

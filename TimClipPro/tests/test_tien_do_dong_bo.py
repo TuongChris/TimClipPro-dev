@@ -416,10 +416,11 @@ def test_file_doi_sau_khi_kiem_thi_van_do_lai(tmp_path, monkeypatch):
     f = tmp_path / "kho" / "a.opus"
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_bytes(b"12345")
-    cs._lan_kiem_cuoi = ("tam", DAI)
+    st = f.stat()
+    cs._lan_kiem_cuoi = ("tam", DAI, st.st_size, st.st_mtime_ns)
     cs._ghi_do_dai_vua_kiem("tam", str(f))
     assert cs._do_dai_file_vua_dat(str(f)) == DAI and dem == []
-    cs._lan_kiem_cuoi = ("tam", DAI)
+    cs._lan_kiem_cuoi = ("tam", DAI, st.st_size, st.st_mtime_ns)
     cs._ghi_do_dai_vua_kiem("tam", str(f))
     f.write_bytes(b"1234567")                                    # bị thay sau khi kiểm
     assert cs._do_dai_file_vua_dat(str(f)) == 123.0 and len(dem) == 1
@@ -516,7 +517,8 @@ def test_app_man_dong_bo_dang_chay_ve_tu_anh_chup_va_nut_dung_giu_nghia_cu(tmp_p
     khung_s = _time.perf_counter() - t0
     assert nghi == [1.0], "đồng bộ kênh vẽ lại 1 lần/giây (không 0,75 s)"
     assert not at.exception
-    chu = " ".join(str(getattr(x, "value", "")) for x in [*at.markdown, *at.caption, *at.header, *at.warning])
+    chu = " ".join(str(getattr(x, "value", "")) for x in [*at.markdown, *at.caption, *at.header, *at.warning,
+                                                           *at.text])
     assert "Đang đồng bộ kênh" in chu and "Video 7/1189: Video đang tải" in chu
     nhan = {m.label for m in at.metric}
     assert {"Đã có (giữ nguyên)", "Tải mới", "Lỗi", "Bị hạn chế", "Chưa thử", "Thời gian chạy", "Tốc độ thực",
@@ -548,3 +550,108 @@ def test_so_tien_do_hong_khong_lam_hong_luot_dong_bo(tmp_path, monkeypatch, may)
     assert r["moi"] == 3 and r["trang_thai"] == "DAY_DU" and r["hieu_suat"] == {}
     archive = (tmp_path / "kho" / "downloaded.txt").read_text(encoding="utf-8")
     assert all(f"youtube {m}" in archive for m in ids)
+
+
+# ---------------------------------------------------------------- 7. review độc lập (711f0f8): sửa P2 + P3
+
+def test_nghi_giua_request_tinh_vao_cho_khong_tinh_vao_hoi_youtube():
+    so, dh = _so()
+    so.ke_hoach(da_co=0, can_tai=1, han_che_bo_qua=0, se_thu=1)
+    so.video_bat_dau(1, 1, "a", "x")
+    so.thong_diep_ytdlp("[youtube] Sleeping 1.00 seconds ...")            # sleep_interval_requests của yt-dlp
+    so.thong_diep_ytdlp("Sleeping 2.00 seconds ...")                       # chờ thử lại HTTP (không tiền tố)
+    dh.tien(5)                                                             # 2 s hỏi YouTube thật + 3 s nghỉ
+    assert so.anh().video.giai_doan == td.GD_TRICH_XUAT, "nghỉ giữa request không đổi giai đoạn"
+    so.thong_diep_ytdlp("[download] Sleeping 3.50 seconds as required by the site...")
+    a = so.anh()
+    assert a.video.giai_doan == td.GD_CHO and a.video.nghi_ly_do == "theo yêu cầu của trang"
+    dh.tien(3.5)
+    so.hook_tai({"status": "finished", "downloaded_bytes": 1, "total_bytes": 1})
+    so.video_xong("moi", media_s=1.0)
+    tk = so.anh().thong_ke
+    assert tk[td.GD_TRICH_XUAT].tong == pytest.approx(2.0) and tk[td.GD_CHO].tong == pytest.approx(6.5)
+    assert any("theo yêu cầu của trang" in c for loai, c, _ in ui.dong_video(a) if loai == "chu")
+    so.thong_diep_ytdlp("[download]  42.0% of 10.00MiB at 1.00MiB/s ETA 00:05")   # dòng tiến trình: bỏ qua
+
+
+def test_doi_client_chi_dem_khi_that_su_thu_client_ke(tmp_path, monkeypatch, may):
+    from ytdlp_gia import C403
+    monkeypatch.setattr(channel, "do_dai_media", lambda p: DAI)
+    ids = [_ma(i) for i in range(3)]
+
+    def tai(phien, ma):
+        if ma == _ma(2):
+            return AUTH                                    # dừng đổi client ngay (lỗi của video)
+        return C403 if phien.client == "" else None        # client mặc định 403, client kế tải được
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", _YdlCoHook(tai={"*": tai}, liet_ke=lambda _p, _u: _danh_sach(ids)))
+    so = td.SoDongBo()
+    r = _cs(tmp_path / "kho", so).sync("https://www.youtube.com/@KenhThu")
+    assert r["moi"] == 2 and r["gioi_han_tuoi"] == 1
+    assert so.anh().doi_client_tong == 1, "chỉ video đầu thật sự đổi client (video sau nhớ client tốt; video 18+ dừng)"
+
+
+def test_eta_dem_lui_trong_luc_xu_ly_mot_video():
+    so, dh = _so()
+    so.ke_hoach(da_co=0, can_tai=100, han_che_bo_qua=0, se_thu=100)
+    for i in range(19):
+        so.video_bat_dau(i + 1, 100, _ma(i), "x")
+        dh.tien(20)
+        so.video_xong("moi", media_s=DAI)
+    so.video_bat_dau(20, 100, _ma(20), "x")
+    dh.tien(15)
+    assert so.anh().eta_s == pytest.approx(20 * 81 - 15)
+
+
+def test_dung_lai_do_dai_chi_khi_file_trong_kho_trung_ban_tam_da_kiem(tmp_path, monkeypatch):
+    dem = []
+    monkeypatch.setattr(channel, "do_dai_media", lambda p: dem.append(p) or 123.0)
+    cs = ChannelSync(str(tmp_path / "kho"))
+    tam = tmp_path / "kho" / "_tam" / "a.tmp.opus"
+    tam.parent.mkdir(parents=True)
+    tam.write_bytes(b"12345")
+    st = tam.stat()
+    cs._lan_kiem_cuoi = (str(tam), DAI, st.st_size, st.st_mtime_ns)
+    dich = tmp_path / "kho" / "a.opus"
+    dich.write_bytes(b"123456789")                         # KHÔNG phải bản đã kiểm (khác kích thước)
+    cs._ghi_do_dai_vua_kiem(str(tam), str(dich))
+    assert cs._do_dai_file_vua_dat(str(dich)) == 123.0 and len(dem) == 1
+    import os as _os
+    _os.replace(tam, dich)                                 # đúng bản đã kiểm (os.replace giữ kích thước + mtime)
+    cs._lan_kiem_cuoi = (str(tam), DAI, st.st_size, st.st_mtime_ns)
+    cs._ghi_do_dai_vua_kiem(str(tam), str(dich))
+    assert cs._do_dai_file_vua_dat(str(dich)) == DAI and len(dem) == 1
+
+
+def test_luot_loi_truoc_vong_lap_dong_so_tien_do(tmp_path, monkeypatch, may):
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", _YdlCoHook(liet_ke=lambda _p, _u: None))
+    so = td.SoDongBo()
+    with pytest.raises(RuntimeError):
+        _cs(tmp_path / "kho", so).sync("https://www.youtube.com/@KenhThu")
+    a = so.anh()
+    assert a.trang_thai != td.TT_DANG_CHAY and a.ket_thuc is not None and a.ly_do_dung
+
+
+def test_app_ve_tien_do_loi_thi_lui_ve_man_chung(tmp_path, monkeypatch):
+    import time as _time
+    from pathlib import Path
+
+    import streamlit
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=120).run()
+    monkeypatch.setattr(streamlit, "rerun", lambda *a, **k: None)
+    goc_sleep = _time.sleep
+    monkeypatch.setattr(_time, "sleep", lambda s: None if s in (0.75, 1.0) else goc_sleep(s))
+
+    class SoHong:
+        def anh(self):
+            raise RuntimeError("ảnh chụp hỏng")
+    at.session_state.so_dong_bo = SoHong()
+    at.session_state.job.update({"running": True, "pct": 0.3, "msg": "[3/10] Video", "results": [], "error": "",
+                                 "kind": "channel"})
+    at.run()
+    assert not at.exception
+    assert any(b.label == "⏹️ Dừng lại" for b in at.button), "nút Dừng vẫn còn"
+    assert any("[3/10] Video" in str(x.value) for x in at.info)
