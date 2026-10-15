@@ -9,6 +9,28 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
   cần duyệt (force-push đang bị cấm).
 - **P-5 Bật ruleset GitHub** (`release/github/*.json`, D-25) — một lệnh `gh api`, chủ repo duyệt.
 
+## D-26 PC2 DEV-ONLY: Development 8502 là ứng dụng làm việc chính, dữ liệu THẬT; Stable chỉ dự phòng (người dùng, 2026-10-15) — thay một phần D-19 (Development chỉ dữ liệu thử) và D-21/D-23 cho việc tự dùng trên PC2
+Quyết định:
+- Trên PC2, chủ dự án làm việc hằng ngày bằng Development 8502, KHÔNG qua phát hành / ký / cập nhật Stable.
+- Stable 1.1.1 (`C:\TimClipPro*`, 8501) và dữ liệu của nó GIỮ NGUYÊN để dự phòng: không xoá, không cập nhật, không dùng hằng
+  ngày. Claude vẫn KHÔNG đọc/ghi/chạy gì trong `C:\TimClipPro*`.
+- Development vận hành (ngoài Git, riêng máy):
+  - mã = worktree `C:\Dev\TimClipPro_VanHanh`, nhánh cục bộ `pc2-van-hanh`, CHỈ fast-forward tới `integration/current`, không
+    sửa tay;
+  - Python = venv riêng cài OFFLINE từ `release/locks/requirements-lock.txt` có băm (`py312-f955a32807a9`, gồm yt-dlp-ejs; Node ≥ 22
+    trên máy);
+  - dữ liệu THẬT bền vững `C:\Dev\TimClipPro_DevState\data`, output `…\output`, sao lưu `D:\TimClipPro_Dev_SaoLuu`;
+  - launcher `TimClipPro_DEV.bat` (+ `_CLI`, `_SaoLuu`, `_CapNhat` dùng chung `_env`): `127.0.0.1:8502`,
+    `--server.fileWatcherType=none` (không tự tải lại giữa lúc tải / tạo vân tay / quét).
+- GUI, CLI, Watch dùng CÙNG thư mục dữ liệu. Không dùng chung SQLite / hàng đợi gửi với Stable, không chép State của Stable.
+- Phát triển vẫn như cũ: worktree việc riêng, test CHỈ dữ liệu synthetic (CLAUDE.md bước 5), PR + review + fast-forward
+  `integration/current`; rồi cập nhật worktree vận hành bằng Git (`GIT_WORKFLOW.md` «Development vận hành PC2»).
+- Không dừng / khởi động lại 8502 khi đang có việc (tải, tạo vân tay, quét, gửi).
+Vì sao: chủ dự án ưu tiên có công cụ làm việc ngay; vòng phát hành + ký + cập nhật Stable tốn thời gian và (15/10) bị lớp quyền
+Claude Code chặn khi tự động hoá trên máy production.
+Bằng chứng: handoff PC2 15/10 (tối) — venv offline 56 gói, quét file thật với kho SML 779 vân tay đúng mốc, CLI cùng dữ
+liệu, sao lưu + cập nhật Git-only thử 3 ca.
+
 ## D-25 Hook `pre-push` dùng chung + ruleset GitHub đề xuất (2026-10-14) — thay hook «chỉ fix/pc2» của D-18
 Quyết định: một hook cho CẢ HAI máy (`release/git-hooks/pre-push`): cho `feature|fix/pc1|pc2/*`; `integration/current`
 CHỈ fast-forward tới ĐÚNG đầu một nhánh việc đã đẩy (đã có PR); chặn tag (tag `stable-*` chỉ do `gh release create` sinh

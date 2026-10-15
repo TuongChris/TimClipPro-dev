@@ -108,6 +108,33 @@ phải in «pre-push: CHẶN»; `git push --dry-run private HEAD:refs/heads/fix/
    thấy `CLAUDE.md`, `CURRENT_STATE.md`, `CLAUDE.local.md`, handoff của máy.
 5. Venv phát triển `TimClipPro\.venv` theo `TEST_MATRIX.md` — không cài gói vào Python gốc (Stable dựng từ nó).
 
+## Development vận hành PC2 (D-26) — cập nhật CHỈ bằng Git
+Trên PC2, ứng dụng làm việc chính là Development 8502. Phần ngoài Git (riêng máy):
+- worktree vận hành `C:\Dev\TimClipPro_VanHanh` (nhánh cục bộ `pc2-van-hanh`, không bao giờ đẩy);
+- venv `C:\Dev\TimClipPro_DevRuntime\py312-<lock>`;
+- dữ liệu `C:\Dev\TimClipPro_DevState\data`;
+- launcher `TimClipPro_DEV*.bat` + `TimClipPro_DEV_tienich.ps1` cùng thư mục.
+
+Không GitHub Release, không ký, không Managed Updater cho Development. Cập nhật một bản đã gộp:
+1. Claude viết mã + test trong worktree VIỆC (không phải worktree vận hành), PR, review, gộp fast-forward
+   `integration/current` như mục trên.
+2. Đợi MỌI việc của Development xong: tải / đồng bộ kênh, tạo vân tay, quét, gửi Sheets, Watch.
+   - Kiểm: không tiến trình con; không file khoá đang mở (`.dong_bo_kenh.lock`, `.timclip.lock`, `tool.lock`); không ghi mới
+     trong `_tam\`; đĩa / mạng của tiến trình đứng yên.
+   - yt-dlp TẢI TRONG tiến trình, nên «không tiến trình con + CPU thấp» KHÔNG đủ.
+3. Đóng cửa sổ TimClipPro DEV, rồi chạy `TimClipPro_DEV_CapNhat.bat`. Script này:
+   - DỪNG nếu 8502 / CLI DEV còn chạy;
+   - sao lưu `data` sang `D:\TimClipPro_Dev_SaoLuu\data_<giờ>` (robocopy chỉ chép, kiểm số file + byte);
+   - `git fetch private`; DỪNG nếu worktree vận hành bẩn / sai nhánh / không fast-forward được, hoặc nếu lock Python đổi (khi đó
+     dựng venv mới trước);
+   - `git merge --ff-only`; import thử; mở lại DEV.
+4. Smoke: health `http://127.0.0.1:8502/_stcore/health` = ok; mở được các tab; lệnh CLI chỉ đọc
+   (`TimClipPro_DEV_CLI.bat youtube-doctor`, `dich`).
+- CẤM trên worktree vận hành: `git reset --hard`, `checkout` đè, force, sửa mã tại chỗ, `git pull` khi có việc. Lùi bản chỉ khi
+  Claude đã xác nhận: `git reset --keep <commit trước>` (DEV đã tắt) + dữ liệu từ bản sao lưu nếu cần.
+- Lock Python đổi: dựng venv MỚI cạnh venv cũ (`pip install --require-hashes --no-deps --only-binary=:all: --no-index`
+  từ wheel đã kiểm), đổi `DEV_PY` trong `TimClipPro_DEV_env.bat`, giữ venv cũ để lùi.
+
 ## Lịch sử (tóm tắt — chi tiết ở `DECISIONS.md`)
 - 09/10: tạo repo `TimClipPro-dev` (private lúc đó), đẩy `integration/current` từ `e49340d` giữ nguyên lịch sử; PC2 clone
   chỉ đọc (giai đoạn 1) rồi được quyền ghi `fix/pc2/*` (giai đoạn 2); PR gộp fast-forward bằng `update-ref`.
