@@ -31,13 +31,19 @@ BOT = [
     "ERROR: [youtube] abcdefghijk: All player responses are invalid. Your IP is likely being "
     "blocked by Youtube",
 ]
-AUTH = [
+# Hạn chế của TỪNG video tách khỏi «cần đăng nhập» chung (sự cố đồng bộ kênh 15/10/2026 — ba video giới hạn tuổi liên
+# tiếp từng mở cầu dao AUTH_REQUIRED và chặn cả kênh).
+TUOI = [
     f"ERROR: [youtube] abcdefghijk: Sign in to confirm your age. This video may be "
     f"inappropriate for some users. {_HUONG_DAN}",
+]
+HOI_VIEN = [
     "ERROR: [youtube] abcdefghijk: Join this channel to get access to members-only content "
     "like this video, and other exclusive perks.",
     "ERROR: [youtube] abcdefghijk: This video is available to this channel's members on "
     "level: Fan (or any higher level).",
+]
+AUTH = [
     f"ERROR: [youtube:tab] UCabc: Login details are needed to download this content. "
     f"{_HUONG_DAN}",
 ]
@@ -113,6 +119,7 @@ KHONG_RO = [
 ]
 
 BANG = ([(x, t.BOT_CHALLENGE) for x in BOT] + [(x, t.AUTH_REQUIRED) for x in AUTH]
+        + [(x, t.AGE_RESTRICTED) for x in TUOI] + [(x, t.MEMBERS_ONLY) for x in HOI_VIEN]
         + [(x, t.PERMANENT_UNAVAILABLE) for x in VINH_VIEN]
         + [(x, t.RATE_LIMITED) for x in GIOI_HAN_429 + GIOI_HAN_PHIEN]
         + [(x, t.HTTP_FORBIDDEN) for x in CAM_403]
@@ -155,7 +162,7 @@ def test_chu_sign_in_cua_video_rieng_tu_khong_bi_coi_la_can_dang_nhap():
         assert t.phan_loai_loi(RuntimeError(tin)).category != t.AUTH_REQUIRED
 
 
-@pytest.mark.parametrize("tin", BOT + AUTH)
+@pytest.mark.parametrize("tin", BOT + AUTH + TUOI + HOI_VIEN)
 def test_bot_va_dang_nhap_khong_duoc_thu_lai(tin):
     f = t.phan_loai_loi(RuntimeError(tin))
     assert not f.retryable

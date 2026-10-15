@@ -19,7 +19,7 @@ from engine import Engine, Match, ScanResult, chu_ky_chinh_sach
 from kho_gia import ghi_kho
 from scan_jobs import ScanJobController
 from watch import MucTheoDoi, WatchList, chay_giam_sat
-from ytdlp_gia import AUTH, BOT, C403, GO, R429, TAM, YdlKichBan, info_mau
+from ytdlp_gia import AUTH, BOT, C403, DANG_NHAP, GO, R429, TAM, YdlKichBan, info_mau
 
 BI_MAT = "GIA_TRI_BI_MAT_GIA_51d0"
 
@@ -147,7 +147,8 @@ def test_quet_co_info_khong_hoi_lai_metadata(tmp_path, monkeypatch):
     assert ydl.dem("info") == 1
 
 
-@pytest.mark.parametrize("loi,loai", [(BOT, t.BOT_CHALLENGE), (AUTH, t.AUTH_REQUIRED),
+@pytest.mark.parametrize("loi,loai", [(BOT, t.BOT_CHALLENGE), (DANG_NHAP, t.AUTH_REQUIRED),
+                                      (AUTH, t.AGE_RESTRICTED),
                                       (GO, t.PERMANENT_UNAVAILABLE)])
 def test_tai_bi_chan_khong_doi_client(tmp_path, monkeypatch, loi, loai):
     """CLAUDE.md 6c: bot-check chặn theo IP ở khâu trích xuất — đổi client không cứu được."""
@@ -268,15 +269,17 @@ def sheets_dem(monkeypatch, tmp_path):
 
 # Dạng NGANG (mặc định, `GiamSat.bat`) vốn bỏ qua kết quả lỗi khi dựng dòng (`to_rows_ngang`);
 # dạng DỌC (`--dang-doc`) thì dựng dòng "(LỖI: …)" cho mọi kết quả lỗi — test cả hai.
+# Cần đăng nhập (toàn phiên) dừng sau 3; giới hạn tuổi (từng video) chỉ dừng ở ngưỡng hàng loạt (20) — cả hai < 50.
+@pytest.mark.parametrize("loi,loai", [(DANG_NHAP, t.AUTH_REQUIRED), (AUTH, t.AGE_RESTRICTED)])
 @pytest.mark.parametrize("dang_ngang", [True, False])
 def test_watch_50_link_dang_nhap_lien_tiep_thi_dung_khong_ghi_sheet(tmp_path, monkeypatch,
-                                                                    sheets_dem, dang_ngang):
-    ydl = YdlKichBan(info={"*": AUTH})
+                                                                    sheets_dem, dang_ngang, loi, loai):
+    ydl = YdlKichBan(info={"*": loi})
     e = _eng(tmp_path, monkeypatch, ydl)
     wl = WatchList(muc=[MucTheoDoi("link", _url(_ma(i))) for i in range(50)], kho="A",
                    gioi_han_moi_lan=50)
     bc = chay_giam_sat(e, wl, sheet_link=LINK_GIA, dang_ngang=dang_ngang)
-    nguong = t.NGUONG_MO[t.AUTH_REQUIRED]
+    nguong = t.NGUONG_MO[loai]
     assert ydl.dem("info") == nguong, "không tiếp tục 40+ video sau khi cầu dao mở"
     assert bc.quet_moi == nguong and bc.chua_quet_do_chan == 50 - nguong
     assert "Đã dừng yêu cầu mới tới YouTube" in bc.chan_youtube

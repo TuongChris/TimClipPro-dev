@@ -36,7 +36,11 @@ LOGGER = logging.getLogger("youtube.truy_cap")
 # =====================================================================
 
 PERMANENT_UNAVAILABLE = "PERMANENT_UNAVAILABLE"     # gỡ, riêng tư, sai mã, không tồn tại
-AUTH_REQUIRED = "AUTH_REQUIRED"                     # giới hạn tuổi, hội viên, cần đăng nhập
+AUTH_REQUIRED = "AUTH_REQUIRED"                     # nội dung đòi đăng nhập (không rõ lý do riêng của video)
+# Hạn chế của TỪNG video — tài khoản/phiên vẫn bình thường cho video khác (sự cố kênh nhiều video giới hạn tuổi,
+# 15/10/2026: ba video liên tiếp mở cầu dao AUTH_REQUIRED và chặn cả kênh). Không bao giờ vượt hạn chế: chỉ bỏ qua.
+AGE_RESTRICTED = "AGE_RESTRICTED"                   # «Sign in to confirm your age»
+MEMBERS_ONLY = "MEMBERS_ONLY"                       # chỉ hội viên kênh / phải trả phí
 BOT_CHALLENGE = "BOT_CHALLENGE"                     # "confirm you're not a bot", captcha
 RATE_LIMITED = "RATE_LIMITED"                       # HTTP 429, phiên bị giới hạn tốc độ
 HTTP_FORBIDDEN = "HTTP_FORBIDDEN"                   # 403 chưa đủ bằng chứng là bot/cookie
@@ -53,7 +57,8 @@ INVALID_INPUT = "INVALID_INPUT"                     # link không phải video /
 UNKNOWN_YOUTUBE_ERROR = "UNKNOWN_YOUTUBE_ERROR"
 BLOCKED_BY_BREAKER = "BLOCKED_BY_BREAKER"           # chưa gửi request: cầu dao đã mở
 
-CAC_LOAI = (PERMANENT_UNAVAILABLE, AUTH_REQUIRED, BOT_CHALLENGE, RATE_LIMITED, HTTP_FORBIDDEN,
+CAC_LOAI = (PERMANENT_UNAVAILABLE, AUTH_REQUIRED, AGE_RESTRICTED, MEMBERS_ONLY, BOT_CHALLENGE, RATE_LIMITED,
+            HTTP_FORBIDDEN,
             TRANSIENT_NETWORK, COOKIE_INVALID_OR_EXPIRED, FORMAT_OR_EXTRACTOR_ERROR,
             JS_CHALLENGE_ERROR, PLAYER_CLIENT_ERROR,
             PARTIAL_OR_CORRUPT_DOWNLOAD, INVALID_INPUT, UNKNOWN_YOUTUBE_ERROR,
@@ -61,8 +66,10 @@ CAC_LOAI = (PERMANENT_UNAVAILABLE, AUTH_REQUIRED, BOT_CHALLENGE, RATE_LIMITED, H
 
 # Lỗi do PHÍA TRUY CẬP (YouTube từ chối, mạng, cookie) — khác lỗi của chính video. `cli.py`/youtube-doctor in «YouTube
 # chặn truy cập» + mã 3 cho nhóm này: thiếu bộ chạy JS (lỗi của MÁY) và lỗi player client giữ như lỗi định dạng (mã 1).
-LOAI_TRUY_CAP = frozenset({AUTH_REQUIRED, BOT_CHALLENGE, RATE_LIMITED, HTTP_FORBIDDEN,
+LOAI_TRUY_CAP = frozenset({AUTH_REQUIRED, AGE_RESTRICTED, MEMBERS_ONLY, BOT_CHALLENGE, RATE_LIMITED, HTTP_FORBIDDEN,
                            TRANSIENT_NETWORK, COOKIE_INVALID_OR_EXPIRED, BLOCKED_BY_BREAKER})
+# Lỗi của RIÊNG một video (hạn chế đặt trên video đó): không nói gì về phiên — cầu dao chỉ có trần hàng loạt.
+LOAI_TUNG_VIDEO = frozenset({AGE_RESTRICTED, MEMBERS_ONLY})
 
 # =====================================================================
 #  Văn bản lỗi yt-dlp
@@ -103,10 +110,9 @@ _GIOI_HAN = ("http error 429", "too many requests", "rate-limited", "rate limite
              "ratelimit", "try again later")
 _COOKIE = ("file cookie", "does not look like a netscape format cookies file",
            "cookies are no longer valid", "netscape formatted, not json")
-_DANG_NHAP = ("confirm your age", "age-restricted", "age restricted",
-              "inappropriate for some users", "members-only", "members only",
-              "join this channel", "channel's members", "login details are needed",
-              "login required", "requires payment")
+_TUOI = ("confirm your age", "age-restricted", "age restricted", "inappropriate for some users")
+_HOI_VIEN = ("members-only", "members only", "join this channel", "channel's members", "requires payment")
+_DANG_NHAP = ("login details are needed", "login required")
 _VINH_VIEN = ("video unavailable", "this video is unavailable", "video is not available",
               "private video", "this video is private", "has been removed", "been terminated",
               "no longer available", "does not exist", "available in your country",
@@ -149,8 +155,15 @@ THONG_BAO = {
         "Video không còn xem được trên YouTube (đã gỡ, để riêng tư, sai mã hoặc bị chặn ở khu "
         "vực này). Đây không phải lỗi tool; video này chưa được quét."),
     AUTH_REQUIRED: (
-        "YouTube yêu cầu đăng nhập mới xem được video này (giới hạn độ tuổi hoặc chỉ dành cho "
-        "hội viên). Cần cookie tài khoản hợp lệ ở «🔐 Kết nối YouTube»; video này chưa được quét."),
+        "YouTube yêu cầu đăng nhập mới xem được nội dung này. Cần cookie tài khoản hợp lệ ở "
+        "«🔐 Kết nối YouTube»; video này chưa được quét."),
+    AGE_RESTRICTED: (
+        "Video giới hạn độ tuổi: YouTube chỉ cho tài khoản ĐÃ ĐĂNG NHẬP (và đã xác minh tuổi) xem. Tool không vượt "
+        "giới hạn này — video bị bỏ qua, các video khác vẫn tiếp tục. Muốn tải: cookie tài khoản hợp lệ ở "
+        "«🔐 Kết nối YouTube»."),
+    MEMBERS_ONLY: (
+        "Video chỉ dành cho hội viên kênh (hoặc phải trả phí): tài khoản đang dùng không có quyền xem. Video bị bỏ "
+        "qua, các video khác vẫn tiếp tục."),
     BOT_CHALLENGE: (
         "YouTube yêu cầu xác minh không phải bot cho địa chỉ mạng này. Tool đã dừng yêu cầu mới "
         "tới YouTube để tránh lặp lỗi xác minh. Nghỉ vài tiếng, giảm nhịp, hoặc nạp cookie tài "
@@ -308,6 +321,10 @@ def _xac_dinh_loai(thap: str, ma: Optional[int], lop: set) -> str:
         return RATE_LIMITED
     if "LoiFileCookie" in lop or _co(thap, _COOKIE):
         return COOKIE_INVALID_OR_EXPIRED
+    if _co(thap, _TUOI):
+        return AGE_RESTRICTED
+    if _co(thap, _HOI_VIEN):
+        return MEMBERS_ONLY
     if _co(thap, _DANG_NHAP):
         return AUTH_REQUIRED
     if "GeoRestrictedError" in lop or ma in (404, 410) or _co(thap, _VINH_VIEN):
@@ -369,7 +386,7 @@ def phan_loai_loi(loi: Any, *, thao_tac: str = "", video_id: str = "", lan_thu: 
         tom_tat = tom_tat_ky_thuat(getattr(goc, "chi_tiet", "") or "")
     return YoutubeAccessFailure(
         category=loai, operation=thao_tac, video_id=str(video_id or ""), retryable=thu_lai,
-        auth_related=loai in (AUTH_REQUIRED, BOT_CHALLENGE, COOKIE_INVALID_OR_EXPIRED),
+        auth_related=loai in (AUTH_REQUIRED, AGE_RESTRICTED, MEMBERS_ONLY, BOT_CHALLENGE, COOKIE_INVALID_OR_EXPIRED),
         rate_limited=loai == RATE_LIMITED, human_message_vi=thong_bao,
         technical_summary=tom_tat, http_status=ma, attempt=int(lan_thu), max_attempts=int(toi_da))
 
@@ -505,7 +522,8 @@ class ChanDoanCookie:
     """
 
     cau_hinh: bool = False
-    nguon: str = ""                    # "file" | "trinh_duyet" | ""
+    nguon: str = ""                    # "file" | "trinh_duyet" | "" — nguồn HIỆU LỰC (cả hai thì file)
+    hai_nguon: bool = False            # cấu hình CẢ file lẫn trình duyệt: chỉ file được dùng
     ten_file: str = ""                 # chỉ tên, không đường dẫn
     ton_tai: bool = False
     doc_duoc: bool = False
@@ -544,12 +562,14 @@ def chan_doan_cookie(duong_dan: str, *, cookies_browser: str = "",
                                   trang_thai=COOKIE_TU_TRINH_DUYET)
         return ChanDoanCookie()
     ten = os.path.basename(duong_dan)
+    # Cả hai ô đều có: chỉ FILE được dùng (``ytdlp_chung.CauHinhMang.tuy_chon``) — ghi nhận để giao diện nói rõ.
+    hai_nguon = bool((cookies_browser or "").strip())
     try:
         st = os.stat(duong_dan)
     except OSError:
-        return ChanDoanCookie(cau_hinh=True, nguon="file", ten_file=ten,
+        return ChanDoanCookie(cau_hinh=True, nguon="file", hai_nguon=hai_nguon, ten_file=ten,
                               trang_thai=COOKIE_KHONG_TON_TAI)
-    co_ban = dict(cau_hinh=True, nguon="file", ten_file=ten, ton_tai=True,
+    co_ban = dict(cau_hinh=True, nguon="file", hai_nguon=hai_nguon, ten_file=ten, ton_tai=True,
                   kich_thuoc=int(st.st_size),
                   sua_luc=datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds"))
     try:
@@ -647,7 +667,12 @@ NGUONG_MO = {
     BOT_CHALLENGE: 1,                 # chặn theo địa chỉ mạng (CLAUDE.md 6c): request sau đều hỏng
     RATE_LIMITED: 1,                  # đã thử lại có nghỉ; tiếp tục chỉ làm nặng thêm
     COOKIE_INVALID_OR_EXPIRED: 1,     # cấu hình hỏng: mọi thao tác sẽ hỏng y hệt
-    AUTH_REQUIRED: 3,                 # một video giới hạn tuổi là bình thường; ba liên tiếp thì không
+    AUTH_REQUIRED: 3,                 # nội dung đòi đăng nhập lặp lại: phiên có vấn đề
+    # Hạn chế của TỪNG video (tuổi, hội viên): kênh có thể có cả loạt video như vậy liền nhau trong khi video khác
+    # vẫn tải được — không dừng lô vì vài video. Chỉ giữ TRẦN HÀNG LOẠT: 20 lần liên tiếp không xen một thành công
+    # nào nghĩa là phiên này không xem được loại video đó — dừng để khỏi gửi hàng loạt yêu cầu vô ích.
+    AGE_RESTRICTED: 20,
+    MEMBERS_ONLY: 20,
     HTTP_FORBIDDEN: 3,                # "403 lặp lại"
     TRANSIENT_NETWORK: 3,             # mạng sập: dừng thay vì đốt cả lô
     FORMAT_OR_EXTRACTOR_ERROR: 5,     # yt-dlp/YouTube hỏng hàng loạt
@@ -661,8 +686,8 @@ NGUONG_MO = {
 # Lỗi mà đổi player client KHÔNG cứu được — dừng đường lui client ngay (CLAUDE.md 6c: bot-check
 # đánh ở khâu trích xuất cho MỌI client). 403/định dạng thì vẫn đổi client như mục 6. Thử thách JS: có cookie thì
 # mọi client nhận cookie đều cần JS. Lỗi player client: client khác có thể được — vẫn đổi.
-DUNG_DOI_CLIENT = frozenset({BOT_CHALLENGE, AUTH_REQUIRED, RATE_LIMITED, PERMANENT_UNAVAILABLE,
-                             COOKIE_INVALID_OR_EXPIRED, INVALID_INPUT, JS_CHALLENGE_ERROR})
+DUNG_DOI_CLIENT = frozenset({BOT_CHALLENGE, AUTH_REQUIRED, AGE_RESTRICTED, MEMBERS_ONLY, RATE_LIMITED,
+                             PERMANENT_UNAVAILABLE, COOKIE_INVALID_OR_EXPIRED, INVALID_INPUT, JS_CHALLENGE_ERROR})
 
 _LY_DO_DUNG = {
     BOT_CHALLENGE: ("xác minh", "YouTube yêu cầu xác minh không phải bot cho địa chỉ mạng này. "
@@ -673,6 +698,11 @@ _LY_DO_DUNG = {
     COOKIE_INVALID_OR_EXPIRED: ("cookie", ""),
     AUTH_REQUIRED: ("đăng nhập", "YouTube liên tục yêu cầu đăng nhập. Kiểm tra cookie ở "
                     "«🔐 Kết nối YouTube» rồi chạy lại."),
+    AGE_RESTRICTED: ("giới hạn độ tuổi", "Liên tiếp nhiều video giới hạn độ tuổi mà phiên này không xem được "
+                     "(chưa đăng nhập, cookie không được chấp nhận, hoặc tài khoản chưa xác minh tuổi). Kiểm tra cookie "
+                     "ở «🔐 Kết nối YouTube» rồi chạy lại — lượt sau tải tiếp phần còn thiếu."),
+    MEMBERS_ONLY: ("chỉ hội viên", "Liên tiếp nhiều video chỉ dành cho hội viên mà tài khoản đang dùng không có quyền "
+                   "xem. Chạy lại để tải tiếp phần còn lại."),
     HTTP_FORBIDDEN: ("403", "YouTube liên tục từ chối tải (HTTP 403). Chưa đủ bằng chứng là do "
                      "cookie hay do bị nghi là bot; hãy chạy lại sau."),
     TRANSIENT_NETWORK: ("mạng", "Mạng liên tục lỗi. Kiểm tra kết nối rồi chạy lại."),
@@ -686,13 +716,15 @@ _LY_DO_DUNG = {
 }
 
 TRUONG_SO_DO = ("youtube_operations", "metadata_requests", "download_attempts",
-                "listing_requests", "retries", "auth_failures", "bot_challenges", "rate_limited",
+                "listing_requests", "retries", "auth_failures", "age_restricted", "members_only",
+                "bot_challenges", "rate_limited",
                 "http_403", "transient", "permanent_unavailable", "format_errors",
                 "js_challenge_errors", "player_client_errors",
                 "cookie_invalid", "other_failures", "cookie_fallbacks",
                 "cookie_rejected_warnings", "cookie_unusable_no_js", "js_challenge_warnings",
-                "client_fallbacks", "skipped_by_breaker")
-_DEM_THEO_LOAI = {AUTH_REQUIRED: "auth_failures", BOT_CHALLENGE: "bot_challenges",
+                "client_fallbacks", "skipped_by_breaker", "successes")
+_DEM_THEO_LOAI = {AUTH_REQUIRED: "auth_failures", AGE_RESTRICTED: "age_restricted", MEMBERS_ONLY: "members_only",
+                  BOT_CHALLENGE: "bot_challenges",
                   RATE_LIMITED: "rate_limited", HTTP_FORBIDDEN: "http_403",
                   TRANSIENT_NETWORK: "transient", PERMANENT_UNAVAILABLE: "permanent_unavailable",
                   FORMAT_OR_EXTRACTOR_ERROR: "format_errors",
@@ -752,6 +784,9 @@ class PhienYouTube:
         # Có cookie nhưng lượt này chạy KHÔNG đăng nhập vì máy chưa giải được thử thách JavaScript (lý do cụ thể) —
         # KHÁC `cookie_bi_tu_choi` (YouTube từ chối phiên): đừng bảo người dùng xuất lại cookie.
         self.khong_dang_nhap_ly_do = ""
+        # Hũ cookie yt-dlp đã nạp có cookie TÀI KHOẢN YouTube (LOGIN_INFO + SAPISID — luật `_has_auth_cookies`) không:
+        # None = chưa quan sát được (chưa mở phiên có cookie / không đọc được hũ). Chỉ xét TÊN, không bao giờ giá trị.
+        self.cookie_tai_khoan: Optional[bool] = None
         self.bat_dau = time.time()
 
     # ---------- trạng thái ----------
@@ -843,9 +878,44 @@ class PhienYouTube:
         with self._lock:
             self._so["client_fallbacks"] += 1
 
+    def ghi_cookie_tai_khoan(self, co: Optional[bool]) -> None:
+        """Một phiên yt-dlp vừa nạp hũ cookie: có cookie tài khoản YouTube không (``ytdlp_chung.co_cookie_tai_khoan``)."""
+        with self._lock:
+            if co is True:
+                self.cookie_tai_khoan = True
+            elif co is False and self.cookie_tai_khoan is None:
+                self.cookie_tai_khoan = False
+
+    def trang_thai_dang_nhap(self, co_cookie: bool) -> tuple:
+        """``(mã, câu)`` — PHÂN BIỆT «đã cấu hình cookie» với «YouTube chấp nhận phiên đăng nhập».
+
+        ``DA_XAC_MINH`` chỉ khi: yt-dlp đã gửi cookie tài khoản, có thao tác thành công, và yt-dlp KHÔNG báo cookie bị
+        thu hồi (nó kiểm sau MỖI request — `_base.py` «cookies are no longer valid»). Không bao giờ suy ra từ việc
+        file cookie đúng cấu trúc."""
+        with self._lock:
+            thanh_cong = self._so["successes"]
+            tai_khoan = self.cookie_tai_khoan
+            tu_choi = self.cookie_bi_tu_choi
+            khong_js = self.khong_dang_nhap_ly_do
+        if not co_cookie:
+            return ("KHONG_COOKIE", "Không dùng cookie — chỉ video công khai; video giới hạn tuổi / hội viên bị bỏ qua.")
+        if khong_js:
+            return ("KHONG_DANG_NHAP", f"Cookie đã cấu hình nhưng lượt này chạy KHÔNG đăng nhập: {khong_js}.")
+        if tu_choi:
+            return ("BI_TU_CHOI", "YouTube KHÔNG chấp nhận cookie (bị thu hồi / hết hạn) — lượt này thực chất chạy như "
+                                  "chưa đăng nhập. Xuất lại cookie từ trình duyệt đang đăng nhập YouTube.")
+        if tai_khoan is False:
+            return ("KHONG_CO_COOKIE_DANG_NHAP", "Cookie đã nạp nhưng KHÔNG có cookie đăng nhập YouTube (thiếu "
+                                                 "LOGIN_INFO / SAPISID) — lượt này chạy như chưa đăng nhập.")
+        if tai_khoan is True and thanh_cong > 0:
+            return ("DA_XAC_MINH", "YouTube chấp nhận phiên đăng nhập ở lượt này (đã gửi cookie tài khoản, có thao tác "
+                                   "thành công, không bị thu hồi).")
+        return ("CHUA_XAC_MINH", "Đã cấu hình cookie nhưng CHƯA xác minh được YouTube chấp nhận phiên đăng nhập.")
+
     def ghi_thanh_cong(self, thao_tac: str = "") -> None:
         with self._lock:
             self._lien_tiep.clear()
+            self._so["successes"] += 1
 
     def ghi_loi(self, loi: Any, thao_tac: str = "", video_id: str = "") -> YoutubeAccessFailure:
         """Phân loại + ghi một lỗi xảy ra NGOÀI ``chay`` (tầng điều phối). Lỗi phiên này đã ghi
@@ -944,5 +1014,6 @@ class PhienYouTube:
             so["breaker_category"] = self._mo_boi.category if self._mo_boi else ""
             so["cookie_rejected"] = self.cookie_bi_tu_choi
             so["cookie_unusable_reason"] = self.khong_dang_nhap_ly_do
+            so["auth_cookies_seen"] = self.cookie_tai_khoan
             so["elapsed_s"] = round(time.time() - self.bat_dau, 3)
         return so

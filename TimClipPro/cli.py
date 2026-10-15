@@ -423,9 +423,17 @@ def _main():
                          cau_hinh_mang=eng.cau_hinh_mang())
         with maintenance_gate.vao_cong_cua(eng, "đồng bộ kênh"):
             r = cs.sync(a.muc[0], a.limit, in_tien_do)
-        trang_thai = "ĐÃ DỪNG" if r.get("da_huy") else "XONG"
-        print(f"\n{trang_thai}: tải mới {r['moi']} video, "
-              f"bỏ qua {r['bo_qua']} video đã có.")
+        trang_thai = {"DAY_DU": "XONG", "MOT_PHAN": "XONG MỘT PHẦN", "BI_CHAN": "DỪNG GIỮA CHỪNG",
+                      "DA_HUY": "ĐÃ DỪNG"}.get(r.get("trang_thai", ""), "ĐÃ DỪNG" if r.get("da_huy") else "XONG")
+        print(f"\n{trang_thai}: có sẵn {r['bo_qua']}, tải mới {r['moi']}, lỗi {r.get('so_loi', 0)}, "
+              f"chưa thử {r.get('chua_thu', 0)}.")
+        for x in ("gioi_han_tuoi", "chi_hoi_vien"):
+            if r.get(x):
+                print(f"  {r[x]} video {'giới hạn độ tuổi' if x == 'gioi_han_tuoi' else 'chỉ hội viên'} bị bỏ qua.")
+        if (r.get("xac_thuc") or {}).get("cau"):
+            print(f"Đăng nhập YouTube: {r['xac_thuc']['cau']}")
+        if r.get("canh_bao_cookie"):
+            print(r["canh_bao_cookie"])
         if r["loi"]:
             print("Lỗi:", *r["loi"][:10], sep="\n  - ")
         if r.get("nghi_hong"):

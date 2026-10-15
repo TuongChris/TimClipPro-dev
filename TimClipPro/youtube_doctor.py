@@ -173,6 +173,8 @@ def _in(kq: dict) -> None:
               f"{'có' if c['co_cookie_dang_nhap'] else 'không'}")
         print("  (Cấu trúc đúng KHÔNG có nghĩa YouTube còn chấp nhận phiên — chạy thêm "
               "--network URL để kiểm.)")
+    if c.get("hai_nguon"):
+        print("  CẢNH BÁO: cấu hình CẢ file cookie lẫn trình duyệt — tool CHỈ dùng file cookie, ô trình duyệt bị bỏ qua.")
     print(f"Cầu dao mở sau: {kq['nguong_cau_dao']}")
     print(f"Google: {kq['google']}")
     mang = kq["mang"]

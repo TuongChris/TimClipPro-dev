@@ -65,6 +65,9 @@ def dong_trang_thai_youtube(cd: Any, phien: Any = None, js: Any = None) -> list:
                               f"{phien.khong_dang_nhap_ly_do}."))
     elif phien is not None and phien.tom_tat().get("youtube_operations"):
         ra.append(("success", "Lượt gần nhất: truy cập YouTube bình thường."))
+    if getattr(cd, "hai_nguon", False):
+        ra.append(("warning", "Đang cấu hình CẢ file cookie lẫn «Lấy thẳng từ trình duyệt» — tool CHỈ dùng file "
+                              "cookie, ô trình duyệt bị bỏ qua. Xoá trống một trong hai ô để hết cảnh báo này."))
     if not cd.cau_hinh:
         ra.append(("info", "Cookie: chưa cấu hình."))
     elif cd.trang_thai == _tc.COOKIE_TU_TRINH_DUYET:
@@ -88,12 +91,73 @@ def dong_trang_thai_youtube(cd: Any, phien: Any = None, js: Any = None) -> list:
     if cd.cau_hinh and js is not None:
         if getattr(js, "san_sang", False):
             ra.append(("info", "Khi quét: DÙNG cookie đăng nhập — yt-dlp giải thử thách JavaScript bằng "
-                               f"{js.mo_ta()}."))
+                               f"{js.mo_ta()}. Đã CẤU HÌNH chưa có nghĩa là YouTube CHẤP NHẬN phiên đăng nhập — kết "
+                               "quả mỗi lượt đồng bộ ghi rõ đã xác minh hay chưa."))
         else:
             ra.append(("warning", f"Cookie đăng nhập CHƯA dùng được trên máy này: {js.ly_do}. Lượt quét sẽ chạy "
                                   "KHÔNG đăng nhập và ghi rõ điều đó trong kết quả. Muốn dùng cookie: cài Node.js ≥ 22 "
                                   "và dùng bản Tool có gói yt-dlp-ejs; muốn hết cảnh báo: xoá trống ô cookie."))
     return ra
+
+
+_MUC_DANG_NHAP = {"DA_XAC_MINH": "success", "CHUA_XAC_MINH": "info", "KHONG_COOKIE": "info",
+                  "BI_TU_CHOI": "warning", "KHONG_DANG_NHAP": "warning", "KHONG_CO_COOKIE_DANG_NHAP": "warning"}
+
+
+def tom_tat_dong_bo_kenh(r: Mapping[str, Any]) -> list:
+    """Các dòng ``(mức, câu)`` cho kết quả một lượt đồng bộ kênh (``ChannelSync.sync``). Dòng đầu là tiêu đề:
+    CHỈ «✅ Đồng bộ xong» màu xanh khi mọi video cần tải đã tải xong (sự cố 15/10/2026: cầu dao đã mở, 1.189 video
+    chưa thử mà vẫn báo xong màu xanh). Không đọc file, không gọi mạng; kết quả đồng bộ không mang cookie."""
+    tt = r.get("trang_thai") or ("DA_HUY" if r.get("da_huy") else "BI_CHAN" if r.get("chan_youtube") else "DAY_DU")
+    moi, co_san = int(r.get("moi") or 0), int(r.get("bo_qua") or 0)
+    so_loi, chua_thu = int(r.get("so_loi") or 0), int(r.get("chua_thu") or 0)
+    so = (f"có sẵn **{co_san}** (giữ nguyên), tải mới **{moi}**, lỗi **{so_loi}**, chưa thử **{chua_thu}**. "
+          f"Thư mục: `{r.get('thu_muc', '')}`")
+    if tt == "DAY_DU":
+        ra = [("success", f"✅ Đồng bộ xong: {so}")]
+    elif tt == "MOT_PHAN":
+        ra = [("warning", f"⚠️ Đồng bộ xong MỘT PHẦN — còn video chưa tải được: {so}")]
+    elif tt == "DA_HUY":
+        ra = [("warning", f"⏹️ Đã dừng đồng bộ theo yêu cầu: {so}")]
+    else:
+        ra = [("error", f"🚫 Đồng bộ DỪNG giữa chừng — chưa xong: {so}")]
+    if r.get("chan_youtube"):
+        ra.append(("error", f"Lý do dừng: {r['chan_youtube']}"))
+    tuoi, hoi_vien = int(r.get("gioi_han_tuoi") or 0), int(r.get("chi_hoi_vien") or 0)
+    if tuoi:
+        ra.append(("warning", f"{tuoi} video giới hạn độ tuổi bị bỏ qua — chỉ tài khoản đã đăng nhập (và đã xác minh "
+                              "tuổi) xem được; tool không vượt giới hạn này."))
+    if hoi_vien:
+        ra.append(("warning", f"{hoi_vien} video chỉ dành cho hội viên kênh / phải trả phí bị bỏ qua."))
+    xt = r.get("xac_thuc") or {}
+    if xt.get("cau"):
+        ra.append((_MUC_DANG_NHAP.get(xt.get("trang_thai", ""), "info"), f"Đăng nhập YouTube: {xt['cau']}"))
+    if r.get("canh_bao_cookie"):
+        ra.append(("warning", str(r["canh_bao_cookie"])))
+    if tt != "DAY_DU" and (so_loi or chua_thu):
+        ra.append(("info", "Video lỗi / chưa thử KHÔNG được ghi là đã tải: bấm «Bắt đầu đồng bộ kênh» lần nữa để tải "
+                           "tiếp phần còn thiếu — file đã có được giữ nguyên, không tải trùng."))
+    return ra
+
+
+def _cung_thu_muc(a: str, b: str) -> bool:
+    import os
+
+    def chuan(p: str) -> str:
+        return os.path.normcase(os.path.normpath(os.path.abspath((p or "").strip().strip('"').rstrip("\\/"))))
+    return bool((a or "").strip() and (b or "").strip()) and chuan(a) == chuan(b)
+
+
+def huong_dan_kho_sau_dong_bo(thu_muc_dong_bo: str, kho_dang_dung: str, thu_muc_kho: str) -> tuple:
+    """``(mức, câu)`` — bước tiếp theo sau đồng bộ: KHÔNG xui nạp audio của nguồn này vào kho vân tay của nguồn khác
+    (sự cố 15/10/2026: thư mục audio của kênh vừa đồng bộ ≠ kho «SML» đang chọn)."""
+    if kho_dang_dung and _cung_thu_muc(thu_muc_dong_bo, thu_muc_kho):
+        return ("info", f"Bước tiếp theo: tab «Kho clip gốc» → «Bổ sung clip mới vào kho» cho kho «{kho_dang_dung}» "
+                        "(đúng kho của thư mục vừa đồng bộ) để tạo vân tay các video vừa tải.")
+    hien = (f"Kho vân tay đang chọn là «{kho_dang_dung}» (thư mục `{thu_muc_kho or '(chưa đặt)'}`) — KHÁC thư mục vừa "
+            "đồng bộ. Đừng nạp audio này vào kho đó." if kho_dang_dung else "Chưa chọn kho vân tay nào.")
+    return ("warning", f"{hien} Tạo kho riêng cho nguồn này: tab «Kho clip gốc» → «Tạo kho mới» (ví dụ theo tên kênh), "
+                       f"chọn kho đó ở thanh bên, đặt thư mục `{thu_muc_dong_bo}`, rồi «Bổ sung clip mới vào kho».")
 
 
 def thong_bao_youtube_chan(ket_qua: Sequence[Any]) -> str:

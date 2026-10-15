@@ -127,7 +127,8 @@ class BaoCao:
                 f"Truy cập YouTube: {so.get('youtube_operations', 0)} thao tác, "
                 f"{so.get('retries', 0)} lần thử lại, bot-check {so.get('bot_challenges', 0)}, "
                 f"429 {so.get('rate_limited', 0)}, 403 {so.get('http_403', 0)}, "
-                f"cần đăng nhập {so.get('auth_failures', 0)}")
+                f"cần đăng nhập {so.get('auth_failures', 0)}, giới hạn tuổi {so.get('age_restricted', 0)}, "
+                f"chỉ hội viên {so.get('members_only', 0)}")
         if self.loi:
             cac_dong.append("Lỗi:")
             cac_dong.extend(f"- {dong}" for dong in self.loi)

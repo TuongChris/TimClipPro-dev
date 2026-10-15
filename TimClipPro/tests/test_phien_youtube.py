@@ -14,7 +14,9 @@ import truy_cap_youtube as t
 import ytdlp_chung as y
 
 BOT = "ERROR: [youtube] x: Sign in to confirm you're not a bot."
-AUTH = "ERROR: [youtube] x: Sign in to confirm your age. This video may be inappropriate."
+# Cần đăng nhập (toàn phiên) — khác giới hạn tuổi/hội viên (từng video, ngưỡng hàng loạt riêng).
+AUTH = "ERROR: [youtube] x: Login details are needed to download this content."
+TUOI = "ERROR: [youtube] x: Sign in to confirm your age. This video may be inappropriate."
 GO = "ERROR: [youtube] oNgXYOLAJWk: Video unavailable"
 TAM = "ERROR: [youtube] x: Unable to download API page: The read operation timed out"
 R429 = "ERROR: [youtube] x: Unable to download API page: HTTP Error 429: Too Many Requests"
@@ -188,14 +190,14 @@ def test_loi_bo_qua_di_thang_ra_ngoai_khong_ghi():
 
 # ---------------------------------------------------------------- cầu dao
 
-@pytest.mark.parametrize("tin,nguong", [(AUTH, 3), (C403, 3), (TAM, 3), (DINH_DANG, 5)])
+@pytest.mark.parametrize("tin,nguong", [(AUTH, 3), (TUOI, 20), (C403, 3), (TAM, 3), (DINH_DANG, 5)])
 def test_nguong_lien_tiep_theo_loai(tin, nguong):
     p, _ = _phien()
     for i in range(nguong):
         assert not p.mo, f"chưa đủ {nguong} lần liên tiếp mà đã mở ở lần {i}"
         ham, _g = _ham(*([tin] * 5))
         with pytest.raises(t.LoiTruyCapYouTube):
-            p.chay("download" if tin != AUTH else "metadata", ham)
+            p.chay("download" if tin not in (AUTH, TUOI) else "metadata", ham)
     assert p.mo
 
 
@@ -263,7 +265,7 @@ def test_thong_bao_dung_noi_ro_ly_do_va_khong_lo_bi_mat():
 
 def test_nen_dung_doi_client_chi_khi_doi_client_vo_ich():
     p, _ = _phien()
-    for tin in (BOT, AUTH, GO, R429, PHIEN_GIOI_HAN):
+    for tin in (BOT, AUTH, TUOI, GO, R429, PHIEN_GIOI_HAN):
         assert p.nen_dung_doi_client(RuntimeError(tin)), tin
     for tin in (C403, DINH_DANG, TAM, "ERROR: lạ"):
         assert not p.nen_dung_doi_client(RuntimeError(tin)), tin
@@ -307,6 +309,7 @@ def test_ngan_sach_bao_thu_va_huu_han():
     assert t.NGUONG_MO[t.COOKIE_INVALID_OR_EXPIRED] == 1
     assert t.NGUONG_MO[t.AUTH_REQUIRED] == 3 and t.NGUONG_MO[t.HTTP_FORBIDDEN] == 3
     assert t.NGUONG_MO[t.TRANSIENT_NETWORK] == 3
+    assert t.NGUONG_MO[t.AGE_RESTRICTED] == 20 and t.NGUONG_MO[t.MEMBERS_ONLY] == 20
     assert t.PERMANENT_UNAVAILABLE not in t.NGUONG_MO
 
 

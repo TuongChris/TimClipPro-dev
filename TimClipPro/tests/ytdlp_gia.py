@@ -11,8 +11,10 @@ import re
 
 BOT = ("ERROR: [youtube] {id}: Sign in to confirm you're not a bot. Use --cookies-from-browser "
        "or --cookies for the authentication.")
+# Giới hạn tuổi: lỗi của TỪNG video (AGE_RESTRICTED) — khác «cần đăng nhập» toàn phiên (DANG_NHAP).
 AUTH = ("ERROR: [youtube] {id}: Sign in to confirm your age. This video may be inappropriate "
         "for some users.")
+DANG_NHAP = "ERROR: [youtube] {id}: Login details are needed to download this content."
 GO = "ERROR: [youtube] {id}: Video unavailable"
 R429 = "ERROR: [youtube] {id}: Unable to download API page: HTTP Error 429: Too Many Requests"
 C403 = "ERROR: unable to download video data: HTTP Error 403: Forbidden"

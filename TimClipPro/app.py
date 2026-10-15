@@ -49,7 +49,9 @@ from scan_ui import (
     df_nguon_chung,
     dong_trang_thai_youtube,
     goi_y_quet_mot_phan,
+    huong_dan_kho_sau_dong_bo,
     thong_bao_youtube_chan,
+    tom_tat_dong_bo_kenh,
 )
 from channel import ChannelSync
 from sheets import SheetsExporter
@@ -985,12 +987,11 @@ if not job["running"] and (job["results"] or job["error"]):
         st.error(f"Lỗi: {job['error']}")
     elif job["kind"] == "channel":
         r = job["results"]
-        thong_bao = st.warning if r.get("da_huy") else st.success
-        tien_to = "⏹️ Đã dừng đồng bộ" if r.get("da_huy") else "✅ Đồng bộ xong"
-        thong_bao(f"{tien_to}: tải mới **{r['moi']}** video, "
-                  f"bỏ qua {r['bo_qua']} video đã có. Thư mục: `{r['thu_muc']}`")
+        # Tiêu đề + số đếm theo TRẠNG THÁI THẬT của lượt (scan_ui.tom_tat_dong_bo_kenh): chỉ xanh khi đã tải đủ.
+        for muc_dbk, cau_dbk in tom_tat_dong_bo_kenh(r):
+            getattr(st, muc_dbk)(cau_dbk)
         if r["loi"]:
-            st.warning("Một số video lỗi:\n\n- " + "\n- ".join(r["loi"][:10]))
+            st.warning(f"Video lỗi ({len(r['loi'])}, hiện tối đa 10):\n\n- " + "\n- ".join(r["loi"][:10]))
         if r.get("nghi_hong"):
             st.warning(
                 f"Phát hiện {len(r['nghi_hong'])} file audio nghi hỏng/nén dở trong kho "
@@ -1000,8 +1001,11 @@ if not job["running"] and (job["results"] or job["error"]):
         if r.get("da_doi_soat"):
             st.info(f"Đã bổ sung metadata tại chỗ cho {r['da_doi_soat']} file có sẵn "
                     "trên đĩa (không gọi lại YouTube).")
-        st.info("Bước tiếp theo: sang tab «Kho clip gốc» bấm «Bổ sung clip mới vào kho» "
-                "để tạo vân tay cho các video vừa tải.")
+        # Thư mục audio vừa đồng bộ có thể KHÁC kho vân tay đang chọn (vd. audio kênh mới, kho đang chọn là kho «SML»):
+        # không xui người dùng nạp nhầm kho.
+        muc_kho, cau_kho = huong_dan_kho_sau_dong_bo(r.get("thu_muc", ""), eng.kho_dang_dung or "",
+                                                      eng.kho_thu_muc or "")
+        getattr(st, muc_kho)(cau_kho)
     elif job["kind"] == "db":
         r = job["results"]
         thong_bao = st.warning if r.get("da_huy") else st.success
@@ -1291,6 +1295,11 @@ with tab1:
                            value=eng.kho_thu_muc,
                            placeholder=r"D:\ClipGocSML",
                            help="Copy đường dẫn từ thanh địa chỉ của File Explorer.")
+    if (thumuc and eng.kho_dang_dung and (eng.kho_thu_muc or "").strip()
+            and huong_dan_kho_sau_dong_bo(thumuc, eng.kho_dang_dung, eng.kho_thu_muc)[0] == "warning"):
+        # Engine cũng chặn «Bổ sung» khi kho đã có vân tay — báo trước để người dùng không bấm nhầm.
+        st.warning(f"Thư mục này KHÁC thư mục của kho «{eng.kho_dang_dung}» (`{eng.kho_thu_muc}`). «Bổ sung» sẽ bị "
+                   "từ chối để không trộn clip của nguồn khác vào kho này — hãy tạo kho riêng cho thư mục này.")
     c1, c2 = st.columns(2)
     with c1:
         if st.button("🔄 Tạo lại kho từ đầu", type="primary", width="stretch",

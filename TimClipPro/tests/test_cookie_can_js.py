@@ -33,7 +33,7 @@ import truy_cap_youtube as t
 import ytdlp_chung as y
 from engine import Cancelled, Engine, Match, ScanResult, TaiAudioDungHinh, chu_ky_chinh_sach
 from kho_gia import ghi_kho
-from ytdlp_gia import AUTH, BOT, YdlKichBan, info_mau
+from ytdlp_gia import AUTH, BOT, DANG_NHAP, YdlKichBan, info_mau
 
 LOI_RELOAD = "ERROR: [youtube] {id}: The page needs to be reloaded."
 LOI_COOKIE_CHET = "ERROR: [youtube] {id}: Requested format is not available"
@@ -165,7 +165,8 @@ def test_reload_khi_may_san_sang_la_loi_player_client_khong_tu_bo_dang_nhap(may)
     assert t.phan_loai_loi(ei.value).category == t.PLAYER_CLIENT_ERROR
 
 
-@pytest.mark.parametrize("mau,loai", [(BOT, t.BOT_CHALLENGE), (AUTH, t.AUTH_REQUIRED), (HOI_VIEN, t.AUTH_REQUIRED)])
+@pytest.mark.parametrize("mau,loai", [(BOT, t.BOT_CHALLENGE), (DANG_NHAP, t.AUTH_REQUIRED),
+                                      (AUTH, t.AGE_RESTRICTED), (HOI_VIEN, t.MEMBERS_ONLY)])
 def test_bot_hay_video_can_dang_nhap_khong_lui_khong_cookie(may, mau, loai):
     """Video cần đăng nhập (tuổi, hội viên) hay YouTube đòi xác minh: KHÔNG thử lại không cookie."""
     da_goi = []
@@ -373,8 +374,9 @@ def test_cau_dao_mo_khi_dang_khong_dang_nhap_noi_ro():
 def test_trang_thai_ui_noi_ro_dung_cookie_hay_khong():
     cd = t.chan_doan_cookie("", cookies_browser="firefox")
     dung = scan_ui.dong_trang_thai_youtube(cd, None, SAN_SANG)
-    assert dung[-1] == ("info", "Khi quét: DÙNG cookie đăng nhập — yt-dlp giải thử thách JavaScript bằng "
-                                "Node.js 24.21.0 + yt-dlp-ejs 0.8.0.")
+    assert dung[-1][0] == "info" and dung[-1][1].startswith(
+        "Khi quét: DÙNG cookie đăng nhập — yt-dlp giải thử thách JavaScript bằng Node.js 24.21.0 + yt-dlp-ejs 0.8.0.")
+    assert "CẤU HÌNH chưa có nghĩa là YouTube CHẤP NHẬN" in dung[-1][1]
     khong = scan_ui.dong_trang_thai_youtube(cd, None, THIEU_EJS)
     assert khong[-1][0] == "warning" and "CHƯA dùng được" in khong[-1][1] and "KHÔNG đăng nhập" in khong[-1][1]
     assert scan_ui.dong_trang_thai_youtube(t.chan_doan_cookie(""), None, THIEU_EJS) == [

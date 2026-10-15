@@ -2923,6 +2923,19 @@ class Engine:
         if not files:
             raise RuntimeError(f"Thư mục không có file media nào: {thumuc}")
 
+        # «Bổ sung» một thư mục KHÁC thư mục đã gắn của một kho đã có vân tay = trộn clip của nguồn khác vào kho này
+        # (và đổi luôn thư mục nguồn của kho — dòng ngay dưới). Sự cố 15/10/2026: audio của một kênh vừa đồng bộ, kho
+        # đang chọn là kho của nguồn khác («SML»). Chặn TRƯỚC mọi ghi: muốn nguồn mới thì tạo kho riêng; muốn đổi thư mục của kho thì «Tạo lại
+        # kho từ đầu» (thay toàn bộ vân tay, không trộn).
+        cu = (self.kho_thu_muc or "").strip().strip('"')
+        if (mode == "add" and self.kho_dang_dung and cu and os.path.exists(self.db_file)
+                and self._khoa_duong_dan(cu.rstrip("\\/")) != self._khoa_duong_dan(thumuc.strip('" ').rstrip("\\/"))):
+            raise RuntimeError(
+                f"Không bổ sung: kho «{self.kho_dang_dung}» đang gắn với thư mục «{cu}», còn thư mục vừa chọn là "
+                f"«{thumuc}». Nạp vào sẽ TRỘN clip của nguồn khác vào kho «{self.kho_dang_dung}». Tạo kho riêng cho "
+                "thư mục này (tab «Kho clip gốc» → «Tạo kho mới») rồi chọn kho đó; còn nếu chủ ý chuyển kho sang thư "
+                "mục mới thì dùng «Tạo lại kho từ đầu».")
+
         # KHÔNG gọi update_kho: hàm đó áp lại kho "đang chọn" của sổ đăng ký lên Engine,
         # tức có thể đổi job sang kho khác giữa chừng. Chỉ ghi đúng entry đã ghim.
         self._ghi_thu_muc_kho_ghim(thumuc)

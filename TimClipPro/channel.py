@@ -35,7 +35,9 @@ from luu_tru import cap_nhat_json, doc_json_an_toan, ghi_json_an_toan, khoa_json
 from process_runner import IM_LANG_FFMPEG_S, TRAN_FFPROBE_S, chay_lenh_media
 from publication_date import resolve_publication_date
 from truy_cap_youtube import (
+    AGE_RESTRICTED,
     INVALID_INPUT,
+    MEMBERS_ONLY,
     LoiTruyCapYouTube,
     PhienYouTube,
     YoutubeAccessFailure,
@@ -44,14 +46,22 @@ from truy_cap_youtube import (
 )
 from ytdlp_chung import (
     PLAYER_CLIENTS_MAC_DINH,
+    THONG_BAO_HAI_NGUON_COOKIE,
     BoGhiYtdlp,
     CauHinhMang,
     NhoClientTotNhat,
     chay_kem_duong_lui_cookie,
+    co_cookie_tai_khoan,
     giai_thich_loi,
     go_ma_mau,
     thu_tung_client,
 )
+
+# Trạng thái tổng của một lượt đồng bộ — giao diện/CLI KHÔNG được báo thành công khi chưa xong hết.
+DONG_BO_DAY_DU = "DAY_DU"          # mọi video cần tải đã tải xong
+DONG_BO_MOT_PHAN = "MOT_PHAN"      # còn video lỗi (giới hạn tuổi, hội viên, lỗi riêng…) — lượt sau tải tiếp phần thiếu
+DONG_BO_BI_CHAN = "BI_CHAN"        # cầu dao mở (bot-check, 429, cookie hỏng, lỗi lặp…) — còn video CHƯA THỬ
+DONG_BO_DA_HUY = "DA_HUY"          # người dùng bấm Dừng
 
 # Ký tự Windows không cho phép đặt trong tên file
 RE_XAU = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
@@ -826,6 +836,9 @@ class ChannelSync:
         def chay(rieng: dict):
             phien.dem_yeu_cau("download")
             with yt_dlp.YoutubeDL(rieng) as ydl:
+                if "cookiefile" in rieng or "cookiesfrombrowser" in rieng:
+                    # Đã CẤU HÌNH cookie ≠ đã gửi cookie tài khoản: xét tên trong hũ yt-dlp vừa nạp (không giá trị).
+                    phien.ghi_cookie_tai_khoan(co_cookie_tai_khoan(ydl))
                 return ydl.extract_info(url, download=True)
 
         def don_file_do_dang() -> None:
@@ -1139,7 +1152,12 @@ class ChannelSync:
         loi: list = []
         kq = {"tong": len(ds), "moi": 0, "bo_qua": 0, "loi": loi, "thu_muc": self.dest,
               "da_huy": False, "nghi_hong": [], "da_cach_ly": [], "da_doi_soat": 0,
-              "chan_youtube": "", "youtube": {}}
+              "chan_youtube": "", "youtube": {},
+              # Trạng thái tổng + số đếm để giao diện/CLI KHÔNG báo thành công khi chưa xong (sự cố 15/10/2026):
+              # can_tai = video chưa có trong kho; so_loi = đã thử mà hỏng; chua_thu = chưa được thử (cầu dao / Dừng).
+              "trang_thai": DONG_BO_DAY_DU, "can_tai": 0, "so_loi": 0, "chua_thu": 0,
+              "gioi_han_tuoi": 0, "chi_hoi_vien": 0, "xac_thuc": {},
+              "canh_bao_cookie": THONG_BAO_HAI_NGUON_COOKIE if self.cau_hinh_mang.hai_nguon_cookie else ""}
         # Cờ huỷ của CẢ lượt sync, để lệnh nén FFmpeg đang chạy cũng dừng được.
         self._huy_luot_sync = _CoHuyTuHam(cancel_check)
         try:
@@ -1179,6 +1197,7 @@ class ChannelSync:
             da_co = (self.done_ids() - (set(nghi) - hop_le)) | hop_le
             can_tai = [v for v in ds if v.id not in da_co]
             kq["bo_qua"] = len(ds) - len(can_tai)
+            kq["can_tai"] = len(can_tai)
             bao(0.02, f"Kênh có {len(ds)} video — {len(can_tai)} video mới cần tải.")
 
             for i, v in enumerate(can_tai):
@@ -1239,7 +1258,13 @@ class ChannelSync:
                 except Exception as e:  # noqa: BLE001
                     # giai_thich_loi: bỏ mã màu ANSI của yt-dlp (Streamlit hiện ra rác)
                     # và nói rõ trường hợp nào là YouTube chặn chứ không phải tool hỏng.
-                    self.phien.ghi_loi(e, "download", v.id)
+                    # Video lỗi KHÔNG vào archive/metadata (chỉ ghi sau khi tải + kiểm xong) — lượt sau thử lại.
+                    f_loi = self.phien.ghi_loi(e, "download", v.id)
+                    kq["so_loi"] += 1
+                    if f_loi.category == AGE_RESTRICTED:
+                        kq["gioi_han_tuoi"] += 1
+                    elif f_loi.category == MEMBERS_ONLY:
+                        kq["chi_hoi_vien"] += 1
                     loi.append(f"{v.title[:40]}: "
                                f"{giai_thich_loi(e, self.cau_hinh_mang.co_cookie)}")
             if self.phien.mo and not kq["chan_youtube"]:
@@ -1248,11 +1273,23 @@ class ChannelSync:
         finally:
             kq["da_cach_ly"] = list(self._da_cach_ly)
             kq["youtube"] = self.phien.tom_tat()
+            kq["chua_thu"] = max(0, kq["can_tai"] - kq["moi"] - kq["so_loi"])
+            if kq["da_huy"]:
+                kq["trang_thai"] = DONG_BO_DA_HUY
+            elif self.phien.mo:
+                kq["trang_thai"] = DONG_BO_BI_CHAN
+            elif kq["so_loi"] or kq["chua_thu"]:
+                kq["trang_thai"] = DONG_BO_MOT_PHAN
+            ma_xt, cau_xt = self.phien.trang_thai_dang_nhap(self.cau_hinh_mang.co_cookie)
+            kq["xac_thuc"] = {"nguon": self.cau_hinh_mang.nguon_cookie_hieu_luc, "trang_thai": ma_xt, "cau": cau_xt}
             # Chỉ dọn thư mục tạm CỦA LƯỢT NÀY.
             shutil.rmtree(self.tmp_dir, ignore_errors=True)
             with contextlib.suppress(OSError):
                 os.rmdir(self.tmp_goc)          # chỉ xoá được khi đã rỗng
-        bao(1.0, "Đồng bộ xong.")
+        bao(1.0, {DONG_BO_DAY_DU: "Đồng bộ xong.",
+                  DONG_BO_MOT_PHAN: f"Đồng bộ xong MỘT PHẦN: {kq['so_loi']} video lỗi, lượt sau tải tiếp.",
+                  DONG_BO_BI_CHAN: f"Đồng bộ DỪNG giữa chừng: {kq['chua_thu']} video chưa thử.",
+                  DONG_BO_DA_HUY: "Đã dừng đồng bộ theo yêu cầu."}[kq["trang_thai"]])
         return kq
 
     def _don_tam_cu(self) -> None:

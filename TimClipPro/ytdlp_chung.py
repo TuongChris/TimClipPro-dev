@@ -536,6 +536,18 @@ class CauHinhMang:
     def co_cookie(self) -> bool:
         return bool(self.cookiefile.strip() or self.cookies_browser.strip())
 
+    @property
+    def hai_nguon_cookie(self) -> bool:
+        """Cấu hình CẢ file cookie lẫn trình duyệt — chỉ FILE được dùng (:meth:`tuy_chon`)."""
+        return bool(self.cookiefile.strip() and self.cookies_browser.strip())
+
+    @property
+    def nguon_cookie_hieu_luc(self) -> str:
+        """``"file"`` | ``"trinh_duyet"`` | ``""`` — nguồn cookie THỰC SỰ đưa cho yt-dlp."""
+        if self.cookiefile.strip():
+            return "file"
+        return "trinh_duyet" if self.cookies_browser.strip() else ""
+
     def bo_cookie(self) -> "CauHinhMang":
         """Bản sao đã gỡ cookie, giữ nguyên timeout và nhịp tải.
 
@@ -583,9 +595,14 @@ class CauHinhMang:
             # đây là rào chắn bảo mật chứ không phải kiểm tra cho đẹp.
             kiem_tra_file_cookie(self.cookiefile)
             opts["cookiefile"] = self.cookiefile.strip()
-        tu_trinh_duyet = phan_tich_cookies_browser(self.cookies_browser)
-        if tu_trinh_duyet:
-            opts["cookiesfrombrowser"] = tu_trinh_duyet
+        else:
+            # MỘT nguồn hiệu lực: có file thì KHÔNG đưa thêm trình duyệt. Đưa cả hai thì yt-dlp gộp hai hũ cookie
+            # (`cookies.load_cookies` → `_merge_cookie_jars`, hũ gộp mang tên file) rồi lúc đóng phiên
+            # (`YoutubeDL.close` → `save_cookies`) GHI hũ đã gộp — kể cả cookie đã giải mã của trình duyệt — vào chính
+            # file cookie của người dùng; phiên trộn hai nguồn cũng không xác định được YouTube nhận cookie nào.
+            tu_trinh_duyet = phan_tich_cookies_browser(self.cookies_browser)
+            if tu_trinh_duyet:
+                opts["cookiesfrombrowser"] = tu_trinh_duyet
         if self.co_cookie:
             kn = kha_nang_js()
             if kn.san_sang:
@@ -594,6 +611,29 @@ class CauHinhMang:
                 raise CookieCanJs(thong_bao_cookie_can_js(kn), kn.ly_do)
         opts.update(them)
         return opts
+
+
+THONG_BAO_HAI_NGUON_COOKIE = (
+    "Đang cấu hình CẢ file cookie lẫn «Lấy thẳng từ trình duyệt» — tool CHỈ dùng file cookie, ô trình duyệt bị bỏ "
+    "qua. Xoá trống một trong hai ô để hết cảnh báo này.")
+
+# Luật `_has_auth_cookies` của yt-dlp 2026.08.19 (`extractor/youtube/_base.py`): có LOGIN_INFO VÀ một trong ba SAPISID.
+_TEN_SAPISID = frozenset({"SAPISID", "__Secure-1PAPISID", "__Secure-3PAPISID"})
+
+
+def co_cookie_tai_khoan(ydl: Any) -> Optional[bool]:
+    """Hũ cookie mà phiên yt-dlp ``ydl`` đã nạp có cookie TÀI KHOẢN YouTube không — CHỈ xét TÊN + miền, không bao giờ
+    đọc/ghi giá trị. ``None`` khi không đọc được hũ (yt-dlp giả trong test, lỗi nạp cookie — lỗi đó yt-dlp tự báo ở
+    request đầu)."""
+    try:
+        hu = getattr(ydl, "cookiejar", None)
+        if hu is None:
+            return None
+        ten = {str(getattr(c, "name", "")) for c in hu
+               if str(getattr(c, "domain", "")).lower().lstrip(".").endswith("youtube.com")}
+    except Exception:  # noqa: BLE001 — chẩn đoán phụ, không được làm hỏng lượt tải
+        return None
+    return "LOGIN_INFO" in ten and bool(ten & _TEN_SAPISID)
 
 
 class BoGhiYtdlp:
