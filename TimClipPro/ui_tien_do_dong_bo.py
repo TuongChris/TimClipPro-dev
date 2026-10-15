@@ -47,10 +47,26 @@ def toc_do_mb(byte_giay: Optional[float]) -> str:
     return "—" if not byte_giay else f"{byte_giay / 1e6:,.1f} MB/s"
 
 
+def dong_ho(giay: Optional[float]) -> str:
+    """``HH:MM:SS`` gọn cho thẻ KPI (cùng kiểu màn quét — ``app._thoi_luong``): ``st.metric`` cắt chữ dài, ở cửa sổ
+    1280 px chỉ còn ~9 ký tự («1 phút 20 …» — nghiệm thu 8502, 15/10)."""
+    if giay is None:
+        return "—"
+    giay = max(0, int(round(giay)))
+    return f"{giay // 3600:02d}:{(giay % 3600) // 60:02d}:{giay % 60:02d}"
+
+
 def chu_eta(anh: AnhDongBo) -> str:
     if anh.eta_s is None:
         return "Đang ước tính"
     return thoi_luong(anh.eta_s) + (f" (độ tin cậy {anh.eta_tin_cay})" if anh.eta_tin_cay else "")
+
+
+def phu_eta(anh: AnhDongBo) -> str:
+    """Dòng nhỏ dưới giá trị ETA: «Đang ước tính» khi chưa đủ số đo, không thì độ tin cậy."""
+    if anh.eta_s is None:
+        return "Đang ước tính"
+    return f"độ tin cậy {anh.eta_tin_cay}" if anh.eta_tin_cay else ""
 
 
 def dong_tong(anh: AnhDongBo) -> str:
@@ -64,20 +80,23 @@ def dong_tong(anh: AnhDongBo) -> str:
 
 
 def the_kpi(anh: AnhDongBo) -> list:
-    """``[(nhãn, giá trị, ghi chú)]`` cho hàng thẻ KPI."""
+    """``[(nhãn, giá trị, ghi chú, chữ phụ)]`` cho hàng thẻ KPI.
+
+    Giá trị NGẮN (số, ``HH:MM:SS``) vì ``st.metric`` cắt chữ dài; đơn vị nằm ở nhãn, chữ phụ hiện ở dòng nhỏ bên dưới
+    (``delta`` không mũi tên), ghi chú nằm trong nút «?»."""
     han_che = anh.gioi_han_tuoi + anh.chi_hoi_vien + anh.han_che_bo_qua
     vmg = anh.video_moi_gio
     return [
-        ("Đã có (giữ nguyên)", "—" if anh.da_co is None else str(anh.da_co), ""),
-        ("Tải mới", str(anh.moi), ""),
-        ("Lỗi", str(anh.loi), ""),
+        ("Đã có (giữ nguyên)", "—" if anh.da_co is None else str(anh.da_co), "", ""),
+        ("Tải mới", str(anh.moi), "", ""),
+        ("Lỗi", str(anh.loi), "", ""),
         ("Bị hạn chế", str(han_che), f"tuổi {anh.gioi_han_tuoi} • hội viên {anh.chi_hoi_vien} • bỏ qua theo sổ "
-                                     f"{anh.han_che_bo_qua}"),
-        ("Chưa thử", "—" if anh.chua_thu is None else str(anh.chua_thu), ""),
-        ("Thời gian chạy", thoi_luong(anh.chay_s), ""),
-        ("Tốc độ thực", "—" if vmg is None else f"{vmg:,.1f} video/giờ",
-         "" if anh.media_gio_moi_gio is None else f"{anh.media_gio_moi_gio:,.1f} giờ audio/giờ"),
-        ("Còn lại (ETA)", chu_eta(anh), anh.eta_ly_do),
+                                     f"{anh.han_che_bo_qua}", ""),
+        ("Chưa thử", "—" if anh.chua_thu is None else str(anh.chua_thu), "", ""),
+        ("Thời gian chạy", dong_ho(anh.chay_s), "giờ:phút:giây", ""),
+        ("Tốc độ (video/giờ)", "—" if vmg is None else f"{vmg:,.1f}", "Số video xử lý xong mỗi giờ, tính trên thời "
+         "gian đã chạy.", "" if anh.media_gio_moi_gio is None else f"{anh.media_gio_moi_gio:,.1f} giờ audio/giờ"),
+        ("Còn lại (ETA)", "—" if anh.eta_s is None else dong_ho(anh.eta_s), anh.eta_ly_do, phu_eta(anh)),
     ]
 
 
@@ -170,8 +189,8 @@ def ve_tien_do_dong_bo(st: Any, anh: AnhDongBo) -> None:
     kpi = the_kpi(anh)
     for hang in (kpi[:4], kpi[4:]):
         cot = st.columns(len(hang))
-        for c, (nhan, gia_tri, ghi_chu) in zip(cot, hang):
-            c.metric(nhan, gia_tri, help=ghi_chu or None)
+        for c, (nhan, gia_tri, ghi_chu, phu) in zip(cot, hang):
+            c.metric(nhan, gia_tri, delta=phu or None, delta_color="off", delta_arrow="off", help=ghi_chu or None)
     for loai, chu, ty in dong_video(anh):
         if loai == "tieu_de":
             st.text(chu)             # tiêu đề video là dữ liệu ngoài — không diễn giải markdown/LaTeX

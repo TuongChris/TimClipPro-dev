@@ -437,8 +437,8 @@ def test_ui_hien_kpi_tien_do_tai_va_nen():
     so.hook_tai({"status": "downloading", "downloaded_bytes": 30_000_000, "total_bytes": 75_000_000, "speed": 1.05e7,
                  "eta": 4, "info_dict": {"format_id": "18", "ext": "mp4", "vcodec": "avc1", "acodec": "mp4a"}})
     a = so.anh()
-    kpi = {n: v for n, v, _ in ui.the_kpi(a)}
-    assert kpi["Đã có (giữ nguyên)"] == "74" and kpi["Còn lại (ETA)"] == "Đang ước tính"
+    kpi = {n: (v, phu) for n, v, _, phu in ui.the_kpi(a)}
+    assert kpi["Đã có (giữ nguyên)"][0] == "74" and kpi["Còn lại (ETA)"] == ("—", "Đang ước tính")
     dong = ui.dong_video(a)
     tai = [x for x in dong if x[0] == "tai"][0]
     assert tai[2] == pytest.approx(0.4) and "10.5 MB/s" in tai[1] and "30.0 MB / 75.0 MB" in tai[1]
@@ -450,6 +450,51 @@ def test_ui_hien_kpi_tien_do_tai_va_nen():
     nen = [x for x in ui.dong_video(so.anh()) if x[0] == "nen"][0]
     assert nen[2] == pytest.approx(0.5) and "450×" in nen[1]
     assert "Đã xét 0/1189" in ui.dong_tong(so.anh())
+
+
+def test_ui_kpi_gia_tri_ngan_khong_bi_cat_va_dang_uoc_tinh_van_hien():
+    """Nghiệm thu trên 8502 (15/10): `st.metric` cắt chữ dài ở cửa sổ 1280 px — «Đang ước …», «226.6 vide…»,
+    «1 phút 20 …», «20 giây (đ…». Giá trị thẻ phải ngắn; chữ phụ («Đang ước tính», độ tin cậy, giờ audio) nằm ở dòng
+    nhỏ bên dưới (delta không mũi tên), đơn vị nằm ở nhãn."""
+    so, dh = _so()
+    so.liet_ke_xong(1263)
+    so.ke_hoach(da_co=74, can_tai=1189, han_che_bo_qua=0, se_thu=1189)
+    kpi = {n: (v, phu) for n, v, _, phu in ui.the_kpi(so.anh())}
+    assert kpi["Còn lại (ETA)"] == ("—", "Đang ước tính")
+    for i in range(40):                                    # lượt dài: 40 video × 1000 s ≈ 11 giờ
+        so.video_bat_dau(i + 1, 1189, _ma(i), f"Video {i}")
+        dh.tien(1000)
+        so.video_xong("moi", media_s=DAI, byte_nen=4_800_000)
+    the = ui.the_kpi(so.anh())
+    assert all(len(v) <= 9 for _, v, _, _ in the), the
+    kpi = {n: (v, phu) for n, v, _, phu in the}
+    assert kpi["Thời gian chạy"][0] == "11:06:40"
+    assert kpi["Tốc độ (video/giờ)"] == ("3.6", "0.6 giờ audio/giờ")
+    eta, phu = kpi["Còn lại (ETA)"]
+    assert eta.count(":") == 2 and "tin cậy" in phu
+
+    class StGhi:
+        def __init__(self):
+            self.metric_kw = []
+
+        def __getattr__(self, ten):
+            def ham(*a, **k):
+                if ten == "metric":
+                    self.metric_kw.append((a, k))
+                return [self for _ in range(a[0])] if ten == "columns" else self
+            return ham
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    st = StGhi()
+    ui.ve_tien_do_dong_bo(st, so.anh())
+    assert len(st.metric_kw) == 8
+    assert all(k.get("delta_arrow") == "off" and k.get("delta_color") == "off" for _a, k in st.metric_kw)
+    assert any(k.get("delta") == "0.6 giờ audio/giờ" for _a, k in st.metric_kw)
 
 
 def test_ui_ve_bang_streamlit_gia_khong_loi_va_khong_sua_anh():
@@ -521,7 +566,7 @@ def test_app_man_dong_bo_dang_chay_ve_tu_anh_chup_va_nut_dung_giu_nghia_cu(tmp_p
                                                            *at.text])
     assert "Đang đồng bộ kênh" in chu and "Video 7/1189: Video đang tải" in chu
     nhan = {m.label for m in at.metric}
-    assert {"Đã có (giữ nguyên)", "Tải mới", "Lỗi", "Bị hạn chế", "Chưa thử", "Thời gian chạy", "Tốc độ thực",
+    assert {"Đã có (giữ nguyên)", "Tải mới", "Lỗi", "Bị hạn chế", "Chưa thử", "Thời gian chạy", "Tốc độ (video/giờ)",
             "Còn lại (ETA)"} <= nhan
     assert any(m.label == "Đã có (giữ nguyên)" and m.value == "74" for m in at.metric)
     assert len(at.dataframe) >= 1
