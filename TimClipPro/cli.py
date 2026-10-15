@@ -256,6 +256,8 @@ def _main():
         help="Thư mục kho clip gốc (dùng với lệnh kenh/vameta)",
     )
     ap.add_argument("--limit", type=int, help="Chỉ lấy N video mới nhất")
+    ap.add_argument("--thu-lai-han-che", action="store_true",
+                    help="(kenh) Thử lại cả video bị hạn chế (giới hạn tuổi / hội viên) đã gặp ở lượt trước")
     ap.add_argument("--sheet", default="", help="Link Google Sheet cho lệnh watch")
     ap.add_argument(
         "--destination",
@@ -422,11 +424,13 @@ def _main():
                          player_clients=list(eng.config.ytdlp_player_clients),
                          cau_hinh_mang=eng.cau_hinh_mang())
         with maintenance_gate.vao_cong_cua(eng, "đồng bộ kênh"):
-            r = cs.sync(a.muc[0], a.limit, in_tien_do)
+            r = cs.sync(a.muc[0], a.limit, in_tien_do, thu_lai_han_che=a.thu_lai_han_che)
         trang_thai = {"DAY_DU": "XONG", "MOT_PHAN": "XONG MỘT PHẦN", "BI_CHAN": "DỪNG GIỮA CHỪNG",
                       "DA_HUY": "ĐÃ DỪNG"}.get(r.get("trang_thai", ""), "ĐÃ DỪNG" if r.get("da_huy") else "XONG")
         print(f"\n{trang_thai}: có sẵn {r['bo_qua']}, tải mới {r['moi']}, lỗi {r.get('so_loi', 0)}, "
-              f"chưa thử {r.get('chua_thu', 0)}.")
+              f"chưa thử {r.get('chua_thu', 0)}, bị hạn chế (chưa tải, không thử lại) {r.get('han_che_bo_qua', 0)}.")
+        if r.get("han_che_bo_qua"):
+            print("  Thử lại video bị hạn chế: thêm --thu-lai-han-che (tool tự thử lại khi đổi nguồn cookie).")
         for x in ("gioi_han_tuoi", "chi_hoi_vien"):
             if r.get(x):
                 print(f"  {r[x]} video {'giới hạn độ tuổi' if x == 'gioi_han_tuoi' else 'chỉ hội viên'} bị bỏ qua.")

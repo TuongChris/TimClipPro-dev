@@ -111,8 +111,14 @@ def _kiem_mang(ch: CauHinhMang, url: str, cd: t.ChanDoanCookie) -> dict:
         opts = ch.tuy_chon("metadata", noplaylist=True, skip_download=True,
                            extract_flat="in_playlist", logger=bo_ghi)
         phien.dem_yeu_cau("metadata")
+        co_cookie = "cookiefile" in opts or "cookiesfrombrowser" in opts
         with yt_dlp.YoutubeDL(opts) as ydl:
-            return ydl.extract_info(url, download=False) or {}
+            if co_cookie:
+                phien.ghi_cookie_tai_khoan(ytdlp_chung.co_cookie_tai_khoan(ydl))   # chỉ TÊN cookie
+            info = ydl.extract_info(url, download=False) or {}
+        if co_cookie:
+            phien.ghi_ket_qua_co_cookie(info)
+        return info
 
     ra: dict = {"da_goi": True, "url_ma_video": t.ma_tu_url(url)}
     try:
@@ -127,13 +133,13 @@ def _kiem_mang(ch: CauHinhMang, url: str, cd: t.ChanDoanCookie) -> dict:
         ra["cookie_duoc_chap_nhan"] = "không cấu hình cookie"
     elif phien.cookie_bi_tu_choi:
         ra["cookie_duoc_chap_nhan"] = t.COOKIE_PHIEN_BI_TU_CHOI
-    elif ra["ket_qua"] == "OK" and cd.co_cookie_dang_nhap:
-        # yt-dlp cảnh báo ngay khi YouTube thu hồi cookie đăng nhập sau một request
-        # (_base.py:819-827); request thành công mà không có cảnh báo đó là bằng chứng tốt
-        # nhất có được mà không cần đăng nhập thật.
+    elif ra["ket_qua"] == "OK" and phien.trang_thai_dang_nhap(True)[0] == "DA_XAC_MINH":
+        # Chỉ khi YouTube trả nội dung CHỈ tài khoản có quyền mới xem (PhienYouTube.trang_thai_dang_nhap). Video công
+        # khai lấy được + cookie đúng tên KHÔNG chứng minh YouTube nhận tài khoản (cookie có thể chỉ trùng tên).
         ra["cookie_duoc_chap_nhan"] = t.COOKIE_SESSION_ACCEPTED_BY_YOUTUBE
     else:
         ra["cookie_duoc_chap_nhan"] = t.COOKIE_PHIEN_CHUA_RO
+    ra["bang_chung_dang_nhap"] = phien.bang_chung_dang_nhap()
     ra["so_do"] = phien.tom_tat()
     return ra
 
@@ -186,6 +192,8 @@ def _in(kq: dict) -> None:
         print(f"  {mang['thong_bao']}")
         print(f"  {t.DAU_CHI_TIET} {mang.get('chi_tiet', '')}")
     print(f"Cookie được YouTube chấp nhận: {mang.get('cookie_duoc_chap_nhan')}")
+    if mang.get("cookie_duoc_chap_nhan") == t.COOKIE_PHIEN_CHUA_RO and c["cau_hinh"]:
+        print("  (Lấy được video công khai KHÔNG chứng minh YouTube nhận tài khoản — video đó không cần đăng nhập.)")
 
 
 def chay(data_dir: str, url_mang: str = "") -> int:

@@ -45,6 +45,7 @@ import ui_tien_do_quet
 from scan_ui import (
     build_nguon_chung_status_dataframe,
     build_scan_status_dataframe,
+    canh_bao_nguon_kho,
     csv_nguon_chung,
     df_nguon_chung,
     dong_trang_thai_youtube,
@@ -1138,6 +1139,13 @@ with tab0:
              "xem ngày đăng ngay tại đây. Việc đồng bộ kho KHÔNG cần bật: ngày đăng "
              "thật được lấy sẵn trong lượt tải của từng video.",
     )
+    thu_lai_han_che = st.checkbox(
+        "Thử lại cả video bị hạn chế (giới hạn tuổi / chỉ hội viên) đã gặp ở lượt trước",
+        value=False,
+        help="Mặc định tool KHÔNG gửi lại request cho video đã biết bị hạn chế khi cách đăng nhập không đổi, để lượt "
+             "sau tiến tới các video còn lại. Tool tự thử lại khi bạn thêm/đổi nguồn cookie. Bật khi vừa xuất lại "
+             "cookie tài khoản đã xác minh tuổi (cùng file). Vẫn dừng nếu YouTube từ chối hàng loạt.",
+    )
 
     if xem_truoc:
         with st.spinner("Đang lấy danh sách (không tải gì cả)..."):
@@ -1172,7 +1180,7 @@ with tab0:
                          player_clients=list(eng.config.ytdlp_player_clients),
                          cau_hinh_mang=eng.cau_hinh_mang())
         chay_nen("channel", cs.sync, kenh_url.strip(), gioi_han or None,
-                 cancel_check=lambda: eng.cancel_event.is_set())
+                 cancel_check=lambda: eng.cancel_event.is_set(), thu_lai_han_che=thu_lai_han_che)
 
     if st.session_state.kho_dir and os.path.isdir(st.session_state.kho_dir.strip('" ')):
         tk = ChannelSync(st.session_state.kho_dir.strip('" ')).thong_ke()
@@ -1295,15 +1303,22 @@ with tab1:
                            value=eng.kho_thu_muc,
                            placeholder=r"D:\ClipGocSML",
                            help="Copy đường dẫn từ thanh địa chỉ của File Explorer.")
-    if (thumuc and eng.kho_dang_dung and (eng.kho_thu_muc or "").strip()
-            and huong_dan_kho_sau_dong_bo(thumuc, eng.kho_dang_dung, eng.kho_thu_muc)[0] == "warning"):
-        # Engine cũng chặn «Bổ sung» khi kho đã có vân tay — báo trước để người dùng không bấm nhầm.
-        st.warning(f"Thư mục này KHÁC thư mục của kho «{eng.kho_dang_dung}» (`{eng.kho_thu_muc}`). «Bổ sung» sẽ bị "
-                   "từ chối để không trộn clip của nguồn khác vào kho này — hãy tạo kho riêng cho thư mục này.")
+    # Thư mục khác nguồn của kho đã có vân tay: engine từ chối «Bổ sung»; «Tạo lại» THAY toàn bộ vân tay → phải xác
+    # nhận. Kho cũ chưa ghi thư mục nguồn: nguồn suy từ đường dẫn lưu trong vân tay (không giả định).
+    nguon_kho = canh_bao_nguon_kho(
+        thumuc, eng.kho_dang_dung or "", eng.kho_thu_muc or "", len(clips),
+        "" if (eng.kho_thu_muc or "").strip() else eng.thu_muc_nguon_tu_van_tay(clips))
+    da_xac_nhan_thay = True
+    if nguon_kho:
+        getattr(st, nguon_kho[0])(nguon_kho[1])
+        if nguon_kho[2]:
+            da_xac_nhan_thay = st.checkbox(
+                f"Tôi hiểu: «Tạo lại kho từ đầu» sẽ THAY toàn bộ {len(clips)} clip của kho «{eng.kho_dang_dung}» bằng "
+                "thư mục này", value=False, key=f"xac_nhan_thay_kho::{eng.kho_dang_dung}::{thumuc}")
     c1, c2 = st.columns(2)
     with c1:
         if st.button("🔄 Tạo lại kho từ đầu", type="primary", width="stretch",
-                     disabled=not (thumuc and eng.kho_dang_dung)):
+                     disabled=not (thumuc and eng.kho_dang_dung and da_xac_nhan_thay)):
             chay_van_tay(thumuc.strip('" '), "new")
     with c2:
         if st.button("➕ Bổ sung clip mới vào kho", width="stretch",

@@ -70,6 +70,15 @@ LOAI_TRUY_CAP = frozenset({AUTH_REQUIRED, AGE_RESTRICTED, MEMBERS_ONLY, BOT_CHAL
                            TRANSIENT_NETWORK, COOKIE_INVALID_OR_EXPIRED, BLOCKED_BY_BREAKER})
 # Lỗi của RIÊNG một video (hạn chế đặt trên video đó): không nói gì về phiên — cầu dao chỉ có trần hàng loạt.
 LOAI_TUNG_VIDEO = frozenset({AGE_RESTRICTED, MEMBERS_ONLY})
+# `availability` (yt-dlp) của nội dung YouTube CHỈ phục vụ tài khoản có quyền: tải được bằng cookie = bằng chứng YouTube
+# nhận tài khoản. KHÔNG gồm "needs_auth" (giới hạn tuổi): yt-dlp tự thêm client web_embedded vượt được cổng tuổi của một
+# số video mà không cần đăng nhập (`extractor/youtube/_video.py`). Video công khai càng không chứng minh gì.
+NOI_DUNG_CHI_TAI_KHOAN = frozenset({"subscriber_only", "premium_only"})
+
+
+def la_bang_chung_tai_khoan(info: Any) -> bool:
+    """Kết quả trích xuất ``info`` là nội dung chỉ tài khoản có quyền mới xem được (chỉ đọc ``availability``)."""
+    return isinstance(info, dict) and str(info.get("availability") or "") in NOI_DUNG_CHI_TAI_KHOAN
 
 # =====================================================================
 #  Văn bản lỗi yt-dlp
@@ -787,6 +796,9 @@ class PhienYouTube:
         # Hũ cookie yt-dlp đã nạp có cookie TÀI KHOẢN YouTube (LOGIN_INFO + SAPISID — luật `_has_auth_cookies`) không:
         # None = chưa quan sát được (chưa mở phiên có cookie / không đọc được hũ). Chỉ xét TÊN, không bao giờ giá trị.
         self.cookie_tai_khoan: Optional[bool] = None
+        # Bằng chứng PHÍA YOUTUBE: đã tải được nội dung chỉ tài khoản có quyền mới xem (NOI_DUNG_CHI_TAI_KHOAN) bằng
+        # cookie. Cookie đã nạp + video công khai thành công KHÔNG đủ (cookie có thể chỉ trùng tên).
+        self.youtube_xac_nhan_tai_khoan = False
         self.bat_dau = time.time()
 
     # ---------- trạng thái ----------
@@ -886,17 +898,33 @@ class PhienYouTube:
             elif co is False and self.cookie_tai_khoan is None:
                 self.cookie_tai_khoan = False
 
-    def trang_thai_dang_nhap(self, co_cookie: bool) -> tuple:
-        """``(mã, câu)`` — PHÂN BIỆT «đã cấu hình cookie» với «YouTube chấp nhận phiên đăng nhập».
+    def ghi_ket_qua_co_cookie(self, info: Any) -> None:
+        """Một thao tác CÓ gửi cookie vừa thành công: ghi bằng chứng YouTube nhận tài khoản nếu đó là nội dung chỉ
+        tài khoản có quyền mới xem được (``la_bang_chung_tai_khoan``). Chỉ đọc ``availability`` — không đọc cookie."""
+        if la_bang_chung_tai_khoan(info):
+            with self._lock:
+                self.youtube_xac_nhan_tai_khoan = True
 
-        ``DA_XAC_MINH`` chỉ khi: yt-dlp đã gửi cookie tài khoản, có thao tác thành công, và yt-dlp KHÔNG báo cookie bị
-        thu hồi (nó kiểm sau MỖI request — `_base.py` «cookies are no longer valid»). Không bao giờ suy ra từ việc
-        file cookie đúng cấu trúc."""
+    def bang_chung_dang_nhap(self) -> dict:
+        """Ba tín hiệu TÁCH RIÊNG: cookie tài khoản đã nạp (theo TÊN), số thao tác thành công, YouTube nhận tài khoản."""
+        with self._lock:
+            return {"cookie_tai_khoan_da_nap": self.cookie_tai_khoan,
+                    "thao_tac_thanh_cong": self._so["successes"],
+                    "youtube_xac_nhan_tai_khoan": self.youtube_xac_nhan_tai_khoan}
+
+    def trang_thai_dang_nhap(self, co_cookie: bool) -> tuple:
+        """``(mã, câu)`` — PHÂN BIỆT «đã cấu hình cookie», «cookie tài khoản đã nạp», «thao tác thành công» và
+        «YouTube nhận tài khoản».
+
+        ``DA_XAC_MINH`` chỉ khi có bằng chứng PHÍA YOUTUBE (``youtube_xac_nhan_tai_khoan``) với cookie tài khoản đã
+        nạp và yt-dlp KHÔNG báo cookie bị thu hồi. Không bao giờ suy ra từ cấu trúc file cookie, từ TÊN cookie, hay từ
+        việc tải được video công khai / giới hạn tuổi. Không có tín hiệu đáng tin → ``CHUA_XAC_MINH``."""
         with self._lock:
             thanh_cong = self._so["successes"]
             tai_khoan = self.cookie_tai_khoan
             tu_choi = self.cookie_bi_tu_choi
             khong_js = self.khong_dang_nhap_ly_do
+            xac_nhan = self.youtube_xac_nhan_tai_khoan
         if not co_cookie:
             return ("KHONG_COOKIE", "Không dùng cookie — chỉ video công khai; video giới hạn tuổi / hội viên bị bỏ qua.")
         if khong_js:
@@ -907,9 +935,13 @@ class PhienYouTube:
         if tai_khoan is False:
             return ("KHONG_CO_COOKIE_DANG_NHAP", "Cookie đã nạp nhưng KHÔNG có cookie đăng nhập YouTube (thiếu "
                                                  "LOGIN_INFO / SAPISID) — lượt này chạy như chưa đăng nhập.")
+        if tai_khoan is True and xac_nhan:
+            return ("DA_XAC_MINH", "YouTube nhận tài khoản ở lượt này: tải được nội dung chỉ dành cho tài khoản có quyền "
+                                   "(hội viên / Premium) bằng cookie tài khoản, cookie không bị thu hồi.")
         if tai_khoan is True and thanh_cong > 0:
-            return ("DA_XAC_MINH", "YouTube chấp nhận phiên đăng nhập ở lượt này (đã gửi cookie tài khoản, có thao tác "
-                                   "thành công, không bị thu hồi).")
+            return ("CHUA_XAC_MINH", f"Đã nạp cookie tài khoản và có {thanh_cong} thao tác thành công, nhưng các video "
+                                     "đó không đòi đăng nhập — CHƯA có bằng chứng YouTube nhận tài khoản (kiểm bằng "
+                                     "lượt chẩn đoán mạng có kiểm soát).")
         return ("CHUA_XAC_MINH", "Đã cấu hình cookie nhưng CHƯA xác minh được YouTube chấp nhận phiên đăng nhập.")
 
     def ghi_thanh_cong(self, thao_tac: str = "") -> None:
@@ -1015,5 +1047,6 @@ class PhienYouTube:
             so["cookie_rejected"] = self.cookie_bi_tu_choi
             so["cookie_unusable_reason"] = self.khong_dang_nhap_ly_do
             so["auth_cookies_seen"] = self.cookie_tai_khoan
+            so["account_confirmed_by_youtube"] = self.youtube_xac_nhan_tai_khoan
             so["elapsed_s"] = round(time.time() - self.bat_dau, 3)
         return so

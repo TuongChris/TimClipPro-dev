@@ -59,6 +59,22 @@ def test_kiem_mang_chi_khi_nguoi_dung_yeu_cau_va_chi_mot_request(tmp_path, monke
     assert kq["mang"]["da_goi"] is True and kq["mang"]["ket_qua"] == "OK"
 
 
+def test_kiem_mang_video_cong_khai_khong_ket_luan_cookie_duoc_chap_nhan(tmp_path, monkeypatch):
+    """Cookie có TÊN đăng nhập + một video công khai lấy được: video công khai không cần đăng nhập, nên chưa chứng
+    minh YouTube nhận tài khoản (PR #8 vòng 2)."""
+    import truy_cap_youtube as t
+    import ytdlp_chung
+
+    monkeypatch.setattr(ytdlp_chung, "kha_nang_js", lambda: ytdlp_chung.KhaNangJs(
+        True, node=r"C:\gia\nodejs\node.exe", node_phien_ban="24.21.0", ejs_phien_ban="0.8.0"))
+    ydl = YdlKichBan(info={"*": lambda _p, m: {**info_mau(m), "availability": "public"}})
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", ydl)
+    kq = youtube_doctor.chan_doan(_data(tmp_path, _COOKIE), url_mang="https://youtu.be/vid00000001")
+    assert kq["mang"]["ket_qua"] == "OK" and ydl.dem("info") == 1
+    assert kq["mang"]["cookie_duoc_chap_nhan"] == t.COOKIE_PHIEN_CHUA_RO
+    assert BI_MAT not in json.dumps(kq, ensure_ascii=False, default=str)
+
+
 def test_kiem_mang_bi_bot_check_bao_dung_loai_va_ma_3(tmp_path, monkeypatch, capsys):
     ydl = YdlKichBan(info={"*": BOT})
     monkeypatch.setattr(yt_dlp, "YoutubeDL", ydl)

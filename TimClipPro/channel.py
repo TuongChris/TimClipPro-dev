@@ -31,6 +31,7 @@ from typing import Callable, Mapping, Optional
 from clip_metadata import (basename_compatible, extract_youtube_id, filename_fallback_parts,
                            valid_upload_date)
 from khoa import KhoaTienTrinh
+import ytdlp_chung
 from luu_tru import cap_nhat_json, doc_json_an_toan, ghi_json_an_toan, khoa_json
 from process_runner import IM_LANG_FFMPEG_S, TRAN_FFPROBE_S, chay_lenh_media
 from publication_date import resolve_publication_date
@@ -62,6 +63,12 @@ DONG_BO_DAY_DU = "DAY_DU"          # mọi video cần tải đã tải xong
 DONG_BO_MOT_PHAN = "MOT_PHAN"      # còn video lỗi (giới hạn tuổi, hội viên, lỗi riêng…) — lượt sau tải tiếp phần thiếu
 DONG_BO_BI_CHAN = "BI_CHAN"        # cầu dao mở (bot-check, 429, cookie hỏng, lỗi lặp…) — còn video CHƯA THỬ
 DONG_BO_DA_HUY = "DA_HUY"          # người dùng bấm Dừng
+
+# Sổ video bị hạn chế (giới hạn tuổi / chỉ hội viên) của MỘT thư mục kho — RIÊNG với downloaded.txt/clips_meta.json:
+# video trong sổ vẫn là CHƯA tải. Lượt sau bỏ qua video đã biết bị hạn chế với CÙNG cách đăng nhập, nên một kênh có
+# ≥ NGUONG_MO[AGE_RESTRICTED] video hạn chế liền nhau vẫn tiến tới phần còn lại thay vì lặp đúng chừng ấy lỗi mãi.
+# Thử lại khi cách đăng nhập đổi, hoặc khi người dùng yêu cầu (vẫn chịu trần hàng loạt của cầu dao).
+TEP_HAN_CHE = "video_han_che.json"
 
 # Ký tự Windows không cho phép đặt trong tên file
 RE_XAU = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
@@ -835,11 +842,16 @@ class ChannelSync:
 
         def chay(rieng: dict):
             phien.dem_yeu_cau("download")
+            co_cookie = "cookiefile" in rieng or "cookiesfrombrowser" in rieng
             with yt_dlp.YoutubeDL(rieng) as ydl:
-                if "cookiefile" in rieng or "cookiesfrombrowser" in rieng:
+                if co_cookie:
                     # Đã CẤU HÌNH cookie ≠ đã gửi cookie tài khoản: xét tên trong hũ yt-dlp vừa nạp (không giá trị).
                     phien.ghi_cookie_tai_khoan(co_cookie_tai_khoan(ydl))
-                return ydl.extract_info(url, download=True)
+                info = ydl.extract_info(url, download=True)
+            if co_cookie:
+                # Bằng chứng PHÍA YOUTUBE (chỉ nội dung chỉ-tài-khoản) — tên cookie + thành công thì chưa đủ.
+                phien.ghi_ket_qua_co_cookie(info)
+            return info
 
         def don_file_do_dang() -> None:
             """Xoá .part/.ytdl trước khi đổi client.
@@ -1110,7 +1122,8 @@ class ChannelSync:
 
     def sync(self, url: str, limit: Optional[int] = None,
              progress: Optional[Callable] = None,
-             cancel_check: Optional[Callable] = None) -> dict:
+             cancel_check: Optional[Callable] = None,
+             thu_lai_han_che: bool = False) -> dict:
         """
         Đồng bộ kênh: chỉ tải video CHƯA có bản đã xác nhận trong kho.
         Trả về {'tong', 'moi', 'bo_qua', 'loi', 'thu_muc', 'da_huy',
@@ -1118,14 +1131,53 @@ class ChannelSync:
 
         Một kho chỉ có một lượt đồng bộ tại một thời điểm (``TEN_KHOA_DONG_BO``); lượt
         thứ hai ném ``DangChayRoi`` ngay, không đụng gì.
+
+        ``thu_lai_han_che``: thử lại cả video đã biết bị hạn chế (``TEP_HAN_CHE``) dù cách đăng nhập không đổi — thử
+        SAU các video chưa biết, vẫn chịu trần hàng loạt của cầu dao.
         """
         with KhoaTienTrinh(os.path.join(self.dest, TEN_KHOA_DONG_BO),
                            "đồng bộ kênh vào kho này"):
-            return self._sync_da_khoa(url, limit, progress, cancel_check)
+            return self._sync_da_khoa(url, limit, progress, cancel_check, thu_lai_han_che)
+
+    # ---------- sổ video bị hạn chế (TEP_HAN_CHE) ----------
+
+    def _ngu_canh_dang_nhap(self) -> str:
+        """Cách đăng nhập của lượt này. Video bị hạn chế chỉ được bỏ qua khi CÙNG cách đăng nhập với lúc gặp hạn chế:
+        thêm/đổi nguồn cookie hay máy vừa đủ Node.js + yt-dlp-ejs thì lượt sau tự thử lại."""
+        ch = self.cau_hinh_mang
+        if not ch.co_cookie:
+            return "khong_cookie"
+        try:
+            js = bool(ytdlp_chung.kha_nang_js().san_sang)
+        except Exception:  # noqa: BLE001 — không xác định được thì coi như chưa sẵn sàng
+            js = False
+        return f"{ch.nguon_cookie_hieu_luc}:{'js' if js else 'khong_js'}"
+
+    def _doc_so_han_che(self) -> dict:
+        """``{mã video: mục}`` của sổ hạn chế; sổ hỏng/thiếu = rỗng (sổ phụ: mất thì chỉ tốn request thử lại)."""
+        try:
+            d = doc_json_an_toan(os.path.join(self.dest, TEP_HAN_CHE), {})
+        except Exception:  # noqa: BLE001
+            return {}
+        video = d.get("video") if isinstance(d, dict) else None
+        return {str(k): m for k, m in video.items() if isinstance(m, dict)} if isinstance(video, dict) else {}
+
+    def _ghi_so_han_che(self, them: dict, go: set) -> None:
+        """Thêm video vừa gặp hạn chế, gỡ video đã tải được — đọc-sửa-ghi dưới khoá. Không chứa cookie."""
+        def sua(d: dict) -> None:
+            if not isinstance(d.get("video"), dict):
+                d["video"] = {}
+            d["phien_ban"] = 1
+            for vid in go:
+                d["video"].pop(vid, None)
+            d["video"].update(them)
+
+        cap_nhat_json(os.path.join(self.dest, TEP_HAN_CHE), sua, {"phien_ban": 1, "video": {}}, giu_ban_sao=False)
 
     def _sync_da_khoa(self, url: str, limit: Optional[int],
                       progress: Optional[Callable],
-                      cancel_check: Optional[Callable]) -> dict:
+                      cancel_check: Optional[Callable],
+                      thu_lai_han_che: bool = False) -> dict:
         def bao(pct, msg):
             if progress:
                 progress(max(0.0, min(1.0, pct)), msg)
@@ -1157,9 +1209,14 @@ class ChannelSync:
               # can_tai = video chưa có trong kho; so_loi = đã thử mà hỏng; chua_thu = chưa được thử (cầu dao / Dừng).
               "trang_thai": DONG_BO_DAY_DU, "can_tai": 0, "so_loi": 0, "chua_thu": 0,
               "gioi_han_tuoi": 0, "chi_hoi_vien": 0, "xac_thuc": {},
+              # Video đã biết bị hạn chế (sổ TEP_HAN_CHE, cùng cách đăng nhập) lượt này không thử lại — vẫn CHƯA tải.
+              "han_che_bo_qua": 0,
               "canh_bao_cookie": THONG_BAO_HAI_NGUON_COOKIE if self.cau_hinh_mang.hai_nguon_cookie else ""}
         # Cờ huỷ của CẢ lượt sync, để lệnh nén FFmpeg đang chạy cũng dừng được.
         self._huy_luot_sync = _CoHuyTuHam(cancel_check)
+        ngu_canh = self._ngu_canh_dang_nhap()
+        han_che_moi: dict = {}         # video gặp giới hạn tuổi / hội viên ở lượt này → ghi sổ
+        da_tai_luot_nay: set = set()   # video tải xong ở lượt này → gỡ khỏi sổ nếu có
         try:
             # File trên đĩa chỉ tính là "đã có" khi đã được xác nhận (audit TCP-10). Trước
             # đây cứ có tên `[ID].opus` là bỏ qua — kể cả file 0 byte do lần nén lỗi để lại.
@@ -1198,7 +1255,17 @@ class ChannelSync:
             can_tai = [v for v in ds if v.id not in da_co]
             kq["bo_qua"] = len(ds) - len(can_tai)
             kq["can_tai"] = len(can_tai)
-            bao(0.02, f"Kênh có {len(ds)} video — {len(can_tai)} video mới cần tải.")
+            # Video đã biết bị hạn chế với CÙNG cách đăng nhập: không gửi lại request vô ích (vẫn báo CHƯA tải, không
+            # vào archive). Video còn lại: video CHƯA biết bị hạn chế thử TRƯỚC, để trần hàng loạt của cầu dao không
+            # chặn mất chúng sau một dãy video hạn chế đã biết.
+            so_han_che = self._doc_so_han_che()
+            bo_han_che = set() if thu_lai_han_che else {
+                vid for vid, m in so_han_che.items() if m.get("ngu_canh") == ngu_canh}
+            con = [v for v in can_tai if v.id not in bo_han_che]
+            kq["han_che_bo_qua"] = len(can_tai) - len(con)
+            can_tai = [v for v in con if v.id not in so_han_che] + [v for v in con if v.id in so_han_che]
+            bao(0.02, f"Kênh có {len(ds)} video — {len(can_tai)} video mới cần tải"
+                + (f" (bỏ qua {kq['han_che_bo_qua']} video đã biết bị hạn chế)." if kq["han_che_bo_qua"] else "."))
 
             for i, v in enumerate(can_tai):
                 if cancel_check and cancel_check():
@@ -1243,6 +1310,7 @@ class ChannelSync:
                     self.cap_nhat_meta({os.path.basename(f): entry}, thay_ca_entry=True)
                     self._mark_done(v.id)
                     kq["moi"] += 1
+                    da_tai_luot_nay.add(v.id)
                     for ten_cu, _ in nghi.get(v.id, []):
                         cu = os.path.join(self.dest, ten_cu)
                         if os.path.exists(cu) and os.path.normcase(cu) != os.path.normcase(f):
@@ -1265,6 +1333,12 @@ class ChannelSync:
                         kq["gioi_han_tuoi"] += 1
                     elif f_loi.category == MEMBERS_ONLY:
                         kq["chi_hoi_vien"] += 1
+                    if f_loi.category in (AGE_RESTRICTED, MEMBERS_ONLY):
+                        # Chỉ hạn chế của TỪNG video vào sổ; bot-check/429/mạng/cookie hỏng thì không (thử lại bình
+                        # thường ở lượt sau, cầu dao lo phần dừng).
+                        han_che_moi[v.id] = {"loai": f_loi.category, "ngu_canh": ngu_canh,
+                                             "luc": datetime.now().isoformat(timespec="seconds"),
+                                             "tieu_de": v.title[:80]}
                     loi.append(f"{v.title[:40]}: "
                                f"{giai_thich_loi(e, self.cau_hinh_mang.co_cookie)}")
             if self.phien.mo and not kq["chan_youtube"]:
@@ -1273,21 +1347,28 @@ class ChannelSync:
         finally:
             kq["da_cach_ly"] = list(self._da_cach_ly)
             kq["youtube"] = self.phien.tom_tat()
-            kq["chua_thu"] = max(0, kq["can_tai"] - kq["moi"] - kq["so_loi"])
+            kq["chua_thu"] = max(0, kq["can_tai"] - kq["moi"] - kq["so_loi"] - kq["han_che_bo_qua"])
             if kq["da_huy"]:
                 kq["trang_thai"] = DONG_BO_DA_HUY
             elif self.phien.mo:
                 kq["trang_thai"] = DONG_BO_BI_CHAN
-            elif kq["so_loi"] or kq["chua_thu"]:
+            elif kq["so_loi"] or kq["chua_thu"] or kq["han_che_bo_qua"]:
                 kq["trang_thai"] = DONG_BO_MOT_PHAN
             ma_xt, cau_xt = self.phien.trang_thai_dang_nhap(self.cau_hinh_mang.co_cookie)
-            kq["xac_thuc"] = {"nguon": self.cau_hinh_mang.nguon_cookie_hieu_luc, "trang_thai": ma_xt, "cau": cau_xt}
+            kq["xac_thuc"] = {"nguon": self.cau_hinh_mang.nguon_cookie_hieu_luc, "trang_thai": ma_xt, "cau": cau_xt,
+                              **self.phien.bang_chung_dang_nhap()}
+            if han_che_moi or (da_tai_luot_nay & set(self._doc_so_han_che())):
+                try:
+                    self._ghi_so_han_che(han_che_moi, da_tai_luot_nay)
+                except Exception as e:  # noqa: BLE001 — sổ phụ: không ghi được thì lượt sau chỉ thử lại
+                    loi.append(f"Không ghi được sổ video bị hạn chế ({TEP_HAN_CHE}): {e}")
             # Chỉ dọn thư mục tạm CỦA LƯỢT NÀY.
             shutil.rmtree(self.tmp_dir, ignore_errors=True)
             with contextlib.suppress(OSError):
                 os.rmdir(self.tmp_goc)          # chỉ xoá được khi đã rỗng
         bao(1.0, {DONG_BO_DAY_DU: "Đồng bộ xong.",
-                  DONG_BO_MOT_PHAN: f"Đồng bộ xong MỘT PHẦN: {kq['so_loi']} video lỗi, lượt sau tải tiếp.",
+                  DONG_BO_MOT_PHAN: f"Đồng bộ xong MỘT PHẦN: {kq['so_loi']} video lỗi, {kq['han_che_bo_qua']} video "
+                                    "bị hạn chế chưa tải, lượt sau tải tiếp.",
                   DONG_BO_BI_CHAN: f"Đồng bộ DỪNG giữa chừng: {kq['chua_thu']} video chưa thử.",
                   DONG_BO_DA_HUY: "Đã dừng đồng bộ theo yêu cầu."}[kq["trang_thai"]])
         return kq

@@ -111,8 +111,9 @@ def tom_tat_dong_bo_kenh(r: Mapping[str, Any]) -> list:
     tt = r.get("trang_thai") or ("DA_HUY" if r.get("da_huy") else "BI_CHAN" if r.get("chan_youtube") else "DAY_DU")
     moi, co_san = int(r.get("moi") or 0), int(r.get("bo_qua") or 0)
     so_loi, chua_thu = int(r.get("so_loi") or 0), int(r.get("chua_thu") or 0)
-    so = (f"có sẵn **{co_san}** (giữ nguyên), tải mới **{moi}**, lỗi **{so_loi}**, chưa thử **{chua_thu}**. "
-          f"Thư mục: `{r.get('thu_muc', '')}`")
+    han_che = int(r.get("han_che_bo_qua") or 0)
+    so = (f"có sẵn **{co_san}** (giữ nguyên), tải mới **{moi}**, lỗi **{so_loi}**, chưa thử **{chua_thu}**"
+          + (f", bị hạn chế (chưa tải) **{han_che}**" if han_che else "") + f". Thư mục: `{r.get('thu_muc', '')}`")
     if tt == "DAY_DU":
         ra = [("success", f"✅ Đồng bộ xong: {so}")]
     elif tt == "MOT_PHAN":
@@ -129,14 +130,19 @@ def tom_tat_dong_bo_kenh(r: Mapping[str, Any]) -> list:
                               "tuổi) xem được; tool không vượt giới hạn này."))
     if hoi_vien:
         ra.append(("warning", f"{hoi_vien} video chỉ dành cho hội viên kênh / phải trả phí bị bỏ qua."))
+    if han_che:
+        ra.append(("warning", f"{han_che} video bị hạn chế (giới hạn tuổi / chỉ hội viên) từ lượt trước — CHƯA tải; lượt "
+                              "này không gửi lại request vô ích cho chúng. Tool tự thử lại khi cách đăng nhập đổi "
+                              "(thêm/đổi nguồn cookie, cài Node.js + yt-dlp-ejs); muốn thử lại ngay: bật «Thử lại cả "
+                              "video bị hạn chế»."))
     xt = r.get("xac_thuc") or {}
     if xt.get("cau"):
         ra.append((_MUC_DANG_NHAP.get(xt.get("trang_thai", ""), "info"), f"Đăng nhập YouTube: {xt['cau']}"))
     if r.get("canh_bao_cookie"):
         ra.append(("warning", str(r["canh_bao_cookie"])))
-    if tt != "DAY_DU" and (so_loi or chua_thu):
-        ra.append(("info", "Video lỗi / chưa thử KHÔNG được ghi là đã tải: bấm «Bắt đầu đồng bộ kênh» lần nữa để tải "
-                           "tiếp phần còn thiếu — file đã có được giữ nguyên, không tải trùng."))
+    if tt != "DAY_DU" and (so_loi or chua_thu or han_che):
+        ra.append(("info", "Video lỗi / chưa thử / bị hạn chế KHÔNG được ghi là đã tải: bấm «Bắt đầu đồng bộ kênh» lần "
+                           "nữa để tải tiếp phần còn thiếu — file đã có được giữ nguyên, không tải trùng."))
     return ra
 
 
@@ -144,8 +150,34 @@ def _cung_thu_muc(a: str, b: str) -> bool:
     import os
 
     def chuan(p: str) -> str:
-        return os.path.normcase(os.path.normpath(os.path.abspath((p or "").strip().strip('"').rstrip("\\/"))))
+        # abspath tự bỏ dấu gạch cuối; KHÔNG rstrip («D:\» → «D:» = thư mục hiện hành của ổ D).
+        return os.path.normcase(os.path.normpath(os.path.abspath((p or "").strip().strip('"'))))
     return bool((a or "").strip() and (b or "").strip()) and chuan(a) == chuan(b)
+
+
+def canh_bao_nguon_kho(thu_muc_chon: str, kho_dang_dung: str, thu_muc_kho: str, so_clip_kho: int,
+                       thu_muc_suy_tu_van_tay: str = "") -> Optional[tuple]:
+    """``(mức, câu, cần_xác_nhận_tạo_lại)`` khi thư mục đang chọn KHÔNG phải nguồn đã biết của một kho ĐÃ có vân tay:
+    «Bổ sung» sẽ bị engine từ chối (không trộn nguồn), còn «Tạo lại kho từ đầu» sẽ THAY toàn bộ vân tay hiện có — phải
+    xác nhận trước. ``None`` khi không có gì để mất (chưa chọn thư mục / kho, kho chưa có clip, cùng nguồn đã gắn).
+    Kho cũ chưa ghi thư mục nguồn: chỉ coi là cùng nguồn khi trùng ``thu_muc_suy_tu_van_tay``
+    (``Engine.thu_muc_nguon_tu_van_tay``)."""
+    if not (thu_muc_chon or "").strip() or not kho_dang_dung or not so_clip_kho:
+        return None
+    thay = (f"«Tạo lại kho từ đầu» sẽ THAY TOÀN BỘ {so_clip_kho} clip đang có vân tay của kho «{kho_dang_dung}» bằng "
+            "thư mục này. Thư mục của nguồn khác thì «Tạo kho mới».")
+    if (thu_muc_kho or "").strip():
+        if _cung_thu_muc(thu_muc_chon, thu_muc_kho):
+            return None
+        return ("warning", f"Thư mục này KHÁC thư mục nguồn của kho «{kho_dang_dung}» (`{thu_muc_kho}`). «Bổ sung» sẽ bị "
+                           f"từ chối để không trộn clip của nguồn khác vào kho này. {thay}", True)
+    if _cung_thu_muc(thu_muc_chon, thu_muc_suy_tu_van_tay):
+        return ("info", f"Kho «{kho_dang_dung}» là kho cũ chưa ghi thư mục nguồn; thư mục này TRÙNG nguồn suy từ vân tay "
+                        "của kho — «Bổ sung» sẽ ghi thư mục này vào sổ kho.", False)
+    return ("warning", f"Kho «{kho_dang_dung}» là kho cũ chưa ghi thư mục nguồn, và thư mục này không phải nguồn của các "
+                       "clip đã có vân tay"
+            + (f" (nguồn suy từ vân tay: `{thu_muc_suy_tu_van_tay}`)" if thu_muc_suy_tu_van_tay else "")
+            + f". «Bổ sung» sẽ bị từ chối. {thay}", True)
 
 
 def huong_dan_kho_sau_dong_bo(thu_muc_dong_bo: str, kho_dang_dung: str, thu_muc_kho: str) -> tuple:

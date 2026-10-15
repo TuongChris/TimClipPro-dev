@@ -12,13 +12,16 @@ Không mạng, không cookie thật (file cookie GIẢ chỉ để kiểm không
 import gzip
 import hashlib
 import json
+import os
 import pickle
 import shutil
 import sys
+import time
 from pathlib import Path
 
 import pytest
 import yt_dlp
+from streamlit.testing.v1 import AppTest
 
 import channel
 import scan_ui
@@ -222,8 +225,13 @@ def test_resume_luot_sau_chi_thu_lai_video_con_thieu(tmp_path, monkeypatch, may)
     meta1 = json.loads((kho / "clips_meta.json").read_text(encoding="utf-8"))
     ydl2 = _vá(monkeypatch, YdlKichBan(tai={_ma(74): AUTH}, liet_ke=lambda _p, _u: _danh_sach(ids)))
     r2 = _cs(kho).sync("https://www.youtube.com/@KenhThuGioiHanTuoi")
-    assert [g[1] for g in ydl2.goi if g[0] == "tai"] == [_ma(74)], "chỉ thử lại đúng video còn thiếu"
-    assert r2["bo_qua"] == 77 and r2["moi"] == 0
+    # Video đã biết bị giới hạn tuổi với CÙNG cách đăng nhập: không gửi lại request vô ích (vẫn báo chưa tải).
+    assert [g[1] for g in ydl2.goi if g[0] == "tai"] == []
+    assert r2["bo_qua"] == 77 and r2["moi"] == 0 and r2["han_che_bo_qua"] == 1 and r2["trang_thai"] == "MOT_PHAN"
+    ydl3 = _vá(monkeypatch, YdlKichBan(tai={_ma(74): AUTH}, liet_ke=lambda _p, _u: _danh_sach(ids)))
+    r3 = _cs(kho).sync("https://www.youtube.com/@KenhThuGioiHanTuoi", thu_lai_han_che=True)
+    assert [g[1] for g in ydl3.goi if g[0] == "tai"] == [_ma(74)], "thử lại: chỉ đúng video còn thiếu"
+    assert r3["moi"] == 0 and r3["so_loi"] == 1
     assert {p.name: (_sha(p), p.stat().st_mtime_ns) for p in kho.glob("*KenhB cu*.opus")} == truoc
     meta2 = json.loads((kho / "clips_meta.json").read_text(encoding="utf-8"))
     assert meta2 == meta1, "metadata + dấu xác nhận giữ nguyên"
@@ -277,6 +285,9 @@ def test_trang_thai_xac_thuc_phan_biet_cau_hinh_voi_da_xac_minh(tmp_path):
     p.ghi_cookie_tai_khoan(True)
     assert p.trang_thai_dang_nhap(co_cookie=True)[0] == "CHUA_XAC_MINH", "chưa có thao tác thành công"
     p.ghi_thanh_cong("download")
+    p.ghi_ket_qua_co_cookie({"id": "x", "availability": "public"})
+    assert p.trang_thai_dang_nhap(co_cookie=True)[0] == "CHUA_XAC_MINH", "video công khai không cần đăng nhập"
+    p.ghi_ket_qua_co_cookie({"id": "y", "availability": "subscriber_only"})
     assert p.trang_thai_dang_nhap(co_cookie=True)[0] == "DA_XAC_MINH"
     p.ghi_cookie_khong_hop_le()
     assert p.trang_thai_dang_nhap(co_cookie=True)[0] == "BI_TU_CHOI"
@@ -300,6 +311,15 @@ def test_nhan_dien_cookie_tai_khoan_chi_theo_ten():
     assert y.co_cookie_tai_khoan(Ydl(["LOGIN_INFO", "SAPISID", "PREF"])) is True
     assert y.co_cookie_tai_khoan(Ydl(["PREF", "VISITOR_INFO1_LIVE"])) is False
     assert y.co_cookie_tai_khoan(object()) is None
+
+    class YdlMien:
+        def __init__(self, mien):
+            self.cookiejar = Jar(C(n, mien) for n in ("LOGIN_INFO", "SAPISID"))
+    # Miền phải THUỘC youtube.com — không chỉ trùng đuôi chuỗi của một miền khác.
+    for mien in (".evilyoutube.com", "notyoutube.com", "youtube.com.evil.example", ".youtube.co"):
+        assert y.co_cookie_tai_khoan(YdlMien(mien)) is False, mien
+    for mien in (".youtube.com", "youtube.com", "www.youtube.com", ".M.YouTube.com"):
+        assert y.co_cookie_tai_khoan(YdlMien(mien)) is True, mien
 
 
 def test_dong_bo_co_cookie_khong_ro_ri_gia_tri(tmp_path, monkeypatch, may, caplog):
@@ -370,3 +390,253 @@ def test_huong_dan_sau_dong_bo_khong_xui_nap_vao_kho_khac():
     assert dong[0] == "warning" and "SML" in dong[1] and "Tạo kho" in dong[1]
     dung = scan_ui.huong_dan_kho_sau_dong_bo(r"D:\KenhB", "KenhB", "D:\\KenhB\\")
     assert dung[0] == "info" and "Bổ sung clip mới vào kho" in dung[1]
+
+
+# ================================================================ PR #8 vòng 2 (review 15/10/2026)
+# ---------------------------------------------------------------- 7. kho CŨ: sổ đăng ký chưa ghi thư mục nguồn
+
+URL_KENH = "https://www.youtube.com/@KenhThuGioiHanTuoi"
+
+
+def _anh_chup(*thu_muc) -> dict:
+    """sha256 + mtime của MỌI file (đệ quy), trừ file khoá tác vụ — chứng minh không ghi gì."""
+    ra = {}
+    for goc in thu_muc:
+        for p in sorted(Path(goc).rglob("*")):
+            if p.is_file() and not p.name.endswith(".lock"):
+                ra[str(p)] = (_sha(p), p.stat().st_mtime_ns)
+    return ra
+
+
+def _kho_cu_chua_ghi_thu_muc(tmp_path, so_clip: int = 300):
+    """Kho «SML» kiểu cũ: `thu_muc` RỖNG trong sổ; vân tay hợp lệ `so_clip` clip (đường dẫn tuyệt đối) ở thư mục nguồn
+    cũ. File nguồn có trước file kho (không bị coi là «file đã thay sau lần dựng»)."""
+    nguon = tmp_path / "Nguon_SML_cu"
+    nguon.mkdir()
+    cu = time.time() - 3600
+    for i in range(so_clip):
+        p = nguon / f"sml{i:03d}.opus"
+        p.write_bytes(b"audio sml " + str(i).encode())
+        os.utime(p, (cu, cu))
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "khos.json").write_text(json.dumps({"dang_dung": "SML", "danh_sach": [
+        {"ten": "SML", "thu_muc": "", "db": "kho_SML.pklz"}]}), encoding="utf-8")
+    _ghi_kho(data / "kho_SML.pklz", [str(nguon / f"sml{i:03d}.opus") for i in range(so_clip)])
+    e = _eng(tmp_path)
+    assert e.kho_dang_dung == "SML" and not (e.kho_thu_muc or "").strip()
+    assert len(e._doc_danh_sach_clip(e.db_file)) == so_clip
+    return e, nguon
+
+
+def _thu_muc_kenh_b(tmp_path) -> Path:
+    kenh_b = tmp_path / "KenhB"
+    kenh_b.mkdir()
+    for i in range(3):
+        (kenh_b / f"20240101 - KenhB {i} [{_ma(i)}].opus").write_bytes(b"audio kenh b " + str(i).encode())
+    return kenh_b
+
+
+def test_kho_cu_chua_ghi_thu_muc_bo_sung_thu_muc_khac_bi_chan_truoc_moi_ghi(tmp_path):
+    e, nguon = _kho_cu_chua_ghi_thu_muc(tmp_path, so_clip=300)
+    kenh_b = _thu_muc_kenh_b(tmp_path)
+    truoc = _anh_chup(tmp_path / "data", kenh_b, nguon)
+    with pytest.raises(RuntimeError, match="SML") as ei:
+        e.build_database(str(kenh_b), "add")
+    assert "nguồn" in str(ei.value) and "Tạo kho mới" in str(ei.value)
+    assert _anh_chup(tmp_path / "data", kenh_b, nguon) == truoc, "không đổi vân tay, sổ kho hay metadata"
+
+
+def test_kho_cu_khong_nhan_thu_muc_cha_bao_ca_nguon_khac(tmp_path):
+    """Thư mục CHA chứa cả nguồn cũ lẫn nguồn khác: không được coi là nguồn của kho (sẽ trộn KenhB vào SML)."""
+    e, nguon = _kho_cu_chua_ghi_thu_muc(tmp_path, so_clip=5)
+    kenh_b = _thu_muc_kenh_b(tmp_path)
+    truoc = _anh_chup(tmp_path / "data", kenh_b, nguon)
+    with pytest.raises(RuntimeError, match="nguồn"):
+        e.build_database(str(tmp_path), "add")
+    assert _anh_chup(tmp_path / "data", kenh_b, nguon) == truoc
+
+
+def test_kho_cu_bo_sung_dung_thu_muc_nguon_suy_tu_van_tay_thi_gan_thu_muc(tmp_path):
+    """Đối chứng dương: thư mục chứa ĐÚNG các clip đã có vân tay (đường dẫn lưu trong kho) = nguồn đã xác nhận."""
+    e, nguon = _kho_cu_chua_ghi_thu_muc(tmp_path, so_clip=5)
+    db_truoc = (_sha(e.db_file), Path(e.db_file).stat().st_mtime_ns)
+    kq = e.build_database(str(nguon), "add")
+    assert kq["thanh_cong"] == 0 and kq["bo_qua"] == 5
+    assert (_sha(e.db_file), Path(e.db_file).stat().st_mtime_ns) == db_truoc, "vân tay không đổi"
+    so = json.loads((tmp_path / "data" / "khos.json").read_text(encoding="utf-8"))
+    assert so["danh_sach"][0]["thu_muc"] == str(nguon)
+
+
+def test_canh_bao_tao_lai_kho_khi_thu_muc_khac_nguon_can_xac_nhan():
+    khac = scan_ui.canh_bao_nguon_kho(r"D:\KenhB", "SML", r"E:\KhoThu\SML", 779)
+    assert khac[0] == "warning" and khac[2] is True
+    assert "Tạo lại kho từ đầu" in khac[1] and "779" in khac[1] and "THAY" in khac[1]
+    cu = scan_ui.canh_bao_nguon_kho(r"D:\KenhB", "SML", "", 300, r"E:\Nguon_SML_cu")
+    assert cu[0] == "warning" and cu[2] is True and "chưa ghi thư mục nguồn" in cu[1]
+    dung_cu = scan_ui.canh_bao_nguon_kho("E:\\Nguon_SML_cu\\", "SML", "", 300, r"E:\Nguon_SML_cu")
+    assert dung_cu[0] == "info" and dung_cu[2] is False
+    assert scan_ui.canh_bao_nguon_kho("E:\\KhoThu\\SML\\", "SML", r"E:\KhoThu\SML", 779) is None
+    assert scan_ui.canh_bao_nguon_kho(r"D:\KenhB", "SML", r"E:\KhoThu\SML", 0) is None, "kho chưa có vân tay"
+
+
+def test_nut_tao_lai_kho_khoa_den_khi_xac_nhan_thay_vay_tay(tmp_path, monkeypatch):
+    data = tmp_path / "data"
+    data.mkdir()
+    sml = tmp_path / "Kho_SML"
+    sml.mkdir()
+    (data / "khos.json").write_text(json.dumps({"dang_dung": "SML", "danh_sach": [
+        {"ten": "SML", "thu_muc": str(sml), "db": "kho_SML.pklz"}]}), encoding="utf-8")
+    _ghi_kho(data / "kho_SML.pklz", [str(sml / f"sml{i}.opus") for i in range(4)])
+    kenh_b = _thu_muc_kenh_b(tmp_path)
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(data))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=120).run()
+    assert not at.exception
+
+    def nut_tao_lai():
+        return next(b for b in at.button if b.label == "🔄 Tạo lại kho từ đầu")
+
+    assert not nut_tao_lai().disabled, "cùng thư mục nguồn: không cần xác nhận thêm"
+    o = next(x for x in at.text_input if x.label == "Đường dẫn thư mục chứa video gốc của kho này")
+    o.set_value(str(kenh_b)).run()
+    assert not at.exception
+    assert nut_tao_lai().disabled, "thư mục khác nguồn: «Tạo lại» thay toàn bộ vân tay — phải xác nhận trước"
+    assert any("THAY" in w.value and "Tạo lại kho từ đầu" in w.value for w in at.warning)
+    xn = next(c for c in at.checkbox if c.label.startswith("Tôi hiểu"))
+    xn.check().run()
+    assert not nut_tao_lai().disabled
+
+
+# ---------------------------------------------------------------- 8. bằng chứng đăng nhập: cookie đã nạp ≠ YouTube nhận
+class _YdlCookieGia(YdlKichBan):
+    """yt-dlp giả có hũ cookie (CHỈ tên + miền; giá trị giả) và trường `availability` của video tải được."""
+
+    def __init__(self, *a, ten_cookie=("LOGIN_INFO", "SAPISID"), availability="public", **k):
+        super().__init__(*a, **k)
+        self.ten_cookie, self.availability = tuple(ten_cookie), availability
+
+    def __call__(self, opts):
+        s = super().__call__(opts)
+        if "cookiefile" in opts or "cookiesfrombrowser" in opts:
+            s.cookiejar = [type("C", (), {"name": n, "domain": ".youtube.com", "value": BI_MAT})()
+                           for n in self.ten_cookie]
+        goc = s.extract_info
+
+        def extract_info(url, download=False):
+            info = goc(url, download=download)
+            if download and isinstance(info, dict):
+                info = {**info, "availability": self.availability}
+            return info
+        s.extract_info = extract_info
+        return s
+
+
+def test_cookie_co_ten_dang_nhap_va_video_cong_khai_thanh_cong_van_chua_xac_minh(tmp_path, monkeypatch, may):
+    ch = y.CauHinhMang(cookiefile=_cookie_gia(tmp_path / "c.txt"))
+    ids = [_ma(i) for i in range(3)]
+    _vá(monkeypatch, _YdlCookieGia(liet_ke=lambda _p, _u: _danh_sach(ids)))
+    r = _cs(tmp_path / "KenhB", ch).sync(URL_KENH)
+    assert r["moi"] == 3 and r["trang_thai"] == "DAY_DU"
+    xt = r["xac_thuc"]
+    assert xt["trang_thai"] == "CHUA_XAC_MINH", "tải được video công khai không chứng minh YouTube nhận tài khoản"
+    assert xt["cookie_tai_khoan_da_nap"] is True and xt["thao_tac_thanh_cong"] >= 3
+    assert xt["youtube_xac_nhan_tai_khoan"] is False
+    assert BI_MAT not in json.dumps(r, ensure_ascii=False, default=str)
+
+
+@pytest.mark.parametrize("availability,mong", [
+    ("public", "CHUA_XAC_MINH"), ("unlisted", "CHUA_XAC_MINH"), (None, "CHUA_XAC_MINH"),
+    # Giới hạn tuổi: yt-dlp tự thêm client web_embedded vượt được cổng tuổi của một số video KHÔNG cần đăng nhập
+    # (`extractor/youtube/_video.py`) → tải được video 18+ chưa chứng minh đăng nhập.
+    ("needs_auth", "CHUA_XAC_MINH"),
+    ("subscriber_only", "DA_XAC_MINH"), ("premium_only", "DA_XAC_MINH")])
+def test_chi_noi_dung_bat_buoc_tai_khoan_moi_la_bang_chung(tmp_path, monkeypatch, may, availability, mong):
+    ch = y.CauHinhMang(cookiefile=_cookie_gia(tmp_path / "c.txt"))
+    _vá(monkeypatch, _YdlCookieGia(availability=availability, liet_ke=lambda _p, _u: _danh_sach([_ma(0)])))
+    r = _cs(tmp_path / "KenhB", ch).sync(URL_KENH)
+    assert r["xac_thuc"]["trang_thai"] == mong
+
+
+def test_noi_dung_hoi_vien_tai_duoc_nhung_khong_co_cookie_tai_khoan_thi_khong_xac_minh(tmp_path, monkeypatch, may):
+    ch = y.CauHinhMang(cookiefile=_cookie_gia(tmp_path / "c.txt"))
+    _vá(monkeypatch, _YdlCookieGia(ten_cookie=("PREF",), availability="subscriber_only",
+                                   liet_ke=lambda _p, _u: _danh_sach([_ma(0)])))
+    r = _cs(tmp_path / "KenhB", ch).sync(URL_KENH)
+    assert r["xac_thuc"]["trang_thai"] == "KHONG_CO_COOKIE_DANG_NHAP"
+
+
+# ---------------------------------------------------------------- 9. tiếp tục có giới hạn sau video bị hạn chế
+
+def test_25_video_gioi_han_tuoi_lien_tiep_luot_sau_tien_toi_video_cong_khai(tmp_path, monkeypatch, may):
+    kho = tmp_path / "KenhB"
+    ids = [_ma(i) for i in range(28)]                  # 25 giới hạn tuổi liên tiếp, rồi 3 công khai
+    tuoi = {m: AUTH for m in ids[:25]}
+    nguong = t.NGUONG_MO[t.AGE_RESTRICTED]
+    assert nguong < 25
+
+    ydl1 = _vá(monkeypatch, YdlKichBan(tai=tuoi, liet_ke=lambda _p, _u: _danh_sach(ids)))
+    r1 = _cs(kho).sync(URL_KENH)
+    assert ydl1.dem("tai") == nguong and r1["trang_thai"] == "BI_CHAN" and r1["moi"] == 0
+
+    ydl2 = _vá(monkeypatch, YdlKichBan(tai=tuoi, liet_ke=lambda _p, _u: _danh_sach(ids)))
+    r2 = _cs(kho).sync(URL_KENH)
+    assert [g[1] for g in ydl2.goi if g[0] == "tai"] == ids[nguong:], \
+        "lượt 2 không lặp lại đúng 20 lỗi đầu: bỏ qua video đã biết bị hạn chế, tiến tới phần còn lại"
+    assert r2["moi"] == 3 and r2["trang_thai"] == "MOT_PHAN" and not r2["chan_youtube"]
+    assert r2["han_che_bo_qua"] == nguong and r2["so_loi"] == 25 - nguong and r2["chua_thu"] == 0
+
+    ydl3 = _vá(monkeypatch, YdlKichBan(tai=tuoi, liet_ke=lambda _p, _u: _danh_sach(ids)))
+    r3 = _cs(kho).sync(URL_KENH)
+    assert ydl3.dem("tai") == 0, "lượt 3: không gửi request tải nào cho video đã biết bị hạn chế"
+    assert r3["moi"] == 0 and r3["han_che_bo_qua"] == 25 and r3["trang_thai"] == "MOT_PHAN"
+    dong = scan_ui.tom_tat_dong_bo_kenh(r3)
+    assert dong[0][0] == "warning" and "bị hạn chế (chưa tải) **25**" in dong[0][1]
+    assert any(m == "warning" and "25 video bị hạn chế" in c and "CHƯA tải" in c and "Thử lại cả video bị hạn chế" in c
+               for m, c in dong[1:]), "video bị hạn chế vẫn được báo là CHƯA tải + cách thử lại"
+
+    archive = (kho / "downloaded.txt").read_text(encoding="utf-8")
+    assert all(f"youtube {m}" not in archive for m in ids[:25]), "không ghi giả video bị hạn chế vào downloaded.txt"
+    assert all(f"youtube {m}" in archive for m in ids[25:])
+    meta = json.loads((kho / "clips_meta.json").read_text(encoding="utf-8"))
+    assert {v["id"] for v in meta.values()} == set(ids[25:])
+
+
+def test_thu_lai_han_che_theo_yeu_cau_hoac_khi_doi_cach_dang_nhap_van_co_tran(tmp_path, monkeypatch, may):
+    kho = tmp_path / "KenhB"
+    ids = [_ma(i) for i in range(25)]
+    tuoi = {m: AUTH for m in ids}
+    nguong = t.NGUONG_MO[t.AGE_RESTRICTED]
+    _vá(monkeypatch, YdlKichBan(tai=tuoi, liet_ke=lambda _p, _u: _danh_sach(ids)))
+    _cs(kho).sync(URL_KENH)                                       # ghi sổ: 20 video đầu bị giới hạn tuổi
+
+    ydl = _vá(monkeypatch, YdlKichBan(tai=tuoi, liet_ke=lambda _p, _u: _danh_sach(ids)))
+    r = _cs(kho).sync(URL_KENH, thu_lai_han_che=True)
+    tai = [g[1] for g in ydl.goi if g[0] == "tai"]
+    assert tai[:5] == ids[nguong:], "video CHƯA biết bị hạn chế được thử trước"
+    assert len(tai) == nguong and r["trang_thai"] == "BI_CHAN", "thử lại vẫn dừng ở trần hàng loạt"
+
+    # Đổi cách đăng nhập (thêm cookie, máy có Node + EJS): tự thử lại, không cần đánh dấu.
+    ch = y.CauHinhMang(cookiefile=_cookie_gia(tmp_path / "c.txt"))
+    ydl2 = _vá(monkeypatch, YdlKichBan(liet_ke=lambda _p, _u: _danh_sach(ids)))
+    r2 = _cs(kho, ch).sync(URL_KENH)
+    assert ydl2.dem("tai") == 25 and r2["moi"] == 25 and r2["han_che_bo_qua"] == 0 and r2["trang_thai"] == "DAY_DU"
+    so = json.loads((kho / channel.TEP_HAN_CHE).read_text(encoding="utf-8"))
+    assert so["video"] == {}, "video đã tải được thì gỡ khỏi sổ hạn chế"
+
+
+def test_so_han_che_chi_ghi_tuoi_hoi_vien_khong_ghi_bot_check(tmp_path, monkeypatch, may):
+    kho = tmp_path / "KenhB"
+    ids = [_ma(i) for i in range(5)]
+    _vá(monkeypatch, YdlKichBan(tai={_ma(0): AUTH, _ma(1): HOI_VIEN, _ma(2): BOT},
+                                liet_ke=lambda _p, _u: _danh_sach(ids)))
+    r = _cs(kho).sync(URL_KENH)
+    assert r["trang_thai"] == "BI_CHAN" and r["chua_thu"] == 2, "bot-check vẫn dừng NGAY"
+    so = json.loads((kho / channel.TEP_HAN_CHE).read_text(encoding="utf-8"))
+    assert set(so["video"]) == {_ma(0), _ma(1)}
+    assert {v["loai"] for v in so["video"].values()} == {"AGE_RESTRICTED", "MEMBERS_ONLY"}
+    assert BI_MAT not in json.dumps(so, ensure_ascii=False)
+    # Lượt sau: video bot-check (_ma(2)) và hai video chưa thử vẫn được thử; hai video hạn chế thì không.
+    ydl = _vá(monkeypatch, YdlKichBan(liet_ke=lambda _p, _u: _danh_sach(ids)))
+    r2 = _cs(kho).sync(URL_KENH)
+    assert [g[1] for g in ydl.goi if g[0] == "tai"] == ids[2:] and r2["moi"] == 3 and r2["han_che_bo_qua"] == 2

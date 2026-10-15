@@ -2630,6 +2630,50 @@ class Engine:
     def _khoa_duong_dan(path: str) -> str:
         return os.path.normcase(os.path.abspath(path))
 
+    @staticmethod
+    def thu_muc_nguon_tu_van_tay(ds_clip: list) -> str:
+        """Thư mục chung SÂU NHẤT chứa mọi clip của kho, suy từ đường dẫn tuyệt đối lưu trong vân tay (đã chuẩn hoá);
+        ``""`` khi không suy ra được (kho rỗng, có tên tương đối, khác ổ đĩa). Bằng chứng nguồn cho kho cũ chưa ghi
+        ``thu_muc`` — không bao giờ giả định thư mục người dùng vừa chọn là nguồn cũ."""
+        thu_muc = [os.path.dirname(str(c.get("duong_dan") or "")) for c in ds_clip or []]
+        if not thu_muc or not all(p and os.path.isabs(p) for p in thu_muc):
+            return ""
+        try:
+            return os.path.commonpath([Engine._khoa_duong_dan(p) for p in thu_muc])
+        except ValueError:
+            return ""
+
+    def _kiem_nguon_bo_sung(self, thumuc: str, ds_cu: list) -> None:
+        """«Bổ sung» vào kho ĐÃ có vân tay chỉ nhận đúng nguồn của kho; khác thì ``RuntimeError`` (gọi TRƯỚC mọi ghi).
+
+        Thư mục khác = trộn clip của nguồn khác vào kho này và đổi luôn thư mục nguồn của kho (sự cố 15/10/2026: audio
+        của một kênh vừa đồng bộ, kho đang chọn là kho của nguồn khác «SML»). Kho cũ chưa ghi ``thu_muc``: nguồn được
+        xác nhận bằng vân tay — thư mục chọn phải TRÙNG thư mục chung của các clip đã có (thư mục cha chứa cả nguồn
+        khác cũng bị từ chối)."""
+        ten_kho = self.kho_dang_dung or os.path.basename(self.db_file)
+        # abspath tự bỏ dấu gạch cuối (giữ «D:\» của ổ gốc — rstrip sẽ thành «D:» = thư mục HIỆN HÀNH của ổ D).
+        chon = self._khoa_duong_dan(thumuc.strip('" '))
+        cu = (self.kho_thu_muc or "").strip().strip('"')
+        if cu:
+            if self._khoa_duong_dan(cu) == chon:
+                return
+            raise RuntimeError(
+                f"Không bổ sung: kho «{ten_kho}» đang gắn với thư mục «{cu}», còn thư mục vừa chọn là «{thumuc}». "
+                f"Nạp vào sẽ TRỘN clip của nguồn khác vào kho «{ten_kho}». Tạo kho riêng cho thư mục này (tab «Kho "
+                "clip gốc» → «Tạo kho mới») rồi chọn kho đó; còn nếu chủ ý chuyển kho sang thư mục mới thì dùng «Tạo "
+                "lại kho từ đầu» (thay toàn bộ vân tay, phải xác nhận).")
+        nguon = self.thu_muc_nguon_tu_van_tay(ds_cu)
+        if nguon and nguon == chon:
+            return
+        so_trong = sum(1 for c in ds_cu if os.path.isabs(str(c.get("duong_dan") or ""))
+                       and self._khoa_duong_dan(os.path.dirname(c["duong_dan"])) == chon)
+        raise RuntimeError(
+            f"Không bổ sung: kho «{ten_kho}» là kho cũ CHƯA ghi thư mục nguồn, và thư mục «{thumuc}» không phải nguồn "
+            f"của {len(ds_cu)} clip đã có vân tay ({so_trong}/{len(ds_cu)} clip nằm trực tiếp trong thư mục này"
+            + (f"; nguồn suy từ vân tay: «{nguon}»" if nguon else "") + "). Tool không tự coi thư mục mới là nguồn "
+            "cũ. Chọn đúng thư mục nguồn của kho rồi «Bổ sung» (thư mục sẽ được ghi vào sổ kho); nguồn khác thì «Tạo "
+            "kho mới».")
+
     def _clip_huu_ich(self, path: str) -> set:
         """Tập đường dẫn (đã chuẩn hoá) của clip CÓ hash trong một file kho."""
         return {
@@ -2923,23 +2967,6 @@ class Engine:
         if not files:
             raise RuntimeError(f"Thư mục không có file media nào: {thumuc}")
 
-        # «Bổ sung» một thư mục KHÁC thư mục đã gắn của một kho đã có vân tay = trộn clip của nguồn khác vào kho này
-        # (và đổi luôn thư mục nguồn của kho — dòng ngay dưới). Sự cố 15/10/2026: audio của một kênh vừa đồng bộ, kho
-        # đang chọn là kho của nguồn khác («SML»). Chặn TRƯỚC mọi ghi: muốn nguồn mới thì tạo kho riêng; muốn đổi thư mục của kho thì «Tạo lại
-        # kho từ đầu» (thay toàn bộ vân tay, không trộn).
-        cu = (self.kho_thu_muc or "").strip().strip('"')
-        if (mode == "add" and self.kho_dang_dung and cu and os.path.exists(self.db_file)
-                and self._khoa_duong_dan(cu.rstrip("\\/")) != self._khoa_duong_dan(thumuc.strip('" ').rstrip("\\/"))):
-            raise RuntimeError(
-                f"Không bổ sung: kho «{self.kho_dang_dung}» đang gắn với thư mục «{cu}», còn thư mục vừa chọn là "
-                f"«{thumuc}». Nạp vào sẽ TRỘN clip của nguồn khác vào kho «{self.kho_dang_dung}». Tạo kho riêng cho "
-                "thư mục này (tab «Kho clip gốc» → «Tạo kho mới») rồi chọn kho đó; còn nếu chủ ý chuyển kho sang thư "
-                "mục mới thì dùng «Tạo lại kho từ đầu».")
-
-        # KHÔNG gọi update_kho: hàm đó áp lại kho "đang chọn" của sổ đăng ký lên Engine,
-        # tức có thể đổi job sang kho khác giữa chừng. Chỉ ghi đúng entry đã ghim.
-        self._ghi_thu_muc_kho_ghim(thumuc)
-
         shifts_kho = max(0, int(self.config.shifts_kho))
         db_da_ton_tai = os.path.exists(self.db_file)
         shifts_da_luu = 0
@@ -2975,6 +3002,14 @@ class Engine:
                         "kho này."
                     ) from e
                 canh_bao.append(f"{e}. Kho sẽ được tạo lại từ đầu.")
+
+        if mode == "add" and ds_cu:
+            # Chặn TRƯỚC mọi ghi (sổ đăng ký, vân tay, metadata): «Bổ sung» chỉ nhận ĐÚNG nguồn của kho.
+            self._kiem_nguon_bo_sung(thumuc, ds_cu)
+        # KHÔNG gọi update_kho: hàm đó áp lại kho "đang chọn" của sổ đăng ký lên Engine,
+        # tức có thể đổi job sang kho khác giữa chừng. Chỉ ghi đúng entry đã ghim.
+        self._ghi_thu_muc_kho_ghim(thumuc)
+
         cu_huu_ich = {self._khoa_duong_dan(c["duong_dan"]) for c in ds_cu
                       if int(c.get("so_hash") or 0) > 0}
         da_co = cu_huu_ich if mode != "new" else set()

@@ -621,16 +621,21 @@ THONG_BAO_HAI_NGUON_COOKIE = (
 _TEN_SAPISID = frozenset({"SAPISID", "__Secure-1PAPISID", "__Secure-3PAPISID"})
 
 
+def _thuoc_youtube(mien: Any) -> bool:
+    """Miền cookie THUỘC youtube.com (chính nó hoặc miền con) — không chỉ trùng đuôi chuỗi («evilyoutube.com»)."""
+    m = str(mien or "").strip().lower().lstrip(".")
+    return m == "youtube.com" or m.endswith(".youtube.com")
+
+
 def co_cookie_tai_khoan(ydl: Any) -> Optional[bool]:
     """Hũ cookie mà phiên yt-dlp ``ydl`` đã nạp có cookie TÀI KHOẢN YouTube không — CHỈ xét TÊN + miền, không bao giờ
     đọc/ghi giá trị. ``None`` khi không đọc được hũ (yt-dlp giả trong test, lỗi nạp cookie — lỗi đó yt-dlp tự báo ở
-    request đầu)."""
+    request đầu). Có tên đúng KHÔNG có nghĩa YouTube nhận phiên (``PhienYouTube.trang_thai_dang_nhap``)."""
     try:
         hu = getattr(ydl, "cookiejar", None)
         if hu is None:
             return None
-        ten = {str(getattr(c, "name", "")) for c in hu
-               if str(getattr(c, "domain", "")).lower().lstrip(".").endswith("youtube.com")}
+        ten = {str(getattr(c, "name", "")) for c in hu if _thuoc_youtube(getattr(c, "domain", ""))}
     except Exception:  # noqa: BLE001 — chẩn đoán phụ, không được làm hỏng lượt tải
         return None
     return "LOGIN_INFO" in ten and bool(ten & _TEN_SAPISID)
