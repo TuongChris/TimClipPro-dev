@@ -47,7 +47,6 @@ Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
   khoá/ghi danh chưa nằm trong repo (PC2 có bản đã thử, ngoài Git).
 - Tiếp: PC1 ký uỷ quyền MỘT lần (đối chiếu ĐỦ khoá công khai base64, không chỉ key_id) → PC2 `ghi-danh` (người dùng) →
   dry-run khoá PC2 thật, PC1 tắt → gộp. Bằng chứng ngoài Git trên PC2: `2026-10-15_release_authority`.
-- Mục cũ hơn (2026-10-14, 2026-10-13, 2026-10-09): `docs/ai/handoff/LICH_SU_PC2.md`.
 ### 2026-10-14 — cookie đăng nhập YouTube chạy bằng Node.js + yt-dlp-ejs (nhánh fix/pc2/youtube-cookie-js-fallback — lúc ghi CHƯA đẩy; đã đẩy `8bd69a7` 14/10, gộp vào Stable 1.1.1 `dc29b33`)
 - Bối cảnh: Stable 1.1.0 + `ytdlp_cookies_browser = firefox` → MỌI video «The page needs to be reloaded», cầu dao khuyên sai «có
   thể yt-dlp cần cập nhật». Bản đầu (`6ebdc72`, `ea12a28`) chỉ lùi không-cookie + nhớ 30 phút — người dùng KHÔNG muốn (YouTube từng
