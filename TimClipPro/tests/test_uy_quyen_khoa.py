@@ -597,6 +597,37 @@ def test_ky_va_kiem_uy_quyen_tu_file_khoa_ma_hoa(may, tmp_path):
     assert kq["trang_thai"] == "DA_GHI_DANH"
 
 
+@pytest.mark.parametrize("go", ["sai_mot_ky_tu", "thieu_mot_ky_tu", "dung", "dung_hoa_co_cach"])
+def test_cli_ky_uy_quyen_phai_go_dung_key_id_moi_hoi_mat_khau(may, tmp_path, monkeypatch, capsys, go):
+    """Review PC2 15/10 (P3-1, đột biến M17 sống sót): đường CLI ``ky-uy-quyen`` mà PC1 chạy thật. key_id KHÔNG hiện
+    trước khi gõ; chủ máy gõ theo tin nhắn của máy kia — phải trùng ĐỦ 16 ký tự key_id khoá mới trong yêu cầu. Sai → không
+    hỏi mật khẩu, không ký, không tạo file. (Console giả lập bằng monkeypatch; đường console thật: test không-console.)"""
+    pem = may["k1"].rieng.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                                        serialization.BestAvailableEncryption(MK_PC1_THU))
+    p_pem, p_yc, p_ra = tmp_path / "khoa_rieng.pem", tmp_path / "yeu_cau.json", tmp_path / "uy_quyen.json"
+    p_pem.write_bytes(pem)
+    L = uq.nap_launcher(may["pc2"]["goc"])
+    p_yc.write_bytes(uq.tao_yeu_cau(may["k2"], ten_may="PC2", cai_dat=uq.doc_cai_dat(may["pc2"]["goc"], L)))
+    kid = may["id2"]
+    go_vao = {"sai_mot_ky_tu": kid[:15] + ("0" if kid[15] != "0" else "1"), "thieu_mot_ky_tu": kid[:15],
+              "dung": kid, "dung_hoa_co_cach": "  " + kid.upper() + " "}[go]
+    da_go, hoi_mk = [], []
+    monkeypatch.setattr(rt, "_co_console", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda dong="": da_go.append(dong) or go_vao)
+    monkeypatch.setattr("getpass.getpass", lambda dong="": hoi_mk.append(dong) or MK_PC1_THU.decode())
+    rc = rt.main(["ky-uy-quyen", "--yeu-cau", str(p_yc), "--khoa", str(p_pem), "--tin-cay", may["pc2"]["tc"],
+                  "--ra", str(p_ra)])
+    ra = capsys.readouterr()
+    assert len(da_go) == 1 and kid not in ra.out.split("khớp:")[0]          # key_id không hiện sẵn trước khi gõ
+    if go.startswith("dung"):
+        assert rc == 0 and len(hoi_mk) == 1 and p_ra.exists()
+        t = rt.kiem_uy_quyen(p_ra.read_bytes(), may["pc2"]["tc"], raw_yeu_cau=p_yc.read_bytes())
+        assert t["khoa_moi"] == kid and t["ky_boi"] == may["k1"].key_id
+    else:
+        assert rc == 1 and hoi_mk == [] and not p_ra.exists() and "KHÔNG khớp" in ra.err
+        assert sorted(os.listdir(tmp_path)) == sorted(["pc2", "khoa_rieng.pem", "yeu_cau.json"])
+
+
 def test_kiem_uy_quyen_bao_khong_khop_yeu_cau(may):
     raw_yc = _yeu_cau(may)
     raw_khac = _yeu_cau(may, khoa=may["k3"].rieng)
