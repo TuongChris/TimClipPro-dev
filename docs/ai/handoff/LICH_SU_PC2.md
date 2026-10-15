@@ -3,6 +3,23 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-10-15 (chiều) — nghiệm thu PR #9 trên 8502 + pilot định dạng (feature/pc2/channel-sync-telemetry-performance)
+- 8502 cũ (worktree ChannelSync) nhàn rỗi → dừng; nghiệm thu bằng DỮ LIỆU GIẢ trên chính app 8502 (yt-dlp giả + chặn
+  mạng, FFmpeg thật, data thử): tải/nén/chờ/thiếu tổng byte/đổi client/ETA/Dừng/BI_CHAN đúng. Lỗi tìm được: thẻ
+  `st.metric` cắt chữ ở 1280 px → `c399101` (giá trị HH:MM:SS/số, chữ phụ ở dòng nhỏ); test đỏ→xanh, đột biến 6/6.
+- Cookie 8502: MỘT nguồn FILE, đúng cấu trúc nhưng KHÔNG có cookie đăng nhập → cần người dùng xuất lại.
+- Pilot 1 video (người dùng duyệt, 17:11): tải 251 opus CHỈ TIẾNG qua visionos (5 request). Nguyên nhân mp4 CÓ HÌNH: một
+  403 → `android` được nhớ cả lượt → sửa ở nhánh RIÊNG `fix/pc2/nho-client-do-lai`. Bằng chứng: `2026-10-15_pr9_nghiem_thu`,
+  `2026-10-15_pilot_audio`.
+### 2026-10-15 — tiến độ + hiệu suất đồng bộ kênh (nhánh feature/pc2/channel-sync-telemetry-performance)
+- Đo lượt THẬT trên 8502 từ bên ngoài (psutil, chỉ đọc, 15 phút): tải 63%, nén FFmpeg 19%, khác 18%; cả lượt 88 video
+  14:00–14:53 = 98,9 video/giờ (chu kỳ trung vị 30 s, p95 68 s); MỌI bản tải là mp4 CÓ HÌNH ~364 kbps → nghẽn MẠNG do
+  định dạng; log cầu dao «Đã thử: android». Lượt tự dừng 14:53:39 do YouTube bot-check (BI_CHAN, đúng PR #8). Chưa đổi
+  client/định dạng (cần pilot; yt-dlp không JS chỉ dùng visionos — `_video.py:143-145, 2976`).
+- `tien_do_dong_bo.SoDongBo` + `ui_tien_do_dong_bo` + móc channel/process_runner/BoGhiYtdlp + app (vẽ lại 1 s); bỏ 1
+  FFprobe/video (âm thanh giải mã giống hệt). Review độc lập: không P0/P1, đã sửa 2 P2 + 7 P3. Test: 24 mới, đột biến
+  24/24, nhanh 2783 = 2781/2/0, chậm 19/19 (chạy sau khi lượt dừng). Benchmark: FFprobe 2→1/video (−4,4% chu kỳ tổng
+  hợp ≈ 0,3% thật), CPU giao diện −18%. Bằng chứng ngoài Git `2026-10-15_sync_perf`; công cụ `pc2_test_tools\sync_perf`.
 ### 2026-10-15 — đồng bộ kênh YouTube: xác thực + cầu dao từng video + PARTIAL/BLOCKED + chặn trộn kho (fix/pc2/youtube-channel-sync-auth)
 - Sự cố Stable 1.1.1: kênh nhiều video giới hạn tuổi → 3 lỗi «confirm your age» liên tiếp mở cầu dao AUTH_REQUIRED (ngưỡng
   3), 1.189 video chưa thử mà banner xanh «Đồng bộ xong»; cấu hình có CẢ file cookie lẫn trình duyệt; kho đang chọn ≠ thư

@@ -4,32 +4,48 @@ Giữ file ≤ 80 dòng. Mục mới thêm lên ĐẦU «Nhật ký» (mẫu: `d
 sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
 ## Máy
-- Vai trò (D-23, từ 14/10): máy phát triển + phát hành CHÍNH, vận hành Stable 8501; PC1 là dự phòng, ngang quyền.
-- Stable: `C:\TimClipPro` (cài đặt), `C:\TimClipPro_State` (dữ liệu, `lichsu.db`, kho), `C:\TimClipPro_Feed` (feed);
-  cổng 8501 (`127.0.0.1`); người dùng báo đang chạy 1.1.1 (14/10). Claude KHÔNG đọc/ghi/chạy gì trong ba thư mục này
-  (chặn trong `.claude/settings.json`); chỉ launcher/updater/công cụ do NGƯỜI DÙNG chạy (file `.bat`).
-- Clone phát triển: `C:\Dev\Tool_Quet` (ngoài OneDrive). Venv `TimClipPro\.venv`; venv có lock 1.1.1 + pytest:
-  `C:\Dev\TimClipPro_CookieFix\TimClipPro\.venv`. Không cài/nâng gói vào Python 3.12.10 gốc (Stable dựng từ nó).
-- Development: cổng 8502, launcher RIÊNG ngoài Git — `--server.port=8502` ghi rõ, `--server.address=127.0.0.1`,
-  `TIMCLIP_DEV_MODE=1`, data/output thử, không cookie/`google_key.json` thật; KHÔNG chạy `ChayTool.bat`, `CapNhat.bat`,
-  `GiamSat.bat` trong clone. Preview: `.claude/launch.json` chỉ gắn 8502.
+- Vai trò (D-23; D-26 từ 15/10 tối): máy phát triển CHÍNH, DEV-ONLY — làm việc hằng ngày bằng Development 8502.
+- Stable 1.1.1: `C:\TimClipPro` / `C:\TimClipPro_State` / `C:\TimClipPro_Feed`, cổng 8501 — CHỈ dự phòng, không cập nhật,
+  không xoá. Claude KHÔNG đọc/ghi/chạy gì trong ba thư mục này (chặn trong `.claude/settings.json`).
+- Development VẬN HÀNH (D-26, ngoài Git):
+  - mã: worktree `C:\Dev\TimClipPro_VanHanh` (nhánh cục bộ `pc2-van-hanh`, chỉ fast-forward theo `integration/current`);
+  - Python: `C:\Dev\TimClipPro_DevRuntime\py312-f955a32807a9` (offline, lock có băm, yt-dlp-ejs 0.8.0; Node 24);
+  - dữ liệu THẬT: `C:\Dev\TimClipPro_DevState\data`; output `…\output`; sao lưu `D:\TimClipPro_Dev_SaoLuu`;
+  - launcher trong `C:\Dev\TimClipPro_DevState`: `TimClipPro_DEV.bat` (icon Desktop «TimClipPro DEV»; 127.0.0.1:8502,
+    `fileWatcherType=none`), `_CLI`, `_SaoLuu`, `_CapNhat`, chung `_env`. Cập nhật: `GIT_WORKFLOW.md` «Development vận hành PC2».
+  - KHÔNG `ChayTool.bat` / `CapNhat.bat` / `GiamSat.bat` của clone. Dừng 8502 chỉ khi KHÔNG có việc (yt-dlp tải TRONG tiến trình).
+- Clone + worktree PHÁT TRIỂN: `C:\Dev\Tool_Quet` + worktree việc; test bằng venv `C:\Dev\TimClipPro_CookieFix\TimClipPro\.venv`
+  (lock + pytest/ruff). Không cài/nâng gói vào Python 3.12.10 gốc.
 - GitHub: Deploy Key «PC2 PC_Office read-only» (tên cũ; quyền GHI cả repo) cho git; `gh` 2.102.0 đăng nhập chủ repo
   (15/10). Hook `pre-push` dùng chung `release/git-hooks/pre-push`: ĐÃ cài 15/10.
 - Khoá ký phát hành PC2: key_id `d02702dd741c3e4f`, ở `C:\TimClipPro_KhoaPhatHanh` (ngoài repo; chỉ tài khoản người dùng +
   SYSTEM; Claude không đọc), mật khẩu người dùng gõ. ĐÃ GHI DANH 15/10 vào Stable PC2 (trust store 2 khoá) và vào
   `release/trusted_keys.json` — PC2 tự ký + phát hành được, PC1 không còn bắt buộc.
-- Dữ liệu: PC2 tự xây; KHÔNG chép dữ liệu từ PC1. Test chỉ dùng dữ liệu synthetic/thư mục tạm.
+- Dữ liệu: PC2 tự xây; KHÔNG chép dữ liệu từ PC1, KHÔNG chép State của Stable sang DEV. Test chỉ dữ liệu synthetic/thư mục
+  tạm; dữ liệu thật chỉ dùng trong app DEV vận hành.
 
 ## Tiếp theo
-1. PR tích hợp (PR #9 đã vào + #10 + #11) → người dùng duyệt gộp FF → chuẩn bị Stable 1.1.2 (ký khoá PC2
-   `d02702dd741c3e4f`, `TimClipPro/docs/PHAT_HANH_HAI_MAY.md`) → checkpoint người dùng ký + công bố + cập nhật Stable →
-   xuất lại cookie đăng nhập → một lượt đồng bộ thật đo lợi định dạng trên cả lượt. PR #8 đã gộp (`97d36e0`).
+1. Người dùng: đồng bộ tiếp kênh Joe (dừng ở 266 — lỗi Claude 21:30, xem Nhật ký) → khi xong, tạo vân tay kho «Kho Joe» từ
+   `E:\Kho_Tool_Quet\Kho_Joe_Bartolozzi` (tab «Kho clip gốc», không tạo kho mới). Google Sheets trong DEV: tạo hồ sơ đích
+   + binding khoá nằm NGOÀI State Stable (binding «mac_dinh» đang trỏ `C:\TimClipPro_State\secrets\…`).
 2. Hỏi người dùng: bật ruleset GitHub (`release/github/`) — chưa bật.
 3. Còn mở từ trước: C7 (người dùng tự lấy kết quả `launcher.py doctor` của Stable); `git user.name/email` riêng cho commit
    PC2 (người dùng quyết); nghiệm thu preview 8502 khi tiện.
 4. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-10-15 (khuya) — PC2 DEV-ONLY: Development vận hành dữ liệu thật (D-26, nhánh feature/pc2/dev-van-hanh)
+- Stable 1.1.2 ĐÃ công bố (GitHub, ký `d02702dd741c3e4f`, diễn tập 14/14) nhưng KHÔNG cài lên PC2. Tự động hoá cập nhật
+  bị lớp quyền chặn («Production Deploy», «Self-Modification»); người dùng chọn DEV-ONLY.
+- Dựng xong: venv offline 56 gói (`pip check` sạch), worktree vận hành `e74c923`, launcher, icon Desktop.
+- Nghiệm thu:
+  - quét file trong máy với kho SML (779/779 vân tay) trên BẢN SAO dữ liệu: đúng mốc 01:10:00, 92 s, lịch sử + CSV ghi đúng;
+  - CLI cùng dữ liệu (`dich`, `youtube-doctor`: cookie FILE có đăng nhập, Node + EJS dùng được);
+  - sao lưu + cập nhật Git-only: 3 ca thử (fast-forward / lệch / bẩn).
+- Đồng bộ kênh THẬT (người dùng, 20:52–21:30, cookie đăng nhập, mã `e74c923`): +104 video (162 video/giờ, 97,6 giờ
+  audio/giờ). LỖI CLAUDE: 21:30 tắt server Dev tạm để đổi sang bản vận hành khi lượt này còn tải (yt-dlp tải trong tiến
+  trình — kiểm «nhàn rỗi» chỉ xem tiến trình con + CPU). Không mất dữ liệu: 266 file = 266 dòng `downloaded.txt` = 266
+  metadata khớp kích thước; `_tam` rỗng. Bằng chứng ngoài Git: `2026-10-15_dev_van_hanh`.
 ### 2026-10-15 (tối) — tích hợp PR #9 + gom PR #10, #11 (nhánh feature/pc2/tich-hop-pr10-pr11)
 - PR #9 vào `integration/current` bằng fast-forward tới `831c045` (người dùng duyệt, tự chạy lệnh đẩy vì lớp quyền Claude
   chặn; nhánh này chỉ vào SAU bước đó). PR #10 (`38bd2ba`) và PR #11
@@ -53,21 +69,4 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 - Test: 6 mới (`tests/test_cookie_can_js.py`; 4 đỏ trên `97d36e0` đúng lý do, 2 khoá hành vi cũ); đột biến 7/7; vùng YouTube/tải
   + Giao diện 622/622; nhanh 2765 = 2763/2/0 (243 s); ruff, import sạch. Không đụng quét → không chạy chậm. Không gọi YouTube/
   Google. Venv: `TimClipPro_CookieFix`. Junit ngoài Git: `2026-10-15_cookie_status`.
-### 2026-10-15 (chiều) — nghiệm thu PR #9 trên 8502 + pilot định dạng (feature/pc2/channel-sync-telemetry-performance)
-- 8502 cũ (worktree ChannelSync) nhàn rỗi → dừng; nghiệm thu bằng DỮ LIỆU GIẢ trên chính app 8502 (yt-dlp giả + chặn
-  mạng, FFmpeg thật, data thử): tải/nén/chờ/thiếu tổng byte/đổi client/ETA/Dừng/BI_CHAN đúng. Lỗi tìm được: thẻ
-  `st.metric` cắt chữ ở 1280 px → `c399101` (giá trị HH:MM:SS/số, chữ phụ ở dòng nhỏ); test đỏ→xanh, đột biến 6/6.
-- Cookie 8502: MỘT nguồn FILE, đúng cấu trúc nhưng KHÔNG có cookie đăng nhập → cần người dùng xuất lại.
-- Pilot 1 video (người dùng duyệt, 17:11): tải 251 opus CHỈ TIẾNG qua visionos (5 request). Nguyên nhân mp4 CÓ HÌNH: một
-  403 → `android` được nhớ cả lượt → sửa ở nhánh RIÊNG `fix/pc2/nho-client-do-lai`. Bằng chứng: `2026-10-15_pr9_nghiem_thu`,
-  `2026-10-15_pilot_audio`.
-### 2026-10-15 — tiến độ + hiệu suất đồng bộ kênh (nhánh feature/pc2/channel-sync-telemetry-performance)
-- Đo lượt THẬT trên 8502 từ bên ngoài (psutil, chỉ đọc, 15 phút): tải 63%, nén FFmpeg 19%, khác 18%; cả lượt 88 video
-  14:00–14:53 = 98,9 video/giờ (chu kỳ trung vị 30 s, p95 68 s); MỌI bản tải là mp4 CÓ HÌNH ~364 kbps → nghẽn MẠNG do
-  định dạng; log cầu dao «Đã thử: android». Lượt tự dừng 14:53:39 do YouTube bot-check (BI_CHAN, đúng PR #8). Chưa đổi
-  client/định dạng (cần pilot; yt-dlp không JS chỉ dùng visionos — `_video.py:143-145, 2976`).
-- `tien_do_dong_bo.SoDongBo` + `ui_tien_do_dong_bo` + móc channel/process_runner/BoGhiYtdlp + app (vẽ lại 1 s); bỏ 1
-  FFprobe/video (âm thanh giải mã giống hệt). Review độc lập: không P0/P1, đã sửa 2 P2 + 7 P3. Test: 24 mới, đột biến
-  24/24, nhanh 2783 = 2781/2/0, chậm 19/19 (chạy sau khi lượt dừng). Benchmark: FFprobe 2→1/video (−4,4% chu kỳ tổng
-  hợp ≈ 0,3% thật), CPU giao diện −18%. Bằng chứng ngoài Git `2026-10-15_sync_perf`; công cụ `pc2_test_tools\sync_perf`.
-- Mục cũ hơn (2026-10-15 PR #8 xác thực đồng bộ kênh, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
+- Mục cũ hơn (2026-10-15 nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8 xác thực, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
