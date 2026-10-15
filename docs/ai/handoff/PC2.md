@@ -21,16 +21,23 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 - Dữ liệu: PC2 tự xây; KHÔNG chép dữ liệu từ PC1. Test chỉ dùng dữ liệu synthetic/thư mục tạm.
 
 ## Tiếp theo
-1. PR tiến độ + hiệu suất đồng bộ kênh (`feature/pc2/channel-sync-telemetry-performance`): người dùng xem kết quả lượt
-   đã dừng trên 8502 → nghiệm thu màn mới trên 8502 (launcher Development riêng của worktree này, ngoài Git) → gộp FF → khi
-   YouTube hết chặn IP: pilot 1 video công khai (người dùng duyệt) để telemetry ghi client + định dạng → quyết định sửa
-   chọn client/định dạng (nghẽn: mp4 CÓ HÌNH qua client `android`). PR #8 đã gộp (`97d36e0`); bản vá Stable chờ duyệt.
+1. PR #9 (tiến độ + hiệu suất đồng bộ kênh): đã nghiệm thu trên 8502 (dữ liệu giả) → người dùng duyệt gộp FF. Sau đó
+   PR riêng `fix/pc2/nho-client-do-lai` (nhớ client tính từ lúc học; nghẽn mp4 CÓ HÌNH qua `android`) → review + gộp → một
+   lượt đồng bộ thật có cookie đăng nhập mới (người dùng xuất lại) để đo lợi thật. PR #8 đã gộp; bản vá Stable chờ duyệt.
 2. Hỏi người dùng: bật ruleset GitHub (`release/github/`) — chưa bật.
 3. Còn mở từ trước: C7 (người dùng tự lấy kết quả `launcher.py doctor` của Stable); `git user.name/email` riêng cho commit
    PC2 (người dùng quyết); nghiệm thu preview 8502 khi tiện.
 4. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-10-15 (chiều) — nghiệm thu PR #9 trên 8502 + pilot định dạng (feature/pc2/channel-sync-telemetry-performance)
+- 8502 cũ (worktree ChannelSync) nhàn rỗi → dừng; nghiệm thu bằng DỮ LIỆU GIẢ trên chính app 8502 (yt-dlp giả + chặn
+  mạng, FFmpeg thật, data thử): tải/nén/chờ/thiếu tổng byte/đổi client/ETA/Dừng/BI_CHAN đúng. Lỗi tìm được: thẻ
+  `st.metric` cắt chữ ở 1280 px → `c399101` (giá trị HH:MM:SS/số, chữ phụ ở dòng nhỏ); test đỏ→xanh, đột biến 6/6.
+- Cookie 8502: MỘT nguồn FILE, đúng cấu trúc nhưng KHÔNG có cookie đăng nhập → cần người dùng xuất lại.
+- Pilot 1 video (người dùng duyệt, 17:11): tải 251 opus CHỈ TIẾNG qua visionos (5 request). Nguyên nhân mp4 CÓ HÌNH: một
+  403 → `android` được nhớ cả lượt → sửa ở nhánh RIÊNG `fix/pc2/nho-client-do-lai`. Bằng chứng: `2026-10-15_pr9_nghiem_thu`,
+  `2026-10-15_pilot_audio`.
 ### 2026-10-15 — tiến độ + hiệu suất đồng bộ kênh (nhánh feature/pc2/channel-sync-telemetry-performance)
 - Đo lượt THẬT trên 8502 từ bên ngoài (psutil, chỉ đọc, 15 phút): tải 63%, nén FFmpeg 19%, khác 18%; cả lượt 88 video
   14:00–14:53 = 98,9 video/giờ (chu kỳ trung vị 30 s, p95 68 s); MỌI bản tải là mp4 CÓ HÌNH ~364 kbps → nghẽn MẠNG do
