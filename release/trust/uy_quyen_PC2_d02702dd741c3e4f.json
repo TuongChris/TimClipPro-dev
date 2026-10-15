@@ -1,0 +1,28 @@
+{
+ "chu_ky": {
+  "chu_ky_b64": "ez8kVfHKR6PKDvttDWfPH5eQazZ03RWN6jqU8U4a5wl+/qd54g7921ukLANEP89aEPwPqBuPT+rjYnXcbuRPCQ==",
+  "key_id": "8aa5baa6c8f225f9",
+  "thuat_toan": "ed25519"
+ },
+ "noi_dung": {
+  "cai_dat_sha256": "15ffb36044c67468184e9876afb974bc001df8476260a703da5a3ea193263942",
+  "dinh_dang": 1,
+  "het_han": "2026-11-14T02:36:33Z",
+  "khoa_hien_co": [
+   "8aa5baa6c8f225f9"
+  ],
+  "khoa_moi": {
+   "ed25519_pub_b64": "ZtXkLr8QOo1sp1YAPpsqheIcUlGl36b3f58Kfnd5dq4=",
+   "key_id": "d02702dd741c3e4f"
+  },
+  "ky_boi": "8aa5baa6c8f225f9",
+  "loai": "uy_quyen_them_khoa_tin_cay",
+  "ma_uy_quyen": "a893c18263a24e858a1c84cd83a81bad",
+  "ma_yeu_cau": "0da7f23550af49cdadfe7f3e3ca4009c",
+  "tao_luc": "2026-10-15T02:36:33Z",
+  "ten_may": "PC2",
+  "trust_store_sha256": "a37dc9b6391ec59a3ee872da7b0e56847a92123833dc099dbe0bcf2b6e2fd76b",
+  "ung_dung": "TimClipPro",
+  "yeu_cau_sha256": "4e8380e4150dd3c3eb0b90c5401be745ed7356586fdeaed27f6e54b785fe17f9"
+ }
+}
