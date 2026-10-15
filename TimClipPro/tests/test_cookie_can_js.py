@@ -383,6 +383,79 @@ def test_trang_thai_ui_noi_ro_dung_cookie_hay_khong():
         ("info", "Cookie: chưa cấu hình.")], "không cấu hình cookie thì không nói gì về JS"
 
 
+BI_MAT_UI = "GIA_TRI_BI_MAT_GIA_js77"
+
+
+def _file_cookie(tmp_path, *ten, hong=False):
+    """File cookies.txt GIẢ: tiêu đề Netscape + PREF + các cookie ``ten`` của .youtube.com (giá trị giả)."""
+    dong = "\t".join([".youtube.com", "TRUE", "/", "TRUE", "9999999999", "{}", BI_MAT_UI]) + "\n"
+    noi_dung = "# Netscape HTTP Cookie File\n" + "".join(dong.format(x) for x in ("PREF",) + ten)
+    if hong:
+        noi_dung += f".youtube.com TRUE / TRUE 0 SID {BI_MAT_UI}\n"   # TAB thành dấu cách
+    p = tmp_path / "cookies.txt"
+    p.write_text(noi_dung, encoding="utf-8")
+    return str(p)
+
+
+def test_file_cookie_khong_co_cookie_dang_nhap_khong_noi_dung_cookie_dang_nhap(tmp_path):
+    """Ca thật 15/10/2026 (Development 8502): file cookie đúng cấu trúc nhưng KHÔNG có LOGIN_INFO/SAPISID, máy đã có
+    Node.js + EJS. Dòng trên nói đúng «KHÔNG có cookie đăng nhập», dòng dưới lại nói «Khi quét: DÙNG cookie đăng
+    nhập» — kết quả đồng bộ thì ghi KHONG_CO_COOKIE_DANG_NHAP. Thanh bên không được trình bày lượt quét như đã đăng
+    nhập khi file không có gì để đăng nhập."""
+    cd = t.chan_doan_cookie(_file_cookie(tmp_path, "VISITOR_INFO1_LIVE"))
+    assert cd.trang_thai == t.COOKIE_FILE_STRUCTURALLY_VALID and not cd.co_cookie_dang_nhap
+    dong = scan_ui.dong_trang_thai_youtube(cd, None, SAN_SANG)
+    muc, cau = dong[-1]
+    assert muc == "warning"
+    assert "DÙNG cookie đăng nhập" not in " ".join(c for _m, c in dong)
+    assert "KHÔNG đăng nhập" in cau and "LOGIN_INFO" in cau and "SAPISID" in cau
+    assert "Node.js 24.21.0 + yt-dlp-ejs 0.8.0" in cau, "nói rõ máy ĐÃ sẵn sàng — thiếu là ở file, không phải ở máy"
+    assert "xuất lại" in cau and "đang đăng nhập YouTube" in cau
+    assert BI_MAT_UI not in repr(dong)
+
+
+def test_file_cookie_co_cookie_dang_nhap_van_noi_dung_cookie(tmp_path):
+    cd = t.chan_doan_cookie(_file_cookie(tmp_path, "LOGIN_INFO", "__Secure-3PAPISID"))
+    assert cd.co_cookie_dang_nhap
+    dong = scan_ui.dong_trang_thai_youtube(cd, None, SAN_SANG)
+    assert dong[-1][0] == "info" and dong[-1][1].startswith(
+        "Khi quét: DÙNG cookie đăng nhập — yt-dlp giải thử thách JavaScript bằng Node.js 24.21.0 + yt-dlp-ejs 0.8.0.")
+    assert "CẤU HÌNH chưa có nghĩa là YouTube CHẤP NHẬN" in dong[-1][1]
+    assert BI_MAT_UI not in repr(dong)
+
+
+def test_hai_nguon_file_khong_dang_nhap_thi_canh_bao_theo_file(tmp_path):
+    """Cả hai ô: CHỈ file được dùng — trình duyệt có đăng nhập cũng không cứu được, nên vẫn cảnh báo theo file."""
+    cd = t.chan_doan_cookie(_file_cookie(tmp_path), cookies_browser="firefox")
+    assert cd.hai_nguon and cd.nguon == "file" and not cd.co_cookie_dang_nhap
+    dong = scan_ui.dong_trang_thai_youtube(cd, None, SAN_SANG)
+    assert dong[-1][0] == "warning" and "KHÔNG đăng nhập" in dong[-1][1]
+    assert "DÙNG cookie đăng nhập" not in " ".join(c for _m, c in dong)
+
+
+@pytest.mark.parametrize("ca", ["khong_ton_tai", "sai_cau_truc"])
+def test_file_cookie_khong_dung_duoc_khong_noi_dung_cookie_dang_nhap(tmp_path, ca):
+    """File thiếu / hỏng: cổng ``kiem_tra_file_cookie`` từ chối trước request đầu (lỗi cookie, cầu dao ngưỡng 1) — cũng
+    không phải «DÙNG cookie đăng nhập». File hỏng vẫn có thể đếm ra LOGIN_INFO + SAPISID ở các dòng còn lại
+    (``co_cookie_dang_nhap`` True) — xét trạng thái cấu trúc, không chỉ xét có cookie đăng nhập."""
+    duong = (str(tmp_path / "khong_co.txt") if ca == "khong_ton_tai"
+             else _file_cookie(tmp_path, "LOGIN_INFO", "SAPISID", hong=True))
+    cd = t.chan_doan_cookie(duong)
+    assert cd.nguon == "file" and cd.trang_thai != t.COOKIE_FILE_STRUCTURALLY_VALID
+    assert cd.co_cookie_dang_nhap is (ca == "sai_cau_truc")
+    dong = scan_ui.dong_trang_thai_youtube(cd, None, SAN_SANG)
+    assert dong[-1][0] == "warning" and "KHÔNG đăng nhập" in dong[-1][1] and "lỗi cookie" in dong[-1][1]
+    assert "DÙNG cookie đăng nhập" not in " ".join(c for _m, c in dong)
+    assert BI_MAT_UI not in repr(dong)
+
+
+def test_trinh_duyet_van_noi_dung_cookie_vi_tool_khong_kiem_duoc():
+    cd = t.chan_doan_cookie("", cookies_browser="firefox")
+    assert cd.nguon == "trinh_duyet" and not cd.co_cookie_dang_nhap, "trình duyệt: tool không mở profile để đếm"
+    dong = scan_ui.dong_trang_thai_youtube(cd, None, SAN_SANG)
+    assert dong[-1][0] == "info" and dong[-1][1].startswith("Khi quét: DÙNG cookie đăng nhập")
+
+
 def test_engine_canh_bao_khong_dang_nhap(tmp_path):
     e = Engine(root=str(tmp_path), data_dir=str(tmp_path / "d"), out_dir=str(tmp_path / "r"))
     e.canh_bao_mang = []
