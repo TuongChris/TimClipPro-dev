@@ -196,6 +196,15 @@ mọi client cùng hỏng. Nối ở cả `engine.youtube_info`, `engine.downloa
 `channel._tai_va_nen`. Bỏ cookie mà vẫn hỏng thì ném lỗi GỐC — cookie không phải
 nguyên nhân, đừng dẫn người dùng đi sửa nhầm.
 
+Audit D-2 (25/10/2026): đường lui cookie đọc «lỗi cuối» của đường lui client, mà có cookie
+đăng nhập (yt-dlp xét theo TÊN LOGIN_INFO + SAPISID, sống hay chết) thì client cuối luôn là
+`android`/`ios` — yt-dlp GỠ chúng, chỉ còn «No video formats found!», trùng dấu hiệu trên.
+Cookie còn sống mà mọi client nhận cookie bị 403 ở khâu tải thành «Cookie YouTube đã hết hiệu
+lực» (ghi chú → lịch sử, CSV, Sheets), phiên «cookie bị từ chối», đồng bộ kênh `BI_TU_CHOI`,
+lượt lùi KHÔNG đăng nhập; 403 thật bị che. Đã sửa: `thu_tung_client` lấy lỗi ĐẠI DIỆN là lỗi
+cuối ở client NHẬN cookie (bỏ «không định dạng» của client không nhận cookie; lỗi làm dừng đổi
+client vẫn là đại diện). Test: `tests/test_cookie_403_khong_phai_cookie_chet.py`.
+
 Bẫy khi nối: cảnh báo KHÔNG được dùng chung `canh_bao_gop`, vì `_merge()` xoá trắng
 danh sách đó ở mỗi lượt khớp còn cảnh báo mạng sinh ra TRƯỚC đó. Nay có
 `Engine.canh_bao_mang` riêng, gắn vào `kq.note` ở cuối `scan_youtube`.

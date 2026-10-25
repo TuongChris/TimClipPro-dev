@@ -93,6 +93,11 @@ request vẫn chỉ do `ytdlp_sleep_requests_s` (yt-dlp) và bộ điều phối
   đăng nhập theo đúng luật `_has_auth_cookies` của yt-dlp). `COOKIE_FILE_STRUCTURALLY_VALID` khác
   `COOKIE_SESSION_ACCEPTED_BY_YOUTUBE`: cái sau chỉ một request thật trả lời được (lùi không-cookie
   thành công, hoặc cảnh báo "cookies are no longer valid" mà `BoGhiYtdlp` giờ nghe được).
+- Đường lui cookie xét dấu hiệu cookie chết trên lỗi ĐẠI DIỆN của `thu_tung_client` = lỗi cuối ở
+  client NHẬN cookie. Có cookie đăng nhập (yt-dlp xét theo TÊN, sống hay chết) thì yt-dlp gỡ client
+  không nhận cookie (android, ios — đứng cuối), chúng luôn hỏng «No video formats found!»: không phải
+  bằng chứng. Mọi client nhận cookie bị 403 = `HTTP_FORBIDDEN`, không lùi, không «cookie hết hiệu
+  lực» (audit D-2).
 - Không đọc profile trình duyệt, không tự bật `cookiesfrombrowser`, không chép cookie ra đâu cả.
   Giữ nguyên cơ chế yt-dlp ghi lại file cookie sau mỗi phiên (`YoutubeDL.close → save_cookies`).
 

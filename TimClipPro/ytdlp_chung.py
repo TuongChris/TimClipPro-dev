@@ -169,8 +169,11 @@ def sap_xep_player_clients(clients: list, co_cookie: bool) -> list:
     tệ hơn là chúng che mất chính lợi ích của cookie. Nên đẩy chúng xuống cuối, giữ
     nguyên thứ tự tương đối để cấu hình của người dùng vẫn còn ý nghĩa.
 
-    Vẫn giữ nhóm không hỗ trợ ở CUỐI chứ không xoá hẳn: nếu cookie sai hoặc hết hạn
-    thì yt-dlp không coi là "đã đăng nhập" nên chúng vẫn là đường lui hợp lệ.
+    Vẫn giữ nhóm không hỗ trợ ở CUỐI chứ không xoá hẳn: file cookie KHÔNG có cookie đăng
+    nhập thì yt-dlp không coi là "đã đăng nhập" nên chúng vẫn là đường lui hợp lệ. yt-dlp
+    xét "đã đăng nhập" theo TÊN cookie (LOGIN_INFO + SAPISID), không theo phiên còn sống:
+    có các tên đó thì chúng luôn bị gỡ và luôn hỏng «No video formats found!» — lỗi đó
+    không nói gì về cookie, :func:`thu_tung_client` không lấy nó làm lỗi đại diện (audit D-2).
     """
     ds = list(clients or [""])
     if not co_cookie:
@@ -773,7 +776,9 @@ def chay_kem_duong_lui_cookie(
        lượt này) rồi không còn định dạng: ném :class:`LoiGiaiJs` — lỗi bộ giải, KHÔNG phải cookie; không tự bỏ đăng nhập.
     3. Cookie chết (:data:`DAU_HIEU_COOKIE_CHET` — YouTube chỉ còn trả storyboard): lùi không cookie như trước. Vì sao
        phải tự lùi: cookie YouTube hết hiệu lực rất thường xuyên (xoay vòng phiên, đăng xuất, đổi mạng) và hạn ghi trong
-       file không phản ánh điều đó; không lùi thì một cookie chết làm hỏng TOÀN BỘ việc quét.
+       file không phản ánh điều đó; không lùi thì một cookie chết làm hỏng TOÀN BỘ việc quét. Dấu hiệu chỉ đọc trên lỗi
+       đại diện của :func:`thu_tung_client` — lỗi của client NHẬN cookie, không phải «không định dạng» của client bị
+       yt-dlp gỡ khi có cookie đăng nhập (audit D-2: mọi client nhận cookie bị 403 không phải cookie chết).
     4. Mọi lỗi khác ném nguyên ra ngoài: video cần đăng nhập (tuổi, hội viên, riêng tư), YouTube đòi xác minh bot, 429,
        lỗi player client («The page needs to be reloaded» khi máy đã có JS)... — KHÔNG lùi không cookie, để phiên phân
        loại đúng và cầu dao dừng lô khi cần.
@@ -891,9 +896,19 @@ def thu_tung_client(
     ``dung_ngay(loi)``: True = đổi client cũng vô ích, dừng ngay (bot-check chặn theo địa chỉ
     mạng ở khâu trích xuất cho MỌI client — CLAUDE.md mục 6c; video bị gỡ; 429). Không truyền =
     thử hết danh sách như cũ. 403 ở khâu tải thì vẫn đổi client (mục 6).
+
+    Lỗi ĐẠI DIỆN (ném kèm, :func:`chay_kem_duong_lui_cookie` đọc nó để quyết «cookie chết») là lỗi cuối — trừ khi lượt
+    có cookie: «không còn định dạng» của client KHÔNG nhận cookie (:func:`client_khong_ho_tro_cookie`) không nói gì về
+    cookie. Cookie đăng nhập (yt-dlp xét theo TÊN, sống hay chết) thì yt-dlp gỡ chính các client đó — chúng đứng cuối
+    (:func:`sap_xep_player_clients`) và LUÔN hỏng «No video formats found!». Lấy lỗi đó làm đại diện thì cookie còn sống
+    mà mọi client nhận cookie bị 403 thành «cookie hết hiệu lực» và lượt bị lùi không đăng nhập (audit D-2). Khi đó đại
+    diện là lỗi cuối ở client NHẬN cookie; lỗi làm ``dung_ngay`` dừng thì luôn là đại diện.
     """
     loi_cuoi: Optional[BaseException] = None
+    loi_dai_dien: Optional[BaseException] = None
     da_thu: list = []
+    co_cookie = bool(opts.get("cookiefile") or opts.get("cookiesfrombrowser"))
+    khong_nhan_cookie = client_khong_ho_tro_cookie() if co_cookie else frozenset()
     if bo_nho is not None:
         clients = bo_nho.sap_xep(clients)
     for client in (clients or [""]):
@@ -908,11 +923,14 @@ def thu_tung_client(
             raise
         except Exception as e:  # noqa: BLE001 — còn client khác thì thử tiếp
             loi_cuoi = e
+            if client not in khong_nhan_cookie or not la_dau_hieu_cookie_chet(e):
+                loi_dai_dien = e
             ten = client or "mặc định"
             da_thu.append(ten)
             if khi_that_bai:
                 khi_that_bai(ten, e)
             if dung_ngay is not None and dung_ngay(e):
+                loi_dai_dien = e
                 break
         else:
             if bo_nho is not None:
@@ -920,7 +938,10 @@ def thu_tung_client(
             if khi_thanh_cong:
                 khi_thanh_cong(client or "mặc định", list(da_thu))
             return ket_qua
+    if loi_dai_dien is None:
+        loi_dai_dien = loi_cuoi
+    nhan = "Lỗi cuối" if loi_dai_dien is loi_cuoi else "Lỗi cuối ở client nhận cookie"
     raise RuntimeError(
         "Không tải được audio. Đã thử: " + ", ".join(da_thu)
-        + ". Lỗi cuối: " + che_bi_mat(go_ma_mau(loi_cuoi))
-    ) from loi_cuoi
+        + f". {nhan}: " + che_bi_mat(go_ma_mau(loi_dai_dien))
+    ) from loi_dai_dien
