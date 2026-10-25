@@ -10,7 +10,6 @@ Dữ liệu KHÔNG đi đâu cả — server chỉ lắng nghe ở localhost tr�
 """
 
 import os
-import threading
 import time
 import uuid
 from datetime import datetime
@@ -27,6 +26,7 @@ import maintenance_gate
 import outbox
 import runtime_paths
 import sheet_destinations
+import tac_vu_nen
 import ui_cap_nhat
 import ui_gui_sheets as ui_gui
 from cau_hinh import GIA_TRI_GIAO_DIEN_MAC_DINH
@@ -123,6 +123,28 @@ if scan_controller.running and not job.get("running"):
     job.update({"running": True, "pct": 0.0, "msg": "", "results": [], "error": "",
                 "kind": "scan", "da_day_sheet": True,
                 "scan_batch_id": scan_controller.snapshot().batch_id})
+
+
+def _dong_bo_tac_vu_nen() -> None:
+    """Tác vụ nền (đồng bộ kênh, lấy lại tên, vá metadata) sống ở mức TIẾN TRÌNH (``tac_vu_nen``). Tải lại trang
+    giữa lượt = phiên MỚI: NHẬN LẠI tác vụ đang chạy (tiến độ, nút Dừng, kết quả cuối) thay vì coi như không có gì
+    chạy (audit D-13). Chỉ main thread chép ảnh chụp vào ``job`` của phiên; thread nền không đọc session_state."""
+    tv = st.session_state.get("tac_vu_nen")
+    if tv is None and not job.get("running"):
+        tv = tac_vu_nen.dang_chay_cua(eng)
+        if tv is None:
+            return
+        st.session_state.tac_vu_nen = tv
+        if tv.so_dong_bo is not None:
+            st.session_state.so_dong_bo = tv.so_dong_bo
+    if tv is None:
+        return
+    job.update(tv.anh())
+    if not job["running"]:
+        st.session_state.pop("tac_vu_nen", None)     # xong: kết quả đã chép, thôi theo dõi
+
+
+_dong_bo_tac_vu_nen()
 # Bản cài managed: bản mới đã kích hoạt mà cửa sổ này còn chạy bản cũ → cảnh báo nổi ở đầu trang.
 ui_cap_nhat.canh_bao_ban_cu()
 # Gửi Google Sheets: hàng đợi BỀN trong lichsu.db + MỘT người gửi nền mỗi tiến trình (không đọc
@@ -204,34 +226,41 @@ def chay_nguon_chung(nguon: list) -> None:
     st.rerun()
 
 
-def chay_nen(kind: str, ham, *args, **kwargs):
+def chay_nen(kind: str, ham, *args, so_dong_bo=None, **kwargs):
     """Chạy một tác vụ dài trong luồng nền để giao diện không bị đơ và nút Dừng vẫn bấm được.
-    Vào cổng bảo trì TRƯỚC (đang cập nhật → báo, không chạy); lease trả khi tác vụ xong."""
+    Vào cổng bảo trì TRƯỚC (đang cập nhật → báo, không chạy); lease trả khi tác vụ xong. Tác vụ ghi sổ mức tiến
+    trình (``tac_vu_nen``) để phiên mới (tải lại trang) nhận lại được; ``so_dong_bo``: sổ tiến độ đồng bộ kênh."""
+    if dang_co_tac_vu():
+        st.warning("Đang có tác vụ chạy; không tạo job trùng.")
+        return
     try:
         lease = maintenance_gate.nhan_viec_cua(eng, f"tác vụ nền «{kind}»")
     except DangChayRoi as e:
         st.error(f"Chưa chạy được: {e}")
         return
+    tv = tac_vu_nen.TacVuNen(kind, huy=eng.cancel, so_dong_bo=so_dong_bo)
     job.update({"running": True, "pct": 0.0, "msg": "Đang khởi động...",
                 "results": [], "error": "", "kind": kind, "da_day_sheet": False})
     eng.cancel_event.clear()
-
-    def bao_tien_do(pct, msg):
-        job["pct"], job["msg"] = pct, msg
-
-    def target():
-        try:
-            job["results"] = ham(*args, progress=bao_tien_do, **kwargs)
-        except Exception as e:  # noqa: BLE001
-            job["error"] = str(e)
-        finally:
-            if lease is not None:
-                lease.tra()
-            job["running"] = False
-
-    t = threading.Thread(target=target, daemon=True)
-    t.start()
+    try:
+        tv.bat_dau(eng, ham, args, kwargs, job=job, lease=lease)
+    except tac_vu_nen.DangCoTacVuKhac as e:   # phiên khác vừa khởi động trước: chưa chạy gì
+        if lease is not None:
+            lease.tra()
+        job.update({"running": False, "msg": ""})
+        st.warning(str(e))
+        return
+    st.session_state.tac_vu_nen = tv
     st.rerun()
+
+
+def _huy_tac_vu_nen() -> None:
+    """Nút Dừng của tác vụ nền: tác vụ nhận lại từ phiên khác → cờ huỷ của Engine đã khởi động nó."""
+    tv = st.session_state.get("tac_vu_nen")
+    if tv is not None:
+        tv.huy()
+    else:
+        eng.cancel()
 
 
 def chay_van_tay(thumuc: str, mode: str) -> None:
@@ -982,7 +1011,7 @@ if job["running"]:
             st.progress(job["pct"], text=f"{job['pct']*100:.0f}%")
             st.info(job["msg"] or "Đang khởi động...")
         if st.button("⏹️ Dừng lại", type="secondary"):
-            eng.cancel()
+            _huy_tac_vu_nen()
             st.warning("Đã gửi yêu cầu dừng, chờ một chút...")
         st.caption("Cửa sổ này tự cập nhật. Bạn có thể để yên và làm việc khác, "
                    "nhưng đừng đóng cửa sổ đen phía sau.")
@@ -991,7 +1020,7 @@ if job["running"]:
         st.progress(job["pct"], text=f"{job['pct']*100:.0f}%")
         st.info(job["msg"] or "Đang khởi động...")
         if st.button("⏹️ Dừng lại", type="secondary"):
-            eng.cancel()
+            _huy_tac_vu_nen()
             st.warning("Đã gửi yêu cầu dừng, chờ một chút...")
         st.caption("Cửa sổ này tự cập nhật. Bạn có thể để yên và làm việc khác, "
                    "nhưng đừng đóng cửa sổ đen phía sau.")
@@ -1205,7 +1234,7 @@ with tab0:
         cs = ChannelSync(st.session_state.kho_dir.strip('" '),
                          player_clients=list(eng.config.ytdlp_player_clients),
                          cau_hinh_mang=eng.cau_hinh_mang(), theo_doi=st.session_state.so_dong_bo)
-        chay_nen("channel", cs.sync, kenh_url.strip(), gioi_han or None,
+        chay_nen("channel", cs.sync, kenh_url.strip(), gioi_han or None, so_dong_bo=st.session_state.so_dong_bo,
                  cancel_check=lambda: eng.cancel_event.is_set(), thu_lai_han_che=thu_lai_han_che)
 
     if st.session_state.kho_dir and os.path.isdir(st.session_state.kho_dir.strip('" ')):
