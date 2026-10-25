@@ -2,6 +2,7 @@
 paths:
   - "TimClipPro/engine.py"
   - "TimClipPro/chap_nhan_khop.py"
+  - "TimClipPro/chong_bong_lap.py"
   - "TimClipPro/toc_do_khop.py"
   - "TimClipPro/common_original.py"
   - "TimClipPro/common_original_jobs.py"
@@ -24,6 +25,9 @@ paths:
   - "TimClipPro/tests/test_toa_do_*.py"
   - "TimClipPro/tests/test_engine_core.py"
   - "TimClipPro/tests/test_chan_doan_zero_match.py"
+  - "TimClipPro/tests/test_bong_am_thanh_lap*.py"
+  - "TimClipPro/tests/am_thanh_lap.py"
+  - "TimClipPro/tests/tao_golden_bong_lap.py"
 ---
 # Quy tắc vùng MATCHER — quét, so khớp, chọn lọc, «Một video gốc chung cho cả lô»
 
@@ -35,7 +39,12 @@ Tự nạp khi đọc/sửa file khớp `paths` ở trên. Bất biến chung v�
 - `audfprint-master/` là thư viện vendored: không sửa, bọc trong `engine.py`.
 - Không đổi `_merge`, ngưỡng mặc định, trần `max_matches` khi người dùng chưa yêu cầu (đã hiệu chỉnh bằng đo thật).
 - Tái hiện bằng audio synthetic (chèn clip vào file dài ở mốc đã biết) — mẫu: `tests/test_nguon_chung_audio_that.py`.
-- Bài học liên quan: `TimClipPro/docs/LOI_DA_GAP.md` mục 5, 12, 13, 15a, 15c, 16.
+  Dữ liệu cho matcher phải có cả âm thanh LẶP (`tests/am_thanh_lap.py`): `_giai_dieu` là nốt ngẫu nhiên, không bao giờ
+  sinh «bóng» — bộ test cũ vì thế đã không bắt được lỗi mốc của nhạc có nhịp (LOI_DA_GAP mục 18).
+- Âm thanh lặp (`chong_bong_lap.py`, `TimClipPro/docs/BONG_AM_THANH_LAP.md`): mốc đầu clip CHỈ lấy từ căn chỉnh chính;
+  không xoá mảnh khỏi phép tính bằng chứng (hash sát ngưỡng sẽ rớt); gộp/lọc không được sinh dương tính MỚI — nếu
+  sinh là đổi chính sách nhận diện (chữ ký chính sách, Watch quét lại âm tính). Hằng số của module cũng là chính sách.
+- Bài học liên quan: `TimClipPro/docs/LOI_DA_GAP.md` mục 5, 12, 13, 15a, 15c, 16, 18.
 
 ## Test (chi tiết: `docs/ai/TEST_MATRIX.md`, hàng «Matcher / quét»)
 - Đổi đường quét, `_merge`, ngưỡng, dừng sớm: suite nhanh + chậm (`-m slow`) + kiểm đột biến các vị từ đã đổi.
@@ -43,7 +52,7 @@ Tự nạp khi đọc/sửa file khớp `paths` ở trên. Bất biến chung v�
 ## Tài liệu (`TimClipPro/docs/`)
 `COMMON_ORIGINAL_DESIGN.md`, `COMMON_ORIGINAL_VALIDATION.md`, `COMMON_ORIGINAL_SATURATION_ANALYSIS.md`,
 `MATCH_ACCEPTANCE_ARCHITECTURE.md`, `MATCH_SELECTION_ARCHITECTURE.md`, `DA_TOC_DO.md`, `FAST_TOP1_SCAN.md`,
-`ZERO_MATCH_ROOT_CAUSE.md`, `SCAN_PIPELINE_V2_DESIGN.md`, `SCAN_THREADING_AND_STATE.md`.
+`ZERO_MATCH_ROOT_CAUSE.md`, `SCAN_PIPELINE_V2_DESIGN.md`, `SCAN_THREADING_AND_STATE.md`, `BONG_AM_THANH_LAP.md`.
 
 Phần dưới đây chuyển NGUYÊN VĂN từ `TimClipPro/CLAUDE.md` (bản e49340d); đường dẫn `docs/…`, `tests/…` tính từ
 `TimClipPro/`.

@@ -486,3 +486,15 @@ thật của video bị gỡ ở Tier 2) không được nhận ra; liệt kê k
 → **Cổng cookie kiểm đúng luật nạp của yt-dlp**: dòng `#HttpOnly_` là bản ghi (dòng hỏng bị yt-dlp
   in nguyên văn ra stderr), dòng 1 phải là tiêu đề Netscape. Cấu trúc đúng ≠ YouTube chấp nhận
   phiên; chỉ request thật mới biết (`cli.py youtube-doctor --network URL`).
+
+**18. «Bóng» của âm thanh lặp làm lệch mốc và thừa dòng (10/10/2026, PC2).** Chi tiết: `docs/BONG_AM_THANH_LAP.md`.
+Nhạc có nhịp trống đều, vòng hợp âm hay đoạn lặp y hệt làm audfprint trả thêm căn chỉnh của CÙNG clip lệch bội số nửa
+ô nhịp («bóng», 8–30% số hash của căn chỉnh thật, phủ cùng vùng video). `_merge` neo mốc vào mảnh có vùng SỚM NHẤT của
+nhóm nên một bóng 34 hash kéo lệch mốc tới ±`dedup_s` (E2E trên PC2: −10,7 s; dựng lại kho: −19,2 s, vì bảng hash
+audfprint bỏ ngẫu nhiên phần tràn); nhóm toàn bóng ≥ 1.000 hash thành dòng «Rất chắc chắn» thừa và làm phồng «Tổng số
+đoạn phát hiện». Bộ test không bắt được vì `_giai_dieu` là nốt ngẫu nhiên — không bao giờ lặp.
+→ **Mốc chỉ lấy từ căn chỉnh CHÍNH**; bóng vẫn được gom và tính bằng chứng như cũ. Đừng xoá mảnh để «làm sạch»: bản
+  xoá-trước-khi-gộp làm nhóm thật mất tới 1,1% hash — đủ đánh rơi ứng viên sát ngưỡng 1.000.
+→ **Dữ liệu test cho matcher phải có âm thanh lặp** (`tests/am_thanh_lap.py`), không chỉ giai điệu ngẫu nhiên.
+→ **Đổi gộp/chấp nhận thì hỏi: có sinh dương tính MỚI không?** Có = đổi chính sách nhận diện (chữ ký chính sách, Watch
+  quét lại âm tính). Bản sửa P0 cố ý không sinh (C' chỉ gộp khi một phần đã đạt chuẩn) nên chữ ký giữ nguyên.

@@ -152,6 +152,11 @@ trống không đóng góp** vào cả tổng hash lẫn `do_dai_hop`.
 Sau đó `hashes` bị kẹp trần bằng tổng hash thật của clip trong kho (`engine.py:2500-2505`) —
 vượt trần thì ghi cảnh báo `"có dấu hiệu đếm trùng"`.
 
+**Từ P0 (10/10/2026, D-27, `docs/BONG_AM_THANH_LAP.md`):** trước khi gộp, `chong_bong_lap.phan_loai_manh` gắn nhãn
+mỗi mảnh là căn chỉnh CHÍNH hay «bóng»/«đối thủ» của một vị trí đặt mạnh hơn (âm thanh lặp). Gom nhóm và tích phân
+hash ở trên KHÔNG đổi; chỉ: nhóm không có mảnh chính bị bỏ, mốc đầu clip lấy từ mảnh chính sớm nhất (không còn «mảnh
+sớm nhất» bất kỳ), các nhóm cùng vị trí đặt được gộp khi không đổi kết luận chấp nhận, và `Match` mang cờ mốc mơ hồ.
+
 ### T5 — **accepted**: ứng viên được chấp nhận
 
 `chap_nhan_khop.loc_chap_nhan` — `chap_nhan_khop.py:129` → `danh_gia_chap_nhan` —

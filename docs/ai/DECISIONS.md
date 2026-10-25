@@ -8,6 +8,26 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-4 Lịch sử repo public** — có dữ liệu cần xử lý (chi tiết ngoài Git); đóng repo public hay viết lại lịch sử đều
   cần duyệt (force-push đang bị cấm).
 - **P-5 Bật ruleset GitHub** (`release/github/*.json`, D-25) — một lệnh `gh api`, chủ repo duyệt.
+- **P-6 Thể hiện cờ «mốc mơ hồ» (D-27)** trên giao diện, CSV, Google Sheets, lịch sử — đổi chính sách báo cáo V2, PR
+  riêng (`TimClipPro/docs/BONG_AM_THANH_LAP.md` §4 có phương án giữ hợp đồng 34 cột). Chưa có thì dòng mơ hồ (âm thanh lặp
+  y hệt, nhiều mốc đúng như nhau) vẫn gửi như mốc chắc chắn. Từng là BLOCKER phát hành Stable; PC2 DEV-ONLY (D-26) dùng
+  D-27 hằng ngày vì nó đã tốt hơn hẳn mã cũ (mã cũ gửi cả dòng «bóng» lẫn mốc lệch như chắc chắn).
+- **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
+  nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
+
+## D-27 Sửa «bóng» của âm thanh lặp trong `_merge` (P0) — PC2 viết 10/10 (`fix/pc2/loop-alias-p0`), đưa lên `fe461bd` 25/10 (người dùng duyệt)
+Quyết định (người dùng duyệt triển khai thử A + B + C' 10/10; duyệt đưa vào mã chạy 25/10 trong kế hoạch audit): mốc đầu clip
+chỉ lấy từ căn chỉnh CHÍNH; mảnh «bóng» (căn chỉnh khác của cùng clip nằm trong phạm vi một vị trí đặt mạnh hơn) vẫn được gom
+và tính hash như cũ; nhóm toàn bóng không thành ứng viên; nhóm cùng vị trí đặt (trôi < ngưỡng bù) gộp thành một lần dùng CHỈ
+khi không đổi kết luận chấp nhận; `Match` có `moc_mo_ho`, `moc_thay_the`, `ty_so_doi_thu` (chỉ trong bộ nhớ), tách khỏi
+`confidence` (độ chắc chắn nguồn). Hằng số ở `chong_bong_lap.py`, không vào `Config`/`TRUONG_CHINH_SACH`; chữ ký chính sách
+GIỮ NGUYÊN. (Viết 10/10 với số D-21; số đó đã dùng cho «Stable phân phối bằng GitHub Release» nên đánh lại là D-27.)
+Vì sao: bản «xoá bóng trước khi gộp» (đã mô phỏng khi điều tra) làm nhóm thật mất tới 1,1% hash — rớt ứng viên sát
+ngưỡng; phân loại theo từng mảnh bỏ sót bóng nằm trong «lỗ» của căn chỉnh bị trôi. Bản sửa không sinh dương tính mới
+(đo: 0 vi phạm trên 27 lượt quét tổng hợp) nên âm tính cũ vẫn đúng — không cần Watch quét lại.
+Ràng buộc: hiển thị cờ mơ hồ là P-6; đổi/nới hằng số hoặc muốn cộng các phần dưới ngưỡng thành dương tính = đổi chính
+sách nhận diện → quyết định mới kèm phương án chữ ký/Watch.
+Bằng chứng: `TimClipPro/docs/BONG_AM_THANH_LAP.md`; `tests/test_bong_am_thanh_lap*.py`; handoff PC2 (10/10 và 25/10).
 
 ## D-26 PC2 DEV-ONLY: Development 8502 là ứng dụng làm việc chính, dữ liệu THẬT; Stable chỉ dự phòng (người dùng, 2026-10-15) — thay một phần D-19 (Development chỉ dữ liệu thử) và D-21/D-23 cho việc tự dùng trên PC2
 Quyết định:
