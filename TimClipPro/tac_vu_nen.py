@@ -10,6 +10,11 @@ Thread nền KHÔNG chạm Streamlit: nó chỉ ghi vào đối tượng ``TacVu
 trước); phiên khác NHẬN LẠI tác vụ thì chép ``anh()`` vào ``job`` của mình ở main thread. Nút Dừng của phiên nhận lại
 gọi ``huy()`` = cờ huỷ của Engine đã khởi động tác vụ (cờ mà ``cancel_check`` của tác vụ đang đọc), không phải Engine
 riêng của phiên mới.
+
+Tác vụ XONG khi không phiên nào đang vẽ (lượt chạy qua đêm, tab bị trình duyệt dỡ — chính tác nhân của D-13) thì kết quả
+chỉ nằm trong ``job`` của phiên đã chết: giữ tác vụ trong ô «vừa xong» của thư mục dữ liệu tới khi MỘT phiên nhận
+(:func:`nhan_vua_xong`), phiên đã theo dõi tới lúc xong báo đã nhận (:func:`da_nhan`), hoặc tác vụ mới bắt đầu (review
+audit D). Chỉ trong bộ nhớ tiến trình: tắt Tool thì mất — như sổ lô quét.
 """
 
 from __future__ import annotations
@@ -21,6 +26,8 @@ from typing import Callable, Optional
 
 # Tác vụ nền ĐANG CHẠY của tiến trình, theo thư mục dữ liệu (một tác vụ mỗi thư mục, như lô quét).
 _DANG_CHAY: dict = {}
+# Tác vụ đã XONG mà chưa phiên nào chép kết quả (theo thư mục dữ liệu; chung khoá với ``_DANG_CHAY``).
+_VUA_XONG: dict = {}
 _KHOA_DANG_CHAY = threading.Lock()
 
 
@@ -38,6 +45,21 @@ def dang_chay_cua(engine) -> Optional["TacVuNen"]:
     with _KHOA_DANG_CHAY:
         tv = _DANG_CHAY.get(_khoa(engine))
     return tv if tv is not None and tv.running else None
+
+
+def nhan_vua_xong(engine) -> Optional["TacVuNen"]:
+    """Lấy (và bỏ khỏi sổ) tác vụ đã XONG trên cùng thư mục dữ liệu mà chưa phiên nào chép kết quả — đúng một phiên
+    nhận được."""
+    with _KHOA_DANG_CHAY:
+        return _VUA_XONG.pop(_khoa(engine), None)
+
+
+def da_nhan(engine, tv: "TacVuNen") -> None:
+    """Phiên đã chép kết quả cuối của ``tv`` vào ``job``: phiên mở sau không nhận lại."""
+    with _KHOA_DANG_CHAY:
+        k = _khoa(engine)
+        if _VUA_XONG.get(k) is tv:
+            del _VUA_XONG[k]
 
 
 class TacVuNen:
@@ -83,6 +105,7 @@ class TacVuNen:
             with self._khoa:
                 self._running = True
             _DANG_CHAY[k] = self
+            _VUA_XONG.pop(k, None)        # kết quả cũ chưa ai nhận: tác vụ mới thay chỗ
 
         def bao_tien_do(pct, msg):
             with self._khoa:
@@ -104,6 +127,7 @@ class TacVuNen:
                 with _KHOA_DANG_CHAY:
                     if _DANG_CHAY.get(k) is self:
                         del _DANG_CHAY[k]
+                        _VUA_XONG[k] = self   # tới khi một phiên nhận (phiên đã bấm có thể đã chết)
                 job["results"], job["error"] = ket_qua, loi
                 job["running"] = False
 

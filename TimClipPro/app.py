@@ -129,10 +129,14 @@ if scan_controller.running and not job.get("running"):
 def _dong_bo_tac_vu_nen() -> None:
     """Tác vụ nền (đồng bộ kênh, lấy lại tên, vá metadata) sống ở mức TIẾN TRÌNH (``tac_vu_nen``). Tải lại trang
     giữa lượt = phiên MỚI: NHẬN LẠI tác vụ đang chạy (tiến độ, nút Dừng, kết quả cuối) thay vì coi như không có gì
-    chạy (audit D-13). Chỉ main thread chép ảnh chụp vào ``job`` của phiên; thread nền không đọc session_state."""
+    chạy (audit D-13). Chỉ main thread chép ảnh chụp vào ``job`` của phiên; thread nền không đọc session_state.
+    Tác vụ đã XONG khi không phiên nào vẽ (tab bị dỡ, chạy qua đêm): phiên MỚI (chưa làm gì — ``job`` chưa có loại)
+    nhận kết quả cuối đúng một lần; phiên đang hiện kết quả việc khác không bị đè (review audit D)."""
     tv = st.session_state.get("tac_vu_nen")
     if tv is None and not job.get("running"):
         tv = tac_vu_nen.dang_chay_cua(eng)
+        if tv is None and not job.get("kind"):
+            tv = tac_vu_nen.nhan_vua_xong(eng)
         if tv is None:
             return
         st.session_state.tac_vu_nen = tv
@@ -143,6 +147,7 @@ def _dong_bo_tac_vu_nen() -> None:
     job.update(tv.anh())
     if not job["running"]:
         st.session_state.pop("tac_vu_nen", None)     # xong: kết quả đã chép, thôi theo dõi
+        tac_vu_nen.da_nhan(eng, tv)                  # phiên mở sau không nhận lại
 
 
 _dong_bo_tac_vu_nen()

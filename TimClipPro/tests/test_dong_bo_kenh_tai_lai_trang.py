@@ -191,3 +191,94 @@ def test_so_tac_vu_nen_mot_tac_vu_moi_thu_muc_du_lieu_va_tra_lease(tmp_path):
     assert huy.is_set() and job["results"] == {"so": 7, "da_huy": True} and job["error"] == ""
     assert tv.anh()["results"] == job["results"] and lease.da_tra == 1
     assert tac_vu_nen.dang_chay_cua(eng_phien_moi) is None
+
+
+# ------------------------------------------------ review audit D: lượt XONG trước khi người dùng tải lại trang
+
+def test_dong_bo_xong_khi_tab_da_bi_do_phien_mo_sau_van_thay_ket_qua_mot_lan(tmp_path, monkeypatch):
+    """Đồng bộ kênh nhiều giờ, trình duyệt dỡ tab (một trong các tác nhân D-13 nêu), lượt XONG lúc 03:00; người dùng mở
+    trang lúc 08:00 = phiên mới. Phiên đó phải thấy kết quả cuối (trạng thái, video lỗi, đăng nhập) — đúng MỘT lần: phiên
+    mở sau nữa không hiện lại kết quả cũ như việc mới."""
+    import streamlit
+
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    kho = tmp_path / "KhoGia"
+    kho.mkdir()
+    da_bat_dau = threading.Event()
+    tha = threading.Event()
+
+    def sync_gia(self, url, limit, progress, cancel_check, thu_lai_han_che=False):
+        da_bat_dau.set()
+        if progress:
+            progress(0.1, "Đang tải video giả 1/3")
+        _cho(tha.is_set, 30.0)
+        return {"tong": 3, "moi": 2, "bo_qua": 0, "loi": ["Video gia 3: lỗi giả đã ghi nhận"], "thu_muc": self.dest,
+                "da_huy": False, "nghi_hong": [], "da_cach_ly": [], "da_doi_soat": 0, "chan_youtube": "",
+                "youtube": {}, "trang_thai": "MOT_PHAN", "can_tai": 3, "so_loi": 1, "chua_thu": 0,
+                "gioi_han_tuoi": 0, "chi_hoi_vien": 0, "xac_thuc": {}, "han_che_bo_qua": 0, "canh_bao_cookie": ""}
+
+    monkeypatch.setattr(ChannelSync, "_sync_da_khoa", sync_gia)
+    monkeypatch.setattr(streamlit, "rerun", lambda *a, **k: None)
+
+    at1 = AppTest.from_file(str(APP_PY), default_timeout=120).run()
+    _o(at1, NHAN_KENH).set_value("https://www.youtube.com/@KenhGia")
+    _o(at1, NHAN_KHO).set_value(str(kho))
+    at1.run()
+    _nut(at1, NUT_DONG_BO).click().run()
+    assert da_bat_dau.wait(15), "thiết lập: lượt đồng bộ giả không chạy"
+    job1 = at1.session_state.job
+    # Tab bị dỡ: phiên #1 không vẽ lại nữa. Lượt xong khi không phiên nào đang mở.
+    tha.set()
+    assert _cho(lambda: not job1.get("running"), 20.0), "lượt giả không kết thúc"
+
+    at2 = AppTest.from_file(str(APP_PY), default_timeout=120).run()
+    assert not at2.exception
+    van_ban2 = _van_ban(at2)
+    job2 = at2.session_state.job
+    assert job2.get("kind") == "channel" and job2.get("results", {}).get("trang_thai") == "MOT_PHAN", (
+        f"phiên mở SAU khi lượt xong không thấy kết quả: job={dict(job2)!r}; văn bản: {van_ban2[:300]!r}")
+    assert "lỗi giả đã ghi nhận" in van_ban2 or "Đồng bộ xong" in van_ban2, van_ban2[:400]
+
+    at3 = AppTest.from_file(str(APP_PY), default_timeout=120).run()
+    assert not at3.exception
+    assert not at3.session_state.job.get("kind"), "kết quả đã có phiên nhận — phiên sau không hiện lại"
+
+
+def test_so_tac_vu_nen_giu_ket_qua_vua_xong_toi_khi_mot_phien_nhan(tmp_path):
+    import types
+
+    import tac_vu_nen
+
+    eng = types.SimpleNamespace(data_dir=str(tmp_path / "data"))
+    eng_phien_moi = types.SimpleNamespace(data_dir=str(tmp_path / "data"))
+
+    def chay_xong(ket):
+        job: dict = {}
+        tv = tac_vu_nen.TacVuNen("channel", huy=lambda: None)
+        tv.bat_dau(eng, lambda progress: ket, (), {}, job=job)
+        assert _cho(lambda: not tv.running and job.get("running") is False, 10.0)
+        return tv
+
+    tv = chay_xong({"trang_thai": "DAY_DU"})
+    assert tac_vu_nen.dang_chay_cua(eng_phien_moi) is None
+    nhan = tac_vu_nen.nhan_vua_xong(eng_phien_moi)
+    assert nhan is tv and nhan.anh()["results"] == {"trang_thai": "DAY_DU"} and not nhan.anh()["running"]
+    assert tac_vu_nen.nhan_vua_xong(eng_phien_moi) is None, "chỉ một phiên nhận"
+
+    # Phiên đã bấm tự theo dõi tới lúc xong (đã chép kết quả) → bỏ khỏi sổ, phiên mới không nhận lại.
+    tv2 = chay_xong({"trang_thai": "MOT_PHAN"})
+    tac_vu_nen.da_nhan(eng, tv2)
+    assert tac_vu_nen.nhan_vua_xong(eng_phien_moi) is None
+
+    # Tác vụ mới bắt đầu thì kết quả cũ chưa ai nhận không còn là «vừa xong».
+    chay_xong({"trang_thai": "cu"})
+    tha = threading.Event()
+    tv4 = tac_vu_nen.TacVuNen("va_title", huy=tha.set)
+    tv4.bat_dau(eng, lambda progress: _cho(tha.is_set, 10.0), (), {}, job={})
+    try:
+        assert tac_vu_nen.nhan_vua_xong(eng_phien_moi) is None
+    finally:
+        tha.set()
+    assert _cho(lambda: not tv4.running, 10.0)
+    assert tac_vu_nen.nhan_vua_xong(eng_phien_moi) is tv4
