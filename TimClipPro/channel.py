@@ -1323,6 +1323,8 @@ class ChannelSync:
               "gioi_han_tuoi": 0, "chi_hoi_vien": 0, "xac_thuc": {},
               # Video đã biết bị hạn chế (sổ TEP_HAN_CHE, cùng cách đăng nhập) lượt này không thử lại — vẫn CHƯA tải.
               "han_che_bo_qua": 0,
+              # Mã có trong sổ đã tải (archive) mà KHÔNG có file ở gốc kho: không tải lại, KHÔNG đếm vào «có sẵn».
+              "trong_so_khong_file": 0,
               "canh_bao_cookie": THONG_BAO_HAI_NGUON_COOKIE if self.cau_hinh_mang.hai_nguon_cookie else ""}
         # Cờ huỷ của CẢ lượt sync, để lệnh nén FFmpeg đang chạy cũng dừng được.
         self._huy_luot_sync = _CoHuyTuHam(cancel_check)
@@ -1364,12 +1366,12 @@ class ChannelSync:
                 loi.append(f"Không đối soát được metadata tại chỗ cho "
                            f"{len(tep['can_doi_soat'])} file có sẵn: {e}")
             hop_le = set(tep["hop_le"])
-            # Archive chỉ là sổ tay: mã có trong archive mà file trên đĩa nghi hỏng thì
-            # vẫn phải tải lại. Mã có trong archive mà KHÔNG có file thì giữ nguyên ý nghĩa
-            # cũ (người dùng có thể đã chủ ý xoá).
-            da_co = (self.done_ids() - (set(nghi) - hop_le)) | hop_le
+            chi_trong_so = self._ma_chi_trong_so(tep)
+            da_co = hop_le | chi_trong_so
             can_tai = [v for v in ds if v.id not in da_co]
-            kq["bo_qua"] = len(ds) - len(can_tai)
+            kq["trong_so_khong_file"] = sum(1 for v in ds if v.id in chi_trong_so)
+            # «Có sẵn (giữ nguyên)» chỉ đếm video THẬT có file trong kho (audit D-7).
+            kq["bo_qua"] = len(ds) - len(can_tai) - kq["trong_so_khong_file"]
             kq["can_tai"] = len(can_tai)
             # Video đã biết bị hạn chế với CÙNG cách đăng nhập: không gửi lại request vô ích (vẫn báo CHƯA tải, không
             # vào archive). Video còn lại: video CHƯA biết bị hạn chế thử TRƯỚC, để trần hàng loạt của cầu dao không
@@ -1381,7 +1383,9 @@ class ChannelSync:
             kq["han_che_bo_qua"] = len(can_tai) - len(con)
             can_tai = [v for v in con if v.id not in so_han_che] + [v for v in con if v.id in so_han_che]
             bao(0.02, f"Kênh có {len(ds)} video — {len(can_tai)} video mới cần tải"
-                + (f" (bỏ qua {kq['han_che_bo_qua']} video đã biết bị hạn chế)." if kq["han_che_bo_qua"] else "."))
+                + (f" (bỏ qua {kq['han_che_bo_qua']} video đã biết bị hạn chế)." if kq["han_che_bo_qua"] else ".")
+                + (f" {kq['trong_so_khong_file']} video có trong sổ đã tải nhưng không có file — không tải lại."
+                   if kq["trong_so_khong_file"] else ""))
             td.ke_hoach(da_co=kq["bo_qua"], can_tai=kq["can_tai"], han_che_bo_qua=kq["han_che_bo_qua"],
                         se_thu=len(can_tai))
 
@@ -1692,6 +1696,15 @@ class ChannelSync:
             return bool(do_dai)
         return not (do_dai and ChannelSync._nguon_ngan_bat_thuong(do_dai, tham_chieu_s))
 
+    def _ma_chi_trong_so(self, tep: Mapping) -> set:
+        """Mã có trong sổ đã tải (archive) mà ở gốc kho KHÔNG có file nào của nó — cả hợp lệ lẫn nghi hỏng.
+
+        Archive chỉ là sổ tay: mã có file nghi hỏng thì vẫn phải tải lại. Mã KHÔNG có file thì đồng bộ không tải lại
+        (người dùng có thể đã chủ ý xoá, hoặc chuyển file vào thư mục con — engine vẫn lấy vân tay ở đó), nhưng cũng
+        không phải «có sẵn». ``sync`` và ``kiem_tra_thieu`` dùng CHUNG hàm này để «Kiểm tra còn thiếu» không hứa tải
+        video mà đồng bộ sẽ bỏ qua (audit D-7). Muốn tải lại: «Dựng lại danh sách đã tải» (``sua_archive``)."""
+        return self.done_ids() - set(tep["hop_le"]) - set(tep["nghi_hong"])
+
     def sua_archive(self) -> dict:
         """
         Dựng lại downloaded.txt từ các file THỰC SỰ đang có trên đĩa.
@@ -1735,10 +1748,15 @@ class ChannelSync:
         tren_dia = self.quet_id_tren_dia()
         # File nghi hỏng tính là CÒN THIẾU — lượt đồng bộ sẽ tải lại nó (audit TCP-10).
         tep = self.kiem_tep_tren_dia({v.id: v.duration for v in ds})
-        thieu = [v for v in ds if v.id not in tep["hop_le"]]
-        return {"tong_kenh": len(ds), "co_roi": len(ds) - len(thieu),
-                "thieu": thieu, "thua": [f for i, f in tren_dia.items()
-                                         if i not in {v.id for v in ds}],
+        # Cùng cách phân loại với `sync`: mã chỉ có trong sổ (không có file) KHÔNG phải «còn thiếu» — đồng bộ sẽ không
+        # tải nó — mà được báo riêng (audit D-7).
+        chi_trong_so = self._ma_chi_trong_so(tep)
+        trong_so = [v for v in ds if v.id in chi_trong_so]
+        thieu = [v for v in ds if v.id not in tep["hop_le"] and v.id not in chi_trong_so]
+        return {"tong_kenh": len(ds), "co_roi": len(ds) - len(thieu) - len(trong_so),
+                "thieu": thieu, "trong_so_khong_file": trong_so,
+                "thua": [f for i, f in tren_dia.items()
+                         if i not in {v.id for v in ds}],
                 "nghi_hong": [f"{ten}: {ly_do}" for ds_tep in tep["nghi_hong"].values()
                               for ten, ly_do in ds_tep]}
 

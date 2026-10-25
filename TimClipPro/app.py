@@ -43,6 +43,7 @@ from publication_date import format_publication_date
 from scan_jobs import ScanJobController
 import ui_tien_do_quet
 from scan_ui import (
+    CAU_TRONG_SO_KHONG_FILE,
     build_nguon_chung_status_dataframe,
     build_scan_status_dataframe,
     canh_bao_nguon_kho,
@@ -1229,8 +1230,15 @@ with tab0:
                     cs = ChannelSync(st.session_state.kho_dir.strip('" '),
                                      cau_hinh_mang=eng.cau_hinh_mang())
                     r = cs.kiem_tra_thieu(kenh_url.strip(), gioi_han or None)
+                    trong_so = r.get("trong_so_khong_file") or []
                     st.success(f"Kênh có {r['tong_kenh']} video — đã có **{r['co_roi']}**, "
-                               f"còn thiếu **{len(r['thieu'])}**.")
+                               f"còn thiếu **{len(r['thieu'])}**"
+                               + (f", trong sổ đã tải nhưng không có file **{len(trong_so)}**" if trong_so else "")
+                               + ".")
+                    if trong_so:
+                        # Đồng bộ KHÔNG tải các video này — không liệt kê chúng là «còn thiếu» (audit D-7).
+                        st.warning(CAU_TRONG_SO_KHONG_FILE.format(n=len(trong_so)) + "\n\n- "
+                                   + "\n- ".join(f"{v.title[:60]} ({v.id})" for v in trong_so[:10]))
                     if r.get("nghi_hong"):
                         st.warning(
                             f"{len(r['nghi_hong'])} file nghi hỏng/nén dở được tính là còn "

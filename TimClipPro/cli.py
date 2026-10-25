@@ -431,6 +431,9 @@ def _main():
               f"chưa thử {r.get('chua_thu', 0)}, bị hạn chế (chưa tải, không thử lại) {r.get('han_che_bo_qua', 0)}.")
         if r.get("han_che_bo_qua"):
             print("  Thử lại video bị hạn chế: thêm --thu-lai-han-che (tool tự thử lại khi đổi nguồn cookie).")
+        if r.get("trong_so_khong_file"):
+            from scan_ui import CAU_TRONG_SO_KHONG_FILE
+            print(" ", CAU_TRONG_SO_KHONG_FILE.format(n=r["trong_so_khong_file"]))
         for x in ("gioi_han_tuoi", "chi_hoi_vien"):
             if r.get(x):
                 print(f"  {r[x]} video {'giới hạn độ tuổi' if x == 'gioi_han_tuoi' else 'chỉ hội viên'} bị bỏ qua.")

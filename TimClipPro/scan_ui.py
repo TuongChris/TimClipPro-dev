@@ -136,6 +136,15 @@ _MUC_DANG_NHAP = {"DA_XAC_MINH": "success", "CHUA_XAC_MINH": "info", "KHONG_COOK
                   "BI_TU_CHOI": "warning", "KHONG_DANG_NHAP": "warning", "KHONG_CO_COOKIE_DANG_NHAP": "warning"}
 
 
+# Mã có trong `downloaded.txt` mà gốc kho không có file (audit D-7): đồng bộ CỐ Ý không tải lại — dùng chung cho kết quả
+# đồng bộ và «Kiểm tra còn thiếu» để hai màn hình nói cùng một điều.
+CAU_TRONG_SO_KHONG_FILE = (
+    "{n} video có trong sổ đã tải (`downloaded.txt`) nhưng KHÔNG thấy file ở thư mục kho — đồng bộ KHÔNG tải lại "
+    "(có thể bạn đã chủ ý xoá) và KHÔNG tính là «có sẵn». File đã mất thật thì kho thiếu vân tay của chúng — muốn tải "
+    "lại: bấm «Dựng lại danh sách đã tải» rồi «Bắt đầu đồng bộ kênh». Nếu bạn chỉ chuyển file vào thư mục con thì "
+    "đừng dựng lại (sẽ tải trùng).")
+
+
 def tom_tat_dong_bo_kenh(r: Mapping[str, Any]) -> list:
     """Các dòng ``(mức, câu)`` cho kết quả một lượt đồng bộ kênh (``ChannelSync.sync``). Dòng đầu là tiêu đề:
     CHỈ «✅ Đồng bộ xong» màu xanh khi mọi video cần tải đã tải xong (sự cố 15/10/2026: cầu dao đã mở, 1.189 video
@@ -144,8 +153,11 @@ def tom_tat_dong_bo_kenh(r: Mapping[str, Any]) -> list:
     moi, co_san = int(r.get("moi") or 0), int(r.get("bo_qua") or 0)
     so_loi, chua_thu = int(r.get("so_loi") or 0), int(r.get("chua_thu") or 0)
     han_che = int(r.get("han_che_bo_qua") or 0)
+    trong_so = int(r.get("trong_so_khong_file") or 0)
     so = (f"có sẵn **{co_san}** (giữ nguyên), tải mới **{moi}**, lỗi **{so_loi}**, chưa thử **{chua_thu}**"
-          + (f", bị hạn chế (chưa tải) **{han_che}**" if han_che else "") + f". Thư mục: `{r.get('thu_muc', '')}`")
+          + (f", bị hạn chế (chưa tải) **{han_che}**" if han_che else "")
+          + (f", trong sổ đã tải nhưng không có file **{trong_so}**" if trong_so else "")
+          + f". Thư mục: `{r.get('thu_muc', '')}`")
     if tt == "DAY_DU":
         ra = [("success", f"✅ Đồng bộ xong: {so}")]
     elif tt == "MOT_PHAN":
@@ -167,6 +179,8 @@ def tom_tat_dong_bo_kenh(r: Mapping[str, Any]) -> list:
                               "này không gửi lại request vô ích cho chúng. Tool tự thử lại khi cách đăng nhập đổi "
                               "(thêm/đổi nguồn cookie, cài Node.js + yt-dlp-ejs); muốn thử lại ngay: bật «Thử lại cả "
                               "video bị hạn chế»."))
+    if trong_so:
+        ra.append(("warning", CAU_TRONG_SO_KHONG_FILE.format(n=trong_so)))
     xt = r.get("xac_thuc") or {}
     if xt.get("cau"):
         ra.append((_MUC_DANG_NHAP.get(xt.get("trang_thai", ""), "info"), f"Đăng nhập YouTube: {xt['cau']}"))
