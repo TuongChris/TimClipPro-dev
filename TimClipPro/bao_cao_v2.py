@@ -9,7 +9,8 @@ chọn lúc xuất, kèm vài quy tắc trình bày rải ở nhiều nơi: tên
 múi giờ hiển thị, link video gốc dạng ``youtu.be``. V2 đổi bốn điều đó cho LƯỢT QUÉT MỚI:
 
 1. tên video chỉ là tên nguồn (``yt-dlp`` ``title``); phạm vi quét nằm ở trường riêng;
-2. link nhảy mốc dùng ĐÚNG giây đang hiển thị: ``00:15:15`` ↔ ``t=915``;
+2. link nhảy mốc dùng ĐÚNG giây đang hiển thị: ``00:15:15`` ↔ ``t=915``
+   (từ 25/10/2026 dạng ``watch?v=<ID>&t=915``, xem ``link_nhay``);
 3. ngày đăng là ``upload_date`` NGUYÊN BẢN của yt-dlp, không quy đổi múi giờ; thiếu thì để
    thiếu kèm lý do, không đoán từ ``timestamp``/``release_*``/tên file;
 4. link video gốc ``https://www.youtube.com/watch?v=<ID>`` dựng từ ID đã xác minh.
@@ -127,13 +128,16 @@ def ma_tu_link(link: Any) -> str:
 def link_nhay(source_id: Any, source_ref: Any, giay: Optional[int]) -> str:
     """Link mở video vi phạm tại ĐÚNG giây ``giay`` (đã qua ``giay_moc``).
 
+    Dạng ``https://www.youtube.com/watch?v=<ID>&t=<giây>`` (chủ dự án chọn 25/10/2026; trước đó
+    ``youtu.be/<ID>?t=``). ``t`` đi sau ``&``: viết ``?t=`` thì giây dính vào mã video.
     Dựng mới từ mã video, không nối chuỗi vào URL người dùng (tránh hai tham số ``t`` mâu
     thuẫn, ``&start=``, ``#t=``...). Không có mã hợp lệ hoặc mốc không hợp lệ → ``""``.
+    Ảnh chụp đã lưu giữ link đã chụp — không hồi tố.
     """
     if giay is None:
         return ""
     ma = ma_video_hop_le(source_id) or ma_tu_link(source_ref)
-    return f"https://youtu.be/{ma}?t={giay}" if ma else ""
+    return f"https://www.youtube.com/watch?v={ma}&t={giay}" if ma else ""
 
 
 def url_goc_chuan(video_id: Any) -> str:

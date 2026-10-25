@@ -252,7 +252,7 @@ Kênh ra video mới hàng tuần thì cứ chạy lại tab này, mất vài ph
 | Thời điểm quét | Để lọc theo đợt trong Google Sheets |
 | Tên video gốc (YouTube) | Tiêu đề thật, lấy từ `clips_meta.json` |
 | Link video gốc | Link tới video gốc của bạn |
-| **🔗 Nhảy tới đúng mốc vi phạm** | `https://youtu.be/ID?t=7605` — bấm là YouTube mở đúng giây vi phạm |
+| **🔗 Nhảy tới đúng mốc vi phạm** | `https://www.youtube.com/watch?v=ID&t=7605` — bấm là YouTube mở đúng giây vi phạm (lần quét trước 25/10/2026 giữ dạng cũ `https://youtu.be/ID?t=7605`) |
 
 Cột cuối là thứ tiết kiệm nhiều thời gian nhất khi làm hồ sơ khiếu nại: không phải tua tay
 trong video 30 tiếng.

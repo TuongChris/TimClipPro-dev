@@ -28,9 +28,11 @@ cũ, tên file/mã lưu trữ/khoá vân tay trong kho.
 * **Mốc** — `giay_moc(x)`: số thực hữu hạn không âm → `floor(x)`; NaN, vô cực, số âm, bool,
   chuỗi → `None` (ô hiện `?`, không có link). Cắt phần lẻ như `engine.hhmmss` (trình phát cắt):
   `915.0` và `915.8` đều là `00:15:15` và `t=915`. Giờ vượt 24 (`25:01:01`) được giữ.
-* **Link nhảy mốc** — `link_nhay(source_id, source_ref, giay)`: `https://youtu.be/<ID>?t=<giây>`
-  dựng MỚI từ mã video (không nối chuỗi vào URL người dùng → không bao giờ có hai `t`, `start`,
-  `#t`). Không có `source_id` hợp lệ thì chỉ đọc mã từ URL YouTube thật (`youtube.com`,
+* **Link nhảy mốc** — `link_nhay(source_id, source_ref, giay)`:
+  `https://www.youtube.com/watch?v=<ID>&t=<giây>` (từ 25/10/2026, chủ dự án chọn; trước đó
+  `https://youtu.be/<ID>?t=<giây>` — ảnh chụp đã lưu giữ nguyên link cũ, không hồi tố; `t` phải
+  sau `&`, viết `?t=` thì giây dính vào mã video). Link luôn dựng MỚI từ mã video (không nối chuỗi
+  vào URL người dùng → không bao giờ có hai `t`, `start`, `#t`). Không có `source_id` hợp lệ thì chỉ đọc mã từ URL YouTube thật (`youtube.com`,
   `m.youtube.com`, `youtube-nocookie.com`, `youtu.be`); host giả kiểu `youtube.com.evil.example`,
   tên file `[ID].mp4`, mã trần → không có link.
 * **Link video gốc** — `url_goc_chuan(video_id)`: chỉ từ mã 11 ký tự resolver đã xác minh;
