@@ -349,3 +349,123 @@ def test_truong_moc_moi_tuong_thich_ket_qua_cu():
     m2 = Match(clip="a.opus", start_s=1.0, end_s=2.0, matched_s=1.0, clip_offset_s=0.0, hashes=5, confidence="x")
     m2.moc_mo_ho, m2.moc_thay_the, m2.ty_so_doi_thu = True, (9.0,), 0.97
     assert m == m2
+
+
+# ------------------------------------------------------------------ P0-1/P0-3 (audit 25/10): phủ theo bằng chứng cục bộ
+# Bản đầu xét «bị phủ» theo BAO [min, max] của vị trí đặt với MỌI mảnh, nên một lần dùng THẬT khác của cùng clip nằm
+# giữa hai mảnh rời của một vị trí yếu hơn bị gắn nhãn bóng, nhóm bị bỏ, video thành âm tính quét trọn (Watch không
+# quét lại). Quy tắc mới (docs/BONG_AM_THANH_LAP.md §2): trong cửa sổ một lần xuất hiện (lệch align ≤ dedup_s) vẫn
+# xét theo bao; ngoài cửa sổ chỉ bị phủ ở chỗ vị trí THẬT SỰ có bằng chứng.
+def _nhan(tho: list) -> list:
+    """Nhãn của từng mảnh (cùng thứ tự ``tho``) với Config mặc định — chỉ ``phan_loai_manh``, không gộp."""
+    import chong_bong_lap
+    return chong_bong_lap.phan_loai_manh(tho, Config().dedup_s)[0]
+
+
+def test_lan_dung_that_giua_cac_manh_roi_cua_vi_tri_yeu_van_la_duong_tinh():
+    """Vị trí align 100 yếu: ba mảnh 700 hash rải [100,140], [700,740], [1850,1890] (bao [100, 1890]). Một lần dùng
+    thật align 600 ở [900,1000], 2.000 hash — không mảnh nào của align 100 có mặt ở đó. Bản đầu: đối thủ (tỷ số
+    2,86), nhóm bị bỏ, 0 ứng viên đạt chuẩn → video âm tính."""
+    tho = [_manh(100.0, 100.0, 140.0, 700), _manh(100.0, 700.0, 740.0, 700), _manh(100.0, 1850.0, 1890.0, 700),
+           _manh(600.0, 900.0, 1000.0, 2000)]
+    _, dat, chon = _chuoi(_engine({CLIP: 60000}), tho, duration=2000.0)
+    assert [round(m.start_s, 1) for m in dat] == [600.0] and chon[0].start_s == pytest.approx(600.0, abs=0.01)
+    assert not chon[0].moc_mo_ho
+
+
+@pytest.mark.parametrize("hash_giua", [2800, 1200])
+def test_phan_khac_cua_clip_lap_lo_giua_hai_doan_la_lan_dung_rieng(hash_giua):
+    """Clip ở align 100 phủ [100,300] và [500,700]; một PHẦN KHÁC của clip (align 320) lấp lỗ [320,480]. Ba vùng rời
+    nhau, phần giữa không chạm bằng chứng nào của align 100 → dòng riêng, dù yếu hơn (1.200 hash = 0,34 × 3.500)."""
+    tho = [_manh(100.0, 100.0, 300.0, 3500), _manh(100.0, 500.0, 700.0, 3500), _manh(320.0, 320.0, 480.0, hash_giua)]
+    _, dat, _ = _chuoi(_engine({CLIP: 60000}), tho, duration=900.0)
+    assert sorted(round(m.start_s, 1) for m in dat) == [100.0, 320.0]
+
+
+def test_bong_trong_lo_cua_vi_tri_gan_align_van_la_bong():
+    """Đối chứng của test trên: cùng hình học nhưng align 108 — TRONG cửa sổ một lần xuất hiện (≤ dedup_s 20 s) của
+    align 100 → vẫn xét theo bao: bóng nằm trọn trong lỗ (không chạm mảnh thật nào) không thành dòng riêng."""
+    tho = [_manh(100.0, 100.0, 300.0, 6000), _manh(100.0, 500.0, 700.0, 6000), _manh(108.0, 350.0, 450.0, 1200)]
+    ds, dat, _ = _chuoi(_engine({CLIP: 60000}), tho, duration=900.0)
+    assert [round(m.start_s, 1) for m in ds] == [100.0] and len(dat) == 1          # C' gộp hai phần, bóng bị bỏ
+
+
+def test_phat_tiep_sau_khi_dung_hai_dong_du_luoi_bong_lan_hai_roi_vao_cum_lan_mot():
+    """Lần 1 = clip[0–60] ở video 100–160 (align 100); dừng 40 s; lần 2 = clip[60–120] ở 200–260 (align 140). Lưới
+    bóng nhịp của mỗi lần có một điểm rơi đúng align của lần kia (±0,3 s) nên lọt vào CỤM của lần kia. Điểm lưới ấy
+    là bóng của lần 2 (nằm trong vùng lần 2, mật độ 10%) — không được dùng để «phủ» lần 2; khi lần 2 thành chính nó
+    đổi nhãn thành bóng của lần 2. Bản đầu: lần 2 là đối thủ (tỷ số 0,96) của lần 1, nhóm bị bỏ."""
+    import chong_bong_lap
+    tho = [_manh(100.0, 100.0, 160.0, 5000), _manh(140.0, 200.0, 260.0, 4800),
+           _manh(99.7, 200.0, 260.0, 500), _manh(140.3, 100.0, 160.0, 500)]
+    _, dat, _ = _chuoi(_engine({CLIP: 60000}), tho, duration=400.0)
+    assert sorted(round(m.start_s, 1) for m in dat) == [100.0, 140.0]
+    assert max(m.end_s for m in dat) <= 260.0 + 1e-6
+    nhan = _nhan(tho)
+    assert [n.loai for n in nhan] == [chong_bong_lap.CHINH, chong_bong_lap.CHINH, chong_bong_lap.BONG,
+                                      chong_bong_lap.BONG]
+    assert nhan[2].vi_tri == nhan[1].vi_tri and nhan[3].vi_tri == nhan[0].vi_tri    # bóng của ĐÚNG lần dùng
+
+
+def test_bong_xa_goi_len_manh_that_roi_tho_vao_lo_troi_van_la_bong():
+    """Ngoài cửa sổ (lệch 60 s): mảnh chỉ gối 40% lên bằng chứng của vị trí (chưa đủ TY_LE_PHU) nhưng yếu kiểu bóng
+    so với bằng chứng ấy (4 so với 33 hash/s) thì phần thò vào lỗ trôi cũng là bóng — một mảnh là MỘT căn chỉnh.
+    Cùng hình học nhưng mật độ của một lần dùng thật (20 hash/s) → không ai phủ được → dòng riêng."""
+    that = [_manh(120.0, 100.0, 190.0, 3000), _manh(120.2, 260.0, 350.0, 3000)]
+    ds, dat, _ = _chuoi(_engine({CLIP: 60000}), that + [_manh(60.0, 150.0, 250.0, 400)], duration=600.0)
+    assert [round(m.start_s, 1) for m in ds] == [120.0] and len(dat) == 1
+    ds, dat, _ = _chuoi(_engine({CLIP: 60000}), that + [_manh(60.0, 150.0, 250.0, 2000)], duration=600.0)
+    assert sorted(round(m.start_s, 1) for m in dat) == [60.0, 120.0]
+
+
+def test_chuoi_bong_dat_chuan_duoc_neo_vao_vi_tri_that_vo_manh_duoi_nguong():
+    """P0-3: bản reup trôi ~0,08% (dưới ngưỡng bù tốc độ) của nhạc lặp 10 hash/s: căn chỉnh thật vỡ 4 mảnh 900 hash,
+    lỗ 30 s > dedup_s ⇒ 4 nhóm đều < 1.000. Chuỗi bóng xa (−60 s, 400 hash) bắc cầu qua các lỗ thành MỘT nhóm đạt
+    bậc A — mã cũ nhận video qua nó (mốc lệch −60 s). Bỏ nhóm bóng = biến dương tính cũ thành âm tính quét trọn.
+    Đúng: neo chuỗi bóng vào các nhóm thật kề nó — một dòng, mốc 120,0, bằng chứng gồm cả 3.600 hash thật."""
+    that = [_manh(120.0 + 0.1 * i, 100 + 120 * i, 190 + 120 * i, 900) for i in range(4)]
+    bong = [_manh(60.0 + 1.06 * j, 150 + 110 * j, 270 + 110 * j, 400) for j in range(4)]
+    _, dat, chon = _chuoi(_engine({CLIP: 9000}), that + bong, duration=900.0)
+    assert len(dat) == 1 and chon[0].start_s == pytest.approx(120.0, abs=0.01)
+    assert chon[0].hashes >= 3600 and (round(chon[0].vung_khop_s), round(chon[0].end_s)) == (100, 600)
+    assert not chon[0].moc_mo_ho and chon[0].ty_so_doi_thu == pytest.approx(400 / 900, abs=0.01)
+
+
+def test_nhom_bong_dat_chuan_khong_ke_nhom_chinh_nao_van_neo_vao_nhom_gan_nhat():
+    """Nhóm toàn đối thủ đạt bậc A nằm trong lỗ rộng của vị trí (cách mảnh thật > dedup_s hai bên), vị trí chưa có
+    nhóm đạt chuẩn → neo vào nhóm chính GẦN NHẤT (rồi C' gộp phần còn lại cùng vị trí): một dòng, mốc 100, cờ mơ hồ
+    vì đối thủ (tỷ số 1,33) nằm trong vùng dòng."""
+    tho = [_manh(100.0, 100.0, 160.0, 900), _manh(100.0, 500.0, 560.0, 900), _manh(110.0, 250.0, 400.0, 1200)]
+    _, dat, chon = _chuoi(_engine({CLIP: 9000}), tho, duration=700.0)
+    assert len(dat) == 1 and chon[0].start_s == pytest.approx(100.0, abs=0.01) and chon[0].hashes == 3000
+    assert chon[0].moc_mo_ho and chon[0].moc_thay_the == (110.0,)
+
+
+def test_nhom_bong_duoi_chuan_van_bi_bo_va_khong_cong_vao_nhom_that():
+    """Nhóm toàn bóng DƯỚI chuẩn không được neo (mã cũ cũng không nhận video qua nó): số liệu nhóm thật giữ nguyên,
+    không có dương tính mới."""
+    tho = [_manh(100.0, 100.0, 160.0, 900), _manh(100.0, 500.0, 560.0, 900), _manh(110.0, 250.0, 400.0, 600)]
+    ds, dat, _ = _chuoi(_engine({CLIP: 9000}), tho, duration=700.0)
+    assert dat == [] and sorted(m.hashes for m in ds) == [900, 900]
+
+
+# ------------------------------------------------------------------ P0-2: C' chỉ gộp phần có bằng chứng riêng ngang nhau
+def test_manh_yeu_cung_align_cach_xa_khong_keo_gian_vung_khop_hay_doi_moc():
+    """Một mảnh 18 hash / 6 s cùng align, cách vùng thật hàng trăm giây: một mình bị loại (< 1.000). C' không được hút
+    nó vào dòng đạt chuẩn — «Đoạn vi phạm» 160–280 không thành 160–706; mốc/offset không đổi khi nó nằm TRƯỚC vùng."""
+    _, dat, _ = _chuoi(_engine({CLIP: 36981}), [_manh(150.0, 160.0, 280.0, 2200), _manh(150.3, 700.0, 706.0, 18)],
+                       duration=900.0)
+    assert len(dat) == 1 and (round(dat[0].vung_khop_s), round(dat[0].end_s), dat[0].hashes) == (160, 280, 2200)
+    _, dat, _ = _chuoi(_engine({CLIP: 36981}), [_manh(150.0, 260.0, 380.0, 2200), _manh(150.2, 158.0, 164.0, 18)],
+                       duration=900.0)
+    assert len(dat) == 1 and (round(dat[0].vung_khop_s), round(dat[0].start_s, 1), round(dat[0].clip_offset_s)) == (
+        260, 150.0, 110)
+
+
+def test_c_phay_van_gop_khi_bong_gom_kem_lam_loang_mot_phan():
+    """Ngang bằng xét trên bằng chứng RIÊNG (mảnh chính) của hai phần: phần đầu bị một bóng dài, rất thưa gom kèm
+    (1 hash/s trên [100,380]) làm loãng mật độ cả nhóm xuống 13,7 so với 27,9 hash/s của phần sau — xét cả nhóm thì
+    «không ngang» và hai phần thành HAI dòng đạt chuẩn; mảnh chính của hai phần vẫn 30 và 27,9 hash/s → một lần dùng."""
+    tho = [_manh(50.0, 60.0, 200.0, 4200), _manh(50.0, 240.0, 380.0, 3900), _manh(58.0, 100.0, 380.0, 300)]
+    _, dat, chon = _chuoi(_engine({CLIP: 36981}), tho, duration=900.0)
+    assert len(dat) == 1 and chon[0].start_s == pytest.approx(50.0, abs=0.01) and chon[0].vung_khop_s == 60.0

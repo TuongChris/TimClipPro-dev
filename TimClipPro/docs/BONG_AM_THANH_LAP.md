@@ -1,9 +1,9 @@
-# «Bóng» của âm thanh lặp trong `_merge` — thiết kế bản sửa P0 (PC2, 10/10/2026)
+# «Bóng» của âm thanh lặp trong `_merge` — thiết kế bản sửa P0 (PC2, 10/10/2026; P0-1/P0-3 sửa 25/10/2026)
 
 Mã: `chong_bong_lap.py` (thuần) + `Engine._merge`. Test: `tests/test_bong_am_thanh_lap.py` (nhanh, mức mảnh),
 `tests/test_bong_am_thanh_lap_audio_that.py` (chậm, audio thật). Dữ liệu golden: `tests/golden/bong_lap/` (README ở đó).
-Báo cáo điều tra đầy đủ nằm NGOÀI Git trên PC2 (`C:\Dev\pc2_test_runs\2026-10-10_p0_loop_alias\BAO_CAO_P0.md`); file
-này tóm tắt những gì cần để review và bảo trì.
+Báo cáo điều tra đầy đủ nằm NGOÀI Git trên PC2 (`C:\Dev\pc2_test_runs\2026-10-10_p0_loop_alias\BAO_CAO_P0.md`; audit
+25/10: `C:\Dev\pc2_test_runs\2026-10-25_audit\p0\`); file này tóm tắt những gì cần để review và bảo trì.
 
 ## 1. Vấn đề
 Nhạc có nhịp trống đều, vòng hợp âm, hay một đoạn lặp y hệt làm audfprint trả thêm những căn chỉnh của CÙNG clip lệch
@@ -23,45 +23,74 @@ Bóng phủ cùng vùng video với căn chỉnh thật nhưng yếu hơn hẳn:
 4. Bảng hash audfprint (depth 100) bỏ NGẪU NHIÊN phần tràn của ô quá đầy (`hash_table.py`, không seed) — trống lặp làm
    tràn nhiều ô, nên mỗi lần dựng kho bóng khác đi một chút, và (1) biến khác biệt nhỏ đó thành bước nhảy mốc lớn.
 
+**Bản đầu của bản sửa (10/10) — lỗi P0-1, audit độc lập 25/10.** «Bị phủ» xét theo BAO [min, max] của vị trí đặt với
+MỌI mảnh, không giới hạn lỗ trong bao, và so sức mạnh với mảnh mạnh nhất của vị trí dù nó ở rất xa. Một lần dùng THẬT
+khác của cùng clip nằm trong bao của một vị trí yếu hơn (phần khác của clip lấp vào lỗ giữa hai đoạn; đoạn chèn 2.000
+hash giữa ba mảnh 700 hash rải trên 1.800 s; phát tiếp sau khi dừng mà lưới bóng của lần 2 có một điểm rơi đúng align
+lần 1) bị gắn nhãn bóng/đối thủ, nhóm của nó không còn mảnh chính nên bị bỏ ⇒ video DƯƠNG TÍNH thành ÂM TÍNH quét trọn,
+cùng chữ ký chính sách ⇒ Watch không bao giờ quét lại. Kèm theo: P0-3 — căn chỉnh thật trôi nhẹ vỡ thành các mảnh
+< 1.000 hash, chỉ chuỗi bóng bắc cầu qua các lỗ đạt bậc A: mã cũ nhận video (mốc lệch), bản đầu bỏ nhóm bóng ⇒ âm
+tính; P0-2 — C' hút một mảnh 18 hash cùng align cách vùng thật hàng trăm giây, kéo giãn «Đoạn vi phạm».
+
 ## 2. Nguyên tắc và cách làm
-Một giây video chỉ có thể là MỘT vị trí trong clip gốc. Hai căn chỉnh khác nhau của cùng clip phủ cùng một vùng video thì
-nhiều nhất một cái là thật.
+Một giây video chỉ có thể là MỘT vị trí trong clip gốc. Hai căn chỉnh khác nhau của cùng clip chỉ tranh nhau ở chỗ CẢ
+HAI có bằng chứng; ở đó cái yếu kiểu bóng là bóng. Vùng video không có mảnh nào của một vị trí đặt thì vị trí đó không
+giải thích được gì ở đó.
 
 Chỉ đổi MỐC và việc nhóm toàn bóng thành ứng viên. Mọi con số bằng chứng của nhóm thật giữ nguyên: gom nhóm, tích phân
 hash, độ dài khớp, vùng khớp, cận trên vẫn tính trên ĐỦ mảnh như cũ.
 
 | Bước | Hàm | Quy tắc |
 |---|---|---|
-| A. Phân loại mảnh | `phan_loai_manh` | Theo (clip, hệ số tốc độ). (1) Gom mảnh thành cụm vị trí đặt: lệch align ≤ `DUNG_SAI_ALIGN_S` = 0,5 s so với mảnh mạnh nhất của cụm. (2) Xét cụm theo TỔNG hash giảm dần; mảnh nằm ≥ `TY_LE_PHU` = 50% trong PHẠM VI của một vị trí đã giữ là «bóng» (hash ≤ `TY_LE_BONG` = 0,5 × mảnh mạnh nhất của vị trí đó) hoặc «đối thủ» ngang ngửa (> 0,5); còn lại là mảnh «chính». |
-| A. Bỏ nhóm toàn bóng | `Engine._merge` | Nhóm (gom như cũ) không có mảnh chính nào → không thành ứng viên. |
+| A. Phân loại mảnh | `phan_loai_manh` | Theo (clip, hệ số tốc độ). (1) Gom mảnh thành cụm vị trí đặt: lệch align ≤ `DUNG_SAI_ALIGN_S` = 0,5 s so với mảnh mạnh nhất của cụm. (2) Xét cụm theo TỔNG hash giảm dần; mảnh bị một vị trí đã giữ PHỦ (`_xet_phu`, dưới) là «bóng» (hash ≤ `TY_LE_BONG` = 0,5 × mảnh mạnh nhất của vị trí đó) hoặc «đối thủ» ngang ngửa (> 0,5); còn lại là mảnh «chính», thành một vị trí đặt mới. |
+| A. Phủ — trong cửa sổ | `_xet_phu` | Lệch align so với vị trí ≤ `dedup_s` (cửa sổ gom nhóm của `_merge` — mã cũ luôn coi hai căn chỉnh như thế là MỘT lần xuất hiện): ≥ `TY_LE_PHU` = 50% độ dài mảnh nằm trong BAO [min, max] các mảnh chính của vị trí. Lỗ trong bao (trôi tốc độ vỡ mảnh — B13; tiếng nói đè) thuộc lần dùng ấy: bóng nằm trọn trong lỗ vẫn là bóng. |
+| A. Phủ — ngoài cửa sổ | `_xet_phu` | Ứng viên một lần dùng KHÁC (mã cũ cho dòng riêng): chỉ bị phủ ở chỗ vị trí THẬT SỰ có bằng chứng — ≥ 50% độ dài mảnh gối lên hợp vùng các mảnh chính của vị trí; hoặc mảnh gối lên bằng chứng ấy (> 0), yếu kiểu bóng so với nó (mật độ ≤ 0,5 × mật độ của vị trí trên phần gối, tích phân như `_merge`) và ≥ 50% nằm trong bao — bóng của vị trí thò vào lỗ (một mảnh là MỘT căn chỉnh: đã là bóng ở phần gối thì phần trong lỗ cũng là bóng). Mảnh chính của vị trí mà bản thân là bóng của mảnh đang xét (nằm ≥ 50% trong mảnh ấy, mật độ ≤ 0,5 × của nó) KHÔNG được dùng để phủ: nó là điểm lưới bóng của căn chỉnh mạnh hơn lọt vào cụm; khi mảnh đang xét thành chính, điểm ấy đổi nhãn thành bóng của vị trí mới và rút khỏi bằng chứng của vị trí cũ. |
+| D. Nhóm toàn bóng | `neo_lai_nhom_bong` + `Engine._merge` | Nhóm (gom như cũ) không có mảnh chính nào. Vị trí phủ nhiều hash nhất của nó đã có nhóm chính tự đạt bậc A → nhóm bóng thừa, bỏ (số liệu nhóm chính giữ nguyên). Chưa có, và nhóm bóng TỰ đạt bậc A (mã cũ đã nhận video qua nó, mốc lệch) → gộp vào các nhóm chính của vị trí đó cách nó ≤ `dedup_s` (không có thì nhóm gần nhất), nếu nhóm gộp vẫn đạt bậc A (cùng chốt với C'): mốc từ mảnh chính, bằng chứng giữ. Còn lại → bỏ. Không bao giờ thành dòng riêng. |
 | A. Mốc | `Engine._merge` | Mốc đầu clip = mảnh CHÍNH sớm nhất (bóng/đối thủ không bao giờ làm mốc). |
-| C'. Một lần dùng | `gop_cung_vi_tri`, `cung_vi_tri` | Nhóm có mảnh chính cùng vị trí đặt: lệch align ≤ 0,1 s + `toc_do_lech_toi_thieu` (0,15%) × khoảng cách tâm, trần 1 s. Chỉ gộp khi một nhóm đã đạt bậc A và nhóm gộp vẫn đạt bậc A (gọi đúng `chap_nhan_khop.danh_gia_chap_nhan`). |
+| C'. Một lần dùng | `gop_cung_vi_tri`, `cung_vi_tri` | Nhóm có mảnh chính cùng vị trí đặt: lệch align ≤ 0,1 s + `toc_do_lech_toi_thieu` (0,15%) × khoảng cách tâm, trần 1 s. Chỉ gộp khi một nhóm đã đạt bậc A, nhóm gộp vẫn đạt bậc A (gọi đúng `chap_nhan_khop.danh_gia_chap_nhan`), VÀ bằng chứng riêng của hai phần (các mảnh chính, không tính bóng gom kèm) có mật độ ngang nhau — không phần nào ≤ 0,5 × phần kia (P0-2). |
 | B. Bằng chứng mốc | `bang_chung_moc` | Trên vị trí đặt LÀM MỐC của dòng: `moc_mo_ho` (có đối thủ > 0,5), `moc_thay_the` (mốc mà các đối thủ cho, ≤ 20), `ty_so_doi_thu` (căn chỉnh cạnh tranh mạnh nhất / mảnh mạnh nhất của vị trí làm mốc). `confidence` (độ chắc chắn của NGUỒN) không đổi. |
 
-Vì sao từng chi tiết (mỗi điều có test và đột biến bắt được — mục 6):
+Vì sao từng chi tiết (mỗi điều có test — mục 6):
 - **Không xoá bóng trước khi gộp** (bản đầu của phương án đã duyệt): xoá làm nhóm thật mất 0–1,1% hash, đủ đánh rơi một
   ứng viên sát ngưỡng 1.000 (`test_sat_nguong_1000_hash_bong_van_gop_bang_chung_nhu_cu`).
-- **Phủ theo phạm vi VỊ TRÍ, không theo từng mảnh**: căn chỉnh thật trôi tốc độ rất nhỏ vỡ thành nhiều mảnh có «lỗ» > 20 s;
-  bóng nằm trong lỗ không bị mảnh thật NÀO phủ quá nửa (video B13: bóng 129,2 s phủ 48,7%) và thành dòng neo sai.
+- **Hai chế độ phủ theo cửa sổ `dedup_s`**: trong cửa sổ, mã cũ đã luôn gộp hai căn chỉnh thành một dòng, nên xét theo
+  bao không thể đánh rơi lần dùng nào mã cũ từng báo riêng; nó giữ được bóng nằm trong lỗ trôi (B13: bóng 129,2 s phủ
+  48,7%, không mảnh thật nào phủ quá nửa) và bóng nằm trọn trong lỗ không chạm mảnh thật nào. Ngoài cửa sổ, mã cũ cho
+  dòng riêng, nên chỉ được gọi là bóng khi vị trí mạnh hơn có bằng chứng THẬT ở cùng giây (P0-1: ba ca audit, fuzz
+  20.000 thế giới so mã cũ: `lost_clip` 33 → 0).
+- **Bóng xa thò vào lỗ** (ngoài cửa sổ, gối < 50%): chỉ bắc cầu khi mảnh yếu kiểu bóng so với bằng chứng nó chạm; một
+  lần dùng thật có mật độ của lần dùng thật thì không ai phủ được (`test_bong_xa_goi_len_manh_that_roi_tho_vao_lo_troi`).
+- **Loại trừ điểm lưới bóng khỏi bằng chứng phủ**: phát tiếp sau khi dừng — lưới bóng ±k·1,06 s của lần 2 có một điểm
+  rơi trong 0,5 s của align lần 1, lọt vào cụm lần 1 (mạnh hơn theo tổng) và «phủ» trọn vùng lần 2 với mật độ 10%.
+  Bằng chứng yếu kiểu bóng so với mảnh đang xét, nằm trong mảnh ấy, chính là bóng của nó.
 - **Gom cụm TRƯỚC, xét theo TỔNG hash**: xét từng mảnh theo hash thì một đối thủ mạnh hơn các mảnh YẾU của vị trí thật
-  được xét trước khi phạm vi của vị trí thật kịp nở tới chỗ nó; xếp theo mảnh mạnh nhất thì căn chỉnh thật vỡ nhiều mảnh
-  thua một bóng có một mảnh lớn.
+  được xét trước khi bằng chứng của vị trí thật kịp có mặt ở chỗ nó; xếp theo mảnh mạnh nhất thì căn chỉnh thật vỡ nhiều
+  mảnh thua một bóng có một mảnh lớn.
+- **D neo thay vì bỏ**: nhóm toàn bóng là âm thanh của chính clip khớp lệch nhịp — bằng chứng của clip ở vị trí đã giải
+  thích nó, chỉ sai mốc. Bỏ nó khi vị trí thật chưa có nhóm đạt chuẩn là biến dương tính cũ thành âm tính quét trọn mà
+  Watch không quét lại (P0-3). Neo = gộp vào nhóm thật kề, cùng chốt chấp nhận như C' nên không tạo dương tính mới (mã
+  cũ đã nhận video qua chính nhóm này) và dòng mới trùm vùng dòng cũ.
 - **Chặn trôi của C'**: bản C (chỉ trần 1 s) gộp mảnh trôi 3% của lượt CHƯA bù tốc độ — đổi 2 golden bù tốc độ. Phần lệch
   gốc 0,1 s cho độ rung vài khung 23 ms của audfprint qua ranh giới khúc.
 - **Chốt chấp nhận của C'**: hai phần cùng dưới ngưỡng cộng lại thành dương tính MỚI là đổi chính sách nhận diện (mục 4);
   phần dày gộp với phần thưa có thể rớt rào mật độ bậc A và mất một dòng đạt chuẩn.
+- **Ngang bằng của C' xét trên mảnh chính**: C' dành cho phần tiếp nối tự có bằng chứng (bị tiếng nói che một đoạn); một
+  mảnh lẻ 18 hash/6 s không được kéo giãn vùng khớp hay dời mốc của dòng đạt chuẩn (P0-2). So cả nhóm thì bóng gom kèm
+  làm loãng một phần và chặn nhầm phần tiếp nối thật (fuzz: 6 lần lệch mốc 0,5–0,6 s, 3 dòng thật mất).
 - **Cờ xét vị trí làm mốc**: mốc lấy từ đó; đối thủ của phần khác trong cùng dòng (bản cắt giữa) không làm mốc mơ hồ.
 - **Hằng số ở module, không ở `Config`**: chúng không làm đổi kết luận âm tính (mục 4) nên không vào `TRUONG_CHINH_SACH`;
-  ĐỔI chúng (nhất là nới) là đổi chính sách nhận diện — cần quyết định riêng (docs/ai/DECISIONS.md D-27).
+  ĐỔI chúng (nhất là nới) là đổi chính sách nhận diện — cần quyết định riêng (docs/ai/DECISIONS.md). `dedup_s` được
+  dùng lại với ĐÚNG nghĩa cũ (cửa sổ một lần xuất hiện), không thêm tham số mới.
 
 ## 3. Bất biến (đã kiểm)
-- Ứng viên đạt chuẩn mới ⊆ ứng viên đạt chuẩn cũ (so theo bằng chứng: clip, hash, vùng), trừ nhóm do C' gộp — mà C' chỉ
-  gộp khi một phần đã đạt chuẩn. ⇒ Không có dương tính MỚI ở mức video; tập clip đạt chuẩn chỉ có thể mất nhóm toàn bóng.
-  Đo trên 27 lượt quét đã ghi của bộ điều tra (phát lại mảnh thô): 0 vi phạm.
-- Nhóm còn lại giữ nguyên `hashes`, `matched_s`, `vung_khop_s`, `end_s` (chỉ `start_s`/`clip_bat_dau_s`/`clip_offset_s` có
-  thể đổi vì mốc đổi).
+- Không có dương tính MỚI ở mức video, không có dòng mới ở vùng chưa từng có dòng (fuzz 2 × 10.000 thế giới so
+  `_merge` của `6ee8f43^`: `new_clip` 0, `new_row` 0). Tập clip đạt chuẩn chỉ có thể mất nhóm toàn bóng mà vị trí thật
+  của nó đã đạt chuẩn; cùng fuzz: `lost_clip` 0 (bản đầu 18 + 15), dòng thật mất 0 (bản đầu 14 + 20).
+- Nhóm còn lại giữ nguyên `hashes`, `matched_s`, `vung_khop_s`, `end_s` (chỉ `start_s`/`clip_bat_dau_s`/`clip_offset_s`
+  có thể đổi vì mốc đổi), trừ nhóm do C'/D gộp — mà một phần của nó đã đạt chuẩn.
 - Hai clip khác nhau, hai hệ số tốc độ khác nhau không bao giờ xét nhau (nhạc hiệu chung, âm thanh chồng, lượt bù).
-- Không có bóng thì kết quả Y HỆT mã cũ: golden quét cũ 29/29 không đổi.
+- Không có bóng thì kết quả Y HỆT mã cũ: golden quét cũ 29/29 không đổi; 3 golden bóng mức mảnh và 3 test audio thật
+  giữ nguyên kết quả của bản đầu.
 
 ## 4. Báo cáo, lịch sử, chữ ký chính sách
 **Trường mới của `Match`** (`moc_mo_ho`, `moc_thay_the`, `ty_so_doi_thu`): mặc định = mốc chắc chắn, `compare=False`; chỉ
@@ -85,9 +114,8 @@ như một mốc chắc chắn. Mã cũ cũng vậy (còn tệ hơn: 4–5 dòng
 gửi kết quả mơ hồ như mốc chắc chắn» CHƯA được bảo đảm. Cần một PR riêng (đổi chính sách báo cáo V2 — người dùng duyệt):
 - Ảnh chụp V2: thêm `moc_mo_ho`, `moc_thay_the`, `ty_so_doi_thu` vào `DoanV2` (đọc ảnh chụp cũ thiếu khoá = mốc chắc
   chắn), tăng `PHIEN_BAN_ANH_CHUP` kèm đọc được bản cũ.
-- Bảng 34 cột/Sheets GIỮ hợp đồng cột: chỉ đổi NỘI DUNG ô «Đoạn vi phạm i» của dòng mơ hồ, ví dụ
-  `≈ HH:MM:SS – HH:MM:SS · link (mốc mơ hồ: âm thanh lặp; mốc khác: …)` — phải kiểm Apps Script có tách chuỗi ô này
-  không (`apps_script/`).
+- Bảng 34 cột/Sheets GIỮ hợp đồng cột: chỉ đổi NỘI DUNG ô «Đoạn vi phạm i» của dòng mơ hồ — phải kiểm Apps Script có
+  tách chuỗi ô này không (`apps_script/`).
 - CSV dọc: cột «Đánh giá» giữ nguyên nghĩa; thêm thông tin mốc vào cột ghi chú hoặc file phụ (sidecar như `dong_pham_vi`).
 - Giao diện + lịch sử: nhãn «mốc mơ hồ» cạnh mốc; lưu cờ bền (bảng riêng hoặc ảnh chụp V2 — không thêm cột vào `jobs`).
 - Hoặc (thay thế, cũng cần duyệt): outbox không tự gửi dòng có mốc mơ hồ, chờ người dùng xác nhận.
@@ -98,28 +126,37 @@ vì ứng viên bóng không còn (bộ điều tra: 74 → 22 trên 16 video).
 **Chữ ký chính sách (`chu_ky_chinh_sach`) GIỮ NGUYÊN — có lý do, không phải để né:**
 - Watch bỏ qua (`Engine.ids_da_quet`): dương tính cùng kho — luôn; âm tính — chỉ khi quét trọn, cùng phiên bản kho, cùng
   chữ ký chính sách. Đổi chữ ký ⇒ mọi âm tính cũ bị quét lại (hàng nghìn video dài).
-- Âm tính cũ VẪN ĐÚNG với mã mới: bản sửa không sinh dương tính mới (mục 3) — đó cũng là lý do C' có chốt chấp nhận.
-- Dương tính cũ: kết luận «có vi phạm» vẫn đúng (bóng chỉ xuất hiện quanh căn chỉnh thật của cùng clip), nhưng DÒNG trong
-  lịch sử/Sheets cũ có thể mang mốc lệch tới ±20 s và dòng bóng. Không quét lại tự động; đề xuất PC1 chạy truy vấn CHỈ
-  ĐỌC trên lịch sử production tìm job có nhiều dòng cùng clip chồng vùng/mốc gần nhau (dấu hiệu bóng) để kiểm lại tay.
+- Âm tính cũ VẪN ĐÚNG với mã mới: bản sửa không sinh dương tính mới (mục 3) — đó cũng là lý do C' và D có chốt chấp nhận.
+- Dương tính cũ: kết luận «có vi phạm» vẫn đúng, nhưng DÒNG trong lịch sử/Sheets cũ có thể mang mốc lệch tới ±20 s và
+  dòng bóng. Video đã quét bằng BẢN ĐẦU (10/10 → 25/10) và kết luận âm tính có thể là âm tính SAI (P0-1/P0-3) — cùng chữ
+  ký nên Watch không quét lại: cần truy vấn CHỈ ĐỌC lịch sử tìm lượt quét trọn 0 ứng viên trong khoảng đó để quét lại tay.
 - Không có cache kết quả khớp nào khác: lô nguồn chung giữ kết quả trong bộ nhớ, kho đệm chỉ chứa media.
-- Kết quả mới và cũ hiện KHÔNG phân biệt được trong lịch sử (cùng chữ ký). Đề xuất kèm PR trình bày: ghi «phiên bản thuật
-  toán gộp» (vd. `gop-p0`) vào ảnh chụp V2 — không vào chữ ký chính sách, vì không đổi kết luận âm tính.
 
 ## 5. Giới hạn đã biết
 - Cùng một clip phát CHỒNG chính nó ở hai độ lệch (hiệu ứng vang/mashup) với lớp yếu ≤ 50% → lớp yếu bị coi là bóng
   (không thành dòng; nếu > 50% thì thành mốc thay thế của dòng mơ hồ). Chưa thấy ca thật.
+- Nhãn bóng/đối thủ so HASH với mảnh mạnh nhất của vị trí (giữ nguyên từ bản đầu): một lần dùng thật ngắn, dày nằm trọn
+  trong một mảnh dài, thưa của vị trí khác vẫn là bóng/đối thủ của nó — khi nhóm của nó được D neo lại, dòng mang mốc
+  của vị trí thưa (fuzz: 1 ca/20.000 thế giới).
+- Hai mảnh của cùng lần dùng lệch align > 0,5 s (rung khung qua ranh giới khúc) rơi vào hai cụm; mảnh yếu hơn nằm trong
+  bao của cụm mạnh thành «đối thủ» — mốc vẫn đúng, dòng có thể mang cờ mơ hồ (thận trọng); nhóm chỉ gồm nó bị bỏ khi vị
+  trí thật đã đạt chuẩn. Như bản đầu.
 - Gom nhóm vẫn là thuật toán tham lam cũ (nhóm lấy align của mảnh đầu làm mốc so): bản reup cắt giữa có khe > `dedup_s`
   vẫn ra 2 dòng (mỗi dòng đúng mốc của một phần), như trước. C' chỉ gộp các phần CÙNG vị trí đặt.
 - Vòng lặp y hệt: mốc báo là căn chỉnh mạnh nhất trong các mốc tương đương (tuỳ ý giữa các mốc ngang nhau) — luôn kèm cờ.
 - Một bóng có MỘT mảnh lớn hơn từng mảnh của căn chỉnh thật bị vỡ (trôi) → mốc vẫn đúng nhưng dòng được đánh dấu mơ hồ
   (thận trọng). Âm thanh lặp có đoạn mở đầu riêng (B05) cũng được đánh dấu: tỷ số 0,89.
+- D bỏ nhóm bóng đạt chuẩn nếu gộp với nhóm thật kề làm rớt bậc A (nhóm thật thưa hơn bóng — chưa thấy trong fuzz).
 - Tràn bảng hash vẫn làm bóng khác nhau giữa các lần dựng kho; bản sửa làm MỐC không còn phụ thuộc vào bóng.
 
 ## 6. Kiểm thử
-- Nhanh: 26 test — tái hiện lỗi (đỏ trên mã cũ: commit đưa test vào đánh dấu `xfail(strict=True)`), khoá hành vi cũ
-  (clip cắt giữa, dùng hai lần, phát lại liền nhau, khúc gối, trôi nối tiếp, nhạc hiệu chung, hai nguồn chồng tiếng, sát
-  ngưỡng 1.000, khác hệ số tốc độ), C' và chốt, bằng chứng mốc, tương thích trường mới.
+- Nhanh (`tests/test_bong_am_thanh_lap.py`): tái hiện lỗi 10/10 (đỏ trên mã cũ), khoá hành vi cũ (clip cắt giữa, dùng
+  hai lần, phát lại liền nhau, khúc gối, trôi nối tiếp, nhạc hiệu chung, hai nguồn chồng tiếng, sát ngưỡng 1.000, khác hệ
+  số tốc độ), C' và chốt, bằng chứng mốc, tương thích trường mới; từ 25/10: P0-1 (lần dùng thật giữa các mảnh rời, phần
+  khác của clip lấp lỗ — đối chứng cùng hình học trong cửa sổ, phát tiếp sau khi dừng có lưới bóng, bóng xa thò vào lỗ
+  trôi), P0-3 (chuỗi bóng đạt chuẩn neo vào vị trí thật vỡ mảnh; neo vào nhóm gần nhất; nhóm bóng dưới chuẩn vẫn bỏ),
+  P0-2 (mảnh yếu không kéo giãn; ngang bằng xét trên mảnh chính).
 - Chậm: 3 test audio thật (nhạc có nhịp trích giữa, vòng lặp y hệt, đối chứng không lặp).
+- Fuzz so mã cũ (công cụ PC2 ngoài Git, `audit_2026_10/fuzz_merge.py`, 2 × 10.000 thế giới): `new_clip` = `new_row` =
+  0, `lost_clip` = 0, dòng thật mất = 0.
 - Đột biến (bộ công cụ PC2 ngoài Git): mỗi điều kiện mới bị vô hiệu → ít nhất một test đỏ.
-- Số đo đầy đủ (16 video, dựng lại kho, hiệu năng): handoff PC2 và mô tả PR.

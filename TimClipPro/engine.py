@@ -4065,9 +4065,10 @@ class Engine:
             return round(float(x.get("he_so", 1.0) or 1.0), 5)
 
         # Âm thanh lặp: mảnh nào là căn chỉnh CHÍNH, mảnh nào là bóng/đối thủ của một vị trí đặt
-        # mạnh hơn (chong_bong_lap). Chỉ dùng để chọn mốc và bỏ nhóm toàn bóng — gom nhóm bên dưới
-        # vẫn xét ĐỦ mảnh như cũ nên hash, vùng khớp, cận trên của nhóm thật không đổi.
-        nhan, _ = chong_bong_lap.phan_loai_manh(loc)
+        # mạnh hơn (chong_bong_lap; cửa sổ một lần xuất hiện = dedup_s, như gom nhóm bên dưới).
+        # Chỉ dùng để chọn mốc và xử lý nhóm toàn bóng — gom nhóm bên dưới vẫn xét ĐỦ mảnh như
+        # cũ nên hash, vùng khớp, cận trên của nhóm thật không đổi.
+        nhan, _ = chong_bong_lap.phan_loai_manh(loc, cfg.dedup_s)
         canh_tranh = chong_bong_lap.chi_muc_canh_tranh(nhan)
 
         gop = []
@@ -4099,15 +4100,17 @@ class Engine:
                 trung["manh"].append(dict(x))
                 trung["cs"].append(i)
 
-        # Nhóm không có mảnh chính nào (toàn bóng) không là ứng viên: vùng video của nó đã có
-        # căn chỉnh thật mạnh hơn giải thích — trước đây thành dòng «Rất chắc chắn» thừa.
-        gop = [g for g in gop if any(nhan[i].loai == chong_bong_lap.CHINH for i in g["cs"])]
-
         def so_lieu_nhom(cs: list) -> tuple:
             """(hash đã áp cận trên, độ dài khớp) — đúng số vòng dưới báo, không ghi cảnh báo."""
             hash_uoc, do_dai_hop = tinh_hash_va_hop([loc[i] for i in cs])
             gioi_han = tong_hash.get(os.path.basename(loc[cs[0]]["clip"]))
             return (hash_uoc if gioi_han is None else min(hash_uoc, gioi_han)), do_dai_hop
+
+        # Nhóm không có mảnh chính nào (toàn bóng) không là ứng viên riêng: vùng video của nó đã
+        # có căn chỉnh thật mạnh hơn giải thích — trước đây thành dòng «Rất chắc chắn» thừa. Nhóm
+        # toàn bóng TỰ đạt chuẩn mà căn chỉnh thật chưa có nhóm đạt chuẩn thì được neo vào các
+        # nhóm thật kề nó (chong_bong_lap.neo_lai_nhom_bong): video đã dương tính không thành âm tính.
+        gop, _, _ = chong_bong_lap.neo_lai_nhom_bong(gop, loc, nhan, cfg, so_lieu_nhom)
 
         # Các nhóm cùng vị trí đặt (trôi < ngưỡng bù tốc độ) là MỘT lần dùng — chỉ gộp khi không
         # đổi kết luận chấp nhận (chong_bong_lap.gop_cung_vi_tri).
