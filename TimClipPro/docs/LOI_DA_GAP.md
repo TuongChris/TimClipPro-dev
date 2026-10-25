@@ -486,6 +486,12 @@ thật của video bị gỡ ở Tier 2) không được nhận ra; liệt kê k
 → **Cổng cookie kiểm đúng luật nạp của yt-dlp**: dòng `#HttpOnly_` là bản ghi (dòng hỏng bị yt-dlp
   in nguyên văn ra stderr), dòng 1 phải là tiêu đề Netscape. Cấu trúc đúng ≠ YouTube chấp nhận
   phiên; chỉ request thật mới biết (`cli.py youtube-doctor --network URL`).
+  Audit D-1 (25/10/2026): cổng bỏ sót luật thứ ba của `http.cookiejar` — cờ include-subdomains phải
+  khớp dấu chấm đầu miền; lệch một dòng thì yt-dlp từ chối CẢ file bằng câu lỗi mang đường dẫn + repr
+  nguyên dòng (giá trị cookie), lọt qua `che_bi_mat` (TAB đã thành chữ `\t`) vào log, lịch sử, CSV,
+  và bị xếp «chưa rõ» (thử đủ 5 client, cầu dao đợi 5 lỗi). Đã sửa cả hai lớp: cổng kiểm luật đó;
+  `che_bi_mat` che câu lỗi nạp; câu đó xếp cookie hỏng. Test: `tests/test_cookie_co_mien_dau_cham.py`
+  so cổng với bộ nạp THẬT của yt-dlp.
 
 **18. «Bóng» của âm thanh lặp làm lệch mốc và thừa dòng (10/10/2026, PC2).** Chi tiết: `docs/BONG_AM_THANH_LAP.md`.
 Nhạc có nhịp trống đều, vòng hợp âm hay đoạn lặp y hệt làm audfprint trả thêm căn chỉnh của CÙNG clip lệch bội số nửa

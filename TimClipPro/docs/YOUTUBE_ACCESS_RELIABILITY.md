@@ -84,8 +84,11 @@ request vẫn chỉ do `ytdlp_sleep_requests_s` (yt-dlp) và bộ điều phối
 ## 5. Cookie
 
 - Cổng `kiem_tra_file_cookie` kiểm ĐÚNG luật nạp của yt-dlp: dòng 1 là tiêu đề Netscape; dòng
-  `#HttpOnly_` là bản ghi thật; mỗi bản ghi 7 trường TAB, hạn dùng là số; nhận diện file HTML/JSON.
-  Thông báo chỉ nêu SỐ DÒNG.
+  `#HttpOnly_` là bản ghi thật; mỗi bản ghi 7 trường TAB, hạn dùng là số; cờ include-subdomains
+  (trường 2 == `TRUE`) khớp dấu chấm đầu miền — `http.cookiejar` `assert` luật này, lệch MỘT dòng là
+  từ chối CẢ file bằng câu lỗi mang nguyên dòng (audit D-1); nhận diện file HTML/JSON.
+  Thông báo chỉ nêu SỐ DÒNG. Lỗi nạp file cookie của yt-dlp («invalid Netscape format cookies file»)
+  xếp `COOKIE_INVALID_OR_EXPIRED`: dừng đổi client, cầu dao mở sau một lỗi.
 - `chan_doan_cookie`: chỉ metadata + số đếm (bản ghi, youtube/google, hết hạn, dòng hỏng, có cookie
   đăng nhập theo đúng luật `_has_auth_cookies` của yt-dlp). `COOKIE_FILE_STRUCTURALLY_VALID` khác
   `COOKIE_SESSION_ACCEPTED_BY_YOUTUBE`: cái sau chỉ một request thật trả lời được (lùi không-cookie
@@ -97,9 +100,11 @@ request vẫn chỉ do `ytdlp_sleep_requests_s` (yt-dlp) và bộ điều phối
 
 `che_bi_mat` (luỹ đẳng): header Cookie/Set-Cookie/Authorization, Bearer, SAPISIDHASH, giá trị tham
 số URL (giữ `v`, `list`, `index`, `t`), cặp token/key/sig/password, tên cookie đăng nhập + giá trị,
-dòng Netscape, dòng cảnh báo cookie của yt-dlp, khối PEM. Áp ở: `giai_thich_loi` (ghi chú → lịch
-sử/CSV), tóm tắt kỹ thuật của mọi lỗi, `BoGhiYtdlp`, log đổi client, `nhat_ky.che_bi_mat` (stderr
-→ file nhật ký Watch).
+dòng Netscape, dòng cảnh báo cookie của yt-dlp, câu lỗi nạp file cookie của `http.cookiejar`
+(đường dẫn + repr nguyên dòng — TAB đã thành chữ `\t` nên mẫu dòng Netscape không bắt được; che từ
+cụm «invalid Netscape format cookies file» tới hết dòng), khối PEM. Áp ở: `giai_thich_loi` (ghi
+chú → lịch sử/CSV), tóm tắt kỹ thuật của mọi lỗi, `BoGhiYtdlp`, log đổi client, `nhat_ky.che_bi_mat`
+(stderr → file nhật ký Watch).
 
 ## 7. Dùng lại metadata và đếm request
 

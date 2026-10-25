@@ -249,7 +249,9 @@ def kiem_tra_file_cookie(duong_dan: str) -> None:
 
     # Kiểm ĐÚNG luật nạp của yt-dlp (`truy_cap_youtube.doc_cau_truc_cookie`): dòng `#HttpOnly_`
     # là bản ghi thật (yt-dlp bóc tiền tố rồi kiểm — dòng hỏng bị IN NGUYÊN VĂN ra stderr), mỗi
-    # bản ghi đúng 7 trường TAB với hạn dùng là số, và dòng 1 phải là tiêu đề Netscape.
+    # bản ghi đúng 7 trường TAB với hạn dùng là số, cờ include-subdomains khớp dấu chấm đầu miền
+    # (lệch thì `http.cookiejar` từ chối CẢ file bằng câu lỗi mang nguyên dòng — audit D-1), và dòng 1
+    # phải là tiêu đề Netscape.
     ct = doc_cau_truc_cookie(noi_dung)
     ten = os.path.basename(duong_dan)
     if ct.dinh_dang == "html":
@@ -263,10 +265,15 @@ def kiem_tra_file_cookie(duong_dan: str) -> None:
     if ct.dong_hong:
         vi_du = ", ".join(str(x) for x in ct.dong_hong[:5])
         them = f" (và {len(ct.dong_hong) - 5} dòng nữa)" if len(ct.dong_hong) > 5 else ""
+        if set(ct.dong_hong) <= set(ct.dong_lech_mien):
+            nguyen_nhan = ("Cột 2 (TRUE/FALSE) không khớp dấu chấm ở đầu tên miền — yt-dlp sẽ từ chối CẢ file; "
+                           "thường do sửa tay hoặc công cụ chuyển đổi tự viết.")
+        else:
+            nguyen_nhan = ("Nguyên nhân hay gặp: mở bằng Notepad rồi lưu lại làm "
+                           "TAB biến thành dấu cách.")
         raise LoiFileCookie(
             f"File cookie «{ten}» sai định dạng Netscape ở "
-            f"dòng {vi_du}{them}. Nguyên nhân hay gặp: mở bằng Notepad rồi lưu lại làm "
-            "TAB biến thành dấu cách. Hãy xuất lại bằng tiện ích trình duyệt, đừng sửa tay."
+            f"dòng {vi_du}{them}. {nguyen_nhan} Hãy xuất lại bằng tiện ích trình duyệt, đừng sửa tay."
         )
     if not ct.so_ban_ghi:
         raise LoiFileCookie(

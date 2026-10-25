@@ -117,7 +117,10 @@ _BOT = ("not a bot", "not a robot", "captcha", "your ip is likely being blocked"
         "unusual traffic", "automated queries")
 _GIOI_HAN = ("http error 429", "too many requests", "rate-limited", "rate limited",
              "ratelimit", "try again later")
+# Hai câu `LoadError` của `http.cookiejar.MozillaCookieJar._really_load` (yt-dlp nạp file cookie qua đó): dòng 1 không
+# phải tiêu đề, và «invalid Netscape format cookies file» — yt-dlp từ chối CẢ file, mọi request sẽ hỏng y hệt (audit D-1).
 _COOKIE = ("file cookie", "does not look like a netscape format cookies file",
+           "invalid netscape format cookies file",
            "cookies are no longer valid", "netscape formatted, not json")
 _TUOI = ("confirm your age", "age-restricted", "age restricted", "inappropriate for some users")
 _HOI_VIEN = ("members-only", "members only", "join this channel", "channel's members", "requires payment")
@@ -411,6 +414,11 @@ _RE_PEM = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*P
                      re.S)
 _RE_DONG_CANH_BAO_COOKIE = re.compile(
     r"(?im)^.*(?:skipping cookie file entry|failed to parse cookie).*$")
+# Lỗi nạp file của `http.cookiejar` (yt-dlp gọi `MozillaCookieJar._really_load`): «invalid Netscape format cookies file
+# '<đường dẫn đầy đủ>': '<repr NGUYÊN dòng cookie, cả giá trị>'». Dòng đã qua repr nên TAB thành hai ký tự «\t» — các
+# mẫu dòng Netscape/tên cookie dưới đây không bắt được (audit D-1). Che từ cụm đó tới hết dòng, cả đường dẫn (mang tên
+# người dùng Windows); giữ cụm để còn phân loại và chẩn đoán.
+_RE_LOI_NAP_COOKIE = re.compile(r"(?i)(invalid netscape format cookies file)(?!\s*\[đã ẩn)[^\r\n]*")
 _RE_DONG_NETSCAPE = re.compile(
     r"(?m)^(?:#HttpOnly_)?[^\t\r\n]+\t(?:TRUE|FALSE)\t[^\t\r\n]*\t(?:TRUE|FALSE)\t[^\t\r\n]*"
     r"\t[^\t\r\n]*\t[^\r\n]*$")
@@ -446,6 +454,7 @@ def che_bi_mat(van_ban: Any) -> str:
         return s
     s = _RE_PEM.sub("[đã ẩn: khoá riêng]", s)
     s = _RE_DONG_CANH_BAO_COOKIE.sub("[đã ẩn: dòng này chứa nội dung cookie]", s)
+    s = _RE_LOI_NAP_COOKIE.sub(lambda m: m.group(1) + " [đã ẩn: đường dẫn và dòng cookie]", s)
     s = _RE_DONG_NETSCAPE.sub("[đã ẩn: dòng cookie]", s)
     s = _RE_DONG_COOKIE_DAU_CACH.sub("[đã ẩn: dòng cookie]", s)
     s = _RE_HEADER.sub(lambda m: m.group(1) + ": " + AN, s)
@@ -463,7 +472,9 @@ def che_bi_mat(van_ban: Any) -> str:
 
 # Đúng luật nạp của yt-dlp: `MozillaCookieJar._really_load` đòi dòng 1 là tiêu đề này
 # (http.cookiejar.NETSCAPE_MAGIC_RGX); `YoutubeDLCookieJar.load` bóc tiền tố `#HttpOnly_`, đòi
-# đúng 7 trường TAB và hạn dùng là số (yt_dlp/cookies.py:1362-1374).
+# đúng 7 trường TAB và hạn dùng là số (yt_dlp/cookies.py:1362-1374); rồi `_really_load` còn
+# `assert` cờ include-subdomains (trường 2 == "TRUE") khớp dấu chấm đầu miền — lệch MỘT dòng là
+# LoadError cho CẢ file, câu lỗi mang repr nguyên dòng đó (audit D-1).
 RE_TIEU_DE_NETSCAPE = re.compile(r"#( Netscape)? HTTP Cookie File")
 TIEN_TO_HTTPONLY = "#HttpOnly_"
 _RE_HAN_DUNG = re.compile(r"[0-9]+(?:\.[0-9]+)?")
@@ -491,6 +502,7 @@ class CauTrucCookie:
     co_tieu_de: bool
     dong_hong: tuple                  # số dòng (từ 1), không nội dung
     ban_ghi: tuple = ()               # (miền, tên, hạn) — nội bộ
+    dong_lech_mien: tuple = ()        # phần của ``dong_hong``: cờ include-subdomains lệch dấu chấm đầu miền
 
     @property
     def so_ban_ghi(self) -> int:
@@ -508,7 +520,7 @@ def doc_cau_truc_cookie(noi_dung: str) -> CauTrucCookie:
     if dau[0] in "[{":
         return CauTrucCookie("json", False, ())
     co_tieu_de = bool(RE_TIEU_DE_NETSCAPE.match(cac_dong[0]))
-    hong, ban_ghi = [], []
+    hong, ban_ghi, lech_mien = [], [], []
     for so, dong in enumerate(cac_dong, start=1):
         tho = dong[len(TIEN_TO_HTTPONLY):] if dong.startswith(TIEN_TO_HTTPONLY) else dong
         if tho.startswith("#") or not tho.strip():
@@ -517,9 +529,13 @@ def doc_cau_truc_cookie(noi_dung: str) -> CauTrucCookie:
         if len(truong) != 7 or (truong[4] and not _RE_HAN_DUNG.fullmatch(truong[4])):
             hong.append(so)
             continue
+        if (truong[1] == "TRUE") != truong[0].startswith("."):
+            hong.append(so)
+            lech_mien.append(so)
+            continue
         ban_ghi.append((truong[0], truong[5], truong[4]))
     dinh_dang = "netscape" if (ban_ghi or co_tieu_de) else "khong_ro"
-    return CauTrucCookie(dinh_dang, co_tieu_de, tuple(hong), tuple(ban_ghi))
+    return CauTrucCookie(dinh_dang, co_tieu_de, tuple(hong), tuple(ban_ghi), tuple(lech_mien))
 
 
 @dataclass(frozen=True)
