@@ -892,6 +892,8 @@ class ChannelSync:
                 truoc_khi_thu_lai=truoc_khi_doi_client, bo_nho=self.nho_client,
                 khi_that_bai=lambda ten, _loi: (phien.ghi_doi_client(), client_loi.__setitem__(0, ten)),
                 khi_thanh_cong=lambda ten, _da_thu: td.client_thanh_cong(ten),
+                # Bấm Dừng (hook tiến độ ném giữa lượt tải) là ý người dùng: không thử client kế (audit D-6).
+                bo_qua=(DaHuyDongBo,),
                 # Bị nghi là bot/đòi đăng nhập/429/video gỡ: đổi client cũng vô ích (mục 6c).
                 dung_ngay=phien.nen_dung_doi_client)
 
@@ -1083,6 +1085,17 @@ class ChannelSync:
         os.makedirs(self.tmp_dir, exist_ok=True)
         td = self.theo_doi
         self._lan_kiem_cuoi = None
+        # Huỷ được giữa chừng — khi TẢI (hook tiến độ) lẫn khi nén (FFmpeg dừng khi IM LẶNG quá lâu, audit TCP-15).
+        if cancel_event is None:
+            cancel_event = getattr(self, "_huy_luot_sync", None)
+
+        def hook_huy(_d: dict) -> None:
+            # yt-dlp tải TRONG tiến trình (không có tiến trình con để giết): ngoại lệ ném từ progress hook đi thẳng ra
+            # khỏi `extract_info` — như hook `_check_cancel()` của `Engine.download_audio`. Trước đây cờ huỷ chỉ được
+            # xem giữa các video / lúc nghỉ thử lại: bấm Dừng thì vẫn tải HẾT video (có khi hàng GB) rồi mới dừng ở
+            # khâu nén (audit D-6). File .part dở nằm trong `tmp_dir` của lượt, `sync()` dọn khi kết thúc.
+            if cancel_event is not None and cancel_event.is_set():
+                raise DaHuyDongBo("Đã huỷ theo yêu cầu trong lúc tải.")
 
         def tai_nguon(vid: str, thu_muc: str) -> tuple:
             os.makedirs(thu_muc, exist_ok=True)
@@ -1092,8 +1105,8 @@ class ChannelSync:
                 outtmpl=os.path.join(thu_muc, "%(id)s.%(ext)s"),
                 # Số lần yt-dlp tự thử lại + nghỉ giữa chúng: bảng NGAN_SACH["download"].
                 noplaylist=True, continuedl=True,
-                # Chỉ ĐO (byte, tốc độ, định dạng) — hook không bao giờ ném lỗi, không đổi cách huỷ.
-                progress_hooks=[td.hook_tai],
+                # `hook_huy` cắt lượt tải khi bấm Dừng; `td.hook_tai` chỉ ĐO (byte, tốc độ, định dạng), không bao giờ ném.
+                progress_hooks=[hook_huy, td.hook_tai],
             ))
             tho = [os.path.join(thu_muc, f) for f in os.listdir(thu_muc)
                    if f.startswith(vid + ".") and not f.endswith((".part", ".ytdl"))
@@ -1113,9 +1126,6 @@ class ChannelSync:
 
         dich = os.path.join(self.dest, self._ten_file(v))
         tam = os.path.join(self.tmp_dir, f"{v.id}.{uuid.uuid4().hex[:8]}{DUOI_DANG_NEN}")
-        # Huỷ được giữa chừng và dừng khi FFmpeg IM LẶNG quá lâu (audit TCP-15).
-        if cancel_event is None:
-            cancel_event = getattr(self, "_huy_luot_sync", None)
         da_cong_bo = False
         ngan_that_su = False
         try:
