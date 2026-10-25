@@ -17,7 +17,8 @@ Luồng này, không sửa yt-dlp:
   (``total_size`` — dung lượng đầu ra, KHÔNG phải byte mạng), giây audio đã nhận, tốc độ — số đo THẬT;
 * có yêu cầu huỷ → giết ffmpeg đang ghi ĐÚNG file đích (chỉ tiến trình con của chính app);
 * không thêm byte nào quá ``han_dung_s`` trong lúc ffmpeg còn chạy → giết, đánh dấu ``dung_hinh``
-  để nơi gọi báo lỗi mạng rõ ràng thay vì chờ vô hạn.
+  để nơi gọi báo lỗi mạng rõ ràng thay vì chờ vô hạn. Mốc byte/giây audio và đồng hồ tính theo TỪNG tiến trình
+  ffmpeg: đổi player client / đường lui cookie là ffmpeg mới, ghi lại từ 0 (audit D-5).
 
 Đường tải thường (tải trọn, yt-dlp tự tải trong tiến trình) đã có progress hook; luồng này khi đó
 chỉ không tìm thấy ffmpeg nào và không làm gì.
@@ -183,6 +184,16 @@ class GiamSatTai:
         self.byte_cuoi = 0
         self.audio_cuoi = 0.0
         self.luc_tien_trien: Optional[float] = None
+        # Mốc và đồng hồ ở trên là của TỪNG tiến trình ffmpeg, không phải của cả lượt ``download_audio``: một khối
+        # ``with`` bọc mọi player client + đường lui cookie, mỗi lần thử là một ffmpeg MỚI ghi lại từ 0 (audit D-5).
+        self._pid_da_thay: set = set()
+        self._byte_tien_do_truoc: Optional[int] = None
+
+    def _ffmpeg_moi(self, bay_gio: float) -> None:
+        """ffmpeg mới bắt đầu (client sau / đường lui cookie): bỏ mốc của ffmpeg trước, đồng hồ chạy lại từ đây."""
+        self.byte_cuoi = 0
+        self.audio_cuoi = 0.0
+        self.luc_tien_trien = bay_gio
 
     def __enter__(self) -> "GiamSatTai":
         self._luong = threading.Thread(target=self._vong, name="giam-sat-tai", daemon=True)
@@ -221,12 +232,22 @@ class GiamSatTai:
         so = doc_tien_do_ffmpeg(self.file_tien_do) if self.file_tien_do else {}
         byte = so.get("byte") or self._kich_thuoc()
         audio = so.get("audio_s")
-        tien = byte > self.byte_cuoi or (audio is not None and audio > self.audio_cuoi)
         ffmpeg = self._tim(self.tien_to)
-        if ffmpeg and self.luc_tien_trien is None:
+        pid = {getattr(p, "pid", None) for p in ffmpeg}
+        byte_tien_do = so.get("byte")
+        if (ffmpeg and not pid <= self._pid_da_thay) or (
+                byte_tien_do is not None and self._byte_tien_do_truoc is not None
+                and byte_tien_do < self._byte_tien_do_truoc):
             # Đồng hồ «đứng yên» chỉ chạy khi ffmpeg đã thật sự tồn tại — trích xuất lại thông tin
-            # (yt-dlp làm trước khi gọi ffmpeg) có hạn chờ riêng của nó.
-            self.luc_tien_trien = bay_gio
+            # (yt-dlp làm trước khi gọi ffmpeg) có hạn chờ riêng của nó. ffmpeg CHƯA từng thấy (PID mới), hoặc file
+            # ``-progress`` bị ghi lại từ đầu (ffmpeg mới mở nó bằng O_TRUNC): mốc của ffmpeg trước không còn
+            # nghĩa — giữ lại thì ffmpeg KHOẺ của client sau, ghi từ 0, không bao giờ «tiến» và bị giết là mạng
+            # đứng với số MB của client trước (audit D-5). Cùng PID biến mất một chu kỳ rồi hiện lại: KHÔNG đặt lại.
+            self._ffmpeg_moi(bay_gio)
+        self._pid_da_thay |= pid
+        if byte_tien_do is not None:
+            self._byte_tien_do_truoc = byte_tien_do
+        tien = byte > self.byte_cuoi or (audio is not None and audio > self.audio_cuoi)
         if tien:
             self.byte_cuoi = max(self.byte_cuoi, byte)
             if audio is not None:
