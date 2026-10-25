@@ -353,6 +353,17 @@ Còn để lại: client mặc định (có audio-only, 3 tiếng chỉ ~66 MB t
 **Bài học quy trình:** khi vá code bằng tìm-thay chuỗi, PHẢI kiểm tra lại là bản vá đã áp
 dụng thật (chạy test tích hợp), vì chuỗi cũ có thể đã bị đổi ở lần vá trước.
 
+Audit D-3 (25/10/2026): hai lượt quét ĐỒNG THỜI cùng một video (Watch giữ `tool.lock`, tab «Quét
+YouTube» của GUI và `cli.py youtube` thì không) dùng chung `downloads/<tên>.<ext>.part` với
+`continuedl`: lượt sau thấy `.part` của lượt trước đang ghi, xin `Range` từ cuối file rồi mở `'ab'` —
+file đệm thành bản trộn hai luồng (tái hiện: khối `[0,1,2,3,2,3]`), lượt kia hỏng vì WinError 32 lúc
+đổi tên, và mọi lượt quét sau dùng lại file hỏng («Đã có sẵn audio») không báo gì (kiểm thiếu đuôi chỉ
+bắt file NGẮN). Trên Windows `sanitize_open` của yt-dlp cố ý không khoá file nên lần mở thứ hai không
+lỗi (đóng G6 của `DATA_FLOW.md`). Đã sửa: `download_audio` giữ khoá HĐH theo tên file tải
+(`data/khoa_tai/<tên>.lock`, ngoài `downloads/`); lượt sau chờ (bấm Dừng là thôi chờ), rồi kiểm lại bộ
+đệm DƯỚI khoá. → Quy tắc: `continuedl` chỉ an toàn khi mỗi `.part` có đúng MỘT người ghi. Test:
+`tests/test_tai_audio_dong_thoi.py`.
+
 **14. "Tool hỏng rồi" hoá ra là ÂM TÍNH ĐÚNG — lỗi nằm ở câu chẩn đoán (21/08/2026).**
 
 Người dùng gửi 4 link kênh `SML Remix` kèm ảnh báo cáo 0 kết quả và hỏi "có phải hôm

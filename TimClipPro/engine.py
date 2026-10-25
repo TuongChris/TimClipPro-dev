@@ -637,6 +637,11 @@ DUNG_SAI_PHU_S = 2.0
 DUNG_SAI_TAI_THIEU_S = 5.0
 # Hai lần tải độc lập lệch nhau không quá mức này thì coi là CÙNG một độ dài.
 DUNG_SAI_TAI_LAI_S = 1.0
+# Khoá MỘT lượt tải audio của một video (``Engine._khoa_tai_audio``): ``data/<THU_MUC_KHOA_TAI>/<tên>.lock``
+# — NGOÀI ``downloads/`` để bộ đệm (``glob(<tên>.*)``) và dọn đệm không bao giờ thấy nó. Lượt sau chờ
+# lượt đang tải, kiểm Dừng mỗi chu kỳ này.
+THU_MUC_KHOA_TAI = "khoa_tai"
+CHU_KY_CHO_KHOA_TAI_S = 0.5
 # Đo độ dài âm thanh THẬT (``Engine.do_dai_audio_that``): bỏ cuộc khi bấy nhiêu giây không đọc thêm gói nào.
 IM_LANG_DO_AUDIO_S = 120.0
 
@@ -3443,11 +3448,56 @@ class Engine:
         hết rồi cắt. Với video 66 tiếng: 18,4 GB xuống còn khoảng 840 MB.
 
         Bản một phần được đặt tên riêng để không bao giờ bị dùng nhầm làm bản đầy đủ.
-        """
-        import yt_dlp
 
+        Mỗi tên file chỉ MỘT lượt tải tại một thời điểm, giữa mọi luồng và tiến trình (GUI, CLI, Watch dùng
+        chung ``data/``): hai lượt chung ``<tên>.<ext>.part`` với ``continuedl`` thì lượt sau nối luồng của
+        nó vào file lượt trước đang ghi → audio đệm HỎNG mà mọi lượt quét sau dùng lại không báo gì (audit
+        D-3). Lượt sau chờ lượt đang tải xong rồi kiểm lại bộ đệm DƯỚI khoá.
+        """
         ten = (self._ten_phan_dau(video_id, gioi_han_giay) if gioi_han_giay
                else video_id)
+        with self._khoa_tai_audio(ten, video_id, progress):
+            return self._tai_audio_trong_khoa(url, video_id, ten, progress, gioi_han_giay)
+
+    @contextlib.contextmanager
+    def _khoa_tai_audio(self, ten: str, video_id: str, progress: Optional[Callable] = None):
+        """Giữ khoá HĐH của lượt tải ``<tên>`` (cả tải một phần ``<id>__p<giây>``) — chờ nếu lượt khác giữ.
+
+        Chờ không có hạn cứng: lượt đang giữ tự có giám sát mạng đứng (``giam_sat_tai``) và khoá HĐH tự nhả
+        khi tiến trình chết; người dùng bấm Dừng thì thôi chờ ngay (``Cancelled``). Thứ tự khoá: lấy SAU
+        ``data/tool.lock`` (Watch đang giữ) và TRƯỚC mọi khoá JSON; khi đang chờ không giữ khoá nào khác
+        ngoài những khoá người gọi đã có. File khoá nhỏ giữ lại trên đĩa (xoá file khoá khi còn người mở
+        là đường đua kinh điển trên POSIX).
+        """
+        duong = os.path.join(self.data_dir, THU_MUC_KHOA_TAI, ten + ".lock")
+        da_bao = False
+        while True:
+            self._check_cancel()
+            khoa = KhoaTienTrinh(duong, f"Tải audio video {video_id}")
+            try:
+                khoa.__enter__()
+                break
+            except DangChayRoi:
+                if not da_bao:
+                    da_bao = True
+                    LOGGER_SCAN.info("event=download.cho_luot_khac video=%s", video_id)
+                    self._bao(progress, 0.02, "Một lượt quét khác đang tải audio của chính video này — "
+                                              "chờ lượt đó xong rồi dùng lại bản đã tải...")
+                    self._td(tdq.GD_TAI, ghi="Chờ lượt quét khác (giao diện / Watch / dòng lệnh) đang tải "
+                                             "audio của chính video này — không tải chồng lên cùng file")
+                self._td_nhip()
+                self.cancel_event.wait(CHU_KY_CHO_KHOA_TAI_S)
+        try:
+            yield
+        finally:
+            khoa.__exit__()
+
+    def _tai_audio_trong_khoa(self, url: str, video_id: str, ten: str,
+                              progress: Optional[Callable],
+                              gioi_han_giay: Optional[float]) -> str:
+        """Thân của ``download_audio`` — CHỈ gọi khi đang giữ ``_khoa_tai_audio(ten)``."""
+        import yt_dlp
+
         san_co = [f for f in glob.glob(os.path.join(self.dl_dir, ten + ".*"))
                   if not f.endswith((".part", ".ytdl"))]
         if san_co:
