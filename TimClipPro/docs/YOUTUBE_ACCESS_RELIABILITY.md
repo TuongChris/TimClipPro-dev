@@ -97,8 +97,13 @@ request vẫn chỉ do `ytdlp_sleep_requests_s` (yt-dlp) và bộ điều phối
 - Đường lui cookie xét dấu hiệu cookie chết trên lỗi ĐẠI DIỆN của `thu_tung_client` = lỗi cuối ở
   client NHẬN cookie. Có cookie đăng nhập (yt-dlp xét theo TÊN, sống hay chết) thì yt-dlp gỡ client
   không nhận cookie (android, ios — đứng cuối), chúng luôn hỏng «No video formats found!»: không phải
-  bằng chứng. Mọi client nhận cookie bị 403 = `HTTP_FORBIDDEN`, không lùi, không «cookie hết hiệu
-  lực» (audit D-2).
+  bằng chứng. Mọi client nhận cookie bị 403 = `HTTP_FORBIDDEN`, không lùi cookie, không «cookie hết
+  hiệu lực» (audit D-2). Nhưng video KHÔNG mất (review audit D — chế độ «chỉ android tải được» của
+  LOI_DA_GAP 6/6c): `thu_tung_client(khi_lui_khong_cookie=…)` thử CHÍNH các client đã bị gỡ, KHÔNG
+  cookie; được thì ghi chú video nói rõ «tải KHÔNG đăng nhập … HTTP 403», câu xác thực của lượt đếm số
+  video đó (`anonymous_client_downloads`), cookie không bị coi là hỏng, không nhớ cho cả lượt. Chỉ khi
+  đại diện là 403 (không bot/đòi đăng nhập/player client); lượt ẩn danh gặp bot/429 thì dừng, lỗi đó
+  là đại diện; bên gọi không truyền hàm báo thì không bao giờ bỏ cookie ở đây.
 - Cookie chết được NHỚ trong lượt (audit D-12): lượt TẢI (đủ chuỗi client) lùi không cookie THÀNH CÔNG
   sau dấu hiệu cookie chết là đối chứng (`PhienYouTube.cookie_chet_trong_luot`, số đo
   `cookie_dead_for_run`); lấy thông tin chỉ thử client mặc định nên chỉ đọc, không ghi. Thao tác sau của

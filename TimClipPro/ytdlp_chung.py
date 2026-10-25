@@ -44,6 +44,7 @@ from truy_cap_youtube import (  # noqa: F401 — tái xuất
     AUTH_REQUIRED,
     DAU_CHI_TIET,
     FORMAT_OR_EXTRACTOR_ERROR,
+    HTTP_FORBIDDEN,
     MEMBERS_ONLY,
     MOC_CAT_HUONG_DAN,
     NGAN_SACH,
@@ -1167,6 +1168,12 @@ class NhoClientTotNhat:
         self._client = None
 
 
+def _bo_cookie_khoi_tuy_chon(opts: dict) -> dict:
+    """Bản sao tuỳ chọn yt-dlp đã gỡ cookie — đúng các khoá :meth:`CauHinhMang.tuy_chon` chỉ đặt khi có cookie (nguồn
+    cookie + bộ chạy JS), phần còn lại (timeout, nhịp, logger, hook) giữ nguyên."""
+    return {k: v for k, v in opts.items() if k not in ("cookiefile", "cookiesfrombrowser", "js_runtimes")}
+
+
 def thu_tung_client(
     clients: list,
     chay: Callable[[dict], Any],
@@ -1177,6 +1184,7 @@ def thu_tung_client(
     khi_thanh_cong: Optional[Callable[[str, list], None]] = None,
     bo_nho: Optional["NhoClientTotNhat"] = None,
     dung_ngay: Optional[Callable[[BaseException], bool]] = None,
+    khi_lui_khong_cookie: Optional[Callable[[str, BaseException], None]] = None,
 ) -> Any:
     """Chạy ``chay(opts)`` lần lượt với từng player client cho tới khi có cái được.
 
@@ -1206,12 +1214,24 @@ def thu_tung_client(
     (:func:`sap_xep_player_clients`) và LUÔN hỏng «No video formats found!». Lấy lỗi đó làm đại diện thì cookie còn sống
     mà mọi client nhận cookie bị 403 thành «cookie hết hiệu lực» và lượt bị lùi không đăng nhập (audit D-2). Khi đó đại
     diện là lỗi cuối ở client NHẬN cookie; lỗi làm ``dung_ngay`` dừng thì luôn là đại diện.
+
+    ``khi_lui_khong_cookie(ten_client, loi_403)``: lượt có cookie mà MỌI client nhận cookie hỏng, đại diện là HTTP 403
+    (không phải cookie chết, bot, đòi đăng nhập — những lỗi đó dừng đổi client hoặc đi đường lui cookie), thì thử lại
+    CHÍNH các client yt-dlp đã gỡ vì cookie đăng nhập (đã thấy «không định dạng» ở lượt có cookie), KHÔNG cookie, theo
+    thứ tự — chế độ «chỉ android tải được» của LOI_DA_GAP mục 6/6c: thiếu bước này thì video hỏng hẳn và 3 video liền
+    mở cầu dao HTTP_FORBIDDEN dừng cả lô (review audit D). Được thì gọi hàm này TRƯỚC khi trả kết quả — bên gọi phải nói
+    rõ video đó tải KHÔNG đăng nhập; KHÔNG phải cookie chết: không qua đường lui cookie, không nhớ cho cả lượt, video
+    sau vẫn thử cookie trước, client đó không vào ``bo_nho``. Không truyền = không bao giờ bỏ cookie ở đây (không lặng
+    lẽ chạy ẩn danh). Lượt không cookie hỏng: gặp lỗi làm ``dung_ngay`` dừng (bot, 429…) thì dừng và lỗi đó là đại
+    diện (cầu dao phải thấy); lỗi khác thì đại diện vẫn là 403.
     """
     loi_cuoi: Optional[BaseException] = None
     loi_dai_dien: Optional[BaseException] = None
     da_thu: list = []
     co_cookie = bool(opts.get("cookiefile") or opts.get("cookiesfrombrowser"))
     khong_nhan_cookie = client_khong_ho_tro_cookie() if co_cookie else frozenset()
+    bi_go: list = []        # client không nhận cookie mà lượt có cookie chỉ còn «không định dạng» (yt-dlp đã gỡ)
+    dung_som = False
     if bo_nho is not None:
         clients = bo_nho.sap_xep(clients)
     for client in (clients or [""]):
@@ -1228,12 +1248,15 @@ def thu_tung_client(
             loi_cuoi = e
             if client not in khong_nhan_cookie or not la_dau_hieu_cookie_chet(e):
                 loi_dai_dien = e
+            else:
+                bi_go.append(client)
             ten = client or "mặc định"
             da_thu.append(ten)
             if khi_that_bai:
                 khi_that_bai(ten, e)
             if dung_ngay is not None and dung_ngay(e):
                 loi_dai_dien = e
+                dung_som = True
                 break
         else:
             if bo_nho is not None:
@@ -1244,6 +1267,34 @@ def thu_tung_client(
     if loi_dai_dien is None:
         loi_dai_dien = loi_cuoi
     nhan = "Lỗi cuối" if loi_dai_dien is loi_cuoi else "Lỗi cuối ở client nhận cookie"
+    if (khi_lui_khong_cookie is not None and bi_go and not dung_som and loi_dai_dien is not None
+            and phan_loai_loi(loi_dai_dien).category == HTTP_FORBIDDEN):
+        loi_403 = loi_dai_dien
+        khong_cookie = _bo_cookie_khoi_tuy_chon(opts)
+        for client in bi_go:
+            rieng = dict(khong_cookie)
+            rieng["extractor_args"] = {"youtube": {"player_client": [client]}}
+            if truoc_khi_thu_lai:
+                truoc_khi_thu_lai()
+            ten = f"{client} không cookie"
+            try:
+                ket_qua = chay(rieng)
+            except bo_qua:
+                raise
+            except Exception as e:  # noqa: BLE001 — còn client bị gỡ khác thì thử tiếp
+                da_thu.append(ten)
+                if khi_that_bai:
+                    khi_that_bai(ten, e)
+                if dung_ngay is not None and dung_ngay(e):
+                    loi_dai_dien, nhan = e, "Lỗi cuối (không cookie)"
+                    break
+            else:
+                LOGGER.warning("event=download.client_khong_cookie_sau_403 client=%s da_thu=%s", client,
+                               ",".join(da_thu))
+                khi_lui_khong_cookie(client, loi_403)
+                if khi_thanh_cong:
+                    khi_thanh_cong(ten, list(da_thu))
+                return ket_qua
     raise RuntimeError(
         "Không tải được audio. Đã thử: " + ", ".join(da_thu)
         + f". {nhan}: " + che_bi_mat(go_ma_mau(loi_dai_dien))

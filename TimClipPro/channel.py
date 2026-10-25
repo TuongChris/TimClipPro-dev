@@ -920,7 +920,10 @@ class ChannelSync:
                 # Bấm Dừng (hook tiến độ ném giữa lượt tải) là ý người dùng: không thử client kế (audit D-6).
                 bo_qua=(DaHuyDongBo,),
                 # Bị nghi là bot/đòi đăng nhập/429/video gỡ: đổi client cũng vô ích (mục 6c).
-                dung_ngay=phien.nen_dung_doi_client)
+                dung_ngay=phien.nen_dung_doi_client,
+                # Mọi client nhận cookie bị 403: client bị yt-dlp gỡ vì cookie đăng nhập thử KHÔNG cookie; phiên đếm để
+                # câu xác thực của lượt nói rõ số video tải KHÔNG đăng nhập (review audit D).
+                khi_lui_khong_cookie=lambda ten, _loi: phien.ghi_tai_khong_dang_nhap_403(ten))
 
         # Cookie hết hiệu lực làm YouTube chỉ trả storyboard nên MỌI client đều hỏng;
         # đường lui cookie phải bọc NGOÀI đường lui client. Đường quét (engine.py) làm

@@ -214,6 +214,12 @@ lực» (ghi chú → lịch sử, CSV, Sheets), phiên «cookie bị từ chố
 lượt lùi KHÔNG đăng nhập; 403 thật bị che. Đã sửa: `thu_tung_client` lấy lỗi ĐẠI DIỆN là lỗi
 cuối ở client NHẬN cookie (bỏ «không định dạng» của client không nhận cookie; lỗi làm dừng đổi
 client vẫn là đại diện). Test: `tests/test_cookie_403_khong_phai_cookie_chet.py`.
+Phản biện bản sửa (review audit D): nhãn đúng nhưng KẾT QUẢ đảo — trước đó lượt lùi không cookie
+(dù gán nhãn sai) để `android` tải được; sau bản sửa video hỏng hẳn, 3 video liền mở cầu dao
+`HTTP_FORBIDDEN` dừng cả lô, đúng chế độ mục 6/6c. Đã sửa: đại diện là 403 thì `thu_tung_client`
+thử lại CHÍNH các client yt-dlp đã gỡ vì cookie đăng nhập, KHÔNG cookie, và bên gọi bắt buộc báo
+(ghi chú video «tải KHÔNG đăng nhập … HTTP 403»; câu xác thực của lượt đếm số video). Không qua
+đường lui cookie, không `cookie_bi_tu_choi`, không nhớ cho cả lượt; bot/429 ở lượt ẩn danh thì dừng.
 
 Audit D-12 (25/10/2026): đường lui cookie KHÔNG nhớ gì giữa các video — cookie chết (vẫn mang tên
 LOGIN_INFO + SAPISID) làm MỖI video thử đủ chuỗi client có cookie (mặc định, tv, web_safari,

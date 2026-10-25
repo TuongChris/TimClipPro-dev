@@ -3665,7 +3665,20 @@ class Engine:
                 # Bị nghi là bot/đòi đăng nhập/429/video gỡ: đổi client cũng vô ích (mục 6c)
                 # — trước đây mỗi video vẫn thử đủ 5 client vào đúng bức tường đó.
                 dung_ngay=phien.nen_dung_doi_client,
+                # Mọi client nhận cookie bị 403: client yt-dlp gỡ vì cookie đăng nhập (android…) thử KHÔNG cookie —
+                # video không mất, ghi chú nói rõ KHÔNG đăng nhập (review audit D).
+                khi_lui_khong_cookie=tai_khong_dang_nhap_403,
             )
+
+        def tai_khong_dang_nhap_403(client: str, loi: BaseException) -> None:
+            phien.ghi_tai_khong_dang_nhap_403(client)
+            tin = (f"Video này tải KHÔNG đăng nhập: mọi cách tải có đăng nhập bị YouTube từ chối (HTTP 403), đã tải "
+                   f"bằng client «{client}» không nhận cookie. Cookie KHÔNG bị coi là hỏng, vẫn dùng cho video "
+                   "khác.")
+            LOGGER_SCAN.warning("event=download.khong_dang_nhap_sau_403 video=%s client=%s loi=%s", video_id, client,
+                                ytdlp_chung.che_bi_mat(ytdlp_chung.go_ma_mau(loi))[:160])
+            if tin not in self.canh_bao_mang:
+                self.canh_bao_mang.append(tin)
 
         def bo_cookie(loi: BaseException) -> None:
             self._canh_bao_cookie_chet(loi)

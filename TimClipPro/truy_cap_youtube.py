@@ -764,7 +764,7 @@ TRUONG_SO_DO = ("youtube_operations", "metadata_requests", "download_attempts",
                 "js_challenge_errors", "player_client_errors",
                 "cookie_invalid", "other_failures", "cookie_fallbacks",
                 "cookie_rejected_warnings", "cookie_unusable_no_js", "js_challenge_warnings",
-                "client_fallbacks", "skipped_by_breaker", "successes")
+                "client_fallbacks", "anonymous_client_downloads", "skipped_by_breaker", "successes")
 _DEM_THEO_LOAI = {AUTH_REQUIRED: "auth_failures", AGE_RESTRICTED: "age_restricted", MEMBERS_ONLY: "members_only",
                   BOT_CHALLENGE: "bot_challenges",
                   RATE_LIMITED: "rate_limited", HTTP_FORBIDDEN: "http_403",
@@ -950,6 +950,14 @@ class PhienYouTube:
         with self._lock:
             self._so["client_fallbacks"] += 1
 
+    def ghi_tai_khong_dang_nhap_403(self, client: str = "") -> None:
+        """Một video tải được KHÔNG đăng nhập: mọi client nhận cookie bị HTTP 403, client yt-dlp gỡ vì cookie đăng nhập
+        tải được khi bỏ cookie (``ytdlp_chung.thu_tung_client(khi_lui_khong_cookie=…)``). KHÔNG phải YouTube từ chối
+        cookie — không đặt ``cookie_bi_tu_choi``, không nhớ cho cả lượt; chỉ đếm để mọi câu trạng thái nói rõ."""
+        with self._lock:
+            self._so["anonymous_client_downloads"] += 1
+        LOGGER.warning("event=youtube.download.anonymous_after_403 client=%s", client)
+
     def ghi_cookie_tai_khoan(self, co: Optional[bool]) -> None:
         """Một phiên yt-dlp vừa nạp hũ cookie: có cookie tài khoản YouTube không (``ytdlp_chung.co_cookie_tai_khoan``)."""
         with self._lock:
@@ -973,6 +981,17 @@ class PhienYouTube:
                     "youtube_xac_nhan_tai_khoan": self.youtube_xac_nhan_tai_khoan}
 
     def trang_thai_dang_nhap(self, co_cookie: bool) -> tuple:
+        """:meth:`_trang_thai_dang_nhap_goc`, thêm câu nói rõ số video đã tải KHÔNG đăng nhập vì mọi client nhận cookie
+        bị HTTP 403 (:meth:`ghi_tai_khong_dang_nhap_403`) — mã giữ nguyên: cookie không bị coi là hỏng."""
+        ma, cau = self._trang_thai_dang_nhap_goc(co_cookie)
+        with self._lock:
+            an_danh = self._so["anonymous_client_downloads"]
+        if co_cookie and an_danh:
+            cau += (f" {an_danh} video tải KHÔNG đăng nhập: mọi cách tải có đăng nhập bị YouTube từ chối (HTTP 403), "
+                    "đã tải bằng client không nhận cookie (cookie KHÔNG bị coi là hỏng).")
+        return ma, cau
+
+    def _trang_thai_dang_nhap_goc(self, co_cookie: bool) -> tuple:
         """``(mã, câu)`` — PHÂN BIỆT «đã cấu hình cookie», «cookie tài khoản đã nạp», «thao tác thành công» và
         «YouTube nhận tài khoản».
 
