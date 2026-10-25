@@ -205,6 +205,15 @@ lượt lùi KHÔNG đăng nhập; 403 thật bị che. Đã sửa: `thu_tung_cl
 cuối ở client NHẬN cookie (bỏ «không định dạng» của client không nhận cookie; lỗi làm dừng đổi
 client vẫn là đại diện). Test: `tests/test_cookie_403_khong_phai_cookie_chet.py`.
 
+Audit D-12 (25/10/2026): đường lui cookie KHÔNG nhớ gì giữa các video — cookie chết (vẫn mang tên
+LOGIN_INFO + SAPISID) làm MỖI video thử đủ chuỗi client có cookie (mặc định, tv, web_safari,
+android, ios) rồi mới lùi: 6 phiên yt-dlp/video, kênh 1.189 video ≈ 6.000 phiên thừa — đúng kiểu
+khuếch đại request của mục 6c, mà lượt vẫn báo «đủ». Đã sửa: lượt tải (đủ chuỗi client) lùi không
+cookie THÀNH CÔNG là đối chứng, ghi vào `PhienYouTube` của lượt; thao tác sau (cả lấy thông tin)
+chạy thẳng không cookie, vẫn báo rõ. Video đòi
+đăng nhập vẫn thử cookie; không đối chứng thì không nhớ; lượt sau thử cookie lại. Test:
+`tests/test_cookie_chet_nho_trong_luot.py`.
+
 Bẫy khi nối: cảnh báo KHÔNG được dùng chung `canh_bao_gop`, vì `_merge()` xoá trắng
 danh sách đó ở mỗi lượt khớp còn cảnh báo mạng sinh ra TRƯỚC đó. Nay có
 `Engine.canh_bao_mang` riêng, gắn vào `kq.note` ở cuối `scan_youtube`.

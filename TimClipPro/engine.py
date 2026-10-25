@@ -3380,8 +3380,11 @@ class Engine:
             # Cookie chết làm YouTube chỉ trả storyboard, và yt-dlp báo "Requested format
             # is not available" — câu chữ dẫn người dùng đi sai hướng hoàn toàn. Tự lùi về
             # không-cookie thay vì để cả lượt quét chết.
+            # Phiên còn nhớ cookie đã chết trong lượt thì khỏi gửi cookie; lượt này chỉ thử client mặc định nên
+            # không tự ghi đối chứng — lượt tải (đủ chuỗi client) mới ghi (audit D-12).
             ket = ytdlp_chung.chay_kem_duong_lui_cookie(
-                self.cau_hinh_mang(), lay, khi_bo_cookie=bo_cookie, bo_ghi=bo_ghi, bo_qua=(Cancelled,))
+                self.cau_hinh_mang(), lay, khi_bo_cookie=bo_cookie, bo_ghi=bo_ghi, bo_qua=(Cancelled,),
+                phien=phien, ghi_doi_chung=False)
             if not isinstance(ket, dict):
                 raise RuntimeError("yt-dlp không trả thông tin video.")
             if ket.get("_type") in ("playlist", "multi_video") or "entries" in ket:
@@ -3625,13 +3628,15 @@ class Engine:
         # (`LoiTruyCapYouTube`) và ghi vào cầu dao. Khâu tải KHÔNG có vòng thử lại ngoài —
         # chạy lại cả danh sách client sẽ đụng `.part` của client khác (xem `don_file_do_dang`).
         # Dừng / mạng đứng đi thẳng ra ở MỌI lớp (đường lui client, đường lui cookie, phiên) — không thành lỗi YouTube
-        # hay «lỗi JavaScript» khi trước đó có cảnh báo giải JS (review F1).
+        # hay «lỗi JavaScript» khi trước đó có cảnh báo giải JS (review F1). Phiên còn nhớ cookie đã chết trong lượt:
+        # video sau khỏi thử lại cả chuỗi client có cookie (audit D-12).
         try:
             with giam_sat:
                 phien.chay("download",
                            lambda: ytdlp_chung.chay_kem_duong_lui_cookie(goc, tai_voi, khi_bo_cookie=bo_cookie,
                                                                          bo_ghi=bo_ghi_tai,
-                                                                         bo_qua=(Cancelled, TaiAudioDungHinh)),
+                                                                         bo_qua=(Cancelled, TaiAudioDungHinh),
+                                                                         phien=phien),
                            video_id=video_id, cancel_event=self.cancel_event, loi_huy=Cancelled,
                            bo_qua=(Cancelled, TaiAudioDungHinh))
         except (Cancelled, TaiAudioDungHinh):

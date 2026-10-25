@@ -34,8 +34,11 @@ from typing import Any, Callable, Optional
 # Văn bản lỗi yt-dlp và cách hiểu chúng sống ở `truy_cap_youtube` (module thuần, tầng dưới cùng);
 # các tên dưới đây giữ ở đây vì mã cũ và test tham chiếu qua `ytdlp_chung.*`.
 from truy_cap_youtube import (  # noqa: F401 — tái xuất
+    AGE_RESTRICTED,
+    AUTH_REQUIRED,
     DAU_CHI_TIET,
     FORMAT_OR_EXTRACTOR_ERROR,
+    MEMBERS_ONLY,
     MOC_CAT_HUONG_DAN,
     NGAN_SACH,
     PLAYER_CLIENT_ERROR,
@@ -733,6 +736,17 @@ def la_dau_hieu_cookie_chet(loi: Any) -> bool:
     return any(d in thap for d in DAU_HIEU_COOKIE_CHET)
 
 
+class CookieChetTrongLuot(RuntimeError):
+    """Lý do chạy KHÔNG cookie đưa cho ``khi_bo_cookie`` (không ném ra): lượt này đã có đối chứng YouTube không nhận
+    phiên cookie (:func:`chay_kem_duong_lui_cookie` bước 5) — cùng nghĩa «cookie chết» với bước 3, chỉ khác là không gửi
+    lại request có cookie."""
+
+
+THONG_BAO_COOKIE_CHET_TRONG_LUOT = (
+    "YouTube đã từ chối cookie ở một thao tác trước của lượt này (có cookie chỉ còn storyboard, bỏ cookie thì được) — "
+    "chạy KHÔNG cookie, không gửi lại request có cookie tới hết lượt.")
+
+
 def la_dau_hieu_cookie_can_js(loi: Any) -> bool:
     """Lượt này có chạy KHÔNG đăng nhập vì máy chưa giải được thử thách JavaScript không (:class:`CookieCanJs`)?"""
     return isinstance(loi, CookieCanJs)
@@ -742,6 +756,10 @@ def la_dau_hieu_cookie_can_js(loi: Any) -> bool:
 # video gỡ... giữ nguyên loại của chúng dù có cảnh báo JS đi kèm. KHÔNG có lỗi chưa phân loại (UNKNOWN): đĩa đầy, lỗi máy…
 # sau một cảnh báo JS không có bằng chứng nào là do JS (review F1, PC1 14/10/2026).
 _LOAI_CO_THE_DO_JS = frozenset({FORMAT_OR_EXTRACTOR_ERROR, PLAYER_CLIENT_ERROR})
+
+# Video mà không cookie chắc chắn không xem được: lượt đã biết cookie chết (bước 5 của đường lui cookie) vẫn thử cookie
+# cho chúng — không bao giờ để lượt không-cookie thay cho đăng nhập ở video đòi đăng nhập.
+_LOAI_CAN_DANG_NHAP = frozenset({AUTH_REQUIRED, AGE_RESTRICTED, MEMBERS_ONLY})
 
 # Thư mục người dùng Windows — mang TÊN người dùng: «X:\Users\<tên>» (cả «\\» của repr Python và «/»). Tên có thể có dấu
 # cách, dấu nháy (O'Brien, O'Đức); dừng ở dấu phân cách đường dẫn, nháy đóng (nháy không đứng trước chữ/số), « | » (chỗ
@@ -764,6 +782,8 @@ def chay_kem_duong_lui_cookie(
     khi_bo_cookie: Optional[Callable[[BaseException], None]] = None,
     bo_ghi: Optional[BoGhiYtdlp] = None,
     bo_qua: tuple = (),
+    phien: Any = None,
+    ghi_doi_chung: bool = True,
 ) -> Any:
     """Chạy ``chay(cau_hinh)`` với chính sách cookie MINH BẠCH — không bao giờ để người dùng tưởng đã đăng nhập khi
     thật ra đang chạy không cookie.
@@ -782,22 +802,44 @@ def chay_kem_duong_lui_cookie(
     4. Mọi lỗi khác ném nguyên ra ngoài: video cần đăng nhập (tuổi, hội viên, riêng tư), YouTube đòi xác minh bot, 429,
        lỗi player client («The page needs to be reloaded» khi máy đã có JS)... — KHÔNG lùi không cookie, để phiên phân
        loại đúng và cầu dao dừng lô khi cần.
+    5. ``phien`` (``PhienYouTube`` của LƯỢT; không truyền = không nhớ gì, như cũ): bước 3 lùi THÀNH CÔNG là đối chứng
+       YouTube không nhận phiên cookie — ghi vào phiên. Các thao tác sau của CÙNG lượt chạy thẳng không cookie và báo
+       ``khi_bo_cookie(CookieChetTrongLuot)`` như bước 3, thay vì lặp lại chuỗi client có cookie chắc chắn hỏng: ~5
+       phiên yt-dlp vô ích mỗi video, khuếch đại request mà mục 6c chỉ ra (audit D-12). Video đòi đăng nhập (tuổi, hội
+       viên, cần đăng nhập) thì không cookie chắc chắn không xem được: vẫn thử cookie như cũ, không thử lại không cookie
+       lần hai — lỗi của lượt có cookie là lỗi ném ra. Thao tác có cookie thành công thì đối chứng cũ sai: bỏ ghi nhớ.
+       Bỏ cookie VẪN hỏng thì không có đối chứng, không ghi. Ghi nhớ chỉ sống trong ``phien``: lượt sau thử lại cookie.
 
+    ``ghi_doi_chung=False``: chỉ ĐỌC ghi nhớ của phiên, không ghi đối chứng — cho ``chay`` KHÔNG đi qua đường lui player
+    client (lấy thông tin chỉ thử client mặc định): hỏng «không định dạng» ở đó chưa chứng minh tv/web_safari có cookie
+    cũng hỏng, nên chưa đủ để bỏ cookie cho cả lượt; lượt tải (đủ chuỗi client) mới ghi.
     ``khi_bo_cookie``: gọi khi quyết định chạy không cookie, để bên trên ghi log/cảnh báo/số đo.
     ``bo_ghi``: logger yt-dlp của lượt (để đọc cảnh báo giải JS); không có thì bỏ qua bước 2.
     ``bo_qua``: các lớp ngoại lệ đi THẲNG ra, không phân loại, không lùi (``Cancelled``, mạng đứng…) — truyền đúng
     ``bo_qua`` của ``PhienYouTube.chay`` bao ngoài: bấm Dừng sau một cảnh báo JS không được thành «lỗi JavaScript»
     (cầu dao ngưỡng 2) hay thành lỗi cookie của lượt lùi.
     """
+    loi_khong_cookie: Optional[BaseException] = None
     if cau_hinh.co_cookie:
         kn = kha_nang_js()
         if not kn.san_sang:
             if khi_bo_cookie:
                 khi_bo_cookie(CookieCanJs(thong_bao_khong_dang_nhap(kn), kn.ly_do))
             return chay(cau_hinh.bo_cookie())
+        if getattr(phien, "cookie_chet_trong_luot", False) is True:
+            if khi_bo_cookie:
+                khi_bo_cookie(CookieChetTrongLuot(THONG_BAO_COOKIE_CHET_TRONG_LUOT))
+            try:
+                return chay(cau_hinh.bo_cookie())
+            except bo_qua:
+                raise
+            except Exception as e:  # noqa: BLE001 — chỉ video đòi đăng nhập mới thử tiếp có cookie
+                if phan_loai_loi(e).category not in _LOAI_CAN_DANG_NHAP:
+                    raise
+                loi_khong_cookie = e
     moc = bo_ghi.so_canh_bao if bo_ghi is not None else 0
     try:
-        return chay(cau_hinh)
+        ket_qua = chay(cau_hinh)
     except bo_qua:
         raise
     except Exception as e:  # noqa: BLE001 — phân loại rồi mới quyết định
@@ -807,18 +849,33 @@ def chay_kem_duong_lui_cookie(
         if js and phan_loai_loi(e).category in _LOAI_CO_THE_DO_JS:
             raise LoiGiaiJs(thong_bao_giai_js_hong(kha_nang_js()),
                             chi_tiet=an_thu_muc_nguoi_dung(f"{tom_tat_ky_thuat(e, 200)} | {js[:200]}")) from e
-        if not la_dau_hieu_cookie_chet(e):
+        if loi_khong_cookie is not None or not la_dau_hieu_cookie_chet(e):
+            # Đã chạy không cookie ở bước 5 (video đòi đăng nhập): không thử lại lần hai.
             raise
         if khi_bo_cookie:
             khi_bo_cookie(e)
         try:
-            return chay(cau_hinh.bo_cookie())
+            ket_qua = chay(cau_hinh.bo_cookie())
         except bo_qua:
             raise
         except Exception:  # noqa: BLE001
             # Bỏ cookie vẫn hỏng => cookie không phải nguyên nhân. Ném lỗi GỐC để
             # người dùng thấy đúng vấn đề thật của video, không bị dẫn sai hướng.
             raise e from None
+        if ghi_doi_chung:
+            _ghi_cookie_chet_trong_luot(phien, True)
+        return ket_qua
+    if cau_hinh.co_cookie:
+        _ghi_cookie_chet_trong_luot(phien, False)
+    return ket_qua
+
+
+def _ghi_cookie_chet_trong_luot(phien: Any, chet: bool) -> None:
+    """Ghi đối chứng cookie chết vào phiên của lượt (bước 5 của :func:`chay_kem_duong_lui_cookie`); không có phiên thì
+    thôi."""
+    ghi = getattr(phien, "ghi_cookie_chet_trong_luot", None)
+    if ghi is not None:
+        ghi(chet)
 
 
 class NhoClientTotNhat:

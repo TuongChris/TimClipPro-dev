@@ -806,6 +806,11 @@ class PhienYouTube:
         self._so = {k: 0 for k in TRUONG_SO_DO}
         self._su_kien: list = []
         self.cookie_bi_tu_choi = False
+        # ĐỐI CHỨNG trong lượt này: một thao tác có cookie chỉ còn «không định dạng» (YouTube chỉ trả storyboard —
+        # `ytdlp_chung.DAU_HIEU_COOKIE_CHET`) mà CÙNG thao tác bỏ cookie thì được. Có rồi thì các thao tác sau của lượt
+        # chạy thẳng không cookie, vẫn báo rõ (`ytdlp_chung.chay_kem_duong_lui_cookie` bước 5) — khỏi lặp lại chuỗi client
+        # có cookie chắc chắn hỏng cho từng video (audit D-12). KHÁC `cookie_bi_tu_choi` (đặt cả khi chưa có đối chứng).
+        self.cookie_chet_trong_luot = False
         # Có cookie nhưng lượt này chạy KHÔNG đăng nhập vì máy chưa giải được thử thách JavaScript (lý do cụ thể) —
         # KHÁC `cookie_bi_tu_choi` (YouTube từ chối phiên): đừng bảo người dùng xuất lại cookie.
         self.khong_dang_nhap_ly_do = ""
@@ -894,6 +899,19 @@ class PhienYouTube:
         with self._lock:
             self._so["cookie_rejected_warnings"] += 1
             self.cookie_bi_tu_choi = True
+
+    def ghi_cookie_chet_trong_luot(self, chet: bool = True) -> None:
+        """``True``: vừa có đối chứng YouTube không nhận phiên cookie (có cookie chỉ còn «không định dạng», bỏ cookie thì
+        được) — các thao tác sau của lượt khỏi gửi cookie. ``False``: một thao tác CÓ cookie vừa thành công — đối chứng cũ
+        không còn đúng, thao tác sau thử cookie lại."""
+        with self._lock:
+            if bool(chet) == self.cookie_chet_trong_luot:
+                return
+            self.cookie_chet_trong_luot = bool(chet)
+        if chet:
+            LOGGER.warning("event=youtube.cookie.dead_for_run")
+        else:
+            LOGGER.info("event=youtube.cookie.dead_for_run_cleared")
 
     def ghi_canh_bao_js(self) -> None:
         """yt-dlp báo không giải được thử thách JavaScript (n/sig) — chỉ để thấy trong số đo; lỗi được phân loại ở
@@ -1061,6 +1079,7 @@ class PhienYouTube:
             so["breaker_open"] = self._mo_boi is not None
             so["breaker_category"] = self._mo_boi.category if self._mo_boi else ""
             so["cookie_rejected"] = self.cookie_bi_tu_choi
+            so["cookie_dead_for_run"] = self.cookie_chet_trong_luot
             so["cookie_unusable_reason"] = self.khong_dang_nhap_ly_do
             so["auth_cookies_seen"] = self.cookie_tai_khoan
             so["account_confirmed_by_youtube"] = self.youtube_xac_nhan_tai_khoan

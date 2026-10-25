@@ -98,6 +98,13 @@ request vẫn chỉ do `ytdlp_sleep_requests_s` (yt-dlp) và bộ điều phối
   không nhận cookie (android, ios — đứng cuối), chúng luôn hỏng «No video formats found!»: không phải
   bằng chứng. Mọi client nhận cookie bị 403 = `HTTP_FORBIDDEN`, không lùi, không «cookie hết hiệu
   lực» (audit D-2).
+- Cookie chết được NHỚ trong lượt (audit D-12): lượt TẢI (đủ chuỗi client) lùi không cookie THÀNH CÔNG
+  sau dấu hiệu cookie chết là đối chứng (`PhienYouTube.cookie_chet_trong_luot`, số đo
+  `cookie_dead_for_run`); lấy thông tin chỉ thử client mặc định nên chỉ đọc, không ghi. Thao tác sau của
+  CÙNG lượt chạy thẳng không cookie và vẫn báo rõ (ghi chú kết quả, `BI_TU_CHOI`) — trước đây mỗi video
+  lại thử đủ chuỗi client có cookie (~5 phiên yt-dlp vô ích/video, ~6.000 với kênh 1.189 video).
+  Không đối chứng (bỏ cookie vẫn hỏng) thì không nhớ; video đòi đăng nhập (tuổi, hội viên, cần đăng
+  nhập) vẫn thử cookie; thao tác có cookie thành công thì bỏ ghi nhớ; lượt sau thử lại cookie từ đầu.
 - Không đọc profile trình duyệt, không tự bật `cookiesfrombrowser`, không chép cookie ra đâu cả.
   Giữ nguyên cơ chế yt-dlp ghi lại file cookie sau mỗi phiên (`YoutubeDL.close → save_cookies`).
 

@@ -898,12 +898,13 @@ class ChannelSync:
         # Cookie hết hiệu lực làm YouTube chỉ trả storyboard nên MỌI client đều hỏng;
         # đường lui cookie phải bọc NGOÀI đường lui client. Đường quét (engine.py) làm
         # y hệt — hai đường dùng chung `chay_kem_duong_lui_cookie`. Ngoài cùng là phiên:
-        # cầu dao mở thì không gửi request; lỗi được phân loại và ghi vào cầu dao.
+        # cầu dao mở thì không gửi request; lỗi được phân loại và ghi vào cầu dao. Phiên còn nhớ
+        # cookie đã chết trong lượt: video sau khỏi thử lại cả chuỗi client có cookie (audit D-12).
         return phien.chay(
             "download",
             lambda: chay_kem_duong_lui_cookie(self.cau_hinh_mang, tai_voi,
                                               khi_bo_cookie=phien.ghi_lui_cookie, bo_ghi=bo_ghi,
-                                              bo_qua=(DaHuyDongBo,)),
+                                              bo_qua=(DaHuyDongBo,), phien=phien),
             video_id=ma_tu_url(url),
             cancel_event=getattr(self, "_huy_luot_sync", None), loi_huy=DaHuyDongBo,
             bo_qua=(DaHuyDongBo,))
