@@ -1052,10 +1052,17 @@ if not job["running"] and (job["results"] or job["error"]):
         st.caption(f"Snapshot: `{r['snapshot_path']}`")
     elif job["kind"] == "va_title":
         r = job["results"]
-        st.success(
-            f"✅ Đã hỏi YouTube tên thật cho {r['da_va']}/{r['tong']} video; "
-            f"bỏ qua {r['bo_qua']} video đã có tên đúng, lỗi {len(r['loi'])}."
-        )
+        if r.get("da_huy"):
+            st.warning(
+                f"⏹️ Đã dừng theo yêu cầu: đã hỏi YouTube tên thật cho {r['da_va']}/{r['tong']} "
+                f"video, lỗi {len(r['loi'])}. Phần đã lấy được đã lưu; bấm lại nút để chạy tiếp "
+                "những video còn lại."
+            )
+        else:
+            st.success(
+                f"✅ Đã hỏi YouTube tên thật cho {r['da_va']}/{r['tong']} video; "
+                f"bỏ qua {r['bo_qua']} video đã có tên đúng, lỗi {len(r['loi'])}."
+            )
         if r.get("da_them_tu_dia"):
             st.caption(f"Bổ sung {r['da_them_tu_dia']} mục mới vào `clips_meta.json` "
                        "từ các file có sẵn trên đĩa.")
@@ -1266,7 +1273,10 @@ with tab0:
         cs_title = ChannelSync(st.session_state.kho_dir.strip('" '),
                                player_clients=list(eng.config.ytdlp_player_clients),
                                cau_hinh_mang=eng.cau_hinh_mang())
-        chay_nen("va_title", cs_title.va_metadata, lay_title=True)
+        # Nút Dừng chỉ đặt eng.cancel_event — phải nối vào đây như đồng bộ kênh, không thì
+        # bấm Dừng vẫn hỏi YouTube hết kho (audit D-9).
+        chay_nen("va_title", cs_title.va_metadata, lay_title=True,
+                 cancel_check=lambda: eng.cancel_event.is_set())
 
 # ---------------------------------------------------------------- TAB 1
 with tab1:

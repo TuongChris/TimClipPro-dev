@@ -501,12 +501,18 @@ class ChannelSync:
         chi_thieu: bool = True,
         *,
         lay_title: bool = False,
+        cancel_check: Optional[Callable] = None,
     ) -> dict:
         """
         Bổ sung upload_date / duration còn thiếu trong clips_meta.json.
         KHÔNG tải lại video, chỉ lấy metadata.
         fetcher: hàm (video_id) -> dict, None thì dùng yt_dlp. Cho phép test offline.
-        Trả về {"tong": n, "da_va": n, "bo_qua": n, "da_them_tu_dia": n, "loi": [...]}.
+        Trả về {"tong": n, "da_va": n, "bo_qua": n, "da_them_tu_dia": n, "loi": [...]}; thêm
+        ``"da_huy": True`` khi lượt bị dừng theo yêu cầu.
+
+        ``cancel_check`` (như ``sync``): hỏi trước MỖI request; fetcher mặc định còn trao nó cho
+        lần nghỉ thử lại của phiên (3 s mạng chập chờn / 30 s HTTP 429) — bấm Dừng thì thoát ngay,
+        phần đã lấy được vẫn ghi ở finally, mục còn lại giữ nguyên để lần sau chạy tiếp (audit D-9).
 
         ``lay_title=True`` lấy thêm TIÊU ĐỀ THẬT trên YouTube. Mặc định tắt vì đây
         là hành vi mới và tốn thêm lượt hỏi cho cả những clip đã đủ ngày/thời lượng.
@@ -537,11 +543,13 @@ class ChannelSync:
                 "loi": [],
             }
 
+        co_huy = _CoHuyTuHam(cancel_check)
         if fetcher is None:
             def fetcher(video_id: str) -> dict:
                 info = ChannelSync.lay_info_video(
                     video_id, self.network_timeout_s,
-                    cau_hinh_mang=self.cau_hinh_mang, phien_youtube=self.phien)
+                    cau_hinh_mang=self.cau_hinh_mang, phien_youtube=self.phien,
+                    cancel_event=co_huy, loi_huy=DaHuyDongBo)
                 return {
                     # Dùng chung cách rút ngày với list_channel/sync để ba đường
                     # không hiểu khác nhau (kể cả trường hợp chỉ có timestamp).
@@ -574,6 +582,7 @@ class ChannelSync:
         bo_qua = tong - len(can_va)
         da_va = 0
         loi = []
+        da_huy = False
         tong_can_va = len(can_va)
 
         # Ghi theo lô: kho lớn có thể cần vá hàng nghìn entry, ghi lại cả file sau
@@ -590,6 +599,10 @@ class ChannelSync:
         try:
             for i, (ten_file, thong_tin) in enumerate(can_va, start=1):
                 video_id = thong_tin.get("id") or ""
+                if co_huy.is_set():
+                    # Bấm Dừng: không gửi request kế; như cầu dao mở, mục còn lại để lần sau.
+                    da_huy = True
+                    break
                 if self.phien.mo:
                     # Một request mỗi clip, liên tiếp — đúng kiểu bị coi là bot. Cầu dao mở thì
                     # dừng; clip còn lại giữ nguyên, lần sau chạy tiếp từ chỗ dở. Trạng thái
@@ -617,6 +630,11 @@ class ChannelSync:
                         self.cap_nhat_meta(thay_doi)
                         thay_doi.clear()
                     da_va += 1
+                except DaHuyDongBo:
+                    # Dừng giữa lúc nghỉ thử lại: ý người dùng, không phải lỗi của video — không
+                    # ghi vào cầu dao/danh sách lỗi, không xoá title; mục này chạy lại lần sau.
+                    da_huy = True
+                    break
                 except Exception as e:  # noqa: BLE001
                     # Hỏi không được: xoá title vừa seed từ tên file, để nơi khác
                     # không tin nhầm cái tên đã bị làm sạch là tên thật YouTube.
@@ -634,13 +652,16 @@ class ChannelSync:
             if thay_doi:
                 self.cap_nhat_meta(thay_doi)
 
-        return {
+        ket_qua = {
             "tong": tong,
             "da_va": da_va,
             "bo_qua": bo_qua,
             "da_them_tu_dia": da_them_tu_dia,
             "loi": loi,
         }
+        if da_huy:
+            ket_qua["da_huy"] = True
+        return ket_qua
 
     def done_ids(self) -> set:
         """Đọc file archive để biết video nào đã tải."""
@@ -677,12 +698,15 @@ class ChannelSync:
         cau_hinh_mang: Optional[CauHinhMang] = None,
         *,
         phien_youtube: Optional[PhienYouTube] = None,
+        cancel_event=None,
+        loi_huy: Optional[type] = None,
     ) -> dict:
         """Trích xuất ĐẦY ĐỦ một video (có upload_date/duration). Không tải file.
 
         ``phien_youtube``: phiên của LƯỢT đang chạy (cầu dao + số đo dùng chung cả lượt). Không
         truyền thì vẫn được phân loại lỗi và thử lại hữu hạn, nhưng cầu dao chỉ sống một lần gọi.
-        Lỗi ném ra là ``LoiTruyCapYouTube`` đã phân loại.
+        Lỗi ném ra là ``LoiTruyCapYouTube`` đã phân loại. ``cancel_event``/``loi_huy`` đi thẳng
+        vào ``phien.chay``: bấm Dừng trong lúc nghỉ thử lại thì ném ``loi_huy`` ngay.
         """
         import yt_dlp
 
@@ -698,7 +722,8 @@ class ChannelSync:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 return ydl.extract_info(f"https://youtu.be/{video_id}", download=False) or {}
 
-        return phien.chay("metadata", lay, video_id=video_id)
+        return phien.chay("metadata", lay, video_id=video_id,
+                          cancel_event=cancel_event, loi_huy=loi_huy)
 
     @staticmethod
     def list_channel(
