@@ -3,6 +3,19 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-10-15 (tối) — tích hợp PR #9 + gom PR #10, #11 (nhánh feature/pc2/tich-hop-pr10-pr11)
+- PR #9 vào `integration/current` bằng fast-forward tới `831c045` (người dùng duyệt, tự chạy lệnh đẩy vì lớp quyền Claude
+  chặn; nhánh này chỉ vào SAU bước đó). PR #10 (`38bd2ba`) và PR #11
+  (`0ecd474`) tạo từ base cũ `97d36e0` → cherry-pick `-x` lên `831c045`: `f944d58` (nhớ client tính từ lúc học),
+  `21a05db` (thanh bên cookie không đăng nhập), không xung đột mã. Handoff hợp nhất tay (commit docs của PR #11 `f9c8663`
+  KHÔNG cherry-pick: mục review PR #6 nó chuyển đã nằm trong LICH_SU từ `6448543`; mục «LOCAL, CHƯA đẩy» đã lỗi thời).
+- PR #10: test hành vi đỏ trên mã cũ (`['android', ''] != ['', 'android']`), 3 test mới, đột biến 4/4. Pilot 1 video
+  (người dùng duyệt, 17:11): client mặc định → visionos, 251 opus CHỈ TIẾNG, 5 request.
+- Test trên đầu nhánh này (chặn mạng, venv `TimClipPro_CookieFix`): mục tiêu yt-dlp/cookie/đồng bộ kênh/huỷ/tiến độ/
+  giao diện 607/607; nhanh 2793 = 2791/2/0; chậm 19/19 (372 s); ruff sạch; quét bí mật 0. Review độc lập (agent ngữ cảnh mới):
+  không P0/P1; 2 P2 CÓ TỪ TRƯỚC, để PR sau — `scan_ui` xét «JS chưa sẵn sàng» trước trạng thái file (đồng bộ kênh vẫn dừng ở
+  lỗi cookie khi file hỏng); `co_cookie_dang_nhap` đếm cả cookie đăng nhập ĐÃ HẾT HẠN.
+- Thay PR #10 + #11 bằng PR tích hợp mới; hai PR cũ đóng sau khi PR mới vào `integration/current`.
 ### 2026-10-15 — thanh bên «Trạng thái YouTube» hết nói «DÙNG cookie đăng nhập» với file không đăng nhập được (fix/pc2/cookie-status-no-login)
 - Ca thật (Development 8502): file cookie đúng cấu trúc, KHÔNG có LOGIN_INFO/SAPISID, máy có Node + EJS → dòng trên «KHÔNG có
   cookie đăng nhập», dòng dưới vẫn «Khi quét: DÙNG cookie đăng nhập…» (kết quả đồng bộ thì đúng: `KHONG_CO_COOKIE_DANG_NHAP`).

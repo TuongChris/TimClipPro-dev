@@ -25,8 +25,8 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   tạm; dữ liệu thật chỉ dùng trong app DEV vận hành.
 
 ## Tiếp theo
-1. Sau khi `integration/current` fast-forward tới `fix/pc2/link-doan-vi-pham-watch`: cập nhật DEV vận hành bằng
-   `TimClipPro_DEV_CapNhat.bat` khi 8502 RẢNH (lock không đổi); lượt quét mới ra link `watch?v=…&t=`.
+1. Gộp `fix/pc2/chong-bong-lap` (P0) rồi `fix/pc2/youtube-audit-d`; cập nhật DEV khi rảnh. Audit 25/10: báo cáo tổng
+   `C:\Dev\pc2_test_runs\2026-10-25_audit\BAO_CAO_AUDIT_TONG.md` — 101 lỗi, 10 P1 + 26 P2 chứng minh; người dùng duyệt sửa hết.
 2. Người dùng: đồng bộ tiếp kênh Joe (dừng ở 266 — lỗi Claude 21:30, xem Nhật ký) → khi xong, tạo vân tay kho «Kho Joe» từ
    `E:\Kho_Tool_Quet\Kho_Joe_Bartolozzi` (tab «Kho clip gốc», không tạo kho mới). Google Sheets trong DEV: tạo hồ sơ đích
    + binding khoá nằm NGOÀI State Stable (binding «mac_dinh» đang trỏ `C:\TimClipPro_State\secrets\…`).
@@ -36,6 +36,15 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 5. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-10-25 — P0 «bóng» (D-27) lên mã chạy + sửa P0-1 theo review độc lập (nhánh fix/pc2/chong-bong-lap)
+- Cherry-pick 4128adb/200ddcf/409f609 (10/10) lên `fe461bd` (`50dcbd2`, `6ee8f43`, `6953e97`; D-21 → D-27, P-6/P-7). Review độc
+  lập (Fable tìm, Opus tái hiện + phản biện): P0-1 P1 CHỨNG MINH — phủ theo khoảng [min,max] bỏ mất lần dùng thật thứ hai,
+  xấu nhất thành âm tính Watch không quét lại. Thi 3 phương án, 2 giám khảo chọn `cuc_bo` → `ed2727f` (phủ theo bằng chứng
+  cục bộ ngoài cửa sổ dedup_s, neo nhóm bóng đạt chuẩn vào vị trí thật, C' cần mật độ ngang bằng).
+- Test (chặn mạng, cp1252, venv CookieFix): nhanh 2832 = 2830/2/0; matcher 748/0; tái hiện P0-1/2/3 13/13; chậm P0 3/3; fuzz
+  mã cũ ↔ mới 2 × 10.000: dương tính mới 0, dòng mất 0, video mất dương tính 0 (6ee8f43: 18/15). Bằng chứng
+  `2026-10-25_p0_bong_v2`, `2026-10-25_audit\p0`. Ghép đề xuất CHƯA làm: lưới «không bỏ ứng viên đạt cuối của clip»,
+  ngưỡng chạm khi bắc cầu lỗ, luật khe cho C' (`ket_qua_panel.json`). Giới hạn: một mảnh audfprint/khúc 1 giờ phủ cả lỗ.
 ### 2026-10-25 — link «Đoạn vi phạm» dạng `watch?v=<ID>&t=<giây>` (nhánh fix/pc2/link-doan-vi-pham-watch)
 - Chủ dự án yêu cầu: link nhảy mốc báo cáo V2 (ô «Đoạn vi phạm N…» bảng Ngang/Sheets, cột «🔗 Nhảy tới đúng mốc vi phạm»,
   CSV, hồ sơ, báo cáo nguồn chung) đổi `https://youtu.be/<ID>?t=` → `https://www.youtube.com/watch?v=<ID>&t=` cho lượt quét
@@ -57,17 +66,4 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   audio/giờ). LỖI CLAUDE: 21:30 tắt server Dev tạm để đổi sang bản vận hành khi lượt này còn tải (yt-dlp tải trong tiến
   trình — kiểm «nhàn rỗi» chỉ xem tiến trình con + CPU). Không mất dữ liệu: 266 file = 266 dòng `downloaded.txt` = 266
   metadata khớp kích thước; `_tam` rỗng. Bằng chứng ngoài Git: `2026-10-15_dev_van_hanh`.
-### 2026-10-15 (tối) — tích hợp PR #9 + gom PR #10, #11 (nhánh feature/pc2/tich-hop-pr10-pr11)
-- PR #9 vào `integration/current` bằng fast-forward tới `831c045` (người dùng duyệt, tự chạy lệnh đẩy vì lớp quyền Claude
-  chặn; nhánh này chỉ vào SAU bước đó). PR #10 (`38bd2ba`) và PR #11
-  (`0ecd474`) tạo từ base cũ `97d36e0` → cherry-pick `-x` lên `831c045`: `f944d58` (nhớ client tính từ lúc học),
-  `21a05db` (thanh bên cookie không đăng nhập), không xung đột mã. Handoff hợp nhất tay (commit docs của PR #11 `f9c8663`
-  KHÔNG cherry-pick: mục review PR #6 nó chuyển đã nằm trong LICH_SU từ `6448543`; mục «LOCAL, CHƯA đẩy» đã lỗi thời).
-- PR #10: test hành vi đỏ trên mã cũ (`['android', ''] != ['', 'android']`), 3 test mới, đột biến 4/4. Pilot 1 video
-  (người dùng duyệt, 17:11): client mặc định → visionos, 251 opus CHỈ TIẾNG, 5 request.
-- Test trên đầu nhánh này (chặn mạng, venv `TimClipPro_CookieFix`): mục tiêu yt-dlp/cookie/đồng bộ kênh/huỷ/tiến độ/
-  giao diện 607/607; nhanh 2793 = 2791/2/0; chậm 19/19 (372 s); ruff sạch; quét bí mật 0. Review độc lập (agent ngữ cảnh mới):
-  không P0/P1; 2 P2 CÓ TỪ TRƯỚC, để PR sau — `scan_ui` xét «JS chưa sẵn sàng» trước trạng thái file (đồng bộ kênh vẫn dừng ở
-  lỗi cookie khi file hỏng); `co_cookie_dang_nhap` đếm cả cookie đăng nhập ĐÃ HẾT HẠN.
-- Thay PR #10 + #11 bằng PR tích hợp mới; hai PR cũ đóng sau khi PR mới vào `integration/current`.
-- Mục cũ hơn (2026-10-15 thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8 xác thực, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
+- Mục cũ hơn (2026-10-15 tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
