@@ -90,7 +90,7 @@ def test_ban_ngang_v2_ten_sach_link_dung_moc_ngay_nguyen_ban_url_watch(tmp_path,
     o = _o(e.to_rows_ngang([kq])[0])
     assert o["Tên video vi phạm"] == TIEU_DE
     assert o["Đoạn vi phạm 1 trong video vi phạm"] == \
-        "00:15:15 – 00:20:15 · https://youtu.be/vidvipham01?t=915"
+        "00:15:15 – 00:20:15 · https://www.youtube.com/watch?v=vidvipham01&t=915"
     assert o["Ngày đăng video vi phạm"] == "15/03/2026"
     assert o["Link video gốc 1"] == "https://www.youtube.com/watch?v=bbbbbbbbbbb"
     assert o["Ngày đăng video gốc 1"] == ""          # kho chỉ có ngày đã quy đổi
@@ -241,7 +241,7 @@ def test_bang_jobs_giu_nguyen_cot(tmp_path, monkeypatch):
 def test_moi_exporter_cung_ten_link_url_ngay(tmp_path, monkeypatch):
     e, kq, hop = _quet_ca_that(tmp_path, monkeypatch)
     so_lan_hoi_youtube = len(hop["info"])
-    link = "https://youtu.be/vidvipham01?t=915"
+    link = "https://www.youtube.com/watch?v=vidvipham01&t=915"
     goc = "https://www.youtube.com/watch?v=bbbbbbbbbbb"
     ngang = e.to_rows_ngang([kq])[0]
     doc = e.to_rows([kq])[0]

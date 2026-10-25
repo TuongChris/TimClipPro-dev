@@ -54,7 +54,7 @@ def test_gia_tri_v2_doc_qua_apps_script_khong_them_hau_to_hay_lui_giay():
     # File03 in «Tên video vi phạm : <ô hiển thị>» — ô V2 không còn hậu tố phạm vi.
     assert "QUÉT MỘT PHẦN" not in o["Tên video vi phạm"]
     doan = o["Đoạn vi phạm 1 trong video vi phạm"]
-    assert doan.startswith("00:15:15 ") and doan.endswith("?t=915")
+    assert doan.startswith("00:15:15 ") and doan.endswith("&t=915")
     # Ngày gửi bằng chuỗi (RAW) → Apps Script chuẩn hoá dd/MM/yyyy giữ đúng ngày lịch.
     assert _chuan_hoa_ngay(o["Ngày đăng video vi phạm"]) == "15/03/2026"
     assert _chuan_hoa_ngay(o["Ngày đăng video gốc 1"]) == "12/03/2025"

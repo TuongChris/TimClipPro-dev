@@ -6,6 +6,7 @@ Số liệu dựng theo ca người dùng nêu, nhưng mọi mã video/tiêu đ�
 """
 import json
 import math
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -50,13 +51,13 @@ def test_hien_thi_moc_khong_hop_le_la_dau_hoi():
 def test_link_trung_dung_giay_hien_thi(start):
     g = v2.giay_moc(start)
     assert v2.hien_thi_moc(g) == "00:15:15"
-    assert v2.link_nhay("vidvipham01", "", g) == "https://youtu.be/vidvipham01?t=915"
+    assert v2.link_nhay("vidvipham01", "", g) == "https://www.youtube.com/watch?v=vidvipham01&t=915"
 
 
 def test_link_khong_co_mot_mot_tham_so_t_khi_dung_tu_source_ref():
     ref = "https://www.youtube.com/watch?v=vidvipham01&t=10s&start=5#t=3"
     link = v2.link_nhay("", ref, 915)
-    assert link == "https://youtu.be/vidvipham01?t=915"
+    assert link == "https://www.youtube.com/watch?v=vidvipham01&t=915"
     assert link.count("t=") == 1 and "start" not in link and "#" not in link
 
 
@@ -72,6 +73,15 @@ def test_link_khong_suy_ma_tu_host_gia_ten_file_hay_ma_tran(ref):
     assert v2.link_nhay("", ref, 915) == ""
 
 
+def test_link_nhay_dang_watch_tach_dung_ma_va_giay():
+    """``t`` là tham số RIÊNG sau ``&``; ``watch?v=<ID>?t=…`` sẽ dính giây vào mã video."""
+    link = v2.link_nhay("vidvipham01", "", 915)
+    u = urlsplit(link)
+    assert (u.scheme, u.netloc, u.path) == ("https", "www.youtube.com", "/watch")
+    assert parse_qs(u.query) == {"v": ["vidvipham01"], "t": ["915"]}
+    assert link.count("?") == 1 and u.fragment == ""
+
+
 def test_link_khong_co_khi_moc_khong_hop_le():
     assert v2.link_nhay("vidvipham01", "", None) == ""
     assert v2.link_nhay("vidvipham01", "", v2.giay_moc(float("nan"))) == ""
@@ -79,7 +89,7 @@ def test_link_khong_co_khi_moc_khong_hop_le():
 
 def test_source_id_sai_dinh_dang_thi_lui_ve_url_hop_le():
     assert v2.link_nhay("abc", "https://youtu.be/vidvipham01?si=x", 7) == \
-        "https://youtu.be/vidvipham01?t=7"
+        "https://www.youtube.com/watch?v=vidvipham01&t=7"
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +274,7 @@ def test_dong_ngang_ca_that_dung_hop_dong_34_cot():
         "Video tổng hợp thử (Phần 2)"
     assert "QUÉT MỘT PHẦN" not in o["Tên video vi phạm"]
     assert o["Đoạn vi phạm 1 trong video vi phạm"] == \
-        "00:15:15 – 00:39:10 · https://youtu.be/vidvipham01?t=915"
+        "00:15:15 – 00:39:10 · https://www.youtube.com/watch?v=vidvipham01&t=915"
     assert o["Ngày đăng video vi phạm"] == "15/03/2026"
     assert o["Link video gốc 1"] == "https://www.youtube.com/watch?v=goc00000001"
     assert o["Ngày đăng video gốc 1"] == "12/03/2025"
@@ -301,7 +311,7 @@ def test_dong_doc_16_cot_dung_cung_gia_tri():
     assert o["Link video gốc"] == "https://www.youtube.com/watch?v=goc00000001"
     assert o["Clip bắt đầu từ"] == "00:15:15" and o["Đến"] == "00:39:10"
     assert o["Vùng khớp từ"] == "00:16:11"
-    assert o["🔗 Nhảy tới đúng mốc vi phạm"] == "https://youtu.be/vidvipham01?t=915"
+    assert o["🔗 Nhảy tới đúng mốc vi phạm"] == "https://www.youtube.com/watch?v=vidvipham01&t=915"
     for cot in Engine.COT_SO:
         assert isinstance(o[cot], (int, float))
 
@@ -331,6 +341,18 @@ def test_anh_chup_luu_doc_lai_y_het_va_khong_giu_tham_chieu():
     assert lai == bc
     assert v2.dong_ngang(lai) == v2.dong_ngang(bc)
     assert v2.dong_doc(lai) == v2.dong_doc(bc)
+
+
+def test_anh_chup_cu_giu_link_youtu_be_khong_hoi_to():
+    """Ảnh chụp lưu trước khi đổi dạng link: xuất lại đúng link đã chụp (Sheet/CSV cũ khớp)."""
+    d = _bc().to_dict()
+    cu = "https://youtu.be/vidvipham01?t=915"
+    d["doan"][0]["link"] = cu
+    lai = v2.doc_anh_chup_da_luu(v2.CHINH_SACH_V2, json.dumps(d, ensure_ascii=False))
+    assert isinstance(lai, v2.BaoCaoV2) and lai.doan[0].link == cu
+    o = dict(zip(HEADER_NGANG, v2.dong_ngang(lai)))
+    assert o["Đoạn vi phạm 1 trong video vi phạm"] == "00:15:15 – 00:39:10 · " + cu
+    assert dict(zip(Engine.HEADER, v2.dong_doc(lai)[0]))["🔗 Nhảy tới đúng mốc vi phạm"] == cu
 
 
 def test_doc_anh_chup_sai_chinh_sach_thi_tu_choi():

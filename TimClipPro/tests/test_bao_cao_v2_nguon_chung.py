@@ -53,7 +53,7 @@ def test_dong_bao_cao_v2_url_watch_ngay_nguyen_ban_link_dung_giay():
     assert _cot(rows, "Link video gốc") == ["https://www.youtube.com/watch?v=aaaaaaaaaaa"] * 2
     assert _cot(rows, "Ngày đăng video gốc") == ["12/03/2025"] * 2   # không phải 13/03
     assert _cot(rows, "Clip bắt đầu từ")[0] == "00:15:15"
-    assert _cot(rows, "🔗 Nhảy tới đúng mốc vi phạm")[0] == "https://youtu.be/vid00000001?t=915"
+    assert _cot(rows, "🔗 Nhảy tới đúng mốc vi phạm")[0] == "https://www.youtube.com/watch?v=vid00000001&t=915"
     assert _cot(rows, "Video vi phạm")[0] == "Video [1] thật"
 
 

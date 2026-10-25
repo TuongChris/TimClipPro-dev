@@ -38,7 +38,7 @@ def test_lich_su_v2_tai_lai_tu_anh_chup(tmp_path, monkeypatch):
     eng = at.session_state.eng
     dong = eng.dong_bao_cao_job(id_moi, dang_ngang=True)[0]
     assert dong[5] == "Video tổng hợp thử (Phần 2)"
-    assert dong[8].endswith("?t=915")
+    assert dong[8].endswith("&t=915")
 
     at = chon.set_value(id_cu).run()
     assert not at.exception
