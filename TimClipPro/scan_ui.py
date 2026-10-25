@@ -63,8 +63,24 @@ def dong_trang_thai_youtube(cd: Any, phien: Any = None, js: Any = None) -> list:
         # Không phải YouTube từ chối cookie: máy chưa giải được thử thách JavaScript — đừng bảo xuất lại cookie.
         ra.append(("warning", "Lượt gần nhất quét KHÔNG đăng nhập: cookie đã cấu hình nhưng "
                               f"{phien.khong_dang_nhap_ly_do}."))
-    elif phien is not None and phien.tom_tat().get("youtube_operations"):
-        ra.append(("success", "Lượt gần nhất: truy cập YouTube bình thường."))
+    elif phien is not None:
+        # «Bình thường» chỉ khi có thao tác THÀNH CÔNG và không lỗi nào: ``youtube_operations`` đếm lượt thử (tăng trước
+        # khi chạy), lỗi dưới ngưỡng cầu dao không mở cầu dao (audit D-10: lô hỏng hết vẫn báo xanh).
+        so = phien.tom_tat()
+        thanh_cong = int(so.get("successes") or 0)
+        loi = {k: int(so.get(k) or 0) for k in _tc.NHAN_TRUONG_THAT_BAI if so.get(k)}
+        tong_loi = sum(loi.values())
+        chi_tiet = ", ".join(f"{_tc.NHAN_TRUONG_THAT_BAI[k]}: {n}" for k, n in loi.items())
+        if tong_loi and not thanh_cong:
+            ra.append(("warning", f"Lượt gần nhất: KHÔNG thao tác YouTube nào thành công — {tong_loi} lỗi ({chi_tiet}), "
+                                  "chưa tới ngưỡng dừng cả lượt. Xem lỗi của từng video trong kết quả."))
+        elif tong_loi:
+            ra.append(("info", f"Lượt gần nhất: {thanh_cong} thao tác YouTube thành công, {tong_loi} lỗi ({chi_tiet}) "
+                               "— chưa tới ngưỡng dừng cả lượt. Xem lỗi của từng video trong kết quả."))
+        elif thanh_cong:
+            ra.append(("success", "Lượt gần nhất: truy cập YouTube bình thường."))
+        elif so.get("youtube_operations"):
+            ra.append(("info", "Lượt gần nhất: chưa thao tác YouTube nào chạy xong (có thể đã bấm Dừng)."))
     if getattr(cd, "hai_nguon", False):
         ra.append(("warning", "Đang cấu hình CẢ file cookie lẫn «Lấy thẳng từ trình duyệt» — tool CHỈ dùng file "
                               "cookie, ô trình duyệt bị bỏ qua. Xoá trống một trong hai ô để hết cảnh báo này."))

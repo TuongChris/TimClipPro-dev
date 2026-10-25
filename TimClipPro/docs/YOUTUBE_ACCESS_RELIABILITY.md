@@ -146,8 +146,10 @@ kênh/tab) bị loại; chỉ toàn tab thì báo INVALID_INPUT kèm hướng d�
 
 ## 8. Giao diện và CLI
 
-- Thanh bên «🔐 Kết nối YouTube» → **Trạng thái YouTube**: lượt gần nhất (bình thường / bị chặn /
-  cookie bị từ chối) + cấu trúc cookie (chỉ số đếm).
+- Thanh bên «🔐 Kết nối YouTube» → **Trạng thái YouTube**: lượt gần nhất (bị chặn / cookie bị từ chối /
+  không thao tác nào thành công / có lỗi dưới ngưỡng / bình thường) + cấu trúc cookie (chỉ số đếm). «Bình
+  thường» (xanh) CHỈ khi có thao tác thành công và 0 lỗi — `youtube_operations` đếm lượt THỬ, không phải
+  thành công; lỗi dưới ngưỡng cầu dao hiện số đếm theo loại (`NHAN_TRUONG_THAT_BAI`), không đoán nguyên nhân.
 - Quét lô bị dừng: banner đỏ "Đã dừng yêu cầu mới tới YouTube…", video còn lại "Chưa quét".
 - CLI: mã thoát 0 xong · 1 lỗi · 2 bận · **3 YouTube chặn truy cập**; lỗi vận hành đã phân loại
   không in traceback.

@@ -537,6 +537,11 @@ thật của video bị gỡ ở Tier 2) không được nhận ra; liệt kê k
   trước khi tới video thật. Đã sửa: loại riêng `UPCOMING_NOT_STARTED` — lỗi của TỪNG video, không bao giờ mở cầu
   dao, không đổi client, không vào sổ hạn chế (lượt sau tự thử lại khi đã phát). Test:
   `tests/test_truy_cap_youtube_sap_phat.py`.
+  Audit D-10 (25/10/2026): «Trạng thái YouTube» ở thanh bên báo XANH «truy cập YouTube bình thường» chỉ vì
+  `youtube_operations` > 0 — số đó đếm lượt THỬ (tăng trước khi chạy). Lô 1–2 link hỏng hết (403, mạng) chưa tới
+  ngưỡng cầu dao vẫn xanh; đường quét thật (metadata được, tải 403) thì cầu dao không bao giờ mở. Đã sửa: xanh chỉ
+  khi có thành công và 0 lỗi; 0 thành công → cảnh báo kèm số lỗi theo loại; có cả hai → dòng thông tin kèm số. Test:
+  `tests/test_trang_thai_youtube_luot_hong.py`.
 
 **18. «Bóng» của âm thanh lặp làm lệch mốc và thừa dòng (10/10/2026, PC2).** Chi tiết: `docs/BONG_AM_THANH_LAP.md`.
 Nhạc có nhịp trống đều, vòng hợp âm hay đoạn lặp y hệt làm audfprint trả thêm căn chỉnh của CÙNG clip lệch bội số nửa

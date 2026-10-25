@@ -772,6 +772,15 @@ _DEM_THEO_LOAI = {AUTH_REQUIRED: "auth_failures", AGE_RESTRICTED: "age_restricte
                   FORMAT_OR_EXTRACTOR_ERROR: "format_errors",
                   JS_CHALLENGE_ERROR: "js_challenge_errors", PLAYER_CLIENT_ERROR: "player_client_errors",
                   COOKIE_INVALID_OR_EXPIRED: "cookie_invalid"}
+# Trường đếm LỖI (``_ghi_that_bai``: mỗi thao tác hỏng sau ngân sách thử lại đếm một lần) + nhãn ngắn cho giao diện.
+# ``youtube_operations`` đếm lượt THỬ (tăng trước khi ``ham()`` chạy) — tóm tắt lượt chạy phải đọc ``successes`` và các
+# trường này, không suy «bình thường» từ số lượt thử (audit D-10).
+NHAN_TRUONG_THAT_BAI = {"http_403": "HTTP 403", "transient": "mạng", "rate_limited": "HTTP 429",
+                        "bot_challenges": "nghi là bot", "auth_failures": "đòi đăng nhập",
+                        "age_restricted": "giới hạn tuổi", "members_only": "chỉ hội viên",
+                        "cookie_invalid": "cookie", "permanent_unavailable": "video bị gỡ / riêng tư / không tồn tại",
+                        "format_errors": "trích xuất / định dạng", "player_client_errors": "player client",
+                        "js_challenge_errors": "thử thách JavaScript", "other_failures": "lỗi khác"}
 _DEM_YEU_CAU = {"metadata": "metadata_requests", "download": "download_attempts",
                 "listing": "listing_requests"}
 
