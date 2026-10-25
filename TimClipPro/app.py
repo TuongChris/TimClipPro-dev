@@ -52,6 +52,7 @@ from scan_ui import (
     dong_trang_thai_youtube,
     goi_y_quet_mot_phan,
     huong_dan_kho_sau_dong_bo,
+    thoat_markdown,
     thong_bao_youtube_chan,
     tom_tat_dong_bo_kenh,
 )
@@ -331,7 +332,7 @@ def bao_cao_khong_co_ket_qua(results: list[ScanResult]) -> None:
 
     for x in ok:
         cd = getattr(x, "chan_doan", None)
-        tieu_de = x.source_name or x.source_ref
+        tieu_de = thoat_markdown(x.source_name or x.source_ref)   # tiêu đề YouTube = chữ ngoài (audit D-8)
         if cd is None:
             st.warning(f"**{tieu_de}** — không tìm thấy clip gốc nào.")
             continue
@@ -473,7 +474,7 @@ def bang_ket_qua(results: list[ScanResult]) -> None:
             "cả video.{}".format(
                 len(mot_phan),
                 "\n".join(
-                    f"- {r.source_name[:60]}: {mo_ta_pham_vi(r)}"
+                    f"- {thoat_markdown(r.source_name[:60])}: {mo_ta_pham_vi(r)}"
                     for r in mot_phan[:8]),
                 "".join(f"\n\n{x}" for x in goi_y)))
     # Báo cáo V2: ngày đăng NGUYÊN BẢN của video gốc. Kho chỉ lưu ngày đã quy đổi thì ô ngày
@@ -991,7 +992,7 @@ if job["running"]:
         b3.metric("Đang quét", f"Video {anh.video_dang_quet}" if anh.video_dang_quet else "—")
         b4.metric("Đã chạy", _thoi_luong(anh.elapsed_seconds))
         if anh.ung_vien:
-            st.info(f"**Video gốc đang xét:** {anh.ung_vien_tieu_de}  \n`{anh.ung_vien}`")
+            st.info(f"**Video gốc đang xét:** {thoat_markdown(anh.ung_vien_tieu_de)}  \n`{anh.ung_vien}`")
         if anh.message:
             st.caption(anh.message)
         st.dataframe(build_nguon_chung_status_dataframe(anh.videos), width="stretch",
@@ -1038,13 +1039,15 @@ if not job["running"] and (job["results"] or job["error"]):
         for muc_dbk, cau_dbk in tom_tat_dong_bo_kenh(r) + dong_hieu_suat(r.get("hieu_suat")):
             getattr(st, muc_dbk)(cau_dbk)
         if r["loi"]:
-            st.warning(f"Video lỗi ({len(r['loi'])}, hiện tối đa 10):\n\n- " + "\n- ".join(r["loi"][:10]))
+            # Mỗi dòng lỗi mở đầu bằng tiêu đề video (channel.py) — chữ ngoài, thoát trước khi vào Markdown (audit D-8).
+            st.warning(f"Video lỗi ({len(r['loi'])}, hiện tối đa 10):\n\n- "
+                       + "\n- ".join(thoat_markdown(d) for d in r["loi"][:10]))
         if r.get("nghi_hong"):
             st.warning(
                 f"Phát hiện {len(r['nghi_hong'])} file audio nghi hỏng/nén dở trong kho "
                 "— đã đưa vào danh sách tải lại. Bản cũ chỉ được chuyển vào thư mục "
                 "`_hong` sau khi tải lại thành công, không bị xoá:\n\n- "
-                + "\n- ".join(r["nghi_hong"][:10]))
+                + "\n- ".join(thoat_markdown(d) for d in r["nghi_hong"][:10]))
         if r.get("da_doi_soat"):
             st.info(f"Đã bổ sung metadata tại chỗ cho {r['da_doi_soat']} file có sẵn "
                     "trên đĩa (không gọi lại YouTube).")
@@ -1143,11 +1146,12 @@ if not job["running"] and (job["results"] or job["error"]):
                 cd = getattr(x, "chan_doan", None)
                 if cd is not None and cd.toc_do_tim_duoc:
                     st.info(
-                        f"🔎 **{x.source_name}** chỉ khớp sau khi bù tốc độ — "
+                        f"🔎 **{thoat_markdown(x.source_name)}** chỉ khớp sau khi bù tốc độ — "
                         f"{cd.toc_do_tim_duoc}. Video này nhiều khả năng đã bị "
                         "chỉnh tốc độ để né nhận dạng bản quyền.")
         if loi:
-            st.error("Có nguồn bị lỗi: " + "; ".join(f"{x.source_name} ({x.note})" for x in loi))
+            st.error("Có nguồn bị lỗi: " + "; ".join(f"{thoat_markdown(x.source_name)} ({thoat_markdown(x.note)})"
+                                                      for x in loi))
         bang_ket_qua(res)
     if st.button("🧹 Xóa kết quả, làm việc khác"):
         job.update({"results": [], "error": "", "kind": ""})
@@ -1267,12 +1271,13 @@ with tab0:
                     if trong_so:
                         # Đồng bộ KHÔNG tải các video này — không liệt kê chúng là «còn thiếu» (audit D-7).
                         st.warning(CAU_TRONG_SO_KHONG_FILE.format(n=len(trong_so)) + "\n\n- "
-                                   + "\n- ".join(f"{v.title[:60]} ({v.id})" for v in trong_so[:10]))
+                                   + "\n- ".join(f"{thoat_markdown(v.title[:60])} ({v.id})"
+                                                       for v in trong_so[:10]))
                     if r.get("nghi_hong"):
                         st.warning(
                             f"{len(r['nghi_hong'])} file nghi hỏng/nén dở được tính là còn "
                             "thiếu (đồng bộ sẽ tải lại):\n\n- "
-                            + "\n- ".join(r["nghi_hong"][:10]))
+                            + "\n- ".join(thoat_markdown(d) for d in r["nghi_hong"][:10]))
                     if r["thieu"]:
                         st.dataframe(pd.DataFrame([{
                             "Ngày đăng": v.upload_date, "Tiêu đề": v.title,

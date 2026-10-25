@@ -13,6 +13,7 @@ from typing import Callable, Optional
 
 import tien_do_quet as tdq
 from engine import hhmmss
+from scan_ui import thoat_markdown
 
 CHUA_DU_ETA = "Chưa đủ dữ liệu để ước tính"
 
@@ -43,7 +44,8 @@ def dong_chi_tiet(anh, v, ten_phase: dict, bay_gio: Optional[float] = None) -> l
     td = anh.tien_do
     co_so_do = cung_video(anh)
     tieu_de = (td.tieu_de if co_so_do and td.tieu_de else v.title) or v.nguon[:90]
-    dong = [f"**Video {v.index}/{anh.total}:** {tieu_de}"]
+    # Tiêu đề / link là chữ NGOÀI (người đăng lại đặt) — thoát trước khi vào st.markdown (audit D-8).
+    dong = [f"**Video {v.index}/{anh.total}:** {thoat_markdown(tieu_de)}"]
     if not co_so_do:
         dong.append(f"**Giai đoạn hiện tại:** {ten_phase.get(v.phase, v.phase)}")
         return dong
@@ -134,7 +136,7 @@ def ve_tien_do_lo(st, anh, ten_phase: dict, gio: Callable[[float], str]) -> None
             st.progress(ty_le, text=f"{anh.tien_do.ten_giai_doan}: {ty_le * 100:.0f}% của bước này")
         st.caption(dong_nhip(anh, bay_gio) + "  \n" + dong_eta_buoc(anh))
         if v.message:
-            st.caption(f"Thông báo gần nhất: {v.message}")
+            st.caption(f"Thông báo gần nhất: {thoat_markdown(v.message)}")   # engine ghép tiêu đề vào câu
         canh_bao = anh.tien_do.canh_bao(bay_gio) if cung_video(anh) else ""
         if canh_bao:
             st.warning(canh_bao)
