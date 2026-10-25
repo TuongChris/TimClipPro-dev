@@ -383,10 +383,37 @@ def _ban_ghi_cookie(van_ban: str) -> dict:
     return ra
 
 
+def _han_dong(dong: str) -> int:
+    """Hạn dùng (giây epoch) của một dòng chuẩn (:func:`_dong_cookie_chuan`); 0 = cookie phiên."""
+    try:
+        return int(dong.split("	")[4])
+    except (IndexError, ValueError):
+        return 0
+
+
+def _doi_con_ghi(doi: dict, goc: dict, tren_dia: dict) -> tuple:
+    """``(doi đã lọc, số dòng giữ)``: cookie phiên đổi chỉ được ghi khi dòng trên đĩa VẪN là dòng phiên đã nạp (so-rồi-
+    đặt, như ``xoa`` của :func:`_gop_ban_ghi`). Phiên khác đã ghi dòng khác từ lúc đó (cả hai phiên cùng xoay một cookie —
+    __Secure-1PSIDTS/SIDCC xoay ở hầu hết phiên) thì giữ dòng trên đĩa, TRỪ KHI dòng của phiên này có hạn dùng MUỘN hơn:
+    YouTube cấp cookie xoay với Max-Age cố định, hạn muộn hơn = cấp sau. Phiên đóng sau không còn đè bản xoay mới hơn
+    bằng bản nó nhận từ đầu phiên (review audit D); cùng hạn / cookie phiên / dòng đã bị xoá thì phiên ghi trước thắng.
+    """
+    ra: dict = {}
+    giu = 0
+    for khoa, dong in doi.items():
+        hien = tren_dia.get(khoa)
+        if hien == goc.get(khoa) or (hien is not None and _han_dong(dong) > _han_dong(hien)):
+            ra[khoa] = dong
+        else:
+            giu += 1
+    return ra, giu
+
+
 def _gop_ban_ghi(hien_tai: str, doi: dict, xoa: dict) -> Optional[str]:
     """Văn bản mới của file cookie = ``hien_tai`` (bản trên đĩa LÚC NÀY) + thay đổi của MỘT phiên; ``None`` = không đổi.
 
-    ``doi`` (khoá → dòng chuẩn): cookie phiên đặt mới/đổi — thay dòng cùng khoá, chưa có thì thêm cuối file. ``xoa``
+    ``doi`` (khoá → dòng chuẩn): cookie phiên đặt mới/đổi, ĐÃ lọc so với đĩa (:func:`_doi_con_ghi`) — thay dòng cùng
+    khoá, chưa có thì thêm cuối file. ``xoa``
     (khoá → dòng chuẩn lúc nạp): cookie phiên đã bỏ (hết hạn, YouTube xoá) — chỉ bỏ khi trên đĩa vẫn đúng giá trị phiên
     đã nạp; phiên khác đã ghi giá trị mới hơn thì giữ. Mọi dòng khác (cookie phiên không đụng tới, chú thích, tiêu đề)
     giữ NGUYÊN VĂN — phiên không bao giờ ghi lại giá trị nó không đổi (giá trị cũ đè cookie vừa xoay).
@@ -498,11 +525,12 @@ class LuongCookieFile:
                     # Người dùng/công cụ khác vừa đổi file thành thứ cổng không nhận: không đè lên — lượt sau cổng báo.
                     LOGGER.warning("event=ytdlp.cookie.write_back_skipped file=%s reason=invalid_on_disk", ten)
                     return
+                doi, giu = _doi_con_ghi(doi, goc, _ban_ghi_cookie(hien_tai))
                 van_ban = _gop_ban_ghi(hien_tai, doi, xoa)
-                if van_ban is None:
-                    return
-                _ghi_de_nguyen_tu(self.duong_dan, van_ban)
-            LOGGER.debug("event=ytdlp.cookie.write_back file=%s changed=%d removed=%d", ten, len(doi), len(xoa))
+                if van_ban is not None:
+                    _ghi_de_nguyen_tu(self.duong_dan, van_ban)
+            LOGGER.debug("event=ytdlp.cookie.write_back file=%s changed=%d removed=%d changed_kept=%d", ten, len(doi),
+                         len(xoa), giu)
         except Exception as e:  # noqa: BLE001 — bước ghi lại không được làm hỏng phiên đã xong
             LOGGER.warning("event=ytdlp.cookie.write_back_skipped file=%s reason=%s", ten, type(e).__name__)
 

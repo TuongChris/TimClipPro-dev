@@ -376,3 +376,59 @@ def test_luot_chong_nhau_theo_thoi_gian_that_khong_loi(tmp_path):
     assert not loi, loi[:3]
     y._CACHE_COOKIE.clear()
     _opts(cfg)
+
+
+# ------------------------------------------------ review audit D: cả hai phiên cùng xoay MỘT cookie
+
+def _xoay(jar, ten, gia_tri, han):
+    """YouTube xoay cookie (``Set-Cookie`` mới): giá trị mới, hạn dùng tính từ LÚC cấp (Max-Age cố định)."""
+    c = _cookie(jar, ten)
+    c.value, c.expires = gia_tri, han
+
+
+def test_hai_phien_cung_xoay_mot_cookie_phien_dong_sau_khong_de_gia_tri_moi_hon(tmp_path):
+    """Lượt quét A nạp v0, YouTube xoay CK_00 → vA ngay đầu phiên (rồi A tải ffmpeg 60 phút). Đồng bộ kênh B nạp v0
+    (đĩa chưa đổi), YouTube xoay → vB (cấp SAU vA), B đóng → đĩa vB. A đóng sau: không được đè vB bằng vA cũ hơn."""
+    p = _tao_cookie(tmp_path)
+    cfg = y.CauHinhMang(cookiefile=str(p))
+    a = yt_dlp.YoutubeDL(_opts(cfg))
+    _ = a.cookiejar
+    _xoay(a.cookiejar, "CK_00", "gia_tri_A_xoay_luc_T0", 4102444800)
+    b = yt_dlp.YoutubeDL(_opts(cfg))
+    _xoay(b.cookiejar, "CK_00", "gia_tri_B_xoay_luc_T30", 4102444800 + 1800)
+    b.close()
+    a.close()
+    sau = p.read_text(encoding="utf-8")
+    assert _dong_cua(sau, "CK_00")[0].endswith("\tgia_tri_B_xoay_luc_T30"), _dong_cua(sau, "CK_00")
+    assert sum(1 for d in sau.splitlines() if "\tCK_" in d) == SO_BAN_GHI
+
+
+def test_hai_phien_cung_xoay_cung_han_phien_ghi_truoc_thang(tmp_path, caplog):
+    """Không phân biệt được bản nào mới hơn (cùng hạn dùng): giữ dòng trên đĩa — cùng phép so-rồi-đặt như khi xoá; log
+    số dòng giữ lại, không tên hay giá trị cookie."""
+    p = _tao_cookie(tmp_path)
+    opts = _opts(y.CauHinhMang(cookiefile=str(p)))
+    a, b = yt_dlp.YoutubeDL(opts), yt_dlp.YoutubeDL(opts)
+    _cookie(a.cookiejar, "CK_00").value = "cua_a"
+    _cookie(a.cookiejar, "CK_01").value = "cua_a_rieng"
+    _cookie(b.cookiejar, "CK_00").value = "cua_b"
+    b.close()
+    with caplog.at_level("DEBUG", logger="youtube.ytdlp"):
+        a.close()
+    sau = p.read_text(encoding="utf-8")
+    assert _dong_cua(sau, "CK_00")[0].endswith("\tcua_b")
+    assert _dong_cua(sau, "CK_01")[0].endswith("\tcua_a_rieng"), "cookie chỉ A đổi vẫn về file"
+    assert any("changed_kept=1" in r.getMessage() for r in caplog.records), [r.getMessage() for r in caplog.records]
+    assert not any("cua_" in r.getMessage() or "CK_0" in r.getMessage() for r in caplog.records)
+
+
+def test_phien_dong_sau_co_ban_xoay_moi_hon_van_ghi(tmp_path):
+    """Chặn sửa quá tay: phiên đóng SAU mà YouTube cấp bản của nó SAU (hạn dùng muộn hơn) thì bản đó thắng."""
+    p = _tao_cookie(tmp_path)
+    opts = _opts(y.CauHinhMang(cookiefile=str(p)))
+    a, b = yt_dlp.YoutubeDL(opts), yt_dlp.YoutubeDL(opts)
+    _xoay(b.cookiejar, "CK_00", "cua_b_cap_truoc", 4102444800)
+    _xoay(a.cookiejar, "CK_00", "cua_a_cap_sau", 4102444800 + 600)
+    b.close()
+    a.close()
+    assert _dong_cua(p.read_text(encoding="utf-8"), "CK_00")[0].endswith("\tcua_a_cap_sau")

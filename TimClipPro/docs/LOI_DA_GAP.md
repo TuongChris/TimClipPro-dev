@@ -161,7 +161,11 @@ ghép đè hỏng tới khi xuất lại; phiên nạp trước đè cookie YouT
 yt-dlp nhận bản chụp (luồng văn bản) chứ không nhận đường dẫn; tool gộp CHỈ cookie phiên đổi vào bản
 mới nhất dưới khoá, thay nguyên tử (`ytdlp_chung.LuongCookieFile`). → Quy tắc: file dùng chung giữa
 các tiến trình chỉ ghi bằng file tạm + `os.replace` dưới khoá, và chỉ ghi phần mình đổi. Test:
-`tests/test_cookie_ghi_lai_dong_thoi.py`.
+`tests/test_cookie_ghi_lai_dong_thoi.py`. Phản biện (review audit D): cookie mà CẢ HAI phiên cùng xoay
+(__Secure-1PSIDTS/SIDCC — chuyện thường) vẫn «người ghi sau thắng»: lượt quét nạp lúc T0, tải ffmpeg
+60 phút, đóng sau đồng bộ kênh → đè bản xoay mới hơn. Đã sửa: dòng phiên đổi cũng so-rồi-đặt như dòng
+xoá (`_doi_con_ghi`) — đĩa đã khác bản phiên nạp thì giữ đĩa, trừ khi bản của phiên có hạn dùng muộn hơn
+(cấp sau).
 
 **9. Vá lệch lần thứ tư — cấu hình chỉ tới 2/6 nơi gọi (18/08/2026).**
 Bản vá 6c thêm cookie + giãn nhịp vào `ytdlp_chung` nhưng chỉ nối vào nút «Đồng bộ kênh»

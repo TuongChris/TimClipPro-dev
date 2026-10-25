@@ -120,7 +120,8 @@ request vẫn chỉ do `ytdlp_sleep_requests_s` (yt-dlp) và bộ điều phối
   cũ. Nay `tuy_chon` đưa yt-dlp `LuongCookieFile`: bản chụp vừa qua cổng, dạng luồng văn bản (yt-dlp
   nhận), không phải đường dẫn. Lưu thì yt-dlp định dạng hũ vào bộ nhớ; tool gộp CHỈ những cookie phiên
   đổi so với bản chụp vào bản MỚI NHẤT trên đĩa, dưới `luu_tru.khoa_json` (file `.timclip.lock` cạnh
-  file cookie); dòng không đổi giữ nguyên văn; thay nguyên tử (file tạm `.timclip-*.tmp` cùng thư mục
+  file cookie); dòng đổi/xoá chỉ ghi khi đĩa vẫn là bản phiên đã nạp (phiên khác đã ghi thì giữ đĩa,
+  trừ bản của phiên có hạn dùng muộn hơn = YouTube cấp sau — review audit D); dòng không đổi giữ nguyên văn; thay nguyên tử (file tạm `.timclip-*.tmp` cùng thư mục
   + `os.replace`). Không đổi gì thì không ghi. Không ghi được (khoá bận quá 10 s, file vừa bị đổi thành
   thứ cổng không nhận, Windows giữ file) thì bỏ lượt ghi, file giữ nguyên, log chỉ tên file + loại lỗi.
   Cổng và bản chụp thử lại tối đa 1 s khi Windows từ chối đọc lúc file đang bị thay. Các lượt đổi client
