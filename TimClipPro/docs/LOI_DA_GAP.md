@@ -153,6 +153,16 @@ nén gửi đi khi nhờ hỗ trợ; `GiamSat.bat` và `ChayMayPhu.bat` đều c
 → **Quy tắc: không bao giờ tin cờ `quiet` của thư viện bên thứ ba để giữ bí mật.**
 Chặn ở đầu nguồn (đừng đưa dữ liệu hỏng vào) và ở đầu ra (lọc trước khi ghi).
 
+Audit D-11 (25/10/2026): chính yt-dlp GHI LẠI file cookie sau mỗi phiên bằng `open(file, 'w')` — cắt
+cụt rồi ghi tại chỗ, không khoá, ghi cả hũ. GUI, CLI, Watch, luồng đồng bộ + luồng quét dùng chung một
+file: phiên khác dựng tuỳ chọn đúng lúc file rỗng → cổng báo «không có bản ghi cookie nào» → cầu dao
+cookie (ngưỡng 1) dừng cả lượt, bảo xuất lại cookie dù cookie vẫn tốt; hai lần lưu đan nhau để lại file
+ghép đè hỏng tới khi xuất lại; phiên nạp trước đè cookie YouTube vừa xoay bằng giá trị cũ. Đã sửa:
+yt-dlp nhận bản chụp (luồng văn bản) chứ không nhận đường dẫn; tool gộp CHỈ cookie phiên đổi vào bản
+mới nhất dưới khoá, thay nguyên tử (`ytdlp_chung.LuongCookieFile`). → Quy tắc: file dùng chung giữa
+các tiến trình chỉ ghi bằng file tạm + `os.replace` dưới khoá, và chỉ ghi phần mình đổi. Test:
+`tests/test_cookie_ghi_lai_dong_thoi.py`.
+
 **9. Vá lệch lần thứ tư — cấu hình chỉ tới 2/6 nơi gọi (18/08/2026).**
 Bản vá 6c thêm cookie + giãn nhịp vào `ytdlp_chung` nhưng chỉ nối vào nút «Đồng bộ kênh»
 và `cli.py kenh`. Bốn nơi còn lại vẫn gọi mạng bằng cấu hình mặc định: nút «Xem danh

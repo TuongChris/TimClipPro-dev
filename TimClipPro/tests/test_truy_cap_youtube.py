@@ -540,4 +540,4 @@ def test_cong_bao_ro_file_html(tmp_path):
 def test_cong_cho_qua_file_chi_co_ban_ghi_httponly(tmp_path):
     p = _ghi(tmp_path, _DAU + _dong(".youtube.com", "SID", httponly=True))
     y.kiem_tra_file_cookie(p)
-    assert y.CauHinhMang(cookiefile=p).tuy_chon()["cookiefile"] == p
+    assert y.CauHinhMang(cookiefile=p).tuy_chon()["cookiefile"].duong_dan == p

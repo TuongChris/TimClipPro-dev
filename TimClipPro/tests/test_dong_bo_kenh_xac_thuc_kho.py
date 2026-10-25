@@ -109,7 +109,7 @@ def _cookie_gia(p: Path) -> str:
 def test_cau_hinh_ca_file_lan_trinh_duyet_chi_dung_file(tmp_path, may):
     ch = y.CauHinhMang(cookiefile=_cookie_gia(tmp_path / "c.txt"), cookies_browser="chrome")
     opts = ch.tuy_chon("download")
-    assert opts.get("cookiefile") == str(tmp_path / "c.txt")
+    assert opts.get("cookiefile").duong_dan == str(tmp_path / "c.txt")
     assert "cookiesfrombrowser" not in opts, "gộp hai nguồn: yt-dlp ghi cookie trình duyệt vào file lúc đóng phiên"
     assert ch.hai_nguon_cookie and ch.nguon_cookie_hieu_luc == "file"
 

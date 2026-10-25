@@ -106,7 +106,19 @@ request vẫn chỉ do `ytdlp_sleep_requests_s` (yt-dlp) và bộ điều phối
   Không đối chứng (bỏ cookie vẫn hỏng) thì không nhớ; video đòi đăng nhập (tuổi, hội viên, cần đăng
   nhập) vẫn thử cookie; thao tác có cookie thành công thì bỏ ghi nhớ; lượt sau thử lại cookie từ đầu.
 - Không đọc profile trình duyệt, không tự bật `cookiesfrombrowser`, không chép cookie ra đâu cả.
-  Giữ nguyên cơ chế yt-dlp ghi lại file cookie sau mỗi phiên (`YoutubeDL.close → save_cookies`).
+- Ghi lại file cookie sau phiên (audit D-11): giữ về nghĩa cơ chế của yt-dlp (`YoutubeDL.close →
+  save_cookies`) — cookie YouTube đặt/xoay trong phiên về file của người dùng — nhưng yt-dlp không còn
+  tự ghi file. Trước đây mỗi phiên cắt cụt + ghi lại CẢ file tại chỗ, không khoá; GUI/CLI/Watch và
+  luồng đồng bộ + quét dùng chung một file nên phiên khác đọc phải file rỗng/dở → «cookie hỏng» (cầu
+  dao ngưỡng 1), hai lần lưu đan nhau làm hỏng file, phiên nạp trước đè cookie vừa xoay bằng giá trị
+  cũ. Nay `tuy_chon` đưa yt-dlp `LuongCookieFile`: bản chụp vừa qua cổng, dạng luồng văn bản (yt-dlp
+  nhận), không phải đường dẫn. Lưu thì yt-dlp định dạng hũ vào bộ nhớ; tool gộp CHỈ những cookie phiên
+  đổi so với bản chụp vào bản MỚI NHẤT trên đĩa, dưới `luu_tru.khoa_json` (file `.timclip.lock` cạnh
+  file cookie); dòng không đổi giữ nguyên văn; thay nguyên tử (file tạm `.timclip-*.tmp` cùng thư mục
+  + `os.replace`). Không đổi gì thì không ghi. Không ghi được (khoá bận quá 10 s, file vừa bị đổi thành
+  thứ cổng không nhận, Windows giữ file) thì bỏ lượt ghi, file giữ nguyên, log chỉ tên file + loại lỗi.
+  Cổng và bản chụp thử lại tối đa 1 s khi Windows từ chối đọc lúc file đang bị thay. Các lượt đổi client
+  của một video nạp cùng bản chụp; thao tác sau đọc lại file. Test: `tests/test_cookie_ghi_lai_dong_thoi.py`.
 
 ## 6. Che bí mật
 

@@ -21,15 +21,21 @@ ghi thẳng ra đĩa dạng thô.
 
 from __future__ import annotations
 
+import contextlib
+import glob
 import hashlib
 import io
 import logging
 import os
 import re
 import subprocess
+import threading
 import time
+import uuid
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Optional
+
+from luu_tru import _thay_the, khoa_json
 
 # Văn bản lỗi yt-dlp và cách hiểu chúng sống ở `truy_cap_youtube` (module thuần, tầng dưới cùng);
 # các tên dưới đây giữ ở đây vì mã cũ và test tham chiếu qua `ytdlp_chung.*`.
@@ -43,6 +49,7 @@ from truy_cap_youtube import (  # noqa: F401 — tái xuất
     NGAN_SACH,
     PLAYER_CLIENT_ERROR,
     RE_MA_MAU,
+    TIEN_TO_HTTPONLY,
     UNKNOWN_YOUTUBE_ERROR,
     LoiTruyCapYouTube,
     che_bi_mat,
@@ -217,6 +224,29 @@ class LoiFileCookie(ValueError):
 # dựng tuỳ chọn, không đọc lại file cookie hàng trăm lần.
 _CACHE_COOKIE: dict = {}
 
+# Windows từ chối stat/mở (PermissionError) trong tích tắc file đang bị `os.replace` thay — bản ghi lại nguyên tử của
+# phiên khác (`_ghi_de_nguyen_tu`, audit D-11). Thử lại ngắn thay vì báo «không đọc được file cookie» (lỗi đó mở cầu dao
+# cookie ngưỡng 1); hết hạn mà vẫn bị từ chối thì là quyền thật — ném như cũ.
+THU_LAI_DOC_COOKIE_S = 1.0
+
+
+def _thu_lai_khi_bi_tu_choi(ham: Callable[[], Any]) -> Any:
+    het_han = time.monotonic() + THU_LAI_DOC_COOKIE_S
+    cho = 0.005
+    while True:
+        try:
+            return ham()
+        except PermissionError:
+            if time.monotonic() >= het_han:
+                raise
+            time.sleep(cho)
+            cho = min(0.1, cho * 2)
+
+
+def _doc_van_ban_cookie(duong_dan: str) -> str:
+    with io.open(duong_dan, encoding="utf-8", errors="replace") as f:
+        return f.read()
+
 
 def kiem_tra_file_cookie(duong_dan: str) -> None:
     """Kiểm định dạng Netscape TRƯỚC khi đưa file cho yt-dlp. Sai thì ném lỗi.
@@ -238,7 +268,8 @@ def kiem_tra_file_cookie(duong_dan: str) -> None:
     if not duong_dan:
         return
     try:
-        khoa = (duong_dan, os.path.getmtime(duong_dan), os.path.getsize(duong_dan))
+        khoa = _thu_lai_khi_bi_tu_choi(
+            lambda: (duong_dan, os.path.getmtime(duong_dan), os.path.getsize(duong_dan)))
     except OSError as e:
         raise LoiFileCookie(
             f"Không đọc được file cookie «{os.path.basename(duong_dan)}»: {e.strerror}."
@@ -247,7 +278,7 @@ def kiem_tra_file_cookie(duong_dan: str) -> None:
         return
 
     try:
-        noi_dung = io.open(duong_dan, encoding="utf-8", errors="replace").read()
+        noi_dung = _thu_lai_khi_bi_tu_choi(lambda: _doc_van_ban_cookie(duong_dan))
     except OSError as e:
         raise LoiFileCookie(
             f"Không đọc được file cookie «{os.path.basename(duong_dan)}»: {e.strerror}."
@@ -290,6 +321,216 @@ def kiem_tra_file_cookie(duong_dan: str) -> None:
             f"File cookie «{ten}» thiếu dòng tiêu đề «# Netscape HTTP Cookie File» ở dòng 1 — "
             "yt-dlp sẽ từ chối cả file. Hãy xuất lại bằng tiện ích trình duyệt, đừng sửa tay.")
     _CACHE_COOKIE[khoa] = True
+
+
+# =====================================================================
+#  Ghi lại file cookie sau phiên yt-dlp — an toàn khi nhiều phiên chồng nhau (audit D-11)
+# =====================================================================
+
+# yt-dlp ghi lại file cookie sau MỖI phiên (`YoutubeDL.close → save_cookies → YoutubeDLCookieJar.save`) bằng
+# `open(file, 'w')`: cắt cụt rồi ghi từng dòng TẠI CHỖ, không khoá, và ghi CẢ hũ của phiên. GUI, CLI, Watch dùng chung MỘT
+# file cookie (D-26), luồng đồng bộ kênh và luồng quét chạy song song. Hậu quả: phiên khác dựng tuỳ chọn đúng lúc file
+# rỗng/dở thì cổng `kiem_tra_file_cookie` báo cookie hỏng → COOKIE_INVALID_OR_EXPIRED (cầu dao ngưỡng 1) dừng cả lượt dù
+# cookie vẫn tốt; hai lần lưu đan nhau để lại file ghép đè (hỏng tới khi người dùng xuất lại); phiên nạp trước ghi đè
+# cookie YouTube vừa xoay (`__Secure-*PSIDTS`, `SIDCC`) bằng giá trị cũ; tắt cửa sổ giữa lúc ghi là file cụt.
+#
+# Nên yt-dlp KHÔNG còn nhận đường dẫn: nó nhận `LuongCookieFile` — bản chụp vừa qua cổng, dạng luồng văn bản
+# (`cookiefile` của yt-dlp nhận «file name or text stream»). Hũ nạp từ luồng đó lưu qua `_luu_hu_cookie`: yt-dlp vẫn tự
+# định dạng hũ (vào bộ nhớ), tool chỉ gộp những cookie PHIÊN ĐÓ đổi so với bản chụp vào bản MỚI NHẤT trên đĩa, dưới khoá
+# thư mục (`luu_tru.khoa_json` — loại trừ cả luồng lẫn tiến trình), rồi thay file nguyên tử (file tạm cùng thư mục +
+# `os.replace`). Không đổi gì thì không ghi. Cơ chế ghi lại giữ nguyên về nghĩa: cookie YouTube đặt/xoay trong phiên vẫn
+# về file của người dùng (YOUTUBE_ACCESS_RELIABILITY §5).
+
+HAN_CHO_KHOA_COOKIE_S = 10.0    # process khác giữ khoá thư mục quá hạn này → bỏ lượt ghi lại, file giữ nguyên
+_DUOI_TAM_COOKIE = ".timclip-"  # file tạm «<file cookie>.timclip-<pid>-<ngẫu nhiên>.tmp», cùng thư mục với file cookie
+_LUU_HU_GOC: Optional[Callable[..., Any]] = None
+_KHOA_CAI_LUU = threading.Lock()
+
+
+def _dong_cookie_chuan(dong: str) -> Optional[tuple]:
+    """``(khoá, dòng chuẩn)`` của một dòng file cookie; ``None`` với dòng chú thích/trống/không đọc được.
+
+    Theo đúng đường yt-dlp nạp rồi lưu lại một cookie (``YoutubeDLCookieJar`` trên ``http.cookiejar``): bỏ tiền tố
+    ``#HttpOnly_``; hạn dùng thành số nguyên, rỗng/0 = cookie phiên ghi «0»; cờ include-subdomains theo dấu chấm đầu
+    miền; tên rỗng thì hũ lấy giá trị làm tên. Khoá = (miền, đường dẫn, tên) — đúng cách hũ phân biệt cookie; dòng
+    chuẩn = đúng dòng ``_really_save`` ghi cho cookie đó, nên cookie phiên không đụng tới có dòng chuẩn y như bản chụp.
+    """
+    if dong.startswith(TIEN_TO_HTTPONLY):
+        dong = dong[len(TIEN_TO_HTTPONLY):]
+    if dong.startswith("#") or not dong.strip():
+        return None
+    truong = dong.split("\t")
+    if len(truong) != 7:
+        return None
+    mien, _, duong, bao_mat, han, ten, gia_tri = truong
+    try:
+        han_so = int(float(han)) if han else 0
+    except (ValueError, OverflowError):
+        return None
+    chuan = "\t".join((mien, "TRUE" if mien.startswith(".") else "FALSE", duong,
+                       "TRUE" if bao_mat == "TRUE" else "FALSE", str(han_so), ten, gia_tri))
+    return (mien, duong, ten or gia_tri), chuan
+
+
+def _ban_ghi_cookie(van_ban: str) -> dict:
+    """``{khoá: dòng chuẩn}`` của cả file — trùng khoá thì dòng SAU thắng, như hũ cookie nạp file."""
+    ra: dict = {}
+    for dong in van_ban.split("\n"):
+        cap = _dong_cookie_chuan(dong)
+        if cap is not None:
+            ra[cap[0]] = cap[1]
+    return ra
+
+
+def _gop_ban_ghi(hien_tai: str, doi: dict, xoa: dict) -> Optional[str]:
+    """Văn bản mới của file cookie = ``hien_tai`` (bản trên đĩa LÚC NÀY) + thay đổi của MỘT phiên; ``None`` = không đổi.
+
+    ``doi`` (khoá → dòng chuẩn): cookie phiên đặt mới/đổi — thay dòng cùng khoá, chưa có thì thêm cuối file. ``xoa``
+    (khoá → dòng chuẩn lúc nạp): cookie phiên đã bỏ (hết hạn, YouTube xoá) — chỉ bỏ khi trên đĩa vẫn đúng giá trị phiên
+    đã nạp; phiên khác đã ghi giá trị mới hơn thì giữ. Mọi dòng khác (cookie phiên không đụng tới, chú thích, tiêu đề)
+    giữ NGUYÊN VĂN — phiên không bao giờ ghi lại giá trị nó không đổi (giá trị cũ đè cookie vừa xoay).
+    """
+    tren_dia = _ban_ghi_cookie(hien_tai)
+    cac_dong = hien_tai.split("\n")
+    if cac_dong and cac_dong[-1] == "":
+        cac_dong.pop()
+    ra: list = []
+    da_dat: set = set()
+    for dong in cac_dong:
+        cap = _dong_cookie_chuan(dong)
+        khoa = cap[0] if cap else None
+        if khoa in doi:
+            if khoa not in da_dat:
+                ra.append(doi[khoa])
+                da_dat.add(khoa)
+            continue
+        if khoa in xoa and tren_dia.get(khoa) == xoa[khoa]:
+            continue
+        ra.append(dong)
+    ra.extend(dong for khoa, dong in doi.items() if khoa not in da_dat)
+    moi = "\n".join(ra) + "\n"
+    return None if moi == hien_tai else moi
+
+
+def _ghi_de_nguyen_tu(duong_dan: str, van_ban: str) -> None:
+    """Thay file bằng ``van_ban`` nguyên tử: file tạm cùng thư mục rồi ``os.replace`` (có thử lại — Windows: tiến trình
+    khác đang đọc file làm replace hỏng tạm thời). Người đọc chỉ thấy bản cũ trọn vẹn hoặc bản mới trọn vẹn.
+
+    CHỈ gọi khi giữ khoá thư mục: lúc đó file tạm còn sót (tiến trình chết giữa chừng — mang giá trị cookie) chắc chắn
+    là mồ côi, dọn được. Mẫu tên riêng của tool: không đụng file ``.tmp`` khác của người dùng trong thư mục đó.
+    """
+    for cu in glob.glob(glob.escape(duong_dan) + _DUOI_TAM_COOKIE + "*.tmp"):
+        with contextlib.suppress(OSError):
+            os.remove(cu)
+    tam = f"{duong_dan}{_DUOI_TAM_COOKIE}{os.getpid()}-{uuid.uuid4().hex[:8]}.tmp"
+    try:
+        with io.open(tam, "w", encoding="utf-8") as f:
+            f.write(van_ban)
+            f.flush()
+            os.fsync(f.fileno())
+        _thay_the(tam, duong_dan)
+    finally:
+        with contextlib.suppress(OSError):
+            if os.path.exists(tam):
+                os.remove(tam)
+
+
+class LuongCookieFile:
+    """File cookie của người dùng như yt-dlp thấy (``cookiefile``): luồng văn bản đọc từ BẢN CHỤP vừa qua cổng; lưu thì
+    gộp thay đổi của phiên vào file thật (:meth:`gop_vao_file`, qua :func:`_luu_hu_cookie`).
+
+    Một đối tượng = một lần dựng tuỳ chọn. Mọi phiên dùng chung dict tuỳ chọn đó (các lượt đổi client của một video —
+    ``thu_tung_client``) nạp CÙNG bản chụp — chính là gốc để biết mỗi phiên đổi gì; lần dựng tuỳ chọn sau đọc lại file
+    (đã có cookie các phiên trước ghi lại). Không phải đường dẫn (không ``__fspath__``): thấy đường dẫn là yt-dlp tự mở
+    ``'w'`` tại chỗ. ``repr`` = repr đường dẫn để câu lỗi nạp cookie của yt-dlp giữ nguyên chữ như trước (``che_bi_mat``
+    che câu đó) — không bao giờ lộ nội dung.
+    """
+
+    def __init__(self, duong_dan: str):
+        self.duong_dan = duong_dan
+        try:
+            # Đọc như cổng: yt-dlp nạp đúng văn bản vừa kiểm, không đọc lại đĩa lúc phiên mở hũ.
+            self._ban_chup = _thu_lai_khi_bi_tu_choi(lambda: _doc_van_ban_cookie(duong_dan))
+        except OSError as e:
+            raise LoiFileCookie(
+                f"Không đọc được file cookie «{os.path.basename(duong_dan)}»: {e.strerror}."
+            ) from None
+        _cai_luu_hu_cookie()
+
+    def __repr__(self) -> str:
+        return repr(self.duong_dan)
+
+    def __iter__(self):
+        # `YoutubeDLCookieJar.load` đọc luồng bằng `for line in f`: mỗi lần nạp một bộ lặp mới từ đầu bản chụp.
+        return iter(io.StringIO(self._ban_chup))
+
+    # yt-dlp chỉ gọi hai hàm dưới khi lưu KHÔNG qua `_luu_hu_cookie` (yt-dlp đổi đường lưu): bỏ, không ghi file.
+    def truncate(self, *_a: Any) -> int:
+        return 0
+
+    def write(self, s: str) -> int:
+        return len(s)
+
+    def gop_vao_file(self, van_ban_phien: str) -> None:
+        """Gộp những cookie phiên đổi (``van_ban_phien`` = hũ của phiên do yt-dlp định dạng) vào file của người dùng.
+
+        Không bao giờ ném lỗi ra ``YoutubeDL.close``: lượt tải đã xong không được hỏng vì bước ghi lại. Không ghi được
+        (khoá bận, file đã bị xoá hay đổi thành nội dung không hợp lệ, đĩa từ chối) thì file giữ nguyên, chỉ ghi log —
+        tên file, số đếm, loại lỗi; không tên hay giá trị cookie.
+        """
+        goc = _ban_ghi_cookie(self._ban_chup)
+        moi = _ban_ghi_cookie(van_ban_phien)
+        doi = {k: d for k, d in moi.items() if goc.get(k) != d}
+        xoa = {k: d for k, d in goc.items() if k not in moi}
+        if not doi and not xoa:
+            return
+        ten = os.path.basename(self.duong_dan)
+        try:
+            if not os.path.isfile(self.duong_dan):
+                LOGGER.warning("event=ytdlp.cookie.write_back_skipped file=%s reason=missing", ten)
+                return
+            with khoa_json(self.duong_dan, han_cho_s=HAN_CHO_KHOA_COOKIE_S):
+                with io.open(self.duong_dan, encoding="utf-8") as f:
+                    hien_tai = f.read()
+                ct = doc_cau_truc_cookie(hien_tai)
+                if ct.dinh_dang != "netscape" or ct.dong_hong or not ct.co_tieu_de or not ct.so_ban_ghi:
+                    # Người dùng/công cụ khác vừa đổi file thành thứ cổng không nhận: không đè lên — lượt sau cổng báo.
+                    LOGGER.warning("event=ytdlp.cookie.write_back_skipped file=%s reason=invalid_on_disk", ten)
+                    return
+                van_ban = _gop_ban_ghi(hien_tai, doi, xoa)
+                if van_ban is None:
+                    return
+                _ghi_de_nguyen_tu(self.duong_dan, van_ban)
+            LOGGER.debug("event=ytdlp.cookie.write_back file=%s changed=%d removed=%d", ten, len(doi), len(xoa))
+        except Exception as e:  # noqa: BLE001 — bước ghi lại không được làm hỏng phiên đã xong
+            LOGGER.warning("event=ytdlp.cookie.write_back_skipped file=%s reason=%s", ten, type(e).__name__)
+
+
+def _luu_hu_cookie(hu: Any, filename: Any = None, ignore_discard: bool = True, ignore_expires: bool = True) -> None:
+    """``YoutubeDLCookieJar.save`` sau :func:`_cai_luu_hu_cookie` (tham số giữ tên của yt-dlp)."""
+    dich = hu.filename if filename is None else filename
+    if not isinstance(dich, LuongCookieFile):
+        return _LUU_HU_GOC(hu, filename, ignore_discard, ignore_expires)
+    bo_dem = io.StringIO()
+    # Chính mã lưu của yt-dlp (luồng không phải đường dẫn: `truncate(0)` rồi ghi) — định dạng hũ y như trước, vào bộ nhớ.
+    _LUU_HU_GOC(hu, bo_dem, ignore_discard, ignore_expires)
+    dich.gop_vao_file(bo_dem.getvalue())
+
+
+def _cai_luu_hu_cookie() -> None:
+    """Một lần mỗi tiến trình: ``YoutubeDLCookieJar.save`` đi qua :func:`_luu_hu_cookie`. Chỉ hũ nạp từ
+    :class:`LuongCookieFile` đổi đường lưu; hũ khác (file tạm của bộ tải ngoài, test) lưu y nguyên yt-dlp."""
+    global _LUU_HU_GOC
+    if _LUU_HU_GOC is not None:
+        return
+    try:
+        from yt_dlp.cookies import YoutubeDLCookieJar
+    except ImportError:  # không có yt-dlp thì cũng không có phiên nào lưu cookie
+        return
+    with _KHOA_CAI_LUU:
+        if _LUU_HU_GOC is None:
+            _LUU_HU_GOC = YoutubeDLCookieJar.save
+            YoutubeDLCookieJar.save = _luu_hu_cookie
 
 
 # =====================================================================
@@ -585,6 +826,9 @@ class CauHinhMang:
         đường gọi. Máy chưa sẵn sàng thì ném :class:`CookieCanJs` TRƯỚC khi có request (trừ liệt kê kênh — không cần
         player nên không cần JS); đường quét/tải lùi không-cookie ở :func:`chay_kem_duong_lui_cookie` trước đó. Không
         cookie: KHÔNG đụng ``js_runtimes`` — đường đã nghiệm thu (visionos, không JS) giữ nguyên từng khoá.
+
+        File cookie: ``cookiefile`` là :class:`LuongCookieFile` (bản chụp đã qua cổng; lưu = gộp nguyên tử vào file của
+        người dùng), không phải đường dẫn.
         """
         opts: dict = {
             "quiet": True,
@@ -607,7 +851,9 @@ class CauHinhMang:
             # Kiểm TRƯỚC khi giao cho yt-dlp: xem kiem_tra_file_cookie() để biết vì sao
             # đây là rào chắn bảo mật chứ không phải kiểm tra cho đẹp.
             kiem_tra_file_cookie(self.cookiefile)
-            opts["cookiefile"] = self.cookiefile.strip()
+            # Bản chụp vừa qua cổng, KHÔNG phải đường dẫn: có đường dẫn thì yt-dlp cắt cụt + ghi lại file dùng chung tại
+            # chỗ sau mỗi phiên (audit D-11) — xem LuongCookieFile.
+            opts["cookiefile"] = LuongCookieFile(self.cookiefile.strip())
         else:
             # MỘT nguồn hiệu lực: có file thì KHÔNG đưa thêm trình duyệt. Đưa cả hai thì yt-dlp gộp hai hũ cookie
             # (`cookies.load_cookies` → `_merge_cookie_jars`, hũ gộp mang tên file) rồi lúc đóng phiên

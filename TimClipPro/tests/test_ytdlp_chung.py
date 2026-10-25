@@ -34,7 +34,8 @@ def _cookie_hop_le(tmp_path, ten="cookies.txt"):
 def test_cookiefile_di_vao_dung_khoa(tmp_path):
     p = _cookie_hop_le(tmp_path)
     opts = y.CauHinhMang(cookiefile=str(p)).tuy_chon()
-    assert opts["cookiefile"] == str(p)
+    # Bản chụp của đúng file đó, KHÔNG phải đường dẫn: có đường dẫn thì yt-dlp ghi lại file tại chỗ (audit D-11).
+    assert isinstance(opts["cookiefile"], y.LuongCookieFile) and opts["cookiefile"].duong_dan == str(p)
 
 
 @pytest.mark.parametrize("nhap,mong_doi", [

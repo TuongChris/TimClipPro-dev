@@ -63,7 +63,7 @@ def test_thong_bao_loi_chi_neu_so_dong_khong_neu_noi_dung(tmp_path):
 
 def test_file_cookie_dung_dinh_dang_thi_di_qua(tmp_path):
     p = _cookie_dung(tmp_path)
-    assert y.CauHinhMang(cookiefile=str(p)).tuy_chon()["cookiefile"] == str(p)
+    assert y.CauHinhMang(cookiefile=str(p)).tuy_chon()["cookiefile"].duong_dan == str(p)
 
 
 def test_file_cookie_khong_ton_tai_bao_loi_ro_rang(tmp_path):
