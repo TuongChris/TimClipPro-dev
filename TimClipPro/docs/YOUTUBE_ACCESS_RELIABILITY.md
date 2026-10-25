@@ -35,7 +35,7 @@ truy_cap_youtube.py ── THUẦN: phân loại lỗi, che bí mật, chẩn đ
 
 - **Phân loại — một nơi** (`phan_loai_loi`): đọc cả chuỗi ngoại lệ (`exc_info` của DownloadError,
   `cause` của ExtractorError, `__cause__`) và mã HTTP thật (`HTTPError.status`). Thứ tự luật cố
-  định: bot → 429/giới hạn → cookie hỏng → cần đăng nhập → vĩnh viễn → đầu vào sai → 403 → mạng
+  định: bot → 429/giới hạn → cookie hỏng → cần đăng nhập → chưa phát → vĩnh viễn → đầu vào sai → 403 → mạng
   tạm thời → định dạng/trích xuất → tải hỏng → khác. Không có luật kiểu `"sign" in loi` (câu riêng
   tư có "Sign in if you've been granted access").
 - **Kết quả**: `YoutubeAccessFailure(category, operation, video_id, retryable, auth_related,
@@ -60,6 +60,7 @@ truy_cap_youtube.py ── THUẦN: phân loại lỗi, che bí mật, chẩn đ
 | FORMAT_OR_EXTRACTOR_ERROR | format not available, page needs reload, n challenge | không | vẫn đổi | 5 liên tiếp | error |
 | PARTIAL_OR_CORRUPT_DOWNLOAD | không thấy file sau khi tải, file rỗng | không | — | không | error |
 | INVALID_INPUT | link kênh/playlist ở ô video, danh sách là TAB | không | dừng | không | error |
+| UPCOMING_NOT_STARTED | `This live event will begin in …`, `Premieres in …`, `Premiere will begin shortly` (premiere / live đã lên lịch, chưa phát) | không | dừng | không bao giờ | error, video đó; lượt sau thử lại (audit D-4) |
 | UNKNOWN_YOUTUBE_ERROR | còn lại | không | vẫn đổi | 5 liên tiếp | error |
 | BLOCKED_BY_BREAKER | (không gửi request) | — | — | — | "Chưa quét", không lịch sử |
 

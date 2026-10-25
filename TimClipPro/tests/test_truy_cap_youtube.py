@@ -113,8 +113,14 @@ TAI_HONG = [
     "ERROR: Did not get any data blocks",
     "ERROR: The downloaded file is empty",
 ]
-KHONG_RO = [
+# Mục SẮP phát (premiere / live đã lên lịch) — audit D-4: trước đây rơi vào «chưa phân loại» (cầu dao 5, đổi đủ client).
+SAP_PHAT = [
     "ERROR: [youtube] abcdefghijk: This live event will begin in a few moments.",
+    "ERROR: [youtube] abcdefghijk: This live event will begin in 2 days.",
+    "ERROR: [youtube] abcdefghijk: Premieres in 7 hours",
+    "ERROR: [youtube] abcdefghijk: Premiere will begin shortly",
+]
+KHONG_RO = [
     "Nén audio thất bại: abc",
 ]
 
@@ -128,6 +134,7 @@ BANG = ([(x, t.BOT_CHALLENGE) for x in BOT] + [(x, t.AUTH_REQUIRED) for x in AUT
         + [(x, t.JS_CHALLENGE_ERROR) for x in THU_THACH_JS]
         + [(x, t.PLAYER_CLIENT_ERROR) for x in PLAYER_CLIENT]
         + [(x, t.PARTIAL_OR_CORRUPT_DOWNLOAD) for x in TAI_HONG]
+        + [(x, t.UPCOMING_NOT_STARTED) for x in SAP_PHAT]
         + [(x, t.UNKNOWN_YOUTUBE_ERROR) for x in KHONG_RO])
 
 

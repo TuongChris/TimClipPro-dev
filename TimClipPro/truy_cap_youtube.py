@@ -54,6 +54,10 @@ JS_CHALLENGE_ERROR = "JS_CHALLENGE_ERROR"
 PLAYER_CLIENT_ERROR = "PLAYER_CLIENT_ERROR"
 PARTIAL_OR_CORRUPT_DOWNLOAD = "PARTIAL_OR_CORRUPT_DOWNLOAD"
 INVALID_INPUT = "INVALID_INPUT"                     # link không phải video / danh sách là TAB
+# Buổi công chiếu (premiere) / phát trực tiếp ĐÃ LÊN LỊCH mà chưa bắt đầu: YouTube chưa có định dạng nào để tải. Chuyện
+# của TỪNG video, không nói gì về phiên — lượt sau tự thử lại khi video đã phát (audit D-4: 5 mục sắp phát ở đầu tab
+# Videos từng bị xếp «chưa phân loại», mở cầu dao và dừng cả lượt đồng bộ/Watch trước khi tới video thật).
+UPCOMING_NOT_STARTED = "UPCOMING_NOT_STARTED"
 UNKNOWN_YOUTUBE_ERROR = "UNKNOWN_YOUTUBE_ERROR"
 BLOCKED_BY_BREAKER = "BLOCKED_BY_BREAKER"           # chưa gửi request: cầu dao đã mở
 
@@ -61,7 +65,7 @@ CAC_LOAI = (PERMANENT_UNAVAILABLE, AUTH_REQUIRED, AGE_RESTRICTED, MEMBERS_ONLY, 
             HTTP_FORBIDDEN,
             TRANSIENT_NETWORK, COOKIE_INVALID_OR_EXPIRED, FORMAT_OR_EXTRACTOR_ERROR,
             JS_CHALLENGE_ERROR, PLAYER_CLIENT_ERROR,
-            PARTIAL_OR_CORRUPT_DOWNLOAD, INVALID_INPUT, UNKNOWN_YOUTUBE_ERROR,
+            PARTIAL_OR_CORRUPT_DOWNLOAD, INVALID_INPUT, UPCOMING_NOT_STARTED, UNKNOWN_YOUTUBE_ERROR,
             BLOCKED_BY_BREAKER)
 
 # Lỗi do PHÍA TRUY CẬP (YouTube từ chối, mạng, cookie) — khác lỗi của chính video. `cli.py`/youtube-doctor in «YouTube
@@ -130,6 +134,10 @@ _VINH_VIEN = ("video unavailable", "this video is unavailable", "video is not av
               "no longer available", "does not exist", "available in your country",
               "geo restrict", "geo-restrict", "incomplete youtube id", "removed by the uploader",
               "copyright claim", "http error 404", "http error 410")
+# Lý do không phát được (`playabilityStatus.reason`) của mục SẮP phát mà yt-dlp ném qua `raise_no_formats` (yt-dlp
+# 2026.08.19 `_video.py` — không đặt `wait_for_video`/`ignore_no_formats_error`): «This live event will begin in …»,
+# «Premieres in …», «Premiere will begin shortly».
+_SAP_PHAT = ("live event will begin", "premieres in ", "premiere will begin")
 _DAU_VAO = ("unsupported url", "is not a valid url", "không phải một video",
             "trả về các tab")
 _CAM = ("http error 403", "403: forbidden", "403 forbidden")
@@ -207,6 +215,10 @@ THONG_BAO = {
     INVALID_INPUT: (
         "Link này không phải một video YouTube (có thể là kênh hoặc danh sách phát). Hãy dùng "
         "link video, hoặc đưa kênh vào mục theo dõi kênh."),
+    UPCOMING_NOT_STARTED: (
+        "Video chưa phát: buổi công chiếu (premiere) hoặc phát trực tiếp đã lên lịch nhưng chưa bắt đầu, YouTube "
+        "chưa cho tải. Không phải lỗi tool hay lỗi truy cập; video này chưa được quét — lượt sau tự thử lại khi video "
+        "đã phát."),
     UNKNOWN_YOUTUBE_ERROR: (
         "YouTube trả lỗi chưa phân loại được. Video này chưa được quét."),
     BLOCKED_BY_BREAKER: (
@@ -339,6 +351,8 @@ def _xac_dinh_loai(thap: str, ma: Optional[int], lop: set) -> str:
         return MEMBERS_ONLY
     if _co(thap, _DANG_NHAP):
         return AUTH_REQUIRED
+    if _co(thap, _SAP_PHAT):
+        return UPCOMING_NOT_STARTED
     if "GeoRestrictedError" in lop or ma in (404, 410) or _co(thap, _VINH_VIEN):
         return PERMANENT_UNAVAILABLE
     if "UnsupportedError" in lop or _co(thap, _DAU_VAO):
@@ -687,7 +701,8 @@ NGAN_SACH = {
 }
 
 # Số lỗi LIÊN TIẾP (không xen thành công) để mở cầu dao. Không có trong bảng = không bao giờ mở:
-# video bị gỡ / không phải video / tải hỏng là chuyện của từng video, truy cập vẫn bình thường.
+# video bị gỡ / không phải video / chưa phát (UPCOMING_NOT_STARTED) / tải hỏng là chuyện của từng video, truy cập vẫn
+# bình thường.
 NGUONG_MO = {
     BOT_CHALLENGE: 1,                 # chặn theo địa chỉ mạng (CLAUDE.md 6c): request sau đều hỏng
     RATE_LIMITED: 1,                  # đã thử lại có nghỉ; tiếp tục chỉ làm nặng thêm
@@ -710,9 +725,11 @@ NGUONG_MO = {
 
 # Lỗi mà đổi player client KHÔNG cứu được — dừng đường lui client ngay (CLAUDE.md 6c: bot-check
 # đánh ở khâu trích xuất cho MỌI client). 403/định dạng thì vẫn đổi client như mục 6. Thử thách JS: có cookie thì
-# mọi client nhận cookie đều cần JS. Lỗi player client: client khác có thể được — vẫn đổi.
+# mọi client nhận cookie đều cần JS. Lỗi player client: client khác có thể được — vẫn đổi. Video chưa phát: client nào
+# cũng nhận cùng lịch phát.
 DUNG_DOI_CLIENT = frozenset({BOT_CHALLENGE, AUTH_REQUIRED, AGE_RESTRICTED, MEMBERS_ONLY, RATE_LIMITED,
-                             PERMANENT_UNAVAILABLE, COOKIE_INVALID_OR_EXPIRED, INVALID_INPUT, JS_CHALLENGE_ERROR})
+                             PERMANENT_UNAVAILABLE, COOKIE_INVALID_OR_EXPIRED, INVALID_INPUT, JS_CHALLENGE_ERROR,
+                             UPCOMING_NOT_STARTED})
 
 _LY_DO_DUNG = {
     BOT_CHALLENGE: ("xác minh", "YouTube yêu cầu xác minh không phải bot cho địa chỉ mạng này. "

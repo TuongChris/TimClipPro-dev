@@ -531,6 +531,12 @@ thật của video bị gỡ ở Tier 2) không được nhận ra; liệt kê k
   và bị xếp «chưa rõ» (thử đủ 5 client, cầu dao đợi 5 lỗi). Đã sửa cả hai lớp: cổng kiểm luật đó;
   `che_bi_mat` che câu lỗi nạp; câu đó xếp cookie hỏng. Test: `tests/test_cookie_co_mien_dau_cham.py`
   so cổng với bộ nạp THẬT của yt-dlp.
+  Audit D-4 (25/10/2026): mục SẮP phát (premiere / live đã lên lịch) nằm trên đầu tab Videos, `list_channel`
+  giữ lại, yt-dlp ném «This live event will begin in …» / «Premieres in …» — không luật nào nhận ra nên thành
+  «chưa phân loại»: mỗi mục thử đủ 5 client, 5 mục liền nhau mở cầu dao, đồng bộ kênh/Watch `BI_CHAN` mỗi ngày
+  trước khi tới video thật. Đã sửa: loại riêng `UPCOMING_NOT_STARTED` — lỗi của TỪNG video, không bao giờ mở cầu
+  dao, không đổi client, không vào sổ hạn chế (lượt sau tự thử lại khi đã phát). Test:
+  `tests/test_truy_cap_youtube_sap_phat.py`.
 
 **18. «Bóng» của âm thanh lặp làm lệch mốc và thừa dòng (10/10/2026, PC2).** Chi tiết: `docs/BONG_AM_THANH_LAP.md`.
 Nhạc có nhịp trống đều, vòng hợp âm hay đoạn lặp y hệt làm audfprint trả thêm căn chỉnh của CÙNG clip lệch bội số nửa
