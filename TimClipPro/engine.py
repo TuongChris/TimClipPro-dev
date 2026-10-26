@@ -2978,9 +2978,21 @@ class Engine:
         đã bị thay và sổ đăng ký (đã fsync) trỏ tới nó. Chuẩn ghi nguyên tử của dự án:
         file tạm + flush + ``os.fsync`` + ``os.replace``. Windows ``FlushFileBuffers`` cần
         quyền ghi nên mở ``r+b`` (không đổi byte nào).
+
+        Diệt virus/sao lưu hay mở file vừa ghi xong bằng handle chỉ-đọc (không share ghi)
+        → ``r+b`` bị từ chối TẠM: thử lại tăng dần như ``_xoa_an_toan`` thay vì bỏ cả job
+        dựng kho nhiều giờ (audit WR-7). Hết lượt vẫn ném lỗi — không công bố khi chưa bền.
         """
-        with open(db_tam, "r+b") as f:
-            os.fsync(f.fileno())
+        so_lan = 6
+        for i in range(so_lan):
+            try:
+                with open(db_tam, "r+b") as f:
+                    os.fsync(f.fileno())
+                return
+            except PermissionError:
+                if i == so_lan - 1:
+                    raise
+                time.sleep(0.4 * (i + 1))   # 0.4s, 0.8s, 1.2s... (~8 s tổng)
 
     def _kiem_kho_tam(self, db_tam: str, sub: str, cu_huu_ich: set,
                       can_xu_ly: list, *, lam_moi: frozenset = frozenset(),

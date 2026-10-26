@@ -128,3 +128,58 @@ def test_cong_bo_nhanh_permissionerror_cung_phai_fsync(tmp_path, theo_doi_ben, m
         assert da_fsync, (
             f"[PermissionError] os.replace công bố {Path(src).name} -> {Path(dst).name} khi "
             "file tạm CHƯA fsync, trong khi sổ đăng ký (đã fsync) trỏ sang file mới không bền")
+
+
+# ---------------------------------------------------------------------------
+# Audit WR-7: trình diệt virus / sao lưu giữ handle CHỈ-ĐỌC ngắn trên database.pklz
+# vừa ghi xong. Mở ``r+b`` để fsync bị Windows từ chối (PermissionError) trong lúc đó;
+# trước khi sửa, ngoại lệ thoát khối công bố → ``finally`` xoá workspace → mất kho đã
+# dựng (job nhiều giờ) dù kho tạm đã kiểm đạt.
+# ---------------------------------------------------------------------------
+
+def _giu_chi_doc_windows(path):
+    """Mở file như trình quét virus: GENERIC_READ + FILE_SHARE_READ (không share ghi/xoá)."""
+    import ctypes
+    from ctypes import wintypes
+
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateFileW.restype = wintypes.HANDLE
+    k32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                                wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD,
+                                wintypes.HANDLE]
+    k32.CloseHandle.argtypes = [wintypes.HANDLE]
+    GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING = 0x80000000, 0x1, 3
+    h = k32.CreateFileW(os.fspath(path), GENERIC_READ, FILE_SHARE_READ, None,
+                        OPEN_EXISTING, 0, None)
+    if h in (None, wintypes.HANDLE(-1).value):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return lambda: k32.CloseHandle(h)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="handle chia sẻ chỉ-đọc là hành vi của Windows")
+def test_kho_tam_bi_giu_chi_doc_tam_thoi_van_cong_bo(tmp_path):
+    import threading
+
+    e = _eng(tmp_path)
+    nguon, db = _kho(e, tmp_path, "A", ["a.opus"], [("cu.opus", 9)])
+    goc = runner_gia(e, {"a.opus": 7})
+    nha = []
+
+    def chay(lenh, on_line=None, **kw):
+        rc, duoi = goc(lenh, on_line, **kw)
+        dong = _giu_chi_doc_windows(lenh[lenh.index("--dbase") + 1])
+        t = threading.Timer(0.3, dong)   # quét xong sau 0,3 s rồi nhả
+        t.start()
+        nha.append((t, dong))
+        return rc, duoi
+
+    e._run_stream = chay
+    try:
+        r = e.build_database(str(nguon), mode="new")
+    finally:
+        for t, dong in nha:
+            t.join()
+    assert nha, "bộ chạy giả không được gọi"
+    assert r.get("da_ghi_kho") is True, r
+    assert os.path.normcase(e.db_file) == os.path.normcase(str(db))
+    assert "a.opus" in doc_ht(e.db_file)
