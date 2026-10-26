@@ -762,7 +762,7 @@ TRUONG_SO_DO = ("youtube_operations", "metadata_requests", "download_attempts",
                 "bot_challenges", "rate_limited",
                 "http_403", "transient", "permanent_unavailable", "format_errors",
                 "js_challenge_errors", "player_client_errors",
-                "cookie_invalid", "other_failures", "cookie_fallbacks",
+                "cookie_invalid", "upcoming_not_started", "other_failures", "cookie_fallbacks",
                 "cookie_rejected_warnings", "cookie_unusable_no_js", "js_challenge_warnings",
                 "client_fallbacks", "anonymous_client_downloads", "skipped_by_breaker", "successes")
 _DEM_THEO_LOAI = {AUTH_REQUIRED: "auth_failures", AGE_RESTRICTED: "age_restricted", MEMBERS_ONLY: "members_only",
@@ -771,7 +771,7 @@ _DEM_THEO_LOAI = {AUTH_REQUIRED: "auth_failures", AGE_RESTRICTED: "age_restricte
                   TRANSIENT_NETWORK: "transient", PERMANENT_UNAVAILABLE: "permanent_unavailable",
                   FORMAT_OR_EXTRACTOR_ERROR: "format_errors",
                   JS_CHALLENGE_ERROR: "js_challenge_errors", PLAYER_CLIENT_ERROR: "player_client_errors",
-                  COOKIE_INVALID_OR_EXPIRED: "cookie_invalid"}
+                  COOKIE_INVALID_OR_EXPIRED: "cookie_invalid", UPCOMING_NOT_STARTED: "upcoming_not_started"}
 # Trường đếm LỖI (``_ghi_that_bai``: mỗi thao tác hỏng sau ngân sách thử lại đếm một lần) + nhãn ngắn cho giao diện.
 # ``youtube_operations`` đếm lượt THỬ (tăng trước khi ``ham()`` chạy) — tóm tắt lượt chạy phải đọc ``successes`` và các
 # trường này, không suy «bình thường» từ số lượt thử (audit D-10).
@@ -781,6 +781,10 @@ NHAN_TRUONG_THAT_BAI = {"http_403": "HTTP 403", "transient": "mạng", "rate_lim
                         "cookie_invalid": "cookie", "permanent_unavailable": "video bị gỡ / riêng tư / không tồn tại",
                         "format_errors": "trích xuất / định dạng", "player_client_errors": "player client",
                         "js_challenge_errors": "thử thách JavaScript", "other_failures": "lỗi khác"}
+# Trường đếm của loại KHÔNG phải lỗi truy cập (không có ngưỡng ``NGUONG_MO``, câu của video nói rõ «Không phải lỗi tool
+# hay lỗi truy cập»): giao diện báo riêng, không cộng vào «lỗi» của lượt (audit DR-8: một video chưa phát từng thành
+# cảnh báo vàng «lỗi khác: 1»).
+NHAN_TRUONG_KHONG_PHAI_LOI = {"upcoming_not_started": "video chưa phát (công chiếu / trực tiếp đã lên lịch)"}
 _DEM_YEU_CAU = {"metadata": "metadata_requests", "download": "download_attempts",
                 "listing": "listing_requests"}
 

@@ -93,5 +93,10 @@ def test_luot_chua_thao_tac_nao_xong_khong_bao_xanh():
 
 def test_nhan_loi_phu_moi_truong_dem_loi():
     """Mọi trường ``_ghi_that_bai`` có thể tăng đều được tính vào tóm tắt — loại lỗi mới không lọt thành «xanh»."""
-    assert set(t.NHAN_TRUONG_THAT_BAI) == {*t._DEM_THEO_LOAI.values(), "other_failures"}
-    assert set(t.NHAN_TRUONG_THAT_BAI) <= set(t.TRUONG_SO_DO)
+    # Hai nhóm rời nhau, hợp lại phủ đủ: lỗi truy cập (cộng vào «lỗi») + loại không phải lỗi (báo dòng riêng, DR-8).
+    assert not set(t.NHAN_TRUONG_THAT_BAI) & set(t.NHAN_TRUONG_KHONG_PHAI_LOI)
+    assert ({*t.NHAN_TRUONG_THAT_BAI, *t.NHAN_TRUONG_KHONG_PHAI_LOI}
+            == {*t._DEM_THEO_LOAI.values(), "other_failures"})
+    assert {*t.NHAN_TRUONG_THAT_BAI, *t.NHAN_TRUONG_KHONG_PHAI_LOI} <= set(t.TRUONG_SO_DO)
+    # Loại «không phải lỗi» thì không bao giờ mở cầu dao.
+    assert not {c for c, k in t._DEM_THEO_LOAI.items() if k in t.NHAN_TRUONG_KHONG_PHAI_LOI} & set(t.NGUONG_MO)

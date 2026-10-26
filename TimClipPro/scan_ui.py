@@ -74,6 +74,8 @@ def dong_trang_thai_youtube(cd: Any, phien: Any = None, js: Any = None) -> list:
         loi = {k: int(so.get(k) or 0) for k in _tc.NHAN_TRUONG_THAT_BAI if so.get(k)}
         tong_loi = sum(loi.values())
         chi_tiet = ", ".join(f"{_tc.NHAN_TRUONG_THAT_BAI[k]}: {n}" for k, n in loi.items())
+        # Video chưa phát không phải lỗi truy cập (không có ngưỡng cầu dao): báo dòng riêng, không cộng vào ``tong_loi``.
+        khong_loi = {k: int(so.get(k) or 0) for k in _tc.NHAN_TRUONG_KHONG_PHAI_LOI if so.get(k)}
         if tong_loi and not thanh_cong:
             ra.append(("warning", f"Lượt gần nhất: KHÔNG thao tác YouTube nào thành công — {tong_loi} lỗi ({chi_tiet}), "
                                   "chưa tới ngưỡng dừng cả lượt. Xem lỗi của từng video trong kết quả."))
@@ -82,8 +84,12 @@ def dong_trang_thai_youtube(cd: Any, phien: Any = None, js: Any = None) -> list:
                                "— chưa tới ngưỡng dừng cả lượt. Xem lỗi của từng video trong kết quả."))
         elif thanh_cong:
             ra.append(("success", "Lượt gần nhất: truy cập YouTube bình thường."))
-        elif so.get("youtube_operations"):
+        elif so.get("youtube_operations") and not khong_loi:
             ra.append(("info", "Lượt gần nhất: chưa thao tác YouTube nào chạy xong (có thể đã bấm Dừng)."))
+        if khong_loi:
+            ra.append(("info", "Lượt gần nhất: " + ", ".join(f"{n} {_tc.NHAN_TRUONG_KHONG_PHAI_LOI[k]}"
+                                                            for k, n in khong_loi.items())
+                       + " — chưa quét, lượt sau tự thử lại. Không phải lỗi truy cập."))
     if getattr(cd, "hai_nguon", False):
         ra.append(("warning", "Đang cấu hình CẢ file cookie lẫn «Lấy thẳng từ trình duyệt» — tool CHỈ dùng file "
                               "cookie, ô trình duyệt bị bỏ qua. Xoá trống một trong hai ô để hết cảnh báo này."))
