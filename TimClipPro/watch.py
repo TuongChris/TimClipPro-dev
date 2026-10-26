@@ -70,6 +70,8 @@ class BaoCao:
     # Gửi Google Sheets qua outbox: nhãn đích đã ghim + số việc của LƯỢT NÀY theo trạng thái.
     dich_gui: str = ""
     gui: dict = field(default_factory=dict)
+    # Việc chờ của lượt chỉ chờ vì TẠM DỪNG (audit B-5): câu báo thay cho «sẽ tự gửi tiếp».
+    gui_tam_dung: str = ""
 
     def tom_tat(self) -> str:
         """Trả về bản tóm tắt nhiều dòng, tiếng Việt, để in ra console hoặc gửi email."""
@@ -93,7 +95,8 @@ class BaoCao:
             trang_thai_sheets = (
                 f"«{self.dich_gui}» — đã gửi {g.get(outbox.SENT, 0)} việc "
                 f"({self.sheets_so_dong} dòng)"
-                + (f", còn chờ {cho} (đã lưu bền, sẽ tự gửi tiếp)" if cho else "")
+                + (f", còn chờ {cho} (đã lưu bền, {self.gui_tam_dung or 'sẽ tự gửi tiếp'})"
+                   if cho else "")
                 + (f", bị chặn {g[outbox.BLOCKED_CONFIG]}" if g.get(outbox.BLOCKED_CONFIG) else "")
                 + (f", KHÔNG RÕ {g[outbox.UNKNOWN]}" if g.get(outbox.UNKNOWN) else ""))
         elif self.sheets_ok:
@@ -545,6 +548,14 @@ def _kho_khong_dung_duoc(engine: Any, wl: WatchList) -> str:
     return ""
 
 
+_CAU_TAM_DUNG = {
+    "toan_bo": "việc gửi đang TẠM DỪNG toàn bộ — tắt «⏸ Tạm dừng toàn bộ việc gửi» ở mục "
+               "«📤 Gửi Google Sheets» thì gửi tiếp",
+    "ho_so": "hồ sơ đích đang TẠM DỪNG — bấm «▶ Bật lại» hồ sơ ở mục «📤 Gửi Google Sheets» "
+             "thì gửi tiếp",
+}
+
+
 def _tong_ket_gui(engine: Any, nen: Any, y_dinh: Any, bao_cao: BaoCao, cho_gui_s: float,
                   dung_lai: Any = None) -> None:
     """Cuối lượt: chờ CÓ HẠN cho việc gửi của lượt này rồi báo đúng trạng thái. Việc chưa gửi vẫn
@@ -567,10 +578,16 @@ def _tong_ket_gui(engine: Any, nen: Any, y_dinh: Any, bao_cao: BaoCao, cho_gui_s
             "rồi xác nhận ở mục «📤 Gửi Google Sheets» (tool không tự gửi lại).")
     cho = sum(tt[t] for t in (outbox.PENDING, outbox.RETRY_WAIT, outbox.CLAIMED, outbox.SENDING))
     if cho:
-        bao_cao.sheets_note = (
-            f"Còn {cho} việc chờ gửi — đã lưu bền, sẽ tự gửi tiếp"
-            + ("" if nen is not None and nen.co_quyen
-               else " (người gửi của ứng dụng đang giữ quyền gửi)") + ".")
+        # Đang tạm dừng thì người gửi KHÔNG nhận việc — nói rõ, kẻo người quên tắt tạm dừng cứ
+        # tưởng «sẽ tự gửi tiếp» (audit B-5).
+        bao_cao.gui_tam_dung = _CAU_TAM_DUNG.get(outbox.ly_do_tam_dung(db, lo), "")
+        if bao_cao.gui_tam_dung:
+            bao_cao.sheets_note = f"Còn {cho} việc chờ gửi — đã lưu bền, {bao_cao.gui_tam_dung}."
+        else:
+            bao_cao.sheets_note = (
+                f"Còn {cho} việc chờ gửi — đã lưu bền, sẽ tự gửi tiếp"
+                + ("" if nen is not None and nen.co_quyen
+                   else " (người gửi của ứng dụng đang giữ quyền gửi)") + ".")
 
 
 def _thuc_hien_giam_sat(

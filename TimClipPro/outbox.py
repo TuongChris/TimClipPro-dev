@@ -448,6 +448,26 @@ def dang_tam_dung(db_path: str) -> bool:
     return h is not None and h["gia_tri"] == "1"
 
 
+def ly_do_tam_dung(db_path: str, lo_id: str) -> str:
+    """Việc còn chờ của lượt ``lo_id`` chỉ chờ vì TẠM DỪNG — người gửi chắc chắn không nhận cho tới
+    khi người dùng bật lại (audit B-5): ``"toan_bo"`` (tạm dừng toàn bộ), ``"ho_so"`` (mọi việc chờ
+    thuộc hồ sơ đang tạm dừng); ``""`` khi không có việc chờ, còn việc đang bay (CLAIMED/SENDING —
+    vẫn đi tới kết cục) hoặc còn việc người gửi sẽ nhận."""
+    with sd.ket_noi(db_path) as con:
+        dem = dict(con.execute(
+            "SELECT trang_thai, COUNT(*) FROM hang_doi_gui WHERE lo_id=? AND trang_thai IN (?,?,?,?)"
+            " GROUP BY trang_thai", (lo_id, CLAIMED, SENDING, *CO_THE_CLAIM)).fetchall())
+        if dem.get(CLAIMED, 0) + dem.get(SENDING, 0) or not any(dem.get(t, 0) for t in CO_THE_CLAIM):
+            return ""
+        con_nhan = con.execute(
+            "SELECT 1 FROM hang_doi_gui WHERE lo_id=? AND trang_thai IN (?,?)"
+            " AND dich_id NOT IN (SELECT id FROM dich_gui WHERE trang_thai=?) LIMIT 1",
+            (lo_id, *CO_THE_CLAIM, sd.TT_TAM_DUNG)).fetchone()
+    if dang_tam_dung(db_path):
+        return "toan_bo"
+    return "" if con_nhan else "ho_so"
+
+
 # ---------------------------------------------------------------------------
 #  Người gửi
 # ---------------------------------------------------------------------------
@@ -1071,8 +1091,9 @@ def cho_gui_xong(db_path: str, data_dir: str, lo_id: str, *, han_s: float = 120.
                  ngu: Callable = time.sleep, dung: Optional[Callable[[], bool]] = None) -> dict:
     """Chờ CÓ HẠN tới khi việc gửi của lượt ``lo_id`` không còn chờ/đang gửi; trả số việc theo trạng
     thái. Người gửi khác (app) đang giữ quyền thì thôi chờ sớm — việc vẫn bền trong hàng đợi.
-    ``RETRY_WAIT`` không bị chờ (đã hẹn giờ thử lại). ``han_s <= 0``: không khởi động người gửi, chỉ
-    đếm. ``dung()`` trả True (yêu cầu dừng / Ctrl+C) → thôi chờ."""
+    ``RETRY_WAIT`` không bị chờ (đã hẹn giờ thử lại). Việc chỉ chờ vì TẠM DỪNG (``ly_do_tam_dung``)
+    cũng không bị chờ: người gửi không nhận cho tới khi người dùng bật lại. ``han_s <= 0``: không
+    khởi động người gửi, chỉ đếm. ``dung()`` trả True (yêu cầu dừng / Ctrl+C) → thôi chờ."""
     if han_s <= 0:
         return tom_tat(db_path, lo_id=lo_id)
     tu_tao = nen is None
@@ -1085,7 +1106,7 @@ def cho_gui_xong(db_path: str, data_dir: str, lo_id: str, *, han_s: float = 120.
         nen.danh_thuc()
         while True:
             tt = tom_tat(db_path, lo_id=lo_id)
-            if tt[PENDING] + tt[CLAIMED] + tt[SENDING] == 0:
+            if tt[PENDING] + tt[CLAIMED] + tt[SENDING] == 0 or ly_do_tam_dung(db_path, lo_id):
                 break
             da = time.monotonic() - bat_dau
             if da >= han_s or (not nen.co_quyen and da >= min(10.0, han_s)):

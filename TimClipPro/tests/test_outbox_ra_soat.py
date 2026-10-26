@@ -272,13 +272,40 @@ def test_cho_gui_xong_han_0_khong_khoi_dong_nguoi_gui(mt, monkeypatch):
     assert goi == []
 
 
+class _NenKhongGui:
+    """Người gửi giữ quyền nhưng không bao giờ gửi: việc PENDING cứ chờ mãi."""
+    co_quyen = True
+
+    def danh_thuc(self):
+        pass
+
+
 def test_cho_gui_xong_dung_som_khi_duoc_yeu_cau(mt):
     a = _ho_so(mt, gid=0)
     _xep(mt, a, 1)
-    ob.dat_tam_dung(mt["db"], True)                              # việc cứ chờ mãi
     bat_dau = time.monotonic()
-    ob.cho_gui_xong(mt["db"], mt["data"], "lo", han_s=30, tao_cong=CongGia, dung=lambda: True)
+    ob.cho_gui_xong(mt["db"], mt["data"], "lo", han_s=30, nen=_NenKhongGui(), dung=lambda: True)
     assert time.monotonic() - bat_dau < 5
+
+
+def test_cho_gui_xong_khong_cho_viec_dang_tam_dung_nhung_cho_viec_dang_bay(mt):
+    """Audit B-5: việc chỉ chờ vì tạm dừng (toàn bộ / hồ sơ) thì thôi chờ ngay; việc đang bay vẫn
+    được chờ tới kết cục dù vừa bật tạm dừng."""
+    a = _ho_so(mt, gid=0)
+    v = _xep(mt, a, 1)
+    assert ob.ly_do_tam_dung(mt["db"], "lo") == ""
+    ob.dat_tam_dung(mt["db"], True)
+    assert ob.ly_do_tam_dung(mt["db"], "lo") == "toan_bo"
+    bat_dau = time.monotonic()
+    tt = ob.cho_gui_xong(mt["db"], mt["data"], "lo", han_s=30, nen=_NenKhongGui())
+    assert time.monotonic() - bat_dau < 5 and tt[ob.PENDING] == 1
+    ob.dat_tam_dung(mt["db"], False)
+    sd.doi_trang_thai(mt["db"], a.id, sd.TT_TAM_DUNG)
+    assert ob.ly_do_tam_dung(mt["db"], "lo") == "ho_so"
+    with sd.ket_noi(mt["db"], ghi=True) as con:                  # việc đang bay: không phải «tạm dừng»
+        con.execute("UPDATE hang_doi_gui SET trang_thai=? WHERE id=?", (ob.SENDING, v))
+    assert ob.ly_do_tam_dung(mt["db"], "lo") == ""
+    assert ob.ly_do_tam_dung(mt["db"], "lo-khac") == ""          # lượt không có việc chờ
 
 
 def test_khoi_dong_nen_dong_thoi_chi_mot_luong(mt, monkeypatch):
