@@ -151,3 +151,40 @@ def test_e3_ho_so_md_thoat_tieu_de_video_vi_pham():
     vi_pham = [(d, _loi_dien_giai(d)) for d in dong if _loi_dien_giai(d)]
     assert vi_pham == [], "file hồ sơ .md chứa tiêu đề ngoài chưa thoát:\n" + "\n".join(
         f"  {d!r}\n      -> {loi}" for d, loi in vi_pham)
+
+
+# ------------------------------------------------------------------ (4) hồ sơ .md vẫn là chữ đọc/chép được
+
+TIEU_DE_THUONG = "SML Movie: Jeffy's Big Day - Part 2! (FULL) #shorts, 50% off? A/B @kenh & ban; x=1"
+CLIP_THUONG = "video_thu_2h clip-01.opus"
+
+
+def _ho_so(tieu_de, ten_clip="clip_a", tieu_de_goc="Clip A"):
+    return dossier.HoSo(tieu_de_vi_pham=tieu_de, link_vi_pham="https://youtu.be/x",
+                        thoi_luong_hhmmss="00:10:00", ngay_lap="2026-10-25",
+                        tong_giay_vi_pham=30, ty_le_video=5.0,
+                        muc=[dossier.MucViPham(
+                            ten_clip_goc=ten_clip, tieu_de_goc=tieu_de_goc, link_goc="https://youtu.be/a",
+                            tu_hhmmss="00:01:00", den_hhmmss="00:01:30",
+                            link_moc="https://youtu.be/x?t=60", do_dai_giay=30, ty_le=90.0, hashes=100)])
+
+
+def test_e3_ho_so_md_giu_nguyen_dau_cau_thuong_de_doc_bang_notepad_va_chep_vao_form():
+    """Hồ sơ .md là FILE người dùng mở bằng Notepad và chép tiêu đề vào form khiếu nại (review audit đợt 2): chỉ
+    ký tự mở cú pháp Markdown/LaTeX được thoát — dấu câu thường («' : - ! ( ) # , % ? / @ & = .») giữ nguyên văn."""
+    md = dossier.render_markdown(_ho_so(TIEU_DE_THUONG, CLIP_THUONG, TIEU_DE_THUONG))
+    assert f"- **Tiêu đề video vi phạm:** {TIEU_DE_THUONG}" in md, md
+    assert f"- **Tên clip gốc:** {CLIP_THUONG}" in md, md
+    assert f"- **Tiêu đề video gốc:** {TIEU_DE_THUONG}" in md, md
+
+
+def test_e3_ho_so_md_van_vo_hieu_html_url_tran_va_nhan_manh():
+    tieu_de = (f"{DAU} <img src=https://127.0.0.1:9/a.gif> https://127.0.0.1:9/b www.vi-du.test "
+               "*dam* _nghieng_ ~~gach~~ `ma` a\\b")
+    md = dossier.render_markdown(_ho_so(tieu_de))
+    dong = next(d for d in md.splitlines() if DAU in d)
+    assert re.search(r"(?<!\\)<", dong) is None and r"\<img" in dong          # không thẻ HTML / autolink <...>
+    assert "https://" not in dong and "www." not in dong          # GFM không tự dựng link từ URL trần
+    assert re.search(r"(?<!\\)[*_~`]", dong.split(":** ", 1)[1]) is None, dong   # nhấn mạnh / gạch / mã
+    assert "a\\\\b" in dong                                       # «\» của chữ ngoài hiện đúng một «\»
+    assert _loi_dien_giai(dong) == []

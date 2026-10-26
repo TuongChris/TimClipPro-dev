@@ -9,7 +9,7 @@ from datetime import datetime
 import bao_cao_v2
 from clip_metadata import ClipMetadataResolver
 import engine
-from markdown_an_toan import thoat_markdown
+from markdown_an_toan import thoat_markdown_ho_so
 
 
 @dataclass
@@ -128,19 +128,21 @@ def render_markdown(ho_so: HoSo) -> str:
 
     Tiêu đề / tên clip là chữ NGOÀI (tiêu đề video vi phạm do chính bên bị khiếu nại đặt): thoát trước khi vào
     Markdown — trình xem .md nào mở hồ sơ cũng biến ``![](url)`` thành ảnh tải từ máy ngoài, ``[chữ](url)``
-    thành link, ``$..$`` thành công thức (audit E-3). Link do tool dựng giữ nguyên để bấm được.
+    thành link, ``$..$`` thành công thức (audit E-3). Link do tool dựng giữ nguyên để bấm được. Thoát HẸP
+    (``thoat_markdown_ho_so``): file mở bằng Notepad và tiêu đề được chép vào form khiếu nại, nên dấu câu thường
+    («' : - !») giữ nguyên văn (review audit đợt 2).
     """
     def hien_thi(gia_tri: str) -> str:
         return gia_tri if gia_tri and gia_tri.strip() else "—"
 
     def chu_ngoai(gia_tri: str) -> str:
-        return thoat_markdown(hien_thi(gia_tri))
+        return thoat_markdown_ho_so(hien_thi(gia_tri))
 
     cac_dong = [
         "# Hồ sơ khiếu nại bản quyền",
         "",
         "## Thông tin chung",
-        f"- **Tiêu đề video vi phạm:** {thoat_markdown(ho_so.tieu_de_vi_pham)}",
+        f"- **Tiêu đề video vi phạm:** {thoat_markdown_ho_so(ho_so.tieu_de_vi_pham)}",
         f"- **Link video vi phạm:** {ho_so.link_vi_pham}",
         f"- **Thời lượng:** {hien_thi(ho_so.thoi_luong_hhmmss)}",
         f"- **Ngày lập:** {ho_so.ngay_lap}",

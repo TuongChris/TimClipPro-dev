@@ -754,6 +754,9 @@ tiêu đề video gốc chung ở `app.py`. CSV/Sheets/lịch sử vẫn nhận 
 `tests/test_tieu_de_ngoai_ho_so_va_ket_qua.py`, `tests/test_tieu_de_ngoai_khong_markdown.py`.
 → **Chữ ngoài vào BẤT KỲ đích Markdown nào (phần tử Streamlit hay file .md) phải qua `thoat_markdown`**, hoặc đi qua
   phần tử không diễn giải (`st.text`, `st.code`, `st.dataframe`); thêm đích Markdown mới thì thử với `![](url)`, `[a](url)`, `$x$`.
+→ FILE người dùng đọc bằng Notepad / chép vào form (hồ sơ .md) dùng `thoat_markdown_ho_so` — thoát HẸP (`\ ` * _ ~ [ ] < > $`
+  + phá URL trần): bản thoát mọi dấu câu biến «Jeffy's Big Day - Part 2!» thành «Jeffy\'s Big Day \- Part 2\!» trong form
+  khiếu nại (review audit đợt 2). Thử thêm cả chiều ngược: tiêu đề có `' : - ! ( ) #` phải còn nguyên văn.
 
 **35. Rào quét bí mật trước khi đẩy chỉ xét tên ref + một grep tay thiếu mẫu — repo CÔNG KHAI (26/10/2026, audit E-4).**
 Hook `pre-push` dùng chung chỉ đọc `$rref` (tag/xoá/force/nhánh lạ); nội dung dựa vào lệnh grep tay trong
