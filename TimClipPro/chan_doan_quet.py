@@ -150,8 +150,15 @@ class ChanDoanQuet:
             self.giai_doan_mat = CHON_LOC_BO_HET
         return self.giai_doan_mat
 
-    def mat_o_dau(self) -> str:
+    def mat_o_dau(self, pham_vi: str = "") -> str:
         """Câu giải thích cho người dùng; rỗng khi lượt quét có kết quả.
+
+        ``pham_vi`` khác rỗng = nguồn chỉ được quét MỘT PHẦN (giới hạn video dài, dừng
+        sớm, tải một phần…), giá trị là câu ``engine.mo_ta_pham_vi``. Khi đó câu trả
+        lời chỉ được nói về PHẦN ĐÃ QUÉT và phải nêu phạm vi ngay tại đây: «không thấy»
+        trong 3 giờ đầu không bao giờ thành «video không chứa…» cho cả video (audit F-3,
+        LOI_DA_GAP mục 12/14). Hộp «Chưa quét trọn» nằm xa bên dưới không sửa được một
+        câu kết luận sai ở dòng đầu.
 
         Hai ca dưới đây được nói RÕ HƠN mô tả chung, vì mô tả chung của chúng từng
         đẩy người dùng đi sửa nhầm chỗ:
@@ -168,16 +175,35 @@ class ChanDoanQuet:
         """
         if not self.giai_doan_mat:
             return ""
+        cau = self._giai_thich(mot_phan=bool(pham_vi))
+        if not pham_vi:
+            return cau
+        return (f"CHỈ QUÉT MỘT PHẦN ({pham_vi}) — đây KHÔNG phải kết luận cho toàn "
+                f"video. Trong phần đã quét: {cau}")
+
+    def _giai_thich(self, mot_phan: bool) -> str:
+        """Câu theo tầng mất kết quả; ``mot_phan`` đổi chủ ngữ «video» → «phần đã quét»."""
         chung = MO_TA_GIAI_DOAN.get(self.giai_doan_mat, self.giai_doan_mat)
 
         if self.giai_doan_mat == AUDFPRINT_KHONG_RA_MATCH and self.so_clip_kho > 0:
             kho = f"«{self.ten_kho}»" if self.ten_kho else "đang chọn"
+            chu_ngu = "Phần đã quét" if mot_phan else "Video"
+            # Quét một phần: lời khuyên «clip gốc chưa có trong kho» là chỉ nhầm chỗ —
+            # clip có thể nằm ở phần CHƯA quét, việc cần làm là quét thêm.
+            ket = ("Clip có thể nằm ở phần chưa quét — muốn chắc, hãy quét thêm phần còn "
+                   "lại trước khi nghĩ tới kho." if mot_phan else
+                   "Nếu bạn chắc đây là bản reup thì khả năng cao clip gốc của nó chưa "
+                   "có trong kho.")
             return (
-                f"Video không chứa đoạn tiếng nào của kho {kho}. Kho nạp bình thường "
+                f"{chu_ngu} không chứa đoạn tiếng nào của kho {kho}. Kho nạp bình thường "
                 f"({self.so_clip_kho} clip) và đã phân tích {self.so_khuc} khúc tiếng, "
-                "nên KHÔNG phải lỗi kho hay lỗi tải. Nếu bạn chắc đây là bản reup thì "
-                "khả năng cao clip gốc của nó chưa có trong kho."
+                f"nên KHÔNG phải lỗi kho hay lỗi tải. {ket}"
             )
+
+        if self.giai_doan_mat == BANG_CHUNG_QUA_YEU and mot_phan:
+            return ("Có dòng khớp nhưng tất cả đều quá ngắn hoặc quá ít hash, bị loại ngay "
+                    "ở bộ lọc thô. Nhiều khả năng phần đã quét không chứa clip gốc nào "
+                    "trong kho.")
 
         if self.giai_doan_mat == KHONG_DAT_CHAP_NHAN and self.dau_hieu_nhac_hieu:
             return (

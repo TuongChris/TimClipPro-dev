@@ -357,12 +357,16 @@ def bao_cao_khong_co_ket_qua(results: list[ScanResult]) -> None:
     for x in ok:
         cd = getattr(x, "chan_doan", None)
         tieu_de = thoat_markdown(x.source_name or x.source_ref)   # tiêu đề YouTube = chữ ngoài (audit D-8)
+        # Quét MỘT PHẦN: câu kết luận tự nói phạm vi, không khẳng định cho cả video (audit F-3).
+        pham_vi = thoat_markdown(mo_ta_pham_vi(x)) if x.quet_mot_phan else ""
         if cd is None:
-            st.warning(f"**{tieu_de}** — không tìm thấy clip gốc nào.")
+            them = (f" (CHỈ QUÉT MỘT PHẦN: {pham_vi} — đây KHÔNG phải kết luận cho toàn "
+                    "video)" if pham_vi else "")
+            st.warning(f"**{tieu_de}** — không tìm thấy clip gốc nào{them}.")
             continue
 
         st.warning(f"**{tieu_de}** — không có đoạn nào đạt tiêu chí.\n\n"
-                   f"{cd.mat_o_dau()}")
+                   f"{cd.mat_o_dau(pham_vi)}")
         with st.expander("🔎 Chi tiết chẩn đoán"):
             st.markdown(
                 f"- Số khúc đã cắt: **{cd.so_khuc}**\n"

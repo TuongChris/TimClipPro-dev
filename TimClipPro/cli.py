@@ -530,7 +530,8 @@ def _main():
             if cd is None:
                 print("   Không tìm thấy clip gốc nào.")
             else:
-                print(f"   Không có đoạn nào đạt tiêu chí. {cd.mat_o_dau()}")
+                pham_vi = mo_ta_pham_vi(kq) if kq.quet_mot_phan else ""   # audit F-3
+                print(f"   Không có đoạn nào đạt tiêu chí. {cd.mat_o_dau(pham_vi)}")
                 print(f"   Phễu: {cd.tom_tat()}")
                 if cd.manh_nhat_bi_loai is not None:
                     print(f"   Mạnh nhất bị loại: {cd.manh_nhat_bi_loai.mo_ta()}")
