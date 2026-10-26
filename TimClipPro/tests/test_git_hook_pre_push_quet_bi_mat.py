@@ -316,3 +316,40 @@ def test_hook_in_sha_du_40_ky_tu_va_cach_duyet_mau_gia(may):
     assert "TIMCLIP_MAU_GIA_DA_DUYET" in out, out
     rc, out = _day_env(may, "fix/pc2/thu:fix/pc2/thu", TIMCLIP_MAU_GIA_DA_DUYET=a)
     assert rc == 0, out
+
+
+# --- Review audit đợt 2 (WR-1): luật «ID bảng 44 ký tự TRẦN» không được bắt một đoạn nằm TRONG chuỗi base64 ---
+# Chữ ký Ed25519 (64 byte → 88 ký tự base64 chuẩn, có «+», «/», «==») được commit trong release/trust/*.json. Một
+# đoạn 44 ký tự giữa hai ký tự base64 «+»/«/»/«=» mở đầu bằng «1» (~1/2000 chữ ký) trông như ID bảng → hook chặn đẩy.
+# Ba chữ ký GIẢ (byte ngẫu nhiên có seed, không ký gì), mỗi chữ ký có một dạng biên khác nhau của đoạn «1 + 43».
+_CHU_KY_GIA = {
+    "cong_truoc_bang_sau": "N+ErORitkaPbiYq16hgaTrwgc0B1kN9u/JFoQUit6+1xe4ecW5YJGP28Lni5uqFZXUFcmjixnsg7JouFMSm2Zw==",
+    "dau_chuoi_cong_sau": "1FyVsAhBD8PYpCPhKP76y4Xn6pmqQge5tgVPYcOSXQEc+kqC7BlF/wC2pIN9ALGK0Sz1BVa/Tl9GSIaE+L/MJg==",
+    "gach_hai_ben": "qKlQzkfvuNdU4Hm0Ls7fHZyzTg3/1HXMwkeQUWjw1ETQTUNtZYIwkbx6p9sdwgqnMLfmHxhO/FmaMR4j9NwJ3A==",
+}
+
+
+@pytest.mark.skipif(not shutil.which("sh"), reason="cần sh")
+@pytest.mark.parametrize("ca", sorted(_CHU_KY_GIA))
+def test_chu_ky_base64_chua_doan_giong_id_bang_khong_bi_chan(tmp_path, ca):
+    chu_ky = _CHU_KY_GIA[ca]
+    assert len(chu_ky) == 88 and re.search(r"(^|[^0-9a-z_-])1[0-9a-z_-]{43}([^0-9a-z_-]|$)", chu_ky.lower())
+    noi_dung = json.dumps({"chu_ky": {"chu_ky_b64": chu_ky, "key_id": "8aa5baa6c8f225f9"},
+                           "khoa_moi": {"ed25519_pub_b64": "1tXkLr8QOo1sp1YAPpsqheIcUlGl36b3f58Kfnd5dq4="}}, indent=1)
+    out = _quet_cay_lam_viec(tmp_path, [("release/trust/uy_quyen_PC2_0123456789abcdef.json", noi_dung)])
+    assert out.strip() == "", out
+
+
+@pytest.mark.skipif(not shutil.which("sh"), reason="cần sh")
+@pytest.mark.parametrize("dong", [
+    f"ID bảng VanPhong: {_SHEET_ID}",
+    f"SHEET_ID = \"{_SHEET_ID}\"",
+    f"sheet_id={_SHEET_ID}",
+    f"APIError: https://sheets.googleapis.com/v4/spreadsheets/{_SHEET_ID}/values/A1:append",
+    f"GET https://sheets.googleapis.com/v4/spreadsheets/{_SHEET_ID}?fields=sheets",
+    f"https://docs.google.com/spreadsheets/d/{_SHEET_ID}/edit#gid=0",
+])
+def test_id_bang_44_ky_tu_van_bi_bat_sau_khi_thu_hep_luat(tmp_path, dong):
+    """Đối chứng WR-1: thu hẹp luật để bỏ đoạn trong base64 KHÔNG được để lọt ID bảng trần hay trong URL API."""
+    out = _quet_cay_lam_viec(tmp_path, [("docs/ghi_chu.md", dong + "\n")])
+    assert "docs/ghi_chu.md: link / ID bảng tính 44 ký tự" in out, out
