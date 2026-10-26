@@ -1290,6 +1290,20 @@ class _TabTheoMa:
         return self._doc({})
 
 
+def _tim_tab(sh, chot: sd.DichGuiChot):
+    """Tab của đích: THEO MÃ khi đã ghim; chưa có mã (hồ sơ link cũ) thì theo TÊN — thiếu tab tên đó là lỗi cấu
+    hình riêng, KHÔNG phải «tab đã ghim theo mã» của ``phan_loai_loi`` (audit B-9). Không tự tạo tab (M2)."""
+    import gspread
+
+    if chot.worksheet_id is not None:
+        return sh.get_worksheet_by_id(chot.worksheet_id)
+    try:
+        return sh.worksheet(chot.worksheet_ten)
+    except gspread.exceptions.WorksheetNotFound:
+        raise ChuaGui(f"Bảng không có tab tên «{chot.worksheet_ten}» — tool không tự tạo tab: hãy tạo tab đó "
+                      "(hoặc sửa hồ sơ sang tab khác).", tam_thoi=False) from None
+
+
 class CongGspread:
     """Transport thật. Mỗi lần gửi: mở bảng (metadata) → tab THEO MÃ (theo tên chỉ khi revision chưa từng phát — để
     TÌM mã) → kiểm tiêu đề NGHIÊM NGẶT, đọc THEO MÃ → ``truoc_khi_gui(mã_tab, tên_tab)`` (người gửi đối chiếu rồi
@@ -1326,8 +1340,7 @@ class CongGspread:
 
         try:
             sh = self._client(duong_dan_khoa).open_by_key(chot.spreadsheet_id)
-            ws = (sh.get_worksheet_by_id(chot.worksheet_id) if chot.worksheet_id is not None
-                  else sh.worksheet(chot.worksheet_ten))
+            ws = _tim_tab(sh, chot)
             if ten_doi_chieu and ws.title != ten_doi_chieu:
                 return False, (f"Tab mã {ws.id} hiện tên «{ws.title}», khác tên đối chiếu "
                                f"«{ten_doi_chieu}» của hồ sơ — kiểm lại link/tên tab.")
@@ -1346,8 +1359,7 @@ class CongGspread:
 
         try:
             sh = self._client(duong_dan_khoa).open_by_key(chot.spreadsheet_id)
-            ws = (sh.get_worksheet_by_id(chot.worksheet_id) if chot.worksheet_id is not None
-                  else sh.worksheet(chot.worksheet_ten))
+            ws = _tim_tab(sh, chot)
             gid, ten = int(ws.id), str(ws.title)
             # Từ đây chỉ dùng MÃ tab; tên chỉ còn là nhãn (đối chiếu, hiển thị) — không request nào mang nó.
             can_tieu_de = sheets.kiem_tieu_de_nghiem_ngat(_TabTheoMa(sh, gid), header, ten)

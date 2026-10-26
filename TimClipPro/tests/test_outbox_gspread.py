@@ -124,6 +124,25 @@ def test_ghim_theo_ten_khi_chua_co_gid_chi_dung_ten_de_tim_ma(gia):
     assert all(y["loai"] in ("metadata", "batchGetByDataFilter", "batchUpdate") for y in gia["may"].nhat_ky)
 
 
+def test_ghim_theo_ten_ma_bang_khong_co_tab_ten_do_bao_dung_ly_do_0_ghi(gia):
+    """Audit B-9: hồ sơ THEO TÊN (link cũ, chưa có mã tab) trỏ vào bảng không có tab «KetQuaQuet» — vẫn chặn (cấu
+    hình, 0 ghi, không tự tạo tab), nhưng lý do nói đúng: thiếu tab TÊN đó, không phải «tab đã ghim theo mã»."""
+    gia["may"].tabs.clear()
+    gia["may"].tabs[0] = TabGia(0, "Sheet1", [], so_cot=26)
+    with pytest.raises(ob.ChuaGui) as e:
+        _gui(gia, _chot(gid=None, ten="KetQuaQuet"))
+    ok, tb = ob.CongGspread().kiem(_chot(gid=None, ten="KetQuaQuet"), gia["khoa"], HEADER)
+    assert e.value.tam_thoi is False and _ghi(gia) == [] and not _sending(gia) and ok is False
+    for ly_do in (e.value.ly_do, tb):
+        assert "theo mã tab" not in ly_do and "«KetQuaQuet»" in ly_do and "tạo tab" in ly_do
+
+
+def test_tab_theo_ma_khong_con_van_bao_theo_ma_tab(gia):
+    with pytest.raises(ob.ChuaGui) as e:
+        _gui(gia, _chot(gid=99))
+    assert "theo mã tab" in e.value.ly_do
+
+
 @pytest.mark.parametrize("noi, loi, tam_thoi", [
     ("metadata", LoiHttp(403, f"loi 403 {URL_BANG}"), False),            # open_by_key: 403 → PermissionError
     ("metadata", LoiHttp(404, f"loi 404 {URL_BANG}"), False),            # → SpreadsheetNotFound
