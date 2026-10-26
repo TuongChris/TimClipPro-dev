@@ -598,3 +598,13 @@ kho cũ đã bị thay — mất hàng giờ tạo vân tay. Nhánh file cũ b�
 → **fsync file ĐÚNG bản sẽ công bố, SAU lần ghi cuối, ngay trước `os.replace`** — kể cả khi người ghi là tiến trình con
   (mở `r+b` rồi `os.fsync`: Windows `FlushFileBuffers` cần quyền ghi). Một fsync ở bước trước không bảo vệ gì nếu
   bước sau ghi lại file. Test: `tests/test_kho_cong_bo_ben_vung.py`.
+
+**22. Sổ đăng ký đổi TRƯỚC khi công bố: «Tạo lại kho» bị Dừng/lỗi để lại nguồn mới trên kho cũ (26/10/2026, PC2, audit C-2).**
+`build_database` ghi `thu_muc` (nguồn) vào `khos.json` ngay đầu job cho cả «Tạo lại kho từ đầu» sang thư mục KHÁC. Dừng,
+audfprint lỗi, mọi clip 0 hash, mất điện → file `.pklz` vẫn là vân tay của nguồn cũ («kho trước job vẫn nguyên») nhưng sổ
+nói nguồn mới; lớp chống trộn nguồn (`_kiem_nguon_bo_sung`) tin sổ, so mới với mới và nhận «Bổ sung» → trộn hai nguồn vào
+một kho (đúng sự cố 15/10).
+→ **Thông tin MÔ TẢ nội dung file (nguồn, phiên bản…) chỉ đổi SAU khi nội dung đó đã công bố**, cùng một lần sửa sổ với
+  phiên bản mới (`_ghi_phien_ban_sau_cong_bo(thu_muc=…)`). «Bổ sung» vẫn ghi sớm vì nguồn đã được chứng minh trùng.
+→ **Lớp chặn dựa vào một bản ghi thì mọi đường thoát (huỷ/lỗi/không công bố) phải để bản ghi đó khớp dữ liệu thật.**
+  Test: `tests/test_tao_lai_kho_giu_nguon_khi_khong_cong_bo.py`.

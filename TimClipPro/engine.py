@@ -2710,6 +2710,10 @@ class Engine:
                     k["thu_muc"] = moi
 
         self._sua_khos(sua)
+        self._dat_thu_muc_kho_trong_bo_nho(moi)
+
+    def _dat_thu_muc_kho_trong_bo_nho(self, moi: str) -> None:
+        """Engine thấy đúng thư mục nguồn vừa ghi vào sổ đăng ký (cache metadata theo thư mục cũ bị bỏ)."""
         if os.path.normcase(moi) != os.path.normcase(self.kho_thu_muc or ""):
             self.kho_thu_muc = moi
             self._invalidate_metadata_cache()
@@ -2920,9 +2924,11 @@ class Engine:
 
     def _ghi_phien_ban_sau_cong_bo(self, *, shifts_kho: int,
                                    cap_nhat_shifts: bool,
-                                   moc_build: Optional[float] = None) -> list:
+                                   moc_build: Optional[float] = None,
+                                   thu_muc: Optional[str] = None) -> list:
         """Sau khi thay file kho: phiên bản mới (+ id bền, shifts, mốc bắt đầu build) trong
-        sổ đăng ký.
+        sổ đăng ký; ``thu_muc`` (chỉ «Tạo lại kho từ đầu») = thư mục nguồn MỚI, ghi cùng một
+        lần sửa sổ — sổ chỉ đổi nguồn khi file kho đã chứa vân tay của nguồn đó (audit C-2).
 
         Lỗi ở đây KHÔNG làm job thất bại — kho đã ghi xong; chỉ cảnh báo. Lịch sử quét
         vẫn thấy kho đã đổi nhờ kích thước file là một phần của phiên bản hiệu lực.
@@ -2930,6 +2936,7 @@ class Engine:
         if not self.kho_dang_dung:
             return []
         ten = self.kho_dang_dung
+        moi = thu_muc.strip('" ') if thu_muc is not None else None
 
         def sua(d: dict) -> None:
             for k in d["danh_sach"]:
@@ -2940,13 +2947,22 @@ class Engine:
                         k["shifts"] = shifts_kho
                     if moc_build:
                         k["moc_build"] = round(float(moc_build), 3)
+                    if moi is not None:
+                        k["thu_muc"] = moi
                     break
 
         try:
             self._sua_khos(sua)
         except Exception as e:  # noqa: BLE001
             LOGGER_SCAN.exception("event=kho.revision_update_failed warehouse=%r", ten)
-            return [f"Kho vân tay đã ghi xong nhưng chưa cập nhật được sổ đăng ký kho: {e}"]
+            canh_bao = f"Kho vân tay đã ghi xong nhưng chưa cập nhật được sổ đăng ký kho: {e}"
+            if moi is not None and self._khoa_duong_dan(moi) != self._khoa_duong_dan(self.kho_thu_muc or moi):
+                canh_bao += (
+                    f". Sổ kho vẫn ghi thư mục nguồn cũ «{self.kho_thu_muc}» trong khi vân tay nay là của "
+                    f"«{moi}» — chạy lại «Tạo lại kho từ đầu» trước khi «Bổ sung».")
+            return [canh_bao]
+        if moi is not None:
+            self._dat_thu_muc_kho_trong_bo_nho(moi)
         return []
 
     def _moc_build_kho_ghim(self) -> float:
@@ -3032,12 +3048,16 @@ class Engine:
                     ) from e
                 canh_bao.append(f"{e}. Kho sẽ được tạo lại từ đầu.")
 
-        if mode == "add" and ds_cu:
-            # Chặn TRƯỚC mọi ghi (sổ đăng ký, vân tay, metadata): «Bổ sung» chỉ nhận ĐÚNG nguồn của kho.
-            self._kiem_nguon_bo_sung(thumuc, ds_cu)
-        # KHÔNG gọi update_kho: hàm đó áp lại kho "đang chọn" của sổ đăng ký lên Engine,
-        # tức có thể đổi job sang kho khác giữa chừng. Chỉ ghi đúng entry đã ghim.
-        self._ghi_thu_muc_kho_ghim(thumuc)
+        if mode == "add":
+            if ds_cu:
+                # Chặn TRƯỚC mọi ghi (sổ đăng ký, vân tay, metadata): «Bổ sung» chỉ nhận ĐÚNG nguồn của kho.
+                self._kiem_nguon_bo_sung(thumuc, ds_cu)
+            # KHÔNG gọi update_kho: hàm đó áp lại kho "đang chọn" của sổ đăng ký lên Engine,
+            # tức có thể đổi job sang kho khác giữa chừng. Chỉ ghi đúng entry đã ghim.
+            self._ghi_thu_muc_kho_ghim(thumuc)
+        # «Tạo lại kho từ đầu» (có thể sang thư mục KHÁC): KHÔNG ghi nguồn mới bây giờ — Dừng/lỗi/không công bố thì
+        # file kho vẫn là vân tay của nguồn cũ, sổ ghi sẵn nguồn mới sẽ làm lớp chống trộn nguồn nhận «Bổ sung» từ
+        # nguồn mới vào kho cũ (audit C-2). Ghi cùng phiên bản mới, SAU khi công bố (`_ghi_phien_ban_sau_cong_bo`).
 
         cu_huu_ich = {self._khoa_duong_dan(c["duong_dan"]) for c in ds_cu
                       if int(c.get("so_hash") or 0) > 0}
@@ -3337,6 +3357,7 @@ class Engine:
             shifts_kho=shifts_kho,
             cap_nhat_shifts=sub == "new" or shifts_da_luu == shifts_kho,
             moc_build=bat_dau_build,
+            thu_muc=thumuc if mode == "new" else None,
         ))
 
         canh_bao.extend(self._cap_nhat_snapshot_sau_build(mode))
