@@ -812,8 +812,8 @@ nguyên»; ghi nhưng còn lỗi → vàng «Hoàn tất MỘT PHẦN»; không 
   quét, cảnh báo «một phần» nhầm, «Clip hiện tại (i/N)» lệch (F-9, F-10, F-11, F-12, F-13); hai phiên cùng bấm «Bắt đầu
   quét» chạy hai lô (F-14).
 - Lộ dữ liệu / bí mật: CSV lịch sử không chặn công thức (E-8), thư mục người dùng Windows trong ghi chú lỗi và tài liệu
-  track (E-6, E-7), hook pre-push bắt nhầm base64 và bỏ qua thông điệp commit (WR-1, WR-8); khoá hồi quy tiêu đề hồ sơ .md
-  (WR-9).
+  track (E-6, E-7 — cả dạng gạch xuôi «C:/Users/…», review P3), hook pre-push bắt nhầm base64 và bỏ qua thông điệp commit
+  (WR-1, WR-8; thu hẹp WR-1 từng làm lọt link «/spreadsheets/u/<n>/d/…», review P3); khoá hồi quy tiêu đề hồ sơ .md (WR-9).
 - Chưa sửa: B-13, F-16 (cần người dùng quyết); WR-2 không tái hiện được.
 → **Mỗi lỗi đều nằm ở chỗ GIAO giữa hai phần** (lượt ↔ việc nền, sổ ↔ tiến trình, dọn đệm ↔ quét, cookie ↔ client): sửa
   một phía thì viết test cho đúng chỗ giao, đừng chỉ test riêng từng phía.

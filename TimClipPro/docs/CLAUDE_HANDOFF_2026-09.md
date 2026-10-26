@@ -76,8 +76,8 @@
 
 | Hạng mục | Giá trị | Bằng chứng (đọc trực tiếp vòng này) |
 |---|---|---|
-| Đường dẫn làm việc | `C:/Users/Admin/OneDrive/Desktop/ToolQuet/Tool_Quet/TimClipPro` | — |
-| **Gốc git là THƯ MỤC CHA** | `C:/Users/Admin/OneDrive/Desktop/ToolQuet/Tool_Quet` | `.git/` nằm ở `Tool_Quet/`, không ở `TimClipPro/` |
+| Đường dẫn làm việc | `C:/Users/<tên>/OneDrive/Desktop/ToolQuet/Tool_Quet/TimClipPro` | — |
+| **Gốc git là THƯ MỤC CHA** | `C:/Users/<tên>/OneDrive/Desktop/ToolQuet/Tool_Quet` | `.git/` nằm ở `Tool_Quet/`, không ở `TimClipPro/` |
 | Remote | `git@github.com:TuongChris/Tool_Quet.git` (SSH) | `.git/config:9` |
 | **HEAD** | `7f85c8d22e33d61c09961cc30afcb9bf35539f00` — **DETACHED** | `.git/HEAD` chứa SHA trần, không phải `ref: refs/heads/...` |
 | Tag tại HEAD | `v2.6` (annotated tag, object `961b3466…`) | `.git/refs/tags/v2.6`; `git describe --tags --exact-match` → `v2.6` (baseline round) |

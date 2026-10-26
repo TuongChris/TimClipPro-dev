@@ -22,7 +22,7 @@ ngờ nhưng đã **bị bác bỏ** khi kiểm chứng thì **không xuất hi�
 nơi nào chúng chạm vào một quyết định thiết kế còn tranh cãi, tài liệu trình bày cả hai
 phía kèm bằng chứng (xem §6.5).
 
-**Gốc dự án:** `C:/Users/Admin/OneDrive/Desktop/ToolQuet/Tool_Quet/TimClipPro`.
+**Gốc dự án:** `C:/Users/<tên>/OneDrive/Desktop/ToolQuet/Tool_Quet/TimClipPro`.
 Mọi đường dẫn `file:dòng` bên dưới là tương đối với gốc này.
 
 ---

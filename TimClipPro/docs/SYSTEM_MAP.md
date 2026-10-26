@@ -24,7 +24,7 @@ Quy ước ký hiệu dùng xuyên suốt:
 Các ô `⚠` chỉ trích dẫn phát hiện đã **CONFIRMED**. Chúng không phải suy đoán, và
 chúng không đề xuất rằng đã có ai sửa. Mỗi ô nêu mã phát hiện để tra ngược.
 
-Đường dẫn gốc của mọi trích dẫn: `C:/Users/Admin/OneDrive/Desktop/ToolQuet/Tool_Quet/TimClipPro/`
+Đường dẫn gốc của mọi trích dẫn: `C:/Users/<tên>/OneDrive/Desktop/ToolQuet/Tool_Quet/TimClipPro/`
 
 ---
 

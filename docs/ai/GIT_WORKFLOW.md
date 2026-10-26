@@ -68,7 +68,7 @@ Hai lớp, cả hai bắt buộc (audit E-4). Quét TỪNG commit sắp đẩy �
    `TIMCLIP_MAU_GIA_DA_DUYET="<SHA 40 ký tự> …"` — chỉ bỏ
    qua đúng các commit đó; `--no-verify` vẫn CẤM. Bí mật thật → bỏ khỏi commit chưa đẩy, báo người dùng.
 2. Tay — phải rỗng, trừ mẫu GIẢ đã biết trong test (tên file `cookies.txt` không còn trong mẫu: lớp 1 + `.gitignore` lo):
-`git log -p --text --format=%B private/integration/current..HEAD | grep -n -i -E "AIza|ya29\.|gh[pousr]_|github_pat_|BEGIN [A-Z ]*PRIVATE|\"private_key|service_account\"|gserviceaccount\.com|client_secret|refresh_token|docs\.google\.com/spreadsheets|(^|[^A-Za-z0-9_-])1[A-Za-z0-9_-]{43}([^A-Za-z0-9_-]|$)|installation_id.{0,4}[0-9a-f]{8}-|__Secure-|SAPISID|LOGIN_INFO|HTTP Cookie File|@gmail\.com|[A-Z]:\\\\Users\\\\"`
+`git log -p --text --format=%B private/integration/current..HEAD | grep -n -i -E "AIza|ya29\.|gh[pousr]_|github_pat_|BEGIN [A-Z ]*PRIVATE|\"private_key|service_account\"|gserviceaccount\.com|client_secret|refresh_token|docs\.google\.com/spreadsheets|(^|[^A-Za-z0-9_-])1[A-Za-z0-9_-]{43}([^A-Za-z0-9_-]|$)|installation_id.{0,4}[0-9a-f]{8}-|__Secure-|SAPISID|LOGIN_INFO|HTTP Cookie File|@gmail\.com|[A-Z]:[\\\\/]+Users[\\\\/]"`
    và thêm: không đường dẫn riêng máy, không dữ liệu khách hàng. Có phát hiện MỚI → dừng, báo người dùng.
 
 ## Hook `pre-push` (cả hai máy)

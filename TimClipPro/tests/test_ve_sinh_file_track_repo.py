@@ -3,7 +3,8 @@
 
 Luật ``.gitignore`` KHÔNG áp cho file đã track, nên một file lọt vào trước khi có luật sẽ ở lại mãi
 mà không ai thấy. ``docs/ai/GIT_WORKFLOW.md`` cấm «đường dẫn riêng máy, tên người dùng Windows»
-(câu quét bí mật của nó có ``[A-Z]:\\\\Users\\\\``) — ba tài liệu cũ từng mang ``C:\\Users\\Admin…``.
+(câu quét bí mật của nó bắt ``X:\\Users\\`` lẫn ``X:/Users/``) — ba tài liệu cũ từng mang ``C:\\Users\\Admin…``,
+ba tài liệu khác ``C:/Users/Admin/…`` (review audit P3: bản đầu của test chỉ soi dấu «\\» nên xanh giả).
 
 Chỉ đọc cây Git của mã đang thử (``git ls-files``); không sửa, không mạng. Không có git/không phải
 repo (vd. cây mã trong gói phát hành) -> bỏ qua.
@@ -23,8 +24,20 @@ GOC_MA = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # .../Tim
 # `session.log` vẫn để chủ sở hữu duyệt»). Untrack rồi thì xoá khỏi đây — test dưới nhắc.
 TRACK_TRUNG_IGNORE_DA_BIET = {"TimClipPro/session.log"}
 
-# X:\Users\<tên thật>; chỗ giữ chỗ «<tên>» / «...» / «…» được phép.
-RE_USERS = re.compile(r"\b[A-Z]:\\{1,2}Users\\{1,2}(?![<.…])[^\\\s`'\"]+")
+# X:\Users\<tên thật> — dấu «\» (cả «\\» của repr Python) lẫn «/» (tài liệu cũ hay ghi C:/Users/<tên>/…), như
+# `truy_cap_youtube._RE_THU_MUC_NGUOI_DUNG` (audit E-6). Chỗ giữ chỗ «<tên>» / «...» / «…» được phép.
+RE_USERS = re.compile(r"\b[A-Z]:(?:\\{1,2}|/)Users(?:\\{1,2}|/)(?![<.…])[^\\/\s`'\"]+")
+
+
+@pytest.mark.parametrize("dong, bat", [
+    (r"Repo: C:\Users\Admin\OneDrive\Tool_Quet", True),
+    (r"repr: 'C:\\Users\\Admin\\AppData'", True),
+    ("Gốc dự án: `C:/Users/Admin/OneDrive/Desktop/ToolQuet`", True),
+    (r"chỗ giữ chỗ C:\Users\<tên>\AppData và C:/Users/<tên>/OneDrive", False),
+    (r"junction trỏ ra C:\\Users\\... hay C:/Users/…/x", False),
+])
+def test_mau_thu_muc_nguoi_dung_bat_ca_hai_kieu_gach(dong, bat):
+    assert bool(RE_USERS.search(dong)) is bat
 
 
 def _env_git():
