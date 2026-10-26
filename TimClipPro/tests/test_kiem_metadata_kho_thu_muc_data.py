@@ -69,3 +69,31 @@ def test_main_bao_loi_cau_hinh_runtime_ro_rang(tmp_path, monkeypatch, capsys):
     assert kiem_metadata_kho.main() == 1
     loi = capsys.readouterr().err
     assert "LỖI CẤU HÌNH" in loi and "TIMCLIP_STATE_ROOT" in loi
+
+
+def test_main_dau_cuoi_bao_cao_so_kho_o_timclip_data_dir(tmp_path, monkeypatch, capsys):
+    """Audit P3 E-9 (trùng gốc rễ C-10): chạy THẬT ``main() --json`` — không thay hàm nội bộ.
+
+    Sổ kho synthetic chỉ có ở ``TIMCLIP_DATA_DIR`` (D-26: dữ liệu ngoài cây mã) → báo cáo JSON
+    phải nói về kho đó, không ném FileNotFoundError về ``<mã>/data/khos.json`` và không soi sổ kho
+    khác nằm trong cây mã.
+    """
+    ten_kho = "KHO_E9_TONG_HOP"
+    data = tmp_path / "DevState" / "data"
+    kho_dir = tmp_path / "kho_clip"
+    data.mkdir(parents=True)
+    kho_dir.mkdir()
+    (data / "khos.json").write_text(json.dumps(
+        {"dang_dung": ten_kho, "danh_sach": [{"ten": ten_kho, "db": "k.pklz", "thu_muc": str(kho_dir)}]},
+        ensure_ascii=False), encoding="utf-8")
+    monkeypatch.delenv("TIMCLIP_RUNTIME_MODE", raising=False)
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(data))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["kiem_metadata_kho.py", "--json"])
+
+    try:
+        ma_thoat = kiem_metadata_kho.main()
+    except FileNotFoundError as e:
+        raise AssertionError(f"kiem_metadata_kho bỏ qua TIMCLIP_DATA_DIR={str(data)!r}: {e}") from None
+    assert ma_thoat == 0
+    assert ten_kho in capsys.readouterr().out
