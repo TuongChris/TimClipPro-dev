@@ -1405,6 +1405,17 @@ class Engine:
             self.canh_bao_khoi_dong.append(str(e))
             self._so_kho_loi_khi_mo = True
             self._ap_dung_kho("", {"dang_dung": "", "danh_sach": []})
+            return
+        # Sổ đúng lược đồ nhưng «dang_dung» trỏ kho không còn trong danh sách (sửa tay, khôi
+        # phục .bak cũ): ``_ap_dung_kho`` lùi về kho đầu — phải BÁO, không lặng lẽ quét bằng kho
+        # khác (audit C-15). Không tự sửa sổ: Watch dựa vào độ lệch sổ↔Engine để dừng (TCP-08).
+        yeu_cau = d.get("dang_dung", "")
+        if yeu_cau and yeu_cau != self.kho_dang_dung:
+            dang_mo = (f"đang mở kho «{self.kho_dang_dung}»" if self.kho_dang_dung
+                       else "chưa có kho nào để mở")
+            self.canh_bao_khoi_dong.append(
+                f"Sổ đăng ký kho (khos.json) chọn kho «{yeu_cau}» nhưng kho này không còn trong "
+                f"danh sách — tool {dang_mo}. Hãy chọn lại kho ở thanh bên trước khi quét.")
 
     def _ap_dung_kho(self, ten: str, d: Optional[dict] = None) -> None:
         d = d or self._doc_khos()

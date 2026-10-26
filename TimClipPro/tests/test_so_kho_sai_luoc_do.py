@@ -113,3 +113,49 @@ def test_so_sai_luoc_do_chan_quet_va_khong_bi_ghi_de(tmp_path, monkeypatch, ten_
     with pytest.raises(LoiDuLieu):
         eng.add_kho("Kho mới")
     assert (data_dir / "khos.json").read_bytes() == truoc
+
+
+def test_dang_dung_tro_kho_khong_con_trong_so_thi_canh_bao_khoi_dong(tmp_path, monkeypatch):
+    """Audit C-15: sổ ĐÚNG lược đồ nhưng lệch nội dung — sửa tay xoá bớt một kho mà quên sửa
+    «dang_dung». Engine vẫn lùi về kho đầu danh sách (giao diện còn chọn lại được), nhưng phải
+    để lại cảnh báo khởi động nêu cả kho trong sổ lẫn kho thật đang mở — trước đây im lặng,
+    ``cli.py youtube/file`` quét bằng kho khác mà không ai biết. Sổ KHÔNG được tự sửa: Watch
+    dựa vào chính độ lệch sổ↔Engine để từ chối quét nhầm kho (TCP-08)."""
+    from engine import Engine
+
+    data_dir, out_dir = _moi_truong(tmp_path, monkeypatch)
+    _ghi_so(data_dir, {
+        "dang_dung": "DaXoa",
+        "danh_sach": [
+            {"ten": "A", "thu_muc": "", "db": "kho_a.pklz", "id": "a" * 32},
+            {"ten": "B", "thu_muc": "", "db": "kho_b.pklz", "id": "b" * 32},
+        ],
+    })
+    truoc = (data_dir / "khos.json").read_bytes()
+
+    eng = Engine(root=str(tmp_path), data_dir=str(data_dir), out_dir=str(out_dir))
+
+    assert eng.kho_dang_dung == "A"
+    assert any("DaXoa" in c and "«A»" in c for c in eng.canh_bao_khoi_dong), (
+        "sổ chọn kho «DaXoa» (không còn trong danh sách) mà Engine lặng lẽ dùng «A»: "
+        f"{eng.canh_bao_khoi_dong!r}")
+    assert (data_dir / "khos.json").read_bytes() == truoc
+
+
+def test_so_nhat_quan_khong_co_canh_bao_kho(tmp_path, monkeypatch):
+    """Đối chứng C-15: «dang_dung» trỏ đúng một kho trong sổ → không cảnh báo nào về kho."""
+    from engine import Engine
+
+    data_dir, out_dir = _moi_truong(tmp_path, monkeypatch)
+    _ghi_so(data_dir, {
+        "dang_dung": "B",
+        "danh_sach": [
+            {"ten": "A", "thu_muc": "", "db": "kho_a.pklz", "id": "a" * 32},
+            {"ten": "B", "thu_muc": "", "db": "kho_b.pklz", "id": "b" * 32},
+        ],
+    })
+
+    eng = Engine(root=str(tmp_path), data_dir=str(data_dir), out_dir=str(out_dir))
+
+    assert eng.kho_dang_dung == "B"
+    assert not any("khos.json" in c for c in eng.canh_bao_khoi_dong), eng.canh_bao_khoi_dong
