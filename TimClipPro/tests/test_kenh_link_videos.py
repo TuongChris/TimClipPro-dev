@@ -28,3 +28,21 @@ def test_link_kenh_duoc_tro_toi_tab_videos(monkeypatch, vao, ra):
     monkeypatch.setattr(yt_dlp, "YoutubeDL", ydl)
     assert [v.id for v in ChannelSync.list_channel(vao)] == ["vid00000001"]
     assert ydl.goi[0][1] == ra
+
+
+@pytest.mark.parametrize("vao,ra", [
+    # Audit D-19: link đã chỉ rõ TAB của kênh giữ nguyên — trước đây thành `…/shorts/videos`,
+    # `…/streams/videos` (đường dẫn không tồn tại, yt-dlp gửi nguyên văn lên YouTube).
+    ("https://www.youtube.com/@kenh/shorts", "https://www.youtube.com/@kenh/shorts"),
+    ("https://www.youtube.com/@kenh/streams", "https://www.youtube.com/@kenh/streams"),
+    (KENH + "/shorts", KENH + "/shorts"),
+    (KENH + "/streams/", KENH + "/streams/"),
+    # Link chia sẻ có tham số: `/videos` vào ĐƯỜNG DẪN, không dính sau `?si=…`.
+    ("https://www.youtube.com/@kenh?si=abc", "https://www.youtube.com/@kenh/videos?si=abc"),
+    (KENH + "/?si=abc", KENH + "/videos?si=abc"),
+])
+def test_link_tab_cu_the_khong_bi_gan_them_videos(monkeypatch, vao, ra):
+    ydl = YdlKichBan(liet_ke=lambda _p, _u: _DS)
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", ydl)
+    assert [v.id for v in ChannelSync.list_channel(vao)] == ["vid00000001"]
+    assert ydl.goi[0][1] == ra

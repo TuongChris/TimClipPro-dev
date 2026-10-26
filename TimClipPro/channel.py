@@ -23,6 +23,7 @@ import os
 import re
 import shutil
 import time
+import urllib.parse
 import uuid
 from datetime import datetime
 from dataclasses import dataclass, replace
@@ -293,6 +294,24 @@ def lam_sach_ten(s: str, max_len: int = 80) -> str:
     s = RE_XAU.sub("_", s or "").strip().rstrip(". ")
     s = re.sub(r"\s+", " ", s)
     return s[:max_len].rstrip(". ") or "khong_ten"
+
+
+# Gốc kênh CHƯA chỉ tab: đường dẫn kết thúc ở `@tên` hoặc `channel/UC…` (cho phép `/` cuối).
+_RE_GOC_KENH = re.compile(r"/(?:@[^/]+|channel/[^/]+)/?$")
+
+
+def _tro_toi_tab_videos(url: str) -> str:
+    """Link gốc kênh → tab Videos; link đã chỉ tab (`/shorts`, `/streams`…) hay playlist giữ nguyên.
+
+    `/channel/UC…` thiếu `/videos` làm yt-dlp trả các TAB (Videos/Shorts/Live) mang id KÊNH thay vì
+    danh sách video (Tier 2) — cùng luật cho link `@tên`. Chỉ xét ĐƯỜNG DẪN: trước đây gắn `/videos`
+    vào cuối cả chuỗi nên `…/shorts` thành `…/shorts/videos` (không tồn tại) và link chia sẻ
+    `@tên?si=…` thành `@tên?si=…/videos` (audit D-19).
+    """
+    phan = urllib.parse.urlsplit(url)
+    if not _RE_GOC_KENH.search(phan.path):
+        return url
+    return urllib.parse.urlunsplit(phan._replace(path=phan.path.rstrip("/") + "/videos"))
 
 
 def ngay_dang_tu_info(info: Mapping | None) -> str:
@@ -761,11 +780,7 @@ class ChannelSync:
         """
         import yt_dlp
 
-        # `/channel/UC…` thiếu `/videos` làm yt-dlp trả các TAB (Videos/Shorts/Live) mang id KÊNH
-        # thay vì danh sách video (Tier 2) — cùng luật đã áp cho link `@tên`.
-        if (("/@" in url or "/channel/" in url) and "/videos" not in url
-                and "/playlist" not in url):
-            url = url.rstrip("/") + "/videos"
+        url = _tro_toi_tab_videos(url)
 
         goc = cau_hinh_mang or CauHinhMang()
         phien = phien_youtube or PhienYouTube()
