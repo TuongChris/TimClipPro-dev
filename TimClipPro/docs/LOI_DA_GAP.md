@@ -564,3 +564,15 @@ audfprint bỏ ngẫu nhiên phần tràn); nhóm toàn bóng ≥ 1.000 hash th�
 → **Dữ liệu test cho matcher phải có âm thanh lặp** (`tests/am_thanh_lap.py`), không chỉ giai điệu ngẫu nhiên.
 → **Đổi gộp/chấp nhận thì hỏi: có sinh dương tính MỚI không?** Có = đổi chính sách nhận diện (chữ ký chính sách, Watch
   quét lại âm tính). Bản sửa P0 cố ý không sinh (C' chỉ gộp khi một phần đã đạt chuẩn) nên chữ ký giữ nguyên.
+
+**19. Gom theo đường dẫn, tra theo tên: hai bản ghi kho cùng tên lẫn số của nhau (26/10/2026, PC2, audit A-1).**
+Kho dựng ĐỆ QUY và chỉ khử trùng theo đường dẫn đầy đủ nên «Season 1/x.opus» và «Season 2/x.opus» (hay một thư mục
+`backup/` chép vào kho) là hai bản ghi vân tay. `_merge` gom mảnh theo đường dẫn, nhưng tổng hash (cận trên) và mẫu số
+`ty_le` ở `_gan_chi_so` lại tra bằng dict theo basename — bản ghi đứng sau đè bản trước: khớp 4,5% bản lớn thành 90%,
+bậc phủ cao nhận NHẦM; khớp hợp lệ bị kẹp và báo «đếm trùng» oan; hai bản sao giống hệt thành hai dòng báo cáo giống
+nhau và `so_dat_nguong` đếm đôi.
+→ **Số của một kết quả lấy từ ĐÚNG bản ghi đã khớp** (`Match.duong_dan_kho`, chỉ trong bộ nhớ); tên chỉ là đường lùi
+  và khi tên trùng thì chọn phía an toàn (tổng lớn nhất). Bản sao cùng tên khớp cùng vị trí đặt = MỘT lần dùng (giữ
+  bản mạnh nhất, không cộng bằng chứng hai bản ghi), có cảnh báo cho người dùng.
+→ **Đổi định danh ở một bước thì rà mọi bảng tra dùng chung định danh đó** (dict comprehension theo tên im lặng nuốt
+  bản trùng). Test: `tests/test_ban_ghi_kho_cung_ten.py`.

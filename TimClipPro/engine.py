@@ -380,6 +380,9 @@ class Match:
     moc_mo_ho: bool = field(default=False, compare=False)
     moc_thay_the: tuple = field(default=(), compare=False)   # các mốc đầu clip khả dĩ khác (giây, 0,1 s)
     ty_so_doi_thu: float = field(default=0.0, compare=False)  # căn chỉnh cạnh tranh mạnh nhất / căn chỉnh làm mốc
+    # Đường dẫn bản ghi vân tay ĐÃ khớp (chuỗi audfprint lưu lúc tạo kho), chỉ trong bộ nhớ: kho dựng đệ quy nên
+    # hai thư mục có thể cùng tên file, mà `clip` chỉ giữ basename (audit A-1). Rỗng = kết quả dựng kiểu cũ.
+    duong_dan_kho: str = field(default="", compare=False)
 
     @property
     def start_hhmmss(self) -> str:
@@ -4088,16 +4091,16 @@ class Engine:
         loc.sort(key=lambda x: (x["clip"], x["align"], -x["hash"]))
 
         try:
-            tong_hash = {
-                os.path.basename(c["ten"]): int(c["so_hash"])
-                for c in self.db_clips()
-                if c.get("ten") and int(c.get("so_hash") or 0) > 0
-            }
+            bang_hash = self._bang_tong_hash()
         except Exception as e:  # kho lỗi vẫn phải trả được kết quả chưa kẹp
-            tong_hash = {}
+            bang_hash = ({}, {}, {})
             self.canh_bao_gop.append(
                 f"Không đọc được tổng hash trong kho để áp cận trên: {e}"
             )
+
+        def gioi_han_cua(duong_dan: str):
+            """Cận trên hash của ĐÚNG bản ghi đã khớp — không theo bản cùng tên ở thư mục khác."""
+            return self._tra_tong_hash(bang_hash, duong_dan, os.path.basename(duong_dan))
 
         def khoang_cach_interval(a: dict, b: dict) -> float:
             a0, a1 = a["bat_dau"], a["bat_dau"] + a["khop"]
@@ -4171,7 +4174,7 @@ class Engine:
         def so_lieu_nhom(cs: list) -> tuple:
             """(hash đã áp cận trên, độ dài khớp) — đúng số vòng dưới báo, không ghi cảnh báo."""
             hash_uoc, do_dai_hop = tinh_hash_va_hop([loc[i] for i in cs])
-            gioi_han = tong_hash.get(os.path.basename(loc[cs[0]]["clip"]))
+            gioi_han = gioi_han_cua(loc[cs[0]]["clip"])
             return (hash_uoc if gioi_han is None else min(hash_uoc, gioi_han)), do_dai_hop
 
         # Nhóm không có mảnh chính nào (toàn bóng) không là ứng viên riêng: vùng video của nó đã
@@ -4184,6 +4187,11 @@ class Engine:
         # đổi kết luận chấp nhận (chong_bong_lap.gop_cung_vi_tri).
         gop, _ = chong_bong_lap.gop_cung_vi_tri(gop, loc, nhan, cfg, so_lieu_nhom)
 
+        # Bản sao cùng tên ở thư mục khác của kho (vd. «backup/x.opus», audit A-1) khớp CÙNG vị trí đặt là
+        # cùng một bằng chứng hai lần: báo cáo chỉ ghi tên file nên thành hai dòng giống hệt và `so_dat_nguong`
+        # đếm đôi. Giữ bản mạnh nhất, bỏ bản còn lại (không cộng bằng chứng hai bản ghi với nhau).
+        gop = self._bo_ban_sao_cung_ten(gop, loc, nhan, so_lieu_nhom, bang_hash[2])
+
         ket_qua = []
         for g in gop:
             manh = g["manh"]
@@ -4195,7 +4203,7 @@ class Engine:
             end_s = max(x["bat_dau"] + x["khop"] for x in manh)
             hash_uoc, do_dai_hop = tinh_hash_va_hop(manh)
             ten_clip = os.path.basename(g["clip"])
-            gioi_han = tong_hash.get(ten_clip)
+            gioi_han = gioi_han_cua(g["clip"])
             if gioi_han is None:
                 self.canh_bao_gop.append(
                     f"Không tra được tổng hash của clip «{ten_clip}»; "
@@ -4233,17 +4241,92 @@ class Engine:
                 moc_mo_ho=moc_mo_ho,
                 moc_thay_the=moc_thay_the,
                 ty_so_doi_thu=ty_so_doi_thu,
+                duong_dan_kho=g["clip"],
             ))
         return sorted(ket_qua, key=lambda m: m.start_s)
+
+    def _bo_ban_sao_cung_ten(self, gop: list, loc: list, nhan: list, so_lieu_nhom, dem_ten: dict) -> list:
+        """Bỏ nhóm của bản ghi CÙNG TÊN (khác đường dẫn) khớp cùng vị trí đặt với một nhóm mạnh hơn.
+
+        Chỉ đụng tới tên có > 1 bản ghi trong kho; kho tên duy nhất (thường gặp) đi qua nguyên vẹn. Hai
+        nhóm của CÙNG một bản ghi vẫn để `gop_cung_vi_tri` quyết như cũ. Mạnh = hash (đã kẹp theo đúng
+        bản ghi), rồi độ dài khớp, rồi thứ tự cũ (tất định).
+        """
+        ten_trung = {os.path.basename(g["clip"]) for g in gop
+                     if dem_ten.get(os.path.basename(g["clip"]), 0) > 1}
+        if not ten_trung:
+            return gop
+        troi = self.config.toc_do_lech_toi_thieu
+
+        def chinh(g: dict) -> list:
+            return [loc[i] for i in g["cs"] if nhan[i].loai == chong_bong_lap.CHINH]
+
+        ung_vien = [(thu_tu, g) for thu_tu, g in enumerate(gop)
+                    if os.path.basename(g["clip"]) in ten_trung]
+        so_lieu = {thu_tu: so_lieu_nhom(g["cs"]) for thu_tu, g in ung_vien}
+        giu: list = []
+        bo: set = set()
+        bo_ten: set = set()
+        for thu_tu, g in sorted(ung_vien, key=lambda t: (-so_lieu[t[0]][0], -so_lieu[t[0]][1], t[0])):
+            ten = os.path.basename(g["clip"])
+            if any(os.path.basename(h["clip"]) == ten and h["clip"] != g["clip"]
+                   and h["he_so"] == g["he_so"]
+                   and any(chong_bong_lap.cung_vi_tri(a, b, troi) for a in chinh(h) for b in chinh(g))
+                   for h in giu):
+                bo.add(thu_tu)
+                bo_ten.add(ten)
+                continue
+            giu.append(g)
+        for ten in sorted(bo_ten):
+            self.canh_bao_gop.append(
+                f"Kho vân tay có {dem_ten[ten]} bản ghi cùng tên «{ten}» ở các thư mục khác nhau khớp "
+                "cùng một chỗ (bản sao?): chỉ tính một lần — nên đặt tên file khác nhau."
+            )
+        return [g for thu_tu, g in enumerate(gop) if thu_tu not in bo]
 
     def _chon_loc_dai_dien(self, *args, **kwargs):
         """Giữ chỗ cho khả năng ghi đè trong test; mặc định dùng hàm thuần."""
         return chon_dai_dien(*args, **kwargs)
 
+    @staticmethod
+    def _khoa_ban_ghi(duong_dan: str) -> str:
+        """Khoá so đường dẫn bản ghi vân tay: audfprint báo nguyên chuỗi đã lưu lúc tạo kho."""
+        return os.path.normcase(os.path.normpath(duong_dan))
+
+    def _bang_tong_hash(self) -> tuple:
+        """``(theo đường dẫn bản ghi, theo tên clip, số bản ghi theo tên)``; kho lỗi thì ném lỗi.
+
+        Kho dựng ĐỆ QUY nên hai thư mục có thể cùng một tên file (audit A-1): mẫu số tỷ lệ phủ và
+        cận trên hash phải lấy từ ĐÚNG bản ghi đã khớp (đường dẫn đầy đủ). Bảng theo tên chỉ là
+        đường lùi khi không tra được đường dẫn; tên trùng thì lấy tổng LỚN NHẤT — tỷ lệ thấp hơn
+        (không nhận nhầm qua bậc phủ cao) và cận trên rộng hơn (không kẹp oan).
+        """
+        theo_dd: dict = {}
+        theo_ten: dict = {}
+        dem_ten: dict = {}
+        for c in self.db_clips():
+            so = int(c.get("so_hash") or 0)
+            if not c.get("ten") or so <= 0:
+                continue
+            ten = os.path.basename(c["ten"])
+            theo_dd[self._khoa_ban_ghi(c.get("duong_dan") or c["ten"])] = so
+            theo_ten[ten] = max(so, theo_ten.get(ten, 0))
+            dem_ten[ten] = dem_ten.get(ten, 0) + 1
+        return theo_dd, theo_ten, dem_ten
+
+    def _tra_tong_hash(self, bang: tuple, duong_dan: str, ten: str):
+        """Tổng hash của bản ghi ``duong_dan``; không tra được thì theo ``ten``; không có thì ``None``."""
+        theo_dd, theo_ten = bang[0], bang[1]
+        if duong_dan:
+            so = theo_dd.get(self._khoa_ban_ghi(duong_dan))
+            if so is not None:
+                return so
+        return theo_ten.get(ten)
+
     def _tong_hash_kho(self) -> dict:
-        """Bản đồ tên clip -> tổng số hash trong kho. Kho lỗi thì trả về rỗng."""
+        """Bản đồ tên clip -> tổng số hash trong kho (tên trùng: lớn nhất). Kho lỗi thì trả về rỗng."""
         try:
-            return {c["ten"]: c["so_hash"] for c in self.db_clips() if c["so_hash"]}
+            return self._bang_tong_hash()[1]
         except Exception:  # noqa: BLE001 — chẩn đoán không được phép làm hỏng lượt quét
             return {}
 
@@ -4261,9 +4344,13 @@ class Engine:
 
     def _gan_chi_so(self, ds: list, duration: float) -> None:
         """Tính tỷ lệ vân tay khớp (%) và vùng vị trí cho từng kết quả."""
-        tong_hash = self._tong_hash_kho()
+        try:
+            bang = self._bang_tong_hash()
+        except Exception:  # noqa: BLE001 — kho lỗi: ty_le = 0 như cũ, không làm hỏng lượt quét
+            bang = ({}, {}, {})
         for m in ds:
-            goc = tong_hash.get(m.clip, 0)
+            # Mẫu số theo ĐÚNG bản ghi đã khớp, không theo bản cùng tên ở thư mục khác (audit A-1).
+            goc = self._tra_tong_hash(bang, getattr(m, "duong_dan_kho", ""), m.clip) or 0
             m.ty_le = min(100.0, round(100.0 * m.hashes / goc, 1)) if goc else 0.0
             if duration:
                 m.vung = self._nhan_vung(m.start_s, duration)
