@@ -335,17 +335,18 @@ def _la_loi_bao_cao(kq: Any) -> bool:
     return bao_cao_v2.la_loi_bao_cao(getattr(kq, "bao_cao", None))
 
 
-def _lister_theo_cau_hinh(engine: Any) -> Callable:
+def _lister_theo_cau_hinh(engine: Any, phien: Optional[PhienYouTube] = None) -> Callable:
     """`(url, limit) -> list[VideoInfo]` mang theo cookie và nhịp tải của engine.
 
     Giữ đúng chữ ký hai đối số mà `mo_rong_watchlist` mong đợi để test vẫn thay được
-    bằng bản giả.
+    bằng bản giả. ``phien``: phiên của lượt Watch — request liệt kê và cảnh báo cookie bị từ
+    chối ghi vào CHÍNH phiên đó (``bao_cao.youtube``), không vào một phiên bỏ đi (audit D-20).
     """
     lay_cau_hinh = getattr(engine, "cau_hinh_mang", None)
     cau_hinh = lay_cau_hinh() if callable(lay_cau_hinh) else None
 
     def lister(url: str, limit: Optional[int] = None) -> list:
-        return ChannelSync.list_channel(url, limit, cau_hinh_mang=cau_hinh)
+        return ChannelSync.list_channel(url, limit, cau_hinh_mang=cau_hinh, phien_youtube=phien)
 
     return lister
 
@@ -371,14 +372,15 @@ def chay_giam_sat(
     # Vòng giám sát chạy lặp lại theo lịch nên là nơi tích luỹ nguy cơ bị YouTube coi
     # là bot cao nhất. `mo_rong_watchlist` mặc định dùng `ChannelSync.list_channel`
     # trần, tức mất cookie và mất nhịp người dùng đã đặt; dựng sẵn lister mang cấu
-    # hình của engine ngay tại đây — chỗ gần nhất còn nhìn thấy `engine`.
-    if lister is None:
-        lister = _lister_theo_cau_hinh(engine)
+    # hình của engine ngay tại đây — chỗ gần nhất còn nhìn thấy `engine` — gắn vào phiên của
+    # lượt nên dựng sau khi mở phiên.
     try:
         with maintenance_gate.vao_cong_cua(engine, "lượt giám sát"), KhoaTienTrinh(
             os.path.join(engine.data_dir, "tool.lock"),
             "giám sát",
         ), _mo_phien(engine) as phien:
+            if lister is None:
+                lister = _lister_theo_cau_hinh(engine, phien)
             return _chay_giam_sat_da_khoa(
                 engine,
                 wl,

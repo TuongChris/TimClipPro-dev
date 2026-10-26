@@ -318,6 +318,25 @@ def test_watch_liet_ke_kenh_bi_429_thi_khong_hoi_kenh_khac(tmp_path, monkeypatch
     assert bc.chan_youtube and bc.quet_moi == 0
 
 
+def test_watch_liet_ke_kenh_ghi_vao_phien_cua_luot(tmp_path, monkeypatch):
+    """Audit D-20: lister mặc định của Watch từng dựng phiên YouTube BỎ ĐI cho mỗi lần liệt kê —
+    request liệt kê và cảnh báo «cookies are no longer valid» mất khỏi ``bao_cao.youtube``. Lượt
+    Watch thường không có video mới, nên lượt liệt kê là bằng chứng DUY NHẤT của lượt."""
+    def liet_ke(p, url):
+        p.opts["logger"].warning(
+            "[youtube] The provided YouTube account cookies are no longer valid. "
+            "They have likely been rotated in the browser as a security measure.")
+        return {"_type": "playlist", "id": "UCkenh", "entries": []}
+
+    ydl = YdlKichBan(liet_ke=liet_ke)
+    e = _eng(tmp_path, monkeypatch, ydl)
+    wl = WatchList(muc=[MucTheoDoi("kenh", "https://www.youtube.com/@kenh")], kho="A")
+    bc = chay_giam_sat(e, wl)
+    assert ydl.dem("liet_ke") == 1 and bc.quet_moi == 0
+    assert bc.youtube["listing_requests"] == 1, "request liệt kê không vào phiên của lượt Watch"
+    assert bc.youtube["cookie_rejected"] is True, "cookie bị từ chối lúc liệt kê mất khỏi báo cáo"
+
+
 # =====================================================================
 #  Lô «một video gốc chung»
 # =====================================================================
