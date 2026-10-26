@@ -1344,6 +1344,18 @@ def _la_loi_truy_cap(e: BaseException) -> bool:
     return isinstance(e, gspread.exceptions.APIError) and _ma_http(e) in (401, 403, 404)
 
 
+_MO_NGU_CANH = " [khoá «"
+
+
+def tach_ngu_canh(ly_do: str) -> tuple:
+    """``(câu, ngữ_cảnh)`` — tách phần ``_kem_ngu_canh`` gắn ở CUỐI (`` [khoá «…» → …; bảng xxxxxx…]``) để giao
+    diện rút gọn câu mà không cắt mất ngữ cảnh. Không có ngữ cảnh → ``(ly_do, "")``."""
+    i = ly_do.rfind(_MO_NGU_CANH)
+    if i < 0 or not ly_do.endswith("…]"):
+        return ly_do, ""
+    return ly_do[:i], ly_do[i:]
+
+
 def _kem_ngu_canh(loi: Exception, e: BaseException, chot: sd.DichGuiChot) -> Exception:
     """Lỗi TRUY CẬP vĩnh viễn: kèm binding + tài khoản dịch vụ + mã bảng RÚT GỌN của CHÍNH việc — thấy ngay việc
     đang dùng khoá của tài khoản nào, mở bảng nào (khoá nhầm tài khoản, dán nhầm bảng). Email tài khoản dịch vụ là
@@ -1351,7 +1363,7 @@ def _kem_ngu_canh(loi: Exception, e: BaseException, chot: sd.DichGuiChot) -> Exc
     (``tam_thoi``) và phạm vi chặn (``chi_revision``, audit B-3) — chỉ đổi CÂU."""
     if not isinstance(loi, ChuaGui) or loi.tam_thoi or not _la_loi_truy_cap(e):
         return loi
-    return ChuaGui(f"{loi.ly_do} [khoá «{chot.xac_thuc_ref}» → {chot.principal}; bảng "
+    return ChuaGui(f"{loi.ly_do}{_MO_NGU_CANH}{chot.xac_thuc_ref}» → {chot.principal}; bảng "
                    f"{chot.spreadsheet_id[:6]}…]", tam_thoi=False, chi_revision=loi.chi_revision)
 
 

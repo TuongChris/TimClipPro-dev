@@ -411,3 +411,22 @@ def test_nguong_giu_lau_khong_thap_hon_tong_timeout_truoc_sending():
     """Trước SENDING có tới ~5 request (token, metadata, tìm tab, 1–2 lần đọc tiêu đề), mỗi cái tối đa kết nối +
     đọc của transport: ngưỡng cảnh báo không được thấp hơn tổng đó (dương tính giả khi mạng nghẽn)."""
     assert ob.HAN_GIU_VIEC_LAU_S >= 5 * sum(ob.CongGspread.THOI_GIAN_CHO)
+
+
+SA_DAI = "timclip-van-phong-02@du-an-gia-123456.iam.gserviceaccount.com"   # dạng thật, ~60 ký tự — gia-khong-bi-mat
+
+
+@pytest.mark.parametrize("goc", [PermissionError(), gspread.exceptions.SpreadsheetNotFound()])
+def test_o_ly_do_giao_dien_giu_ngu_canh_khi_tai_khoan_dich_vu_dai(goc):
+    """Cột «Lý do / ghi chú» bị cắt độ dài: câu + ngữ cảnh với địa chỉ tài khoản dịch vụ thật (~60 ký tự) vượt mức
+    cắt — phần «bảng xxxxxx…» (thấy ngay dán nhầm bảng) KHÔNG được mất; chỉ rút phần câu."""
+    import ui_gui_sheets as ui
+
+    loi = ob._kem_ngu_canh(ob.phan_loai_loi(goc, da_phat=False), goc, _chot(ref="mac_dinh", principal=SA_DAI))
+    o = ui.o_ly_do(SimpleNamespace(loi=loi.ly_do, da_xoa_job=False))
+    assert len(o) <= ui.DO_DAI_O_LY_DO and ID_NGAN in o and SA_DAI in o and "mac_dinh" in o
+    ngan = "Lỗi ngắn [khoá «x» → y; bảng abcdef…]"
+    assert ui.o_ly_do(SimpleNamespace(loi=ngan, da_xoa_job=False)) == ngan             # đủ chỗ: nguyên văn
+    dai = "x" * 500                                                                     # không có ngữ cảnh: cắt như cũ
+    assert ui.o_ly_do(SimpleNamespace(loi=dai, da_xoa_job=False)) == dai[:ui.DO_DAI_O_LY_DO]
+    assert "chỉ giữ biên nhận" in ui.o_ly_do(SimpleNamespace(loi="", da_xoa_job=True))

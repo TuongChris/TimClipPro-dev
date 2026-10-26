@@ -267,8 +267,7 @@ def _ve_hang_doi(eng) -> None:
         "Nguồn": "tự động" if v.nguon == outbox.NGUON_AUTO else "thủ công",
         "Đích (đã ghim)": nhan_dich(v), "Trạng thái": outbox.NHAN_TRANG_THAI.get(v.trang_thai),
         "Lần thử": v.so_lan_thu, "Dòng": v.so_dong,
-        "Lý do / ghi chú": (v.loi or ("đã xoá lần quét — chỉ giữ biên nhận" if v.da_xoa_job
-                                      else ""))[:220],
+        "Lý do / ghi chú": o_ly_do(v),
         "Vì sao chưa gửi": outbox.ly_do_chua_gui(db, v, nen=nen, gio=gio, anh=anh),
         "Cập nhật": datetime.fromtimestamp(v.sua_luc).strftime("%d/%m %H:%M:%S"),
     } for v in ds]), width="stretch", hide_index=True)
@@ -321,6 +320,22 @@ def _dich_doc_duoc(v) -> bool:
         return True
     except sd.LoiDichGui:
         return False
+
+
+DO_DAI_O_LY_DO = 220
+
+
+def o_ly_do(v, toi_da: int = DO_DAI_O_LY_DO) -> str:
+    """Ô «Lý do / ghi chú» (giới hạn độ dài). Lỗi truy cập mang ngữ cảnh ở CUỐI (khoá → tài khoản dịch vụ; bảng
+    rút gọn): địa chỉ tài khoản dịch vụ thật ~60 ký tự làm câu vượt mức cắt — chỉ rút phần câu, GIỮ NGUYÊN ngữ
+    cảnh (phần «bảng xxxxxx…» là dấu hiệu duy nhất của dán nhầm bảng). Giá trị lưu trong DB không đổi."""
+    s = v.loi or ("đã xoá lần quét — chỉ giữ biên nhận" if v.da_xoa_job else "")
+    if len(s) <= toi_da:
+        return s
+    cau, ngu_canh = outbox.tach_ngu_canh(s)
+    if not ngu_canh or len(ngu_canh) >= toi_da:
+        return s[:toi_da]
+    return cau[:toi_da - len(ngu_canh) - 1] + "…" + ngu_canh
 
 
 def dong_ho_so(d, xt_theo_ref: dict) -> dict:
