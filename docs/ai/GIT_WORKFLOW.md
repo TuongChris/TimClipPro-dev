@@ -58,8 +58,8 @@ Quy trình phát hành: `TimClipPro/docs/PHAT_HANH_HAI_MAY.md`. Khoá ký mỗi 
 
 ## Quét trước MỖI lần đẩy (cả hai máy — repo công khai)
 Hai lớp, cả hai bắt buộc (audit E-4). Quét TỪNG commit sắp đẩy — bí mật thêm rồi xoá ở commit sau vẫn bị đẩy.
-1. Tự động — hook `pre-push` (mục dưới) CHẶN khi một dòng THÊM trong commit chưa có trên remote mang mẫu chắc chắn: khoá
-   PEM / khoá JSON, metadata service account (type = service_account, private_key_id, email `*.iam.gserviceaccount.com`),
+1. Tự động — hook `pre-push` (mục dưới) CHẶN khi một dòng THÊM hoặc một dòng THÔNG ĐIỆP (WR-8) của commit chưa có trên
+   remote mang mẫu chắc chắn: khoá PEM / khoá JSON, metadata service account (type = service_account, private_key_id, email `*.iam.gserviceaccount.com`),
    client secret / refresh token, khoá API / token Google, GitHub, link hoặc ID bảng tính 44 ký tự TRẦN, `installation_id`
    gán UUID, tiêu đề / dòng cookie Netscape (mọi tên cookie); hoặc file tên khoá / cookie / `installation.json` /
    `secrets/` (như `.gitignore` gốc). Hook chỉ in commit + file + loại, KHÔNG in nội dung. Mẫu GIẢ có chủ đích (test):

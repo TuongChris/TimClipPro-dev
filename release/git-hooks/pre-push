@@ -5,9 +5,9 @@
 # fast-forward tới ĐÚNG đầu một nhánh việc đã có trên remote (đã đẩy để mở PR).
 # Chặn: mọi tag (tag stable-* chỉ do «gh release create» tạo khi người dùng duyệt phát hành), xoá ref, force-push,
 # nhánh ngoài quy ước, tạo mới integration/current.
-# Nội dung (audit E-4 — repo CÔNG KHAI): mọi dòng THÊM trong các commit sắp đẩy (chưa có trên remote) được quét mẫu
-# bí mật chắc chắn (khoá PEM/JSON, metadata service account, token, link/ID bảng tính, định danh cài đặt, dòng cookie
-# Netscape) và tên file nhạy cảm (như .gitignore gốc). Mẫu GIẢ có chủ đích trong test: ghi «gia-khong-bi-mat» trên CÙNG
+# Nội dung (audit E-4 — repo CÔNG KHAI): mọi dòng THÊM và mọi dòng thông điệp (WR-8) của các commit sắp đẩy (chưa có
+# trên remote) được quét mẫu bí mật chắc chắn (khoá PEM/JSON, metadata service account, token, link/ID bảng tính,
+# định danh cài đặt, dòng cookie Netscape) và tên file nhạy cảm (như .gitignore gốc). Mẫu GIẢ có chủ đích trong test: ghi «gia-khong-bi-mat» trên CÙNG
 # dòng. Hook chỉ in commit + file + loại, KHÔNG in nội dung dòng. Lệnh quét tay của GIT_WORKFLOW.md vẫn bắt buộc.
 # Commit chưa đẩy đã mang mẫu GIẢ mà thiếu dấu (vd. tạo trước bản hook này): NGƯỜI DÙNG xem danh sách, duyệt, rồi đẩy
 # MỘT lần với TIMCLIP_MAU_GIA_DA_DUYET="<SHA đủ 40 ký tự> ..." — chỉ bỏ qua đúng các commit đó (vẫn in ra stderr);
@@ -17,7 +17,9 @@ z=0000000000000000000000000000000000000000
 
 # In «<commit> <file>: <loại>» cho mỗi chỗ nhạy cảm trong các commit từ $2 chưa có trên remote $1 (rỗng = sạch).
 quet_noi_dung() {
-  git -c core.quotePath=false log -p --text --no-color --no-ext-diff --format='commit %H' "$2" --not \
+  # Thông điệp commit (WR-8 — cũng lên repo công khai) in sau «commit <SHA>», mỗi dòng thụt 1 khoảng trắng (%w(0,1,1):
+  # không ngắt dòng) nên không dòng nào của nó giống «commit <SHA>», «+++ » hay «+» của diff.
+  git -c core.quotePath=false log -p --text --no-color --no-ext-diff --format='commit %H%n%w(0,1,1)%B' "$2" --not \
       --remotes="$1" -- </dev/null | awk -v duyet=" ${TIMCLIP_MAU_GIA_DA_DUYET:-} " '
     function bao(loai,   k) {
       k = c SUBSEP f SUBSEP loai
@@ -30,8 +32,30 @@ quet_noi_dung() {
       n++
       if (n <= 30) print "  " c " " f ": " loai
     }
+    # Quét MỘT dòng nội dung (đã bỏ ký tự đầu: «+» của diff, « » thụt của thông điệp commit).
+    function kiem(dong,   d) {
+      if (index(dong, "gia-khong-bi-mat")) return
+      d = tolower(dong)
+      if (d ~ /-----begin [a-z0-9 ]*private key-----/ || d ~ /"private_key"[ \t]*:/) bao("khoá riêng")
+      if (d ~ /"type"[ \t]*:[ \t]*"service_account"/ || d ~ /"private_key_id"[ \t]*:/ ||
+          d ~ /[a-z0-9._-]+@[a-z0-9-]+\.iam\.gserviceaccount\.com/) bao("metadata service account")
+      if (d ~ /"(client_secret|refresh_token)"[ \t]*:/) bao("client secret / refresh token")
+      if (d ~ /aiza[0-9a-z_-]{35}/ || d ~ /ya29\.[0-9a-z_-]{20,}/ || d ~ /gh[pousr]_[0-9a-z]{36}/ ||
+          d ~ /github_pat_[0-9a-z_]{22,}/) bao("khoá API / token")
+      # ID trần: biên không phải ký tự base64 («+», «/», «=» dính vào = đoạn giữa chữ ký/khoá base64, WR-1); ID
+      # sau «/» chỉ trong URL bảng (docs.google.com/spreadsheets/d/…, sheets.googleapis.com/v4/spreadsheets/…).
+      if (d ~ /spreadsheets\/(d\/)?[0-9a-z_-]{20,}/ ||
+          d ~ /(^|[^0-9a-z_+\/-])1[0-9a-z_-]{43}([^0-9a-z_+\/=-]|$)/) bao("link / ID bảng tính 44 ký tự")
+      if (d ~ /installation_id["\047]?[ \t]*[:=][ \t]*["\047]?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/)
+        bao("định danh cài đặt (installation_id)")
+      if (d ~ /^#[ \t]*(netscape[ \t]+)?http[ \t]+cookie[ \t]+file/ ||
+          d ~ /^(#httponly_)?[^\t#]+\t(true|false)\t[^\t]*\t(true|false)\t[0-9]+\t[^\t]+\t/) bao("cookie Netscape")
+    }
     BEGIN { gsub(/[ \t,;]+/, " ", duyet); duyet = tolower(duyet) }
-    /^commit [0-9a-f]+$/ { ct = $2; c = $2; next }    # SHA ĐỦ 40 ký tự: dán thẳng vào TIMCLIP_MAU_GIA_DA_DUYET
+    # SHA ĐỦ 40 ký tự: dán thẳng vào TIMCLIP_MAU_GIA_DA_DUYET. Sau nó là thông điệp, tới dòng KHÔNG thụt đầu tiên.
+    /^commit [0-9a-f]+$/ { ct = $2; c = $2; f = "(thông điệp commit)"; tdiep = 1; next }
+    tdiep && /^ / { kiem(substr($0, 2)); next }
+    { tdiep = 0 }
     /^\+\+\+ / {
       f = substr($0, 5); sub(/^"?b\//, "", f); sub(/"$/, "", f)
       if (f == "/dev/null") next
@@ -45,24 +69,7 @@ quet_noi_dung() {
       else if (t ~ /(^|\/)(secrets|credentials)\//) bao("thư mục bí mật")
       next
     }
-    /^\+/ {
-      if (index($0, "gia-khong-bi-mat")) next
-      d = tolower($0)
-      if (d ~ /-----begin [a-z0-9 ]*private key-----/ || d ~ /"private_key"[ \t]*:/) bao("khoá riêng")
-      if (d ~ /"type"[ \t]*:[ \t]*"service_account"/ || d ~ /"private_key_id"[ \t]*:/ ||
-          d ~ /[a-z0-9._-]+@[a-z0-9-]+\.iam\.gserviceaccount\.com/) bao("metadata service account")
-      if (d ~ /"(client_secret|refresh_token)"[ \t]*:/) bao("client secret / refresh token")
-      if (d ~ /aiza[0-9a-z_-]{35}/ || d ~ /ya29\.[0-9a-z_-]{20,}/ || d ~ /gh[pousr]_[0-9a-z]{36}/ ||
-          d ~ /github_pat_[0-9a-z_]{22,}/) bao("khoá API / token")
-      # ID trần: biên không phải ký tự base64 («+», «/», «=» dính vào = đoạn giữa chữ ký/khoá base64, WR-1); ID
-      # sau «/» chỉ trong URL bảng (docs.google.com/spreadsheets/d/…, sheets.googleapis.com/v4/spreadsheets/…).
-      if (d ~ /spreadsheets\/(d\/)?[0-9a-z_-]{20,}/ ||
-          d ~ /(^|[^0-9a-z_+\/-])1[0-9a-z_-]{43}([^0-9a-z_+\/=-]|$)/) bao("link / ID bảng tính 44 ký tự")
-      if (d ~ /installation_id["\047]?[ \t]*[:=][ \t]*["\047]?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/)
-        bao("định danh cài đặt (installation_id)")
-      if (d ~ /^\+#[ \t]*(netscape[ \t]+)?http[ \t]+cookie[ \t]+file/ ||
-          d ~ /^\+(#httponly_)?[^\t#]+\t(true|false)\t[^\t]*\t(true|false)\t[0-9]+\t[^\t]+\t/) bao("cookie Netscape")
-    }
+    /^\+/ { kiem(substr($0, 2)) }
     END { if (n > 30) print "  … và " (n - 30) " chỗ khác" }'
 }
 

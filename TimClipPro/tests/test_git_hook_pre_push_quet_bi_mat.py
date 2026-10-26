@@ -353,3 +353,70 @@ def test_id_bang_44_ky_tu_van_bi_bat_sau_khi_thu_hep_luat(tmp_path, dong):
     """Đối chứng WR-1: thu hẹp luật để bỏ đoạn trong base64 KHÔNG được để lọt ID bảng trần hay trong URL API."""
     out = _quet_cay_lam_viec(tmp_path, [("docs/ghi_chu.md", dong + "\n")])
     assert "docs/ghi_chu.md: link / ID bảng tính 44 ký tự" in out, out
+
+
+# --- Review audit đợt 2 (WR-8): thông điệp commit cũng lên repo CÔNG KHAI — hook phải quét cả nó ---
+# Thông điệp bàn giao dài của dự án hay dán link lỗi / ghi chú: một link bảng thật hay khoá API trong THÂN thông điệp
+# trước đây đi qua hook (chỉ xét dòng «+» của diff). Thông điệp không thu hồi được nếu không viết lại lịch sử.
+
+def _commit_thong_diep(clone, thong_diep, ten="docs/ghi_chu.md"):
+    """Commit vô hại (một dòng ghi chú) với thông điệp nhiều dòng tuỳ ý."""
+    p = os.path.join(clone, *ten.split("/"))
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "a", encoding="utf-8", newline="\n") as f:
+        f.write("ghi chú\n")
+    _git(clone, "add", ten)
+    _git(clone, "commit", "-q", "--cleanup=verbatim", "-m", thong_diep)
+    return _sha(clone)
+
+
+@pytest.mark.parametrize("dong, loai", [
+    (f"Bảng lỗi: https://docs.google.com/spreadsheets/d/{_SHEET_ID}/edit#gid=0", "link / ID bảng tính 44 ký tự"),
+    (f"gspread báo 403 với ID bảng {_SHEET_ID}", "link / ID bảng tính 44 ký tự"),
+    (f"khoá thử = {_KHOA_API}", "khoá API / token"),
+    ("+ email svc-thu@du-an-thu.iam.gserviceaccount.com", "metadata service account"),   # gia-khong-bi-mat
+])
+def test_bi_mat_trong_than_thong_diep_commit_bi_chan(may, dong, loai):
+    _nhanh(may)
+    sha = _commit_thong_diep(may, f"fix(sheets): sửa lỗi 403\n\nNguyên nhân: binding trỏ nhầm.\n{dong}\nTest: xanh.\n")
+    rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
+    assert rc != 0 and f"  {sha} (thông điệp commit): {loai}" in out, out
+    assert _SHEET_ID not in out and _KHOA_API not in out and "svc-thu" not in out          # không in nội dung
+    assert _git(may, "ls-remote", "private", "refs/heads/fix/pc2/thu").stdout.strip() == ""
+
+
+def test_thong_diep_commit_binh_thuong_va_mau_gia_co_dau_qua_hook(may):
+    """Thông điệp kiểu dự án (mô tả luật, SHA, dòng giống diff) không bị chặn nhầm; mẫu GIẢ có dấu thì qua; duyệt SHA
+    (TIMCLIP_MAU_GIA_DA_DUYET) áp cho cả thông điệp."""
+    _nhanh(may)
+    _commit_thong_diep(may, (
+        "fix(hook): luật ID bảng 44 ký tự (audit WR-1)\n\n"
+        "ID đứng sau «/» chỉ trong URL bảng: docs.google.com/spreadsheets/d/… và spreadsheets/(d/)?<id>.\n"
+        "commit 2b1a1c47f313d1ce5d7f48215d6bc4d4549b4d04\n"
+        "+++ b/TimClipPro/google_key.json\n"
+        "diff --git a/x b/x\n"
+        "+ email dạng <tên>@<dự án>.iam.gserviceaccount.com\n"
+        f"mẫu giả {_KHOA_API}  gia-khong-bi-mat\n\n"
+        "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"))
+    assert _day(may, "fix/pc2/thu:fix/pc2/thu")[0] == 0
+    sha = _commit_thong_diep(may, f"thu: mẫu giả không dấu\n\n{_KHOA_API}\n")
+    assert _day(may, "fix/pc2/thu:fix/pc2/thu")[0] != 0
+    rc, out = _day_env(may, "fix/pc2/thu:fix/pc2/thu", TIMCLIP_MAU_GIA_DA_DUYET=sha)
+    assert rc == 0 and "bỏ qua (người dùng duyệt là mẫu GIẢ)" in out, out
+
+
+def test_thong_diep_commit_khong_lam_lech_quet_diff_phia_sau(may):
+    """Dòng trong thông điệp trông như «commit <sha>» / «+++ b/…» không được đổi commit hay file đang quét của diff."""
+    _nhanh(may)
+    _git(may, "switch", "-q", "fix/pc2/thu")
+    p = os.path.join(may, "docs", "x.md")
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "w", encoding="utf-8", newline="\n") as f:
+        f.write(f"khoa = {_KHOA_API}\n")
+    _git(may, "add", "docs/x.md")
+    _git(may, "commit", "-q", "--cleanup=verbatim", "-m",
+         "thu: ghi chú\n\ncommit " + "a" * 40 + "\n+++ b/docs/khac.md\n")
+    sha = _sha(may)
+    rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
+    assert rc != 0 and f"  {sha} docs/x.md: khoá API / token" in out, out
+    assert "a" * 40 not in out and "docs/khac.md" not in out, out
