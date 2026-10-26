@@ -686,9 +686,14 @@ def tru_khoang(goc, bo) -> list:
     return hop_khoang(con)
 
 
-def mo_ta_pham_vi(kq) -> str:
-    """Một dòng tiếng Việt nói phần nào của video đã thực sự được so khớp."""
-    tong = float(getattr(kq, "duration_s", 0.0) or 0.0)
+def mo_ta_pham_vi(kq, tong: Optional[float] = None) -> str:
+    """Một dòng tiếng Việt nói phần nào của video đã thực sự được so khớp.
+
+    ``tong``: mẫu số khi ``kq.duration_s`` chưa phải thời lượng VIDEO (lượt quét lồng trên file
+    phần đầu — audit A-12); bỏ trống = ``kq.duration_s``.
+    """
+    if tong is None:
+        tong = float(getattr(kq, "duration_s", 0.0) or 0.0)
     vung = getattr(kq, "vung_da_khop", None)
     da_khop = tong_do_dai(vung) if vung is not None else float(
         getattr(kq, "pham_vi_quet_s", 0.0) or 0.0)
@@ -5396,6 +5401,12 @@ class Engine:
                 if not tong:
                     raise RuntimeError(f"Không đọc được thời lượng file: {path}")
                 kq.duration_s = tong
+                # Mẫu số của ghi chú = thời lượng VIDEO: lượt lồng trên file 3 giờ đầu của video 66
+                # giờ không được ghi «…/03:00:00» — nơi gọi sửa ``duration_s`` sau đó nhưng không viết
+                # lại câu đã ghi, nên ghi chú cuối mang hai mẫu số mâu thuẫn (audit A-12).
+                mau = tong
+                if source_type == "youtube":
+                    mau = max(tong, float(getattr(self, "_thoi_luong_video_nguon", 0.0) or 0.0))
                 if source_type == "file":
                     # File trong máy: thời lượng + phạm vi lên sổ tiến độ (YouTube tự ghi số của VIDEO ở
                     # `_scan_youtube` — lượt quét lồng ở đây chỉ thấy file phần đầu, không được ghi đè).
@@ -5507,11 +5518,11 @@ class Engine:
                 # — báo lỗi để lịch sử không chặn lượt quét lại (audit TCP-04).
                 kq.ly_do_pham_vi = "loi_khuc"
                 if kq.matches:
-                    tin = (f"Chưa quét trọn video: {mo_ta_pham_vi(kq)}. Bằng chứng chỉ "
+                    tin = (f"Chưa quét trọn video: {mo_ta_pham_vi(kq, mau)}. Bằng chứng chỉ "
                            "nằm trong phần đã so khớp.")
                 else:
                     kq.status = "error"
-                    tin = (f"Không xử lý được một phần video: {mo_ta_pham_vi(kq)}. Chưa "
+                    tin = (f"Không xử lý được một phần video: {mo_ta_pham_vi(kq, mau)}. Chưa "
                            "thể kết luận video này không chứa clip gốc — hãy quét lại.")
                 kq.note = "\n".join([x for x in (kq.note, tin) if x])
                 self._bao(progress, p_match1, "⚠️ " + tin)
@@ -5522,11 +5533,11 @@ class Engine:
                            else kq.pham_vi_quet_s)
                 if theo_dich and pv.dung_som:
                     tin = (f"Đã dừng sớm sau khi so khớp {hhmmss(da_khop)}"
-                           f"/{hhmmss(tong)} — đã thấy video gốc cần xác minh nên không "
+                           f"/{hhmmss(mau)} — đã thấy video gốc cần xác minh nên không "
                            "quét tiếp. Các video gốc khác chỉ được tìm trong phần đã quét.")
                 else:
                     tin = (f"Đã dừng sớm sau khi so khớp {hhmmss(da_khop)}"
-                           f"/{hhmmss(tong)} — đã đủ bằng chứng nên không quét tiếp. "
+                           f"/{hhmmss(mau)} — đã đủ bằng chứng nên không quét tiếp. "
                            "Bằng chứng chỉ nằm trong phần đã quét.")
                 kq.note = "\n".join([x for x in (kq.note, tin) if x])
                 self._bao(progress, p_match1, "ℹ️ " + tin)
@@ -5636,6 +5647,7 @@ class Engine:
         # Mã video đang quét cho các lượt ``scan_media`` lồng (chặn tự khớp theo mã — audit
         # A-14). Đặt lại ở đầu MỖI video: bản ghim của một lô dùng chung cho nhiều video.
         self._ma_video_nguon = ""
+        self._thoi_luong_video_nguon = 0.0
         try:
             self._bao(progress, 0.02, "Đang lấy thông tin video...")
             self._td(tdq.GD_METADATA, ghi="Đang lấy thông tin video từ YouTube")
@@ -5649,6 +5661,8 @@ class Engine:
             kq.channel_url = info["channel_url"]
             kq.upload_date = info["upload_date"]
             dai_nguon = float(info.get("duration") or 0)
+            # Thời lượng VIDEO cho ghi chú của các lượt ``scan_media`` lồng (audit A-12).
+            self._thoi_luong_video_nguon = dai_nguon
             self._td(tieu_de=kq.source_name, thoi_luong_nguon_s=dai_nguon or None,
                      ghi=(f"Metadata OK — nguồn dài {hhmmss(dai_nguon)}" if dai_nguon
                           else "Metadata OK — YouTube không cho biết thời lượng"))
