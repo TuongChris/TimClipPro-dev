@@ -4456,11 +4456,10 @@ class Engine:
                         f"đã chạm cận trên {gioi_han}; có dấu hiệu đếm trùng."
                     )
             k = g["he_so"]
-            # Mốc đầu clip gốc trên trục VIDEO: `bat_dau − k·t_clip` (xem parser).
-            clip_bat_dau_s = max(
-                0.0,
-                som_nhat["bat_dau"] - k * som_nhat["t_clip"],
-            )
+            # Mốc đầu clip gốc trên trục VIDEO: `bat_dau − k·t_clip` (xem parser). Có thể âm khi
+            # bản reup cắt mất phần đầu clip; chỉ mốc hiển thị/link mới kẹp về 0.
+            dau_clip_tho = som_nhat["bat_dau"] - k * som_nhat["t_clip"]
+            clip_bat_dau_s = max(0.0, dau_clip_tho)
             moc_mo_ho, moc_thay_the, ty_so_doi_thu = chong_bong_lap.bang_chung_moc(
                 i_moc, loc, nhan, canh_tranh, vung_khop_s, end_s, k)
             ket_qua.append(Match(
@@ -4469,9 +4468,9 @@ class Engine:
                 end_s=end_s,
                 matched_s=do_dai_hop,
                 # "Khớp từ giây thứ mấy CỦA CLIP" đo trên trục clip gốc: đổi khoảng cách
-                # trên video về trục clip bằng cách chia k. Với k = 1 y hệt công thức cũ
-                # (kể cả ca clip bắt đầu trước đầu video và bị kẹp về 0).
-                clip_offset_s=(vung_khop_s - clip_bat_dau_s) / k,
+                # trên video về trục clip bằng cách chia k. Tính từ mốc CHƯA kẹp: phép kẹp của
+                # trục video không được làm hụt phần đầu clip đã bị bỏ qua (audit A-13).
+                clip_offset_s=(vung_khop_s - dau_clip_tho) / k,
                 hashes=hashes,
                 confidence=danh_gia(hashes),
                 clip_bat_dau_s=clip_bat_dau_s,

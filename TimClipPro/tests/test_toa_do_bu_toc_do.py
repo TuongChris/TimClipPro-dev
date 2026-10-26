@@ -61,9 +61,24 @@ def test_moc_dau_clip_dung_cong_thuc_affine(tmp_path, k, offset, t_q, t_r):
     assert m.vung_khop_s == pytest.approx(vung_khop, abs=1e-6)
     assert m.end_s == pytest.approx(vung_khop + k * dai, abs=1e-6)
     assert m.matched_s == pytest.approx(k * dai, abs=1e-6)
-    if dau_clip >= 0:
-        # "Khớp từ giây thứ mấy CỦA CLIP" là trục clip gốc: đúng bằng t_clip.
-        assert m.clip_offset_s == pytest.approx(t_r, abs=1e-6)
+    # "Khớp từ giây thứ mấy CỦA CLIP" là trục clip gốc: đúng bằng t_clip, kể cả khi mốc đầu
+    # clip trên video bị kẹp về 0 (audit A-13).
+    assert m.clip_offset_s == pytest.approx(t_r, abs=1e-6)
+
+
+@pytest.mark.parametrize("k", [1.0, 0.98])
+def test_clip_bat_dau_truoc_dau_video_offset_van_tren_truc_clip(tmp_path, k):
+    """Bản reup cắt mất phần đầu clip (audit A-13): mảnh ở giây 12 của video ứng với giây 42
+    của clip gốc, nên đầu clip rơi vào giây âm. Mốc trên trục VIDEO kẹp về 0 (link không âm),
+    nhưng «khớp từ giây thứ mấy CỦA CLIP» vẫn đo trên trục clip gốc = 42 s — phần bị kẹp
+    không được làm hụt nó (code cũ trả 12 s, một mốc trên trục video)."""
+    e = _eng(tmp_path)
+    tho = _khop_tho(e, tmp_path, [(_ten_khuc(tmp_path, 0, k), 12.0, 42.0, 90.0, 3000)])
+    m = e._merge(tho)[0]
+    assert m.start_s == pytest.approx(0.0, abs=1e-6)
+    assert m.clip_bat_dau_s == pytest.approx(0.0, abs=1e-6)
+    assert m.vung_khop_s == pytest.approx(k * 12.0, abs=1e-6)
+    assert m.clip_offset_s == pytest.approx(42.0, abs=1e-6)
 
 
 def test_ca_cua_audit_3420_098_700_600(tmp_path):
@@ -108,8 +123,9 @@ def test_khong_gop_manh_khac_phep_bien_doi(tmp_path):
 
 
 def test_duong_k_bang_1_cho_ket_qua_y_het_cong_thuc_cu(tmp_path):
-    """Đường không bù tốc độ không được đổi một bit nào (kể cả ca clip bắt đầu trước
-    đầu video, bị kẹp về 0)."""
+    """Đường không bù tốc độ không được đổi một bit nào, trừ ``clip_offset_s`` của ca clip
+    bắt đầu trước đầu video: công thức cũ lấy nó từ mốc ĐÃ kẹp về 0 nên hụt đúng phần kẹp —
+    đó là lỗi (audit A-13), nay là phần đầu clip gốc bị bỏ qua = ``t_r``."""
     e = _eng(tmp_path)
     dong = [(_ten_khuc(tmp_path, 3420, 1.0), 40.0, 3500.0, 60.0, 900),
             (_ten_khuc(tmp_path, 0, 1.0), 300.0, 20.0, 80.0, 1200)]
@@ -120,7 +136,7 @@ def test_duong_k_bang_1_cho_ket_qua_y_het_cong_thuc_cu(tmp_path):
         bat_dau = offset + t_q
         dau = max(0.0, bat_dau - t_r)
         return Match(clip="reference.opus", start_s=dau, end_s=bat_dau + dai,
-                     matched_s=dai, clip_offset_s=bat_dau - dau, hashes=so_hash,
+                     matched_s=dai, clip_offset_s=t_r, hashes=so_hash,
                      confidence="", clip_bat_dau_s=dau, vung_khop_s=bat_dau)
 
     ky_vong = sorted([cu(0, 300.0, 20.0, 80.0, 1200), cu(3420, 40.0, 3500.0, 60.0, 900)],
