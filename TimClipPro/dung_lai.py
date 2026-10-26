@@ -7,16 +7,25 @@ import os
 import signal
 from typing import Any
 
+# Dung sai so mtime file dừng với mốc time.time(): mtime do hệ thống file đóng dấu theo đồng hồ
+# thô (Windows ~15,6 ms/nhịp, FAT/exFAT làm tròn 2 s), nên file ghi CÙNG lúc mốc có thể mang mtime
+# nhỏ hơn mốc. Chỉ file cũ hơn mốc QUÁ dung sai mới là yêu cầu cũ; file sót từ lượt trước luôn cũ
+# hơn nhiều (lượt chạy theo lịch cách nhau hàng phút trở lên).
+DUNG_SAI_MTIME_S = 2.0
+
 
 def mtime_file_dung_cu(file_dung: str, moc_bat_dau: float | None) -> float | None:
-    """mtime của file dừng có từ TRƯỚC mốc bắt đầu lượt (yêu cầu cũ, bị bỏ qua); None nếu không có."""
+    """mtime của file dừng có từ TRƯỚC mốc bắt đầu lượt (yêu cầu cũ, bị bỏ qua); None nếu không có.
+
+    «Trước» = cũ hơn mốc quá `DUNG_SAI_MTIME_S`; file ghi sát mốc vẫn là yêu cầu cho lượt này.
+    """
     if not file_dung or moc_bat_dau is None:
         return None
     try:
         mtime = os.path.getmtime(file_dung)
     except OSError:
         return None
-    return mtime if mtime < moc_bat_dau else None
+    return mtime if mtime < moc_bat_dau - DUNG_SAI_MTIME_S else None
 
 
 class YeuCauDung:

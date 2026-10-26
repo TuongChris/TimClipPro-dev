@@ -301,6 +301,41 @@ def test_dung_moi_sau_moc_ghi_de_file_cu_van_dung(tmp_path):
     assert dung_lai.mtime_file_dung_cu(str(path), yeu_cau.moc_bat_dau) is None
 
 
+# Review audit P3: mtime file (đồng hồ hệ thống theo nhịp ~15,6 ms trên Windows, FAT 2 s) và
+# time.time() không cùng độ phân giải. File dừng ghi CÙNG nhịp với mốc bắt đầu có thể mang mtime
+# nhỏ hơn mốc vài ms → từng bị xếp là «yêu cầu cũ» (test đầu-cuối dưới đây chập chờn ~7–10%).
+# Mốc cố định + os.utime: không dựa vào may rủi thời gian.
+_MOC_CO_DINH = 1_700_000_000.0
+
+
+def _file_dung_mtime(tmp_path, mtime):
+    import os
+
+    path = tmp_path / "DUNG"
+    path.write_text("Yêu cầu dừng từ CLI.\n", encoding="utf-8")
+    os.utime(path, (mtime, mtime))
+    return path
+
+
+@pytest.mark.parametrize("lech_s", [0.0, 0.0156, 0.5, 1.9])
+def test_file_dung_ghi_sat_moc_bat_dau_van_dung(tmp_path, lech_s):
+    path = _file_dung_mtime(tmp_path, _MOC_CO_DINH - lech_s)
+    yeu_cau = YeuCauDung(file_dung=str(path), moc_bat_dau=_MOC_CO_DINH)
+
+    assert dung_lai.mtime_file_dung_cu(str(path), _MOC_CO_DINH) is None
+    assert yeu_cau.can_dung() is True
+
+
+@pytest.mark.parametrize("tuoi_s", [2.5, 60.0, 3600.0])
+def test_file_dung_cu_hon_dung_sai_van_bi_bo_qua(tmp_path, tuoi_s):
+    assert tuoi_s > dung_lai.DUNG_SAI_MTIME_S
+    path = _file_dung_mtime(tmp_path, _MOC_CO_DINH - tuoi_s)
+    yeu_cau = YeuCauDung(file_dung=str(path), moc_bat_dau=_MOC_CO_DINH)
+
+    assert dung_lai.mtime_file_dung_cu(str(path), _MOC_CO_DINH) == pytest.approx(_MOC_CO_DINH - tuoi_s)
+    assert yeu_cau.can_dung() is False
+
+
 def test_cli_watch_bo_qua_file_dung_cu_tu_truoc_khi_bat_dau(tmp_path, monkeypatch, capsys):
     import cli
     from watch import MucTheoDoi as Muc, WatchList as DanhSach
@@ -360,6 +395,12 @@ def test_cli_watch_dung_gui_luc_dang_nap_engine_van_dung_luot(tmp_path, monkeypa
     thay = {}
 
     def chay_gia(engine, wl, progress=None, **kw):
+        import os
+
+        # Ca xấu nhất của đồng hồ Windows, ghim tất định: file ghi trong lúc nạp (CÙNG nhịp với
+        # mốc) nhưng mtime ra trước mốc một nhịp 15,6 ms.
+        moc = kw["dung_lai"].moc_bat_dau
+        os.utime(tmp_path / "DUNG", (moc - 0.0156, moc - 0.0156))
         thay["can_dung"] = kw["dung_lai"].can_dung()
         return SimpleNamespace(tom_tat=lambda: "tóm tắt giả", ban=False, chan_youtube="", loi=[])
 
