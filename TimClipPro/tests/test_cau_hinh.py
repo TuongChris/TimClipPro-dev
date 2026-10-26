@@ -111,13 +111,26 @@ def test_file_chua_ton_tai_khong_bi_tao(tmp_path):
     assert not (tmp_path / TEN_FILE).exists()
 
 
-def test_cau_hinh_khong_hop_le_quay_ve_mac_dinh(tmp_path):
+def test_cau_hinh_khong_hop_le_chi_tra_khoa_xung_dot_ve_mac_dinh(tmp_path):
+    # Audit C-5: trước đây hai khoá xung đột làm cả Config về mặc định (mất cookie, top_n...).
+    # Nay giữ tập con lớn nhất, xác định theo thứ tự trường dataclass: bỏ chunk_s (trường
+    # đứng trước) là đủ qua validate, nên chunk_s về mặc định và overlap_max_s=300 được giữ.
     du_lieu = lay_tu_config(Config())
     du_lieu["chunk_s"] = 300
     du_lieu["overlap_max_s"] = 300
+    du_lieu["top_n"] = 3
+    du_lieu["ytdlp_cookiefile"] = "C:/khong_ton_tai/cookies_gia.txt"
+    du_lieu["kho_dir"] = "C:/khong_ton_tai/kho_gia"
     ghi_cau_hinh(str(tmp_path / "data"), du_lieu)
 
     engine = Engine(root=str(tmp_path))
 
-    assert engine.config == Config()
-    assert any("đang dùng mặc định" in msg for msg in engine.canh_bao_khoi_dong)
+    engine.config.validate()
+    assert engine.config.chunk_s == Config().chunk_s
+    assert engine.config.overlap_max_s == 300
+    assert engine.config.top_n == 3
+    assert engine.config.ytdlp_cookiefile == "C:/khong_ton_tai/cookies_gia.txt"
+    assert engine.cau_hinh_da_luu.get("kho_dir") == "C:/khong_ton_tai/kho_gia"
+    assert any("chunk_s" in msg and "giữ nguyên" in msg
+               for msg in engine.canh_bao_khoi_dong)
+    assert not any("đang dùng mặc định" in msg for msg in engine.canh_bao_khoi_dong)

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import os
 from dataclasses import fields
 from typing import Any
@@ -65,6 +66,68 @@ def ap_vao_config(cfg: Any, du_lieu: dict) -> list:
             continue
         setattr(cfg, khoa, gia_tri)
     return bi_bo_qua
+
+
+def ap_tung_khoa_co_kiem(cfg: Any, du_lieu: dict) -> tuple[Any, list, list]:
+    """
+    Áp ``du_lieu`` lên BẢN SAO của ``cfg`` sao cho kết quả qua ``validate()``, hạ cấp theo
+    TỪNG khoá chứ không theo cả file (audit C-5).
+
+    Trả về ``(cfg_moi, bi_bo_qua, bi_tu_choi)``: ``bi_bo_qua`` = khoá lạ/sai kiểu như
+    ``ap_vao_config``; ``bi_tu_choi`` = danh sách ``(khoa, ly_do)`` của các khoá đúng kiểu nhưng
+    làm ``validate()`` trượt — chúng giữ giá trị của ``cfg`` gốc, mọi khoá khác của người dùng
+    vẫn được áp. Một giá trị gõ tay ngoài dải không được kéo theo cookie, top_n... về mặc định.
+
+    Thứ tự xét: (1) áp hết, qua validate thì xong; (2) bỏ đúng MỘT khoá (theo thứ tự trường
+    dataclass, như ``lay_tu_config``) mà qua validate thì khoá đó là thủ phạm duy nhất;
+    (3) áp lần lượt theo thứ tự trường, khoá nào làm validate trượt thì trả lại, lặp tới khi
+    không khoá bị trả nào áp lại được. Kết quả xác định với cùng một file. Chính ``cfg`` gốc
+    không qua validate thì ném ``ValueError`` (người gọi quay về mặc định cả file).
+    """
+    cfg_moi = copy.deepcopy(cfg)
+    bi_bo_qua = ap_vao_config(cfg_moi, du_lieu)
+    try:
+        cfg_moi.validate()
+        return cfg_moi, bi_bo_qua, []
+    except ValueError as e:
+        ly_do_chung = str(e)
+
+    # Chỉ các khoá đã áp thật và khác giá trị gốc mới có thể là thủ phạm.
+    da_ap = [
+        truong.name for truong in fields(cfg)
+        if truong.name in du_lieu and truong.name not in bi_bo_qua
+        and getattr(cfg_moi, truong.name) != getattr(cfg, truong.name)
+    ]
+    for khoa in da_ap:
+        thu = copy.deepcopy(cfg)
+        ap_vao_config(thu, {k: du_lieu[k] for k in da_ap if k != khoa})
+        try:
+            thu.validate()
+        except ValueError:
+            continue
+        return thu, bi_bo_qua, [(khoa, ly_do_chung)]
+
+    cfg_moi = copy.deepcopy(cfg)
+    cfg_moi.validate()  # gốc hỏng -> ValueError cho người gọi
+    ly_do: dict = {}
+    cho = list(da_ap)
+    while cho:
+        con_lai = []
+        for khoa in cho:
+            thu = copy.deepcopy(cfg_moi)
+            ap_vao_config(thu, {khoa: du_lieu[khoa]})
+            try:
+                thu.validate()
+            except ValueError as e:
+                ly_do[khoa] = str(e)
+                con_lai.append(khoa)
+                continue
+            cfg_moi = thu
+            ly_do.pop(khoa, None)
+        if len(con_lai) == len(cho):
+            break
+        cho = con_lai
+    return cfg_moi, bi_bo_qua, [(khoa, ly_do[khoa]) for khoa in cho]
 
 
 def lay_tu_config(cfg: Any) -> dict:

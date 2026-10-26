@@ -506,6 +506,10 @@ Nếu vẫn lỗi hết, đổi thứ tự trong `data\cau_hinh.json`:
 "ytdlp_player_clients": ["android", "", "tv", "ios", "web_safari"]
 ```
 
+Gõ sai một giá trị (ngoài dải, vd. danh sách rỗng hay `chunk_s` ≤ 60) chỉ làm **đúng khoá
+đó** về mặc định khi khởi động; cảnh báo ở đầu thanh bên nêu tên khoá và lý do, các thiết
+lập khác (cookie, Sheet, kho) vẫn giữ nguyên.
+
 Tìm client nào còn sống bằng cách thử tay:
 
 ```powershell

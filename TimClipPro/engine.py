@@ -300,9 +300,9 @@ class Config:
             raise ValueError(
                 "ytdlp_player_clients không được rỗng; dùng [\"\"] để giữ mặc định yt-dlp."
             )
-        # KHÔNG kiểm tra os.path.exists() ở đây: validate() chạy lúc nạp cấu hình trong
-        # try/except, ném lỗi sẽ reset TOÀN BỘ cấu hình người dùng về mặc định. File
-        # cookie thiếu chỉ được cảnh báo ở thời điểm dùng.
+        # KHÔNG kiểm tra os.path.exists() ở đây: validate() chạy lúc nạp cấu hình, ném lỗi
+        # sẽ trả khoá cookie của người dùng về mặc định (rỗng) — file cookie thiếu là cảnh
+        # báo ở thời điểm dùng, không phải lý do bỏ đường dẫn người dùng đã đặt.
         for ten in ("ytdlp_cookiefile", "ytdlp_cookies_browser"):
             if not isinstance(getattr(self, ten), str):
                 raise ValueError(f"{ten} phải là chuỗi.")
@@ -1105,11 +1105,23 @@ class Engine:
         self._chan_doan_quet = gia_tri
 
     def _nap_cau_hinh(self) -> None:
-        """Nạp cấu hình bền vững; mọi lỗi đều được hạ thành cảnh báo khởi động."""
+        """Nạp cấu hình bền vững; mọi lỗi đều được hạ thành cảnh báo khởi động.
+
+        Giá trị ngoài dải chỉ trả về mặc định ĐÚNG khoá đó (audit C-5): một con số gõ tay
+        sai không được kéo theo cookie, top_n, link Sheet, thư mục kho về mặc định — rồi bị
+        «Lưu cấu hình» ghi đè lên file. Chỉ file không đọc được mới về mặc định cả file.
+        """
         try:
             du_lieu = cau_hinh.doc_cau_hinh(self.data_dir)
-            self.cau_hinh_da_luu = du_lieu
-            bi_bo_qua = cau_hinh.ap_vao_config(self.config, du_lieu)
+            bi_bo_qua, bi_tu_choi = [], []
+            if du_lieu:  # chưa có file: giữ nguyên Config, như trước
+                self.config, bi_bo_qua, bi_tu_choi = cau_hinh.ap_tung_khoa_co_kiem(
+                    self.config, du_lieu)
+            khoa_tu_choi = {khoa for khoa, _ in bi_tu_choi}
+            self.cau_hinh_da_luu = {
+                khoa: gia_tri for khoa, gia_tri in du_lieu.items()
+                if khoa not in khoa_tu_choi
+            }
             bi_bo_qua = [
                 khoa for khoa in bi_bo_qua
                 if khoa not in cau_hinh.GIA_TRI_GIAO_DIEN_MAC_DINH
@@ -1119,8 +1131,13 @@ class Engine:
                     "Đã bỏ qua khóa cấu hình lạ hoặc sai kiểu: "
                     + ", ".join(sorted(bi_bo_qua))
                 )
-            if du_lieu:
-                self.config.validate()
+            if bi_tu_choi:
+                self.canh_bao_khoi_dong.append(
+                    "Cấu hình có giá trị không hợp lệ; chỉ các khóa sau về mặc định: "
+                    + "; ".join(f"{khoa} ({ly_do})" for khoa, ly_do in bi_tu_choi)
+                    + ". Các thiết lập khác (cookie, Sheet, kho...) vẫn giữ nguyên — sửa "
+                    "khóa trên trong cau_hinh.json hoặc bấm «Lưu cấu hình» để ghi mặc định."
+                )
         except Exception as e:  # noqa: BLE001
             self.config = Config()
             self.cau_hinh_da_luu = {}
