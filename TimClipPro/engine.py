@@ -4047,6 +4047,11 @@ class Engine:
         # Dừng / mạng đứng đi thẳng ra ở MỌI lớp (đường lui client, đường lui cookie, phiên) — không thành lỗi YouTube
         # hay «lỗi JavaScript» khi trước đó có cảnh báo giải JS (review F1). Phiên còn nhớ cookie đã chết trong lượt:
         # video sau khỏi thử lại cả chuỗi client có cookie (audit D-12).
+        if gioi_han_giay:
+            # `.part` một phần của lượt trước bị cắt ngang (đóng cửa sổ/mất điện) không nối tiếp được (ffmpeg -y ghi
+            # lại từ đầu) và không đường dọn nào khác bỏ nó: để lại thì nằm trên đĩa mãi, và giám sát đọc kích thước
+            # nó làm «ffmpeg đã ghi» khi -progress chưa có byte (audit D-18). Đang giữ khoá của `ten`: chỉ file của ta.
+            don_file_do_dang()
         try:
             with giam_sat:
                 phien.chay("download",
