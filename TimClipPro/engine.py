@@ -1528,17 +1528,27 @@ class Engine:
                 return
             if xoa_van_tay:
                 self._cache_khoa = None
-                db = self._duong_dan_db_kho(kho["db"])
-                # `_xoa_an_toan` không ném lỗi, chỉ trả False khi file vẫn bị giữ sau các
-                # lần thử. Bỏ mục khỏi sổ lúc đó = báo xoá xong trong khi file vân tay nằm
-                # lại mồ côi (kho tạo lại cùng tên từng thừa hưởng nó) → dừng, chưa sửa sổ
-                # (audit C-4).
-                if not self._xoa_an_toan(db):
-                    raise RuntimeError(
-                        f"Chưa xoá được kho «{ten}»: file vân tay {os.path.basename(db)} "
-                        "đang bị một tiến trình khác giữ (lượt quét ở cửa sổ/CLI khác, "
-                        "hoặc phần mềm diệt virus/sao lưu). Chưa xoá gì cả, kho vẫn còn "
-                        "nguyên. Chờ việc đó xong rồi bấm xoá lại.")
+                # File CŨ mà build bỏ lại khi công bố sang file mới vì file cũ bị khoá
+                # (`db_cu`): không gì khác tham chiếu nó → gỡ cùng kho, gỡ TRƯỚC file đang
+                # dùng để lỗi giữa chừng không để kho mất vân tay (audit C-11). Trùng file
+                # của kho khác (sổ sửa tay) thì không bao giờ đụng.
+                dang_dung_o_kho_khac = {k.get("db") for k in d["danh_sach"] if k is not kho}
+                cac_file = [kho["db"]]
+                if (kho.get("db_cu") and kho["db_cu"] != kho["db"]
+                        and kho["db_cu"] not in dang_dung_o_kho_khac):
+                    cac_file.insert(0, kho["db_cu"])
+                for ten_file in cac_file:
+                    db = self._duong_dan_db_kho(ten_file)
+                    # `_xoa_an_toan` không ném lỗi, chỉ trả False khi file vẫn bị giữ sau các
+                    # lần thử. Bỏ mục khỏi sổ lúc đó = báo xoá xong trong khi file vân tay nằm
+                    # lại mồ côi (kho tạo lại cùng tên từng thừa hưởng nó) → dừng, chưa sửa sổ
+                    # (audit C-4).
+                    if not self._xoa_an_toan(db):
+                        raise RuntimeError(
+                            f"Chưa xoá được kho «{ten}»: file vân tay {os.path.basename(db)} "
+                            "đang bị một tiến trình khác giữ (lượt quét ở cửa sổ/CLI khác, "
+                            "hoặc phần mềm diệt virus/sao lưu). Chưa xoá gì cả, kho vẫn còn "
+                            "nguyên. Chờ việc đó xong rồi bấm xoá lại.")
 
             def bo(d: dict) -> dict:
                 d["danh_sach"] = [k for k in d["danh_sach"] if k["ten"] != ten]

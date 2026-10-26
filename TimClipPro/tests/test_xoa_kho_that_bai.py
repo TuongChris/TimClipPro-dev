@@ -183,3 +183,96 @@ def test_giao_dien_xoa_kho_bi_giu_file_thi_bao_loi_khong_rerun_lang_le(tmp_path,
     ghi = json.loads((data_dir / "khos.json").read_text(encoding="utf-8"))
     assert [k["ten"] for k in ghi["danh_sach"]] == ["KhoTest"]
     assert (data_dir / "kho_test.pklz").exists()
+
+
+# --- Audit C-11: file vân tay CŨ của nhánh công bố dự phòng (``db_cu``) ---------------------
+#
+# Build công bố kho mà file cũ đang bị khoá (diệt virus / tiến trình khác) → ``os.replace`` ném
+# PermissionError → kho được công bố sang ``kho_<slug>_<hex>.pklz``, sổ ghi ``db_cu`` = tên cũ. Xoá
+# kho phải gỡ CẢ file cũ đó: không ai tham chiếu nó nữa, cỡ cả kho (66–315 MB) và nằm lại mãi.
+
+
+def _kho_da_cong_bo_du_phong(e, tmp_path, monkeypatch, ten="A"):
+    """Kho «ten» đi qua đúng nhánh PermissionError của ``build_database`` (audfprint giả)."""
+    from kho_gia import ghi_kho_tu_lenh
+
+    db_cu = _kho_co_van_tay(e, tmp_path, ten)
+    clips = tmp_path / f"clips_{ten}"
+    clips.mkdir()
+    (clips / "moi.wav").write_bytes(b"fixture")
+    monkeypatch.setattr(e, "require", lambda **kwargs: None)
+    monkeypatch.setattr(e, "_run_stream",
+                        lambda command, on_line=None, **kw: (ghi_kho_tu_lenh(command) and 0, []))
+    goc_replace = os.replace
+    da_khoa = []
+
+    def replace_bi_khoa(src, dst, *a, **kw):
+        if not da_khoa and os.path.normcase(os.path.abspath(dst)) == os.path.normcase(str(db_cu)):
+            da_khoa.append(dst)
+            raise PermissionError(13, "The process cannot access the file", dst)
+        return goc_replace(src, dst, *a, **kw)
+
+    monkeypatch.setattr(os, "replace", replace_bi_khoa)
+    e.build_database(str(clips), "new")
+    monkeypatch.setattr(os, "replace", goc_replace)
+
+    # Tiền đề: đúng nhánh dự phòng đã chạy — kho trỏ sang file mới, file cũ còn nằm đó.
+    kho = next(k for k in e._doc_khos()["danh_sach"] if k["ten"] == ten)
+    assert da_khoa and kho.get("db_cu") == db_cu.name and kho["db"] != db_cu.name
+    assert db_cu.exists() and (Path(e.data_dir) / kho["db"]).exists()
+    return db_cu, Path(e.data_dir) / kho["db"]
+
+
+def test_xoa_kho_go_ca_file_cu_cua_nhanh_cong_bo_du_phong(tmp_path, monkeypatch):
+    e = _eng(tmp_path)
+    db_cu, db_moi = _kho_da_cong_bo_du_phong(e, tmp_path, monkeypatch)
+
+    e.delete_kho("A", xoa_van_tay=True)
+
+    con_lai = sorted(p.name for p in Path(e.data_dir).glob("*.pklz"))
+    assert con_lai == [], f"xoá kho vẫn để lại file vân tay mồ côi: {con_lai}"
+    assert e.list_khos() == []
+
+
+def test_xoa_kho_file_cu_dang_bi_giu_thi_chua_xoa_gi(tmp_path, monkeypatch):
+    """File cũ vẫn bị giữ lúc xoá → như C-4: báo lỗi, sổ và CẢ HAI file còn nguyên."""
+    e = _eng(tmp_path)
+    db_cu, db_moi = _kho_da_cong_bo_du_phong(e, tmp_path, monkeypatch)
+    so_truoc, sha_moi = e._doc_khos(), _sha(db_moi)
+    goc_xoa = Engine._xoa_an_toan
+
+    def xoa(p, so_lan=6):
+        if os.path.normcase(p) == os.path.normcase(str(db_cu)):
+            return False
+        return goc_xoa(p, so_lan)
+
+    monkeypatch.setattr(Engine, "_xoa_an_toan", staticmethod(xoa))
+
+    with pytest.raises(RuntimeError, match=f"Chưa xoá được kho «A».*{db_cu.name}"):
+        e.delete_kho("A")
+
+    assert e._doc_khos() == so_truoc
+    assert db_cu.exists() and db_moi.exists() and _sha(db_moi) == sha_moi
+
+
+def test_xoa_kho_khong_dung_file_cu_dang_la_vay_tay_cua_kho_khac(tmp_path):
+    """``db_cu`` trùng file mà một kho KHÁC đang dùng (sổ sửa tay / file cũ bị xoá tay rồi tên được
+    cấp lại) → không bao giờ xoá vân tay của kho kia."""
+    data = tmp_path / "data"
+    data.mkdir()
+    for ten_file in ("a_moi.pklz", "b.pklz"):
+        ghi_ht(data / ten_file, [(str(tmp_path / ten_file), 5)])
+    (data / "khos.json").write_text(json.dumps({
+        "dang_dung": "A",
+        "danh_sach": [
+            {"ten": "A", "thu_muc": "", "db": "a_moi.pklz", "db_cu": "b.pklz", "id": "id_a"},
+            {"ten": "B", "thu_muc": "", "db": "b.pklz", "id": "id_b"},
+        ],
+    }, ensure_ascii=False), encoding="utf-8")
+    e = _eng(tmp_path)
+
+    e.delete_kho("A")
+
+    assert not (data / "a_moi.pklz").exists()
+    assert (data / "b.pklz").exists(), "đã xoá vân tay của kho B"
+    assert [k["ten"] for k in e.list_khos()] == ["B"]
