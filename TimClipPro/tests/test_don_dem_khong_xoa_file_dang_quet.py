@@ -301,3 +301,53 @@ def test_dung_lai_ban_dem_giua_luc_don_dem_liet_ke_va_luc_xoa_thi_khong_xoa(
     assert os.path.exists(dem), (
         f"[{ly_do_chon}] dọn đệm xoá bản đệm vừa được lượt quét nhận lại: {kq!r}")
     assert kq["bo_qua_dang_dung"] >= 1 and not kq["loi"], kq
+
+
+@pytest.mark.parametrize("ai_dung", ["luot_khac_dang_quet", "doi_chung"])
+@pytest.mark.parametrize("ca", ["thoi_luong_chua_ro", "tai_thieu"])
+def test_bo_ban_dem_cut_cua_video_dai_khong_xoa_file_luot_khac_dang_dung(engine, monkeypatch, ca, ai_dung):
+    """Audit WR-5 (cùng gốc C-9): ``_quet_video_dai_gioi_han`` bỏ bản đệm phần đầu «cụt» (không có bằng
+    chứng + file ngắn hơn giới hạn khi YouTube không báo thời lượng; hay tải thiếu khi có thời lượng)
+    bằng ``os.remove`` trần — bỏ qua khoá tải và dấu «đang dùng». Lượt quét giao diện cùng video đang
+    giữ dấu (giữa hai lệnh FFmpeg cắt khúc, không ai mở file) thì lượt Watch xong trước xoá mất file
+    → khúc kế của lượt giao diện lỗi. Đúng: file đang có lượt khác dùng thì để nguyên (lượt sau tự kiểm
+    lại độ dài); không ai dùng ("doi_chung") thì vẫn bỏ như cũ."""
+    import don_dep
+    from engine import GHVD_TU_DONG, ScanResult
+    e = engine
+    e.config = Config(tai_mot_phan=True, keep_downloads=True)
+    e._gioi_han_video_dai = GHVD_TU_DONG
+    ba_gio = 3 * 3600
+    ten_file = f"{VID}__p{ba_gio}.webm"
+    os.makedirs(e.dl_dir, exist_ok=True)
+    dem = os.path.join(e.dl_dir, ten_file)
+    with open(dem, "wb") as fh:
+        fh.write(b"ban-dem-luot-khac-dang-quet")
+
+    def tai(url, vid, progress=None, gioi_han_giay=None):
+        # Như download_audio thật: có bản đệm thì trả lại, chưa có thì «tải mạng» ra bản MỚI.
+        p = os.path.join(e.dl_dir, f"{vid}__p{int(gioi_han_giay)}.webm")
+        if not os.path.exists(p):
+            with open(p, "wb") as fh:
+                fh.write(b"ban-tai-moi")
+        return p
+
+    monkeypatch.setattr(e, "download_audio", tai)
+    monkeypatch.setattr(e, "do_dai_audio_that", lambda p: 1200.0)     # 20 phút < giới hạn 3 giờ
+    monkeypatch.setattr(e, "scan_media", lambda path, **k: ScanResult(
+        source_name="v", duration_s=1200.0, pham_vi_quet_s=1200.0, vung_da_khop=[(0.0, 1200.0)]))
+    info = {"id": VID, "title": "v", "duration": 0 if ca == "thoi_luong_chua_ro" else 65 * 3600.0,
+            "channel": "", "channel_id": "", "channel_url": "", "upload_date": ""}
+    dau = don_dep.dat_dau_dang_dung(e.dl_dir, ten_file) if ai_dung == "luot_khac_dang_quet" else None
+    try:
+        r, f = e._quet_video_dai_gioi_han(URL, info, "v", float(ba_gio), None)
+    finally:
+        if dau is not None:
+            don_dep.nha_dau_dang_dung(dau)
+    assert r.status == "error"           # không bằng chứng + file thiếu: lỗi, không bao giờ âm tính
+    if ai_dung == "doi_chung":
+        assert not os.path.exists(dem), "không ai dùng: bản cụt phải bị bỏ để lượt sau tải lại"
+        return
+    assert os.path.exists(dem), f"[{ca}] xoá bản đệm mà lượt quét khác đang giữ dấu «đang dùng»"
+    with open(dem, "rb") as fh:
+        assert fh.read() == b"ban-dem-luot-khac-dang-quet", f"[{ca}] bản đệm lượt khác đang dùng bị thay"

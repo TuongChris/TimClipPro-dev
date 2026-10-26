@@ -3795,6 +3795,20 @@ class Engine:
                     os.utime(goc)   # lần dùng cuối = lúc lượt quét XONG
                 don_dep.nha_dau_dang_dung(dau)
 
+    def _bo_file_dem(self, path: str) -> bool:
+        """Bỏ file đệm ``path`` — trừ khi lượt quét khác (GUI / CLI / Watch chung ``data/``) đang tải
+        hay giữ dấu «đang dùng» nó: xoá trần thì lượt đó hỏng ở khúc FFmpeg kế (audit WR-5, cùng gốc
+        C-9). True = đã bỏ; False = để nguyên, lượt sau tự kiểm lại độ dài. File ngoài kho đệm: xoá
+        thẳng như cũ."""
+        goc = os.path.abspath(path)
+        if os.path.normcase(os.path.dirname(goc)) != os.path.normcase(os.path.abspath(self.dl_dir)):
+            os.remove(goc)
+            return True
+        if don_dep.xoa_file_dem_neu_ranh(self.dl_dir, os.path.basename(goc)):
+            return True
+        LOGGER_SCAN.info("event=scan.cache_keep_in_use file=%s", os.path.basename(goc))
+        return False
+
     def _tai_audio_trong_khoa(self, url: str, video_id: str, ten: str,
                               progress: Optional[Callable],
                               gioi_han_giay: Optional[float]) -> str:
@@ -5082,7 +5096,10 @@ class Engine:
             # Bản đệm của lượt trước bị cụt (tải đứt giữa chừng): không dùng lại, tải lại MỘT lần.
             self._td(ghi=f"Bản đệm cũ chỉ có {hhmmss(dai_file)} âm thanh — bỏ và tải lại một lần")
             with contextlib.suppress(OSError):
-                os.remove(f)
+                if not self._bo_file_dem(f):
+                    # Lượt khác đang quét chính bản này: không tải chồng lên — dùng nó, phần thiếu
+                    # thành vùng chưa kiểm ở dưới.
+                    self._td(ghi="Bản đệm đang được một lượt quét khác dùng — giữ nguyên, không tải lại")
             f = self.download_audio(url, info["id"], progress, gioi_han_giay=gioi_han)
             dai_file = float(self.do_dai_audio_that(f) or 0)
         thieu = thieu_that(dai_file)
@@ -5112,7 +5129,7 @@ class Engine:
                 tin += " Chưa thể kết luận video này không chứa clip gốc."
                 if thieu and self._trong_thu_muc_dem(f):
                     with contextlib.suppress(OSError):
-                        os.remove(f)      # có thể là bản cụt: lượt sau tải lại, không quét lại nó
+                        self._bo_file_dem(f)   # có thể là bản cụt: lượt sau tải lại, không quét lại nó
             r.note = "\n".join(x for x in (r.note, tin) if x)
             return r, f
         r.duration_s = tong
@@ -5131,7 +5148,7 @@ class Engine:
                 tin += " Chưa thể kết luận — hãy quét lại."
             if self._trong_thu_muc_dem(f):
                 with contextlib.suppress(OSError):
-                    os.remove(f)          # bản cụt không được dùng lại ở lượt sau
+                    self._bo_file_dem(f)  # bản cụt không được dùng lại ở lượt sau
         else:
             r.pham_vi_quet_s = min(r.pham_vi_quet_s or can_den, can_den)
             if not r.vung_loi and not r.ly_do_pham_vi:
@@ -5788,7 +5805,7 @@ class Engine:
                         # Bản tải MỘT PHẦN `<id>__p<giây>` đã quét xong: không giữ đệm thì bỏ
                         # luôn, trước đây nó nằm lại mãi (phản biện vòng 3).
                         with contextlib.suppress(OSError):
-                            os.remove(f)
+                            self._bo_file_dem(f)
                     f = self.download_audio(url, info["id"], progress)
                     r = self.scan_media(f, label=kq.source_name, ref=url,
                                         source_type="youtube", progress=progress,
@@ -5829,7 +5846,7 @@ class Engine:
             r.upload_date = info["upload_date"]
             if not self.config.keep_downloads:
                 with contextlib.suppress(Exception):
-                    os.remove(f)
+                    self._bo_file_dem(f)
             kq = r
         except Cancelled:
             kq.status, kq.note = "error", "Đã hủy theo yêu cầu."
@@ -5869,7 +5886,8 @@ class Engine:
             if p.endswith((".part", ".ytdl")):
                 continue
             try:
-                os.remove(p)
+                if not self._bo_file_dem(p):
+                    con_lai.append(p)
             except OSError:
                 con_lai.append(p)
         return not con_lai
@@ -5962,7 +5980,7 @@ class Engine:
         if self._trong_thu_muc_dem(f):
             # Bỏ bản đệm thiếu để lần quét sau tải lại, không dùng lại file cụt.
             with contextlib.suppress(OSError):
-                os.remove(f)
+                self._bo_file_dem(f)
         return r, f
 
     def scan_iter(

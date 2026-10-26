@@ -131,6 +131,29 @@ def _dang_duoc_dung(thu_muc_dem: str, ten_file: str, bo_dau_mo_coi: bool) -> boo
     return dang_dung
 
 
+def xoa_file_dem_neu_ranh(thu_muc_dem: str, ten_file: str) -> bool:
+    """Xoá file đệm ``ten_file`` CHỈ khi không lượt nào khác đang tải / nhận / dùng nó.
+
+    Cùng giao thức với vòng xoá của ``don_kho_dem``: lấy khoá tải của mục (không chờ — đang bị giữ =
+    lượt khác đang tải hay nhận file) rồi kiểm dấu «đang dùng» dưới khoá đó. Engine bỏ bản đệm cụt /
+    bản không giữ đệm qua đây chứ không ``os.remove`` trần (audit WR-5). True = đã xoá (hoặc không còn
+    file); False = có lượt khác đang dùng, để nguyên.
+    """
+    khoa = KhoaTienTrinh(duong_khoa_tai(thu_muc_dem, ten_muc_dem(ten_file)), f"Bỏ file đệm: {ten_file}")
+    try:
+        khoa.__enter__()
+    except DangChayRoi:
+        return False
+    try:
+        if _dang_duoc_dung(thu_muc_dem, ten_file, bo_dau_mo_coi=True):
+            return False
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(os.path.join(thu_muc_dem, ten_file))
+        return True
+    finally:
+        khoa.__exit__()
+
+
 def don_kho_dem(
     thu_muc: str,
     max_gb: float = 20.0,
