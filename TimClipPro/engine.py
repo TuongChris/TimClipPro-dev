@@ -1063,6 +1063,7 @@ class Engine:
         self.chunk_dir = os.path.join(self.data_dir, "chunks")
         self.out_dir = os.path.abspath(out_dir or self.runtime.out_dir)
         self.sqlite_file = os.path.join(self.data_dir, "lichsu.db")
+        self._canh_bao_thu_muc_du_lieu()
 
         for d in (self.data_dir, self.dl_dir, self.out_dir):
             os.makedirs(d, exist_ok=True)
@@ -1103,6 +1104,29 @@ class Engine:
     @chan_doan_quet.setter
     def chan_doan_quet(self, gia_tri: ChanDoanQuet) -> None:
         self._chan_doan_quet = gia_tri
+
+    def _canh_bao_thu_muc_du_lieu(self) -> None:
+        """Legacy: thư mục dữ liệu trong OneDrive/thư mục đồng bộ/ổ mạng → CẢNH BÁO khởi động.
+
+        Thiết kế (docs/MANAGED_RUNTIME_DESIGN.md §4): managed từ chối, legacy «chỉ cảnh báo» — nhưng
+        cảnh báo phải TỚI người dùng (audit C-8): ``canh_bao_khoi_dong`` là kênh duy nhất được vẽ ra
+        (thanh bên app, stderr CLI, Watch). Kiểm ĐÚNG thư mục Engine dùng: ``data_dir`` truyền tay
+        khác thư mục runtime phân giải thì tính lại, không mượn cảnh báo của thư mục khác.
+        """
+        if self.runtime.che_do != runtime_paths.LEGACY:
+            return  # managed gặp vấn đề này đã dừng trong resolve()
+        if os.path.normcase(self.data_dir) == os.path.normcase(
+                os.path.abspath(self.runtime.data_dir)):
+            ly_do = list(self.runtime.canh_bao)
+        else:
+            ly_do = runtime_paths.kiem_duong_dan_trang_thai(self.data_dir)
+        if not ly_do:
+            return
+        self.canh_bao_khoi_dong.extend(ly_do)
+        self.canh_bao_khoi_dong.append(
+            "Lịch sử quét, hàng chờ gửi Google Sheets (lichsu.db) và sổ kho đang nằm ở chỗ dịch vụ "
+            "đồng bộ/ổ mạng chép lại — file dữ liệu có thể hỏng hoặc quay về bản cũ. Nên chuyển thư "
+            "mục dữ liệu (TIMCLIP_DATA_DIR) ra ổ đĩa cục bộ ngoài thư mục đồng bộ.")
 
     def _nap_cau_hinh(self) -> None:
         """Nạp cấu hình bền vững; mọi lỗi đều được hạ thành cảnh báo khởi động.
