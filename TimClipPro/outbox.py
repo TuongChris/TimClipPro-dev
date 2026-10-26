@@ -1357,10 +1357,15 @@ def tach_ngu_canh(ly_do: str) -> tuple:
 
 
 def _kem_ngu_canh(loi: Exception, e: BaseException, chot: sd.DichGuiChot) -> Exception:
-    """Lỗi TRUY CẬP vĩnh viễn: kèm binding + tài khoản dịch vụ + mã bảng RÚT GỌN của CHÍNH việc — thấy ngay việc
-    đang dùng khoá của tài khoản nào, mở bảng nào (khoá nhầm tài khoản, dán nhầm bảng). Email tài khoản dịch vụ là
-    địa chỉ để chia sẻ (giao diện vẫn hiện), không phải bí mật; mã bảng chỉ 6 ký tự đầu. Giữ nguyên phân loại
-    (``tam_thoi``) và phạm vi chặn (``chi_revision``, audit B-3) — chỉ đổi CÂU."""
+    """Lỗi TRUY CẬP vĩnh viễn: kèm binding + tài khoản dịch vụ + mã bảng RÚT GỌN của việc KÍCH HOẠT lỗi — thấy
+    ngay lần gửi đó dùng khoá của tài khoản nào, mở bảng nào (khoá nhầm tài khoản, dán nhầm bảng). Email tài khoản
+    dịch vụ là địa chỉ để chia sẻ (giao diện vẫn hiện), không phải bí mật; mã bảng chỉ 6 ký tự đầu. Giữ nguyên phân
+    loại (``tam_thoi``) và phạm vi chặn (``chi_revision``, audit B-3) — chỉ đổi CÂU.
+
+    ``_chan_nhom`` chép NGUYÊN câu này sang các việc chờ cùng nhóm (cùng bảng + tab + binding + lược đồ — ``_nhom``
+    không gồm principal): binding đăng ký lại sang tài khoản khác thì việc cũ (``chot.principal`` cũ) hiện tài
+    khoản của việc kích hoạt. Chấp nhận (review 26/10): chỉ là câu hiển thị; trạng thái và phạm vi chặn không đổi,
+    và khi «Thử gửi lại» mỗi việc tự qua ``_kiem_khoa`` với principal của chính nó."""
     if not isinstance(loi, ChuaGui) or loi.tam_thoi or not _la_loi_truy_cap(e):
         return loi
     return ChuaGui(f"{loi.ly_do}{_MO_NGU_CANH}{chot.xac_thuc_ref}» → {chot.principal}; bảng "
