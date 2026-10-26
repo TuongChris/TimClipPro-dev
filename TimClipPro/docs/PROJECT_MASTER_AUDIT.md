@@ -81,7 +81,7 @@ nào ở độ sâu ≤ 4 trên D:.
 Repository thật được audit:
 
 ```
-C:\Users\Admin\OneDrive\Desktop\ToolQuet\Tool_Quet\TimClipPro
+C:\Users\<tên>\OneDrive\Desktop\ToolQuet\Tool_Quet\TimClipPro
 ```
 
 Đây chắc chắn là cùng dự án: cùng bộ 38 module, cùng remote `Tool_Quet`.

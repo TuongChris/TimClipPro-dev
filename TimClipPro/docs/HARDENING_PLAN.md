@@ -14,7 +14,7 @@ phê duyệt — xem báo cáo).
 
 | | |
 |---|---|
-| Repo | `C:\Users\Admin\OneDrive\Desktop\ToolQuet\Tool_Quet` (git toplevel) |
+| Repo | `C:\Users\<tên>\OneDrive\Desktop\ToolQuet\Tool_Quet` (git toplevel) |
 | Revision gốc | `4b7e5bd` (nhánh `sua-watchdog-van-tay`), trùng commit audit khai báo |
 | Nơi sửa | **worktree riêng** `…\ToolQuet\Tool_Quet_hardening`, nhánh `hardening-sau-audit` |
 | Thư mục chạy thật | `Tool_Quet\TimClipPro` (có `data/`, `.venv`, `bin/`) — **không sửa**, chỉ đọc |

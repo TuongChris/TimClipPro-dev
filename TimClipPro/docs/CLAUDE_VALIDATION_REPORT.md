@@ -10,7 +10,7 @@ Tài liệu này chỉ liệt kê **lệnh đã chạy và kết quả quan sát
 ## 1. Dựng môi trường
 
 ```powershell
-& "C:\Users\Administrator\AppData\Local\Python\pythoncore-3.14-64\python.exe" -m venv .venv-claude
+& "C:\Users\<tên>\AppData\Local\Python\pythoncore-3.14-64\python.exe" -m venv .venv-claude
 & ".\.venv-claude\Scripts\python.exe" -m pip install -r requirements-dev.txt
 & ".\.venv-claude\Scripts\python.exe" -m pip check
 ```
