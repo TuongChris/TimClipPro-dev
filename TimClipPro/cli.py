@@ -402,7 +402,22 @@ def _main():
             if job["bo_qua_dang_chay"]:
                 print(f"Giữ lại {job['bo_qua_dang_chay']} thư mục còn mới "
                       "(có thể đang có lượt quét chạy).")
-            loi = ket_qua["loi"] + job["loi"]
+            # Cùng lý do cho job dựng kho (mỗi bản làm việc là BẢN SAO cả kho) và file tiến độ
+            # tải của ffmpeg: chỉ `finally` của job dọn, kill/crash bỏ qua nó (audit C-7).
+            rac = don_dep.don_rac_job_tam(
+                eng.data_dir,
+                max_ngay=eng.config.dem_max_ngay,
+                thuc_hien=not a.xem_truoc,
+            )
+            print(
+                f"Bản làm việc dựng kho + tiến độ tải: {rac['tong_muc']} mục, "
+                f"{rac['tong_gb']:.3f} GB.\n"
+                f"{hanh_dong}: {rac['xoa_muc']} mục, {rac['xoa_gb']:.3f} GB."
+            )
+            if rac["bo_qua_dang_chay"]:
+                print(f"Giữ lại {rac['bo_qua_dang_chay']} mục còn mới "
+                      "(có thể đang dựng kho hoặc tải).")
+            loi = ket_qua["loi"] + job["loi"] + rac["loi"]
             if loi:
                 print("Lỗi:", *loi, sep="\n  - ")
         return

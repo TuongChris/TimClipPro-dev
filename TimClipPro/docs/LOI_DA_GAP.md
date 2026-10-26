@@ -629,3 +629,14 @@ lặng lẽ về `data/db.pklz`.
   loại lỗi mà các lối vào đã biết xử lý; sổ sai thì KHÔNG ghi đè file người dùng đang sửa.
 → **Lớp chặn dựa trên trạng thái thật** (sổ không dùng được lúc mở), không chỉ dựa trên dấu vết một kiểu hỏng.
   Test: `tests/test_so_kho_sai_luoc_do.py`.
+
+**25. Dọn rác chỉ trong `finally` và chỉ một phần: bản sao kho vân tay mồ côi không ai thu hồi (26/10/2026, PC2, audit C-7).**
+«Bổ sung» chép CẢ kho (hàng trăm MB) vào `data/fingerprint_jobs/<job>` TRƯỚC `try:` có `finally: rmtree` duy nhất → Dừng
+lúc «Đang tạo bản làm việc an toàn…» (`da_huy=True`, giao diện báo huỷ sạch), copystat/ENOSPC, `audfprint remove` lỗi
+đều để lại bản sao. Kill/crash/đóng cửa sổ console bỏ qua mọi `finally`, mà `dondep`/Watch chỉ dọn `downloads/` và
+`scan_jobs/`. Dừng job đa nhân (terminate cây tiến trình) còn bỏ `timclip_ht_*` trong %TEMP% hệ thống, nơi không ai dọn.
+→ **Tài nguyên tạm phải nằm trong vùng dọn NGAY khi tạo** (bọc từ `makedirs`, không chờ tới bước chạy chính).
+→ **Mọi thư mục/file tạm của job phải nằm dưới một gốc có reaper theo tuổi** (`don_dep.don_rac_job_tam`, gọi từ `dondep`
+  và Watch); không đặt ở %TEMP% hệ thống — runner đặt bảng hash cạnh `--dbase` (bản làm việc). Job dài phải có nhịp sống
+  trên đĩa (chạm `clips.txt` mỗi nhịp tim) để reaper không nhầm job đang chạy.
+  Test: `tests/test_don_ban_lam_viec_van_tay.py`.

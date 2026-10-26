@@ -3207,24 +3207,31 @@ class Engine:
         os.makedirs(workspace, exist_ok=True)
         listfile = os.path.join(workspace, "clips.txt")
         db_tam = os.path.join(workspace, "database.pklz")
-        with open(listfile, "w", encoding="utf-8", newline="\n") as f:
-            f.write("\n".join(can_xu_ly))
         sub = "new"
-        if mode != "new" and os.path.exists(self.db_file):
-            tracker.phase("validating", "Đang tạo bản làm việc an toàn của kho hiện có...")
-            with open(self.db_file, "rb") as nguon, open(db_tam, "xb") as dich:
-                while True:
-                    self._check_cancel()
-                    khoi = nguon.read(8 * 1024 * 1024)
-                    if not khoi:
-                        break
-                    dich.write(khoi)
-                dich.flush()
-                os.fsync(dich.fileno())
-            shutil.copystat(self.db_file, db_tam)
-            sub = "add"
-            if lam_moi:
-                self._go_van_tay_cu(db_tam, lam_moi, ds_cu, workspace, tracker)
+        # Bản làm việc là BẢN SAO cả kho (hàng trăm MB): hỏng/Dừng ở bất kỳ bước chuẩn bị nào
+        # (chép kho, copystat, gỡ vân tay cũ) cũng phải dọn nó — `finally` bên dưới chưa bao
+        # tới đây (audit C-7). Crash/kill bỏ qua mọi `finally`: phần đó do `dondep`/Watch thu hồi.
+        try:
+            with open(listfile, "w", encoding="utf-8", newline="\n") as f:
+                f.write("\n".join(can_xu_ly))
+            if mode != "new" and os.path.exists(self.db_file):
+                tracker.phase("validating", "Đang tạo bản làm việc an toàn của kho hiện có...")
+                with open(self.db_file, "rb") as nguon, open(db_tam, "xb") as dich:
+                    while True:
+                        self._check_cancel()
+                        khoi = nguon.read(8 * 1024 * 1024)
+                        if not khoi:
+                            break
+                        dich.write(khoi)
+                    dich.flush()
+                    os.fsync(dich.fileno())
+                shutil.copystat(self.db_file, db_tam)
+                sub = "add"
+                if lam_moi:
+                    self._go_van_tay_cu(db_tam, lam_moi, ds_cu, workspace, tracker)
+        except BaseException:
+            shutil.rmtree(workspace, ignore_errors=True)
+            raise
 
         loi_file = []
         structured_seen = False
@@ -3294,6 +3301,12 @@ class Engine:
                 f"im lặng {snapshot.silent_seconds:.0f} giây."
             )
             tracker.heartbeat(snapshot.pid, detail, phase=phase)
+            # Nhịp sống trên đĩa: dọn rác theo tuổi (`don_dep.don_rac_job_tam`) tính theo file
+            # MỚI NHẤT trong bản làm việc — job dựng kho chạy hàng giờ không bao giờ trông «cũ».
+            try:
+                os.utime(listfile)
+            except OSError:
+                pass
 
         # --maxtimebits 16: cho phép clip gốc dài tới ~25 phút vẫn định vị đúng mốc thời gian
         tham_so = ["--maxtimebits", "16"]

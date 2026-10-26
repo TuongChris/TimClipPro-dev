@@ -14,7 +14,7 @@ import outbox
 import runtime_paths
 import sheet_destinations as sd
 from channel import ChannelSync
-from don_dep import don_job_quet, don_kho_dem
+from don_dep import don_job_quet, don_kho_dem, don_rac_job_tam
 from engine import LoiLuuBen
 from khoa import DangChayRoi, KhoaTienTrinh
 from luu_tru import doc_json_an_toan, ghi_json_an_toan
@@ -457,6 +457,21 @@ def _chay_giam_sat_da_khoa(
             )
         except Exception as e:  # noqa: BLE001
             bao_cao.loi.append(f"Không dọn được thư mục job: {e}")
+
+        # Bản làm việc dựng kho (bản sao cả kho) + file tiến độ tải mồ côi do kill/crash
+        # (audit C-7). Lượt Watch giữ `tool.lock` nên không job dựng kho nào đang chạy.
+        try:
+            ket_qua_rac = don_rac_job_tam(
+                engine.data_dir,
+                max_ngay=engine.config.dem_max_ngay,
+            )
+            bao_cao.da_don_gb += ket_qua_rac["xoa_gb"]
+            bao_cao.loi.extend(
+                f"Dọn bản làm việc dựng kho: {dong}"
+                for dong in ket_qua_rac["loi"]
+            )
+        except Exception as e:  # noqa: BLE001
+            bao_cao.loi.append(f"Không dọn được bản làm việc dựng kho: {e}")
 
 
 def _db_theo_so(engine: Any, ten: str) -> str:

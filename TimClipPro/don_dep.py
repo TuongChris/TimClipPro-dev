@@ -241,3 +241,76 @@ def don_job_quet(
         da_xoa_byte += item.kich_thuoc
     ket_qua["xoa_gb"] = da_xoa_byte / _BYTE_MOI_GB
     return ket_qua
+
+
+# Rác tạm của job dựng kho / tải mà chỉ ``finally`` của chính job dọn — crash, kill, mất
+# điện, đóng cửa sổ console bỏ qua ``finally`` nên phần còn sót không ai thu hồi (audit C-7).
+THU_MUC_JOB_VAN_TAY = "fingerprint_jobs"   # mỗi job một thư mục: BẢN SAO cả kho + clips.txt
+THU_MUC_TIEN_DO_TAI = "tien_do_tai"        # file -progress nhỏ của ffmpeg khi tải một phần
+
+
+def don_rac_job_tam(
+    data_dir: str,
+    max_ngay: int = 7,
+    thuc_hien: bool = True,
+    bay_gio: Optional[float] = None,
+) -> dict:
+    """Thu hồi bản làm việc vân tay mồ côi (``data/fingerprint_jobs/<job>``) và file tiến độ
+    tải mồ côi (``data/tien_do_tai/*``) đã quá ``max_ngay`` ngày.
+
+    Cùng quy ước với ``don_job_quet``: chỉ lọc theo TUỔI (không theo dung lượng — dễ trúng job
+    đang chạy), tuổi tính theo file MỚI NHẤT bên trong; ``max_ngay <= 0`` = không xoá gì. Job
+    dựng kho đang chạy chạm ``clips.txt`` mỗi nhịp tim, ffmpeg ghi file tiến độ liên tục — nên
+    việc đang chạy luôn «mới» tính bằng giây.
+    """
+    job = don_job_quet(
+        os.path.join(data_dir, THU_MUC_JOB_VAN_TAY),
+        max_ngay=max_ngay,
+        thuc_hien=thuc_hien,
+        bay_gio=bay_gio,
+    )
+    ket_qua = {
+        "tong_muc": job["tong_job"],
+        "tong_gb": job["tong_gb"],
+        "xoa_muc": job["xoa_job"],
+        "xoa_gb": job["xoa_gb"],
+        "bo_qua_dang_chay": job["bo_qua_dang_chay"],
+        "loi": list(job["loi"]),
+    }
+
+    thu_muc_td = os.path.join(data_dir, THU_MUC_TIEN_DO_TAI)
+    gioi_han = max_ngay * _GIAY_MOI_NGAY
+    if not os.path.isdir(thu_muc_td):
+        return ket_qua
+    try:
+        cac_muc = list(os.scandir(thu_muc_td))
+    except OSError as e:
+        ket_qua["loi"].append(f"Không quét được {thu_muc_td}: {e}")
+        return ket_qua
+    muc = []
+    for entry in cac_muc:
+        try:
+            if not entry.is_file(follow_symlinks=False):
+                continue
+            st = entry.stat(follow_symlinks=False)
+        except OSError as e:
+            ket_qua["loi"].append(f"{entry.path}: {e}")
+            continue
+        muc.append(MucDem(path=entry.path, kich_thuoc=st.st_size, lan_dung_cuoi=st.st_mtime))
+    ket_qua["tong_muc"] += len(muc)
+    ket_qua["tong_gb"] += sum(x.kich_thuoc for x in muc) / _BYTE_MOI_GB
+    if gioi_han <= 0:
+        return ket_qua
+
+    can_xoa = chon_can_xoa(muc, 0, gioi_han, bay_gio)
+    ket_qua["bo_qua_dang_chay"] += len(muc) - len(can_xoa)
+    for item in can_xoa:
+        if thuc_hien:
+            try:
+                os.remove(item.path)
+            except OSError as e:
+                ket_qua["loi"].append(f"{item.path}: {e}")
+                continue
+        ket_qua["xoa_muc"] += 1
+        ket_qua["xoa_gb"] += item.kich_thuoc / _BYTE_MOI_GB
+    return ket_qua

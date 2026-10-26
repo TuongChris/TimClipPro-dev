@@ -40,6 +40,28 @@ CHO_WORKER_S = 1800.0
 # được xếp là "ready" nên EOF vẫn nổi lên tức thì.
 NHIP_KIEM_S = 0.5
 
+# Thư mục đặt bảng hash tạm của các worker (``timclip_ht_*``). ``main()`` đặt nó = thư mục
+# chứa ``--dbase`` — với engine đó là bản làm việc ``data/fingerprint_jobs/<job>``, được dọn
+# cùng job (kể cả khi Dừng: terminate bỏ qua ``finally`` của runner) và bị ``dondep``/Watch thu
+# hồi nếu crash. Không đặt → %TEMP% hệ thống như cũ, chỉ cho lối gọi trực tiếp (audit C-7).
+BIEN_THU_MUC_BANG_TAM = "TIMCLIP_THU_MUC_BANG_TAM"
+
+
+def _thu_muc_bang_tam():
+    """Thư mục cha cho ``tempfile.mkdtemp`` của bảng hash; ``None`` = %TEMP% hệ thống."""
+    thu_muc = os.environ.get(BIEN_THU_MUC_BANG_TAM, "")
+    return thu_muc if thu_muc and os.path.isdir(thu_muc) else None
+
+
+def _dbase_trong_lenh(tham_so: list):
+    """Giá trị ``--dbase``/``-d`` trong dòng lệnh audfprint; không có → ``None``."""
+    for i, muc in enumerate(tham_so):
+        if muc in ("--dbase", "-d") and i + 1 < len(tham_so):
+            return tham_so[i + 1]
+        if muc.startswith("--dbase="):
+            return muc.split("=", 1)[1]
+    return None
+
 
 def _emit(event: str, **payload) -> None:
     """Ghi một dòng event bằng ĐÚNG MỘT syscall.
@@ -253,7 +275,7 @@ def instrumented_multiproc_add(analyzer, hash_tab, filename_iter, report, ncores
     for ix, filename in enumerate(filename_iter):
         filelists[ix % ncores].append(filename)
 
-    thu_muc = tempfile.mkdtemp(prefix="timclip_ht_")
+    thu_muc = tempfile.mkdtemp(prefix="timclip_ht_", dir=_thu_muc_bang_tam())
     rx: list = []
     pr: list = []
     duong_dan: list = []
@@ -468,6 +490,11 @@ def main(argv: list[str] | None = None) -> int:
         _NHOM_CUA_RUNNER.gan_chinh_minh()
     except Exception:  # noqa: BLE001 - lớp bảo vệ thêm, không được làm hỏng build
         _NHOM_CUA_RUNNER = None
+
+    # Bảng hash tạm nằm cạnh database đang dựng (bản làm việc của job), không ở %TEMP%.
+    dbase = _dbase_trong_lenh(argv[2:])
+    if dbase:
+        os.environ.setdefault(BIEN_THU_MUC_BANG_TAM, os.path.dirname(os.path.abspath(dbase)))
 
     import audfprint
     import audfprint_analyze
