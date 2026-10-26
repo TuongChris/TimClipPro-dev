@@ -188,3 +188,14 @@ def test_e3_ho_so_md_van_vo_hieu_html_url_tran_va_nhan_manh():
     assert re.search(r"(?<!\\)[*_~`]", dong.split(":** ", 1)[1]) is None, dong   # nhấn mạnh / gạch / mã
     assert "a\\\\b" in dong                                       # «\» của chữ ngoài hiện đúng một «\»
     assert _loi_dien_giai(dong) == []
+
+
+def test_wr9_ho_so_md_tieu_de_tieng_viet_co_dau_cham_gach_ngoac_giu_nguyen_van():
+    """Audit WR-9: tiêu đề tiếng Việt có «. - , : ( ) !» (vd. «Ep.3») vào cả ba chỗ chữ ngoài của hồ sơ .md phải
+    NGUYÊN VĂN — không «\\» thừa khi mở bằng Notepad / chép vào form khiếu nại. «[ ]» vẫn thoát (mở link/ảnh)."""
+    tieu_de = "Tập 12 - Phần 2 (Full HD) Ep.3: Hành trình, phần cuối!"
+    md = dossier.render_markdown(_ho_so(tieu_de, tieu_de, tieu_de))
+    for nhan in ("Tiêu đề video vi phạm", "Tên clip gốc", "Tiêu đề video gốc"):
+        assert f"- **{nhan}:** {tieu_de}" in md, md
+    md = dossier.render_markdown(_ho_so("Tập 12 [2024] Ep.3"))
+    assert r"- **Tiêu đề video vi phạm:** Tập 12 \[2024\] Ep.3" in md, md
