@@ -783,3 +783,37 @@ nguyên»; ghi nhưng còn lỗi → vàng «Hoàn tất MỘT PHẦN»; không 
 (`completed` = vòng đời job, không phải «đã ghi kho»). Test: `tests/test_tieu_de_tao_van_tay.py`.
 → **Tiêu đề đầu tiên của MỌI màn kết quả dựng từ kết quả THẬT** (đã ghi gì, bao nhiêu lỗi) bằng một hàm thuần có test
   từng trường hợp — xanh chỉ khi mọi việc cần làm đã xong; đừng để chi tiết đúng nằm dưới một tiêu đề sai.
+
+**37. Tổng kết đợt P3 audit 25/10 — các lớp lỗi đã sửa (26/10/2026, PC2, nhánh `fix/pc2/audit-p3`).** Năm chuỗi sửa
+(quét, Sheets, kho, YouTube, giao diện) gộp một nhánh; mỗi lỗi có test đỏ trước khi sửa (commit mang mã audit).
+- Tự khớp làm sai kết quả quét: dừng sớm / chặn bù tốc độ, link của chính video gốc báo «tự vi phạm» (A-7, A-14).
+- Toạ độ và phạm vi tính sai ở biên: đuôi không tiếng thành vùng lỗi mãi, mẫu số phạm vi của video dài tải một phần,
+  «khớp từ giây thứ» hụt khi clip bắt đầu trước đầu video, parser bỏ dòng «to time -0.0 s» (A-10, A-12, A-13, A-16).
+- Chọn lọc và hiệu năng matcher: sàn bằng chứng so khác bậc loại clip gốc thứ hai khỏi Top-N; phân loại mảnh lặp bậc
+  hai (A-11, P0-4).
+- Vòng đời việc gửi Sheets lệch với lượt Watch: chờ việc đang tạm dừng, bỏ sót việc tới hạn của lượt trước, không nêu
+  BLOCKED_REPORT, tạm dừng giữa vòng vẫn claim thêm (B-5, B-6, B-11, F-15).
+- Phân loại / thông báo lỗi Sheets và lịch sử sai nguồn: mã HTTP khi thân lỗi không phải JSON, hồ sơ theo TÊN thiếu tab,
+  `cli.py dich` thiếu mã tab đã chốt, `lichsu.db` hỏng ra traceback (B-7, B-9, B-10, B-8).
+- Đường dẫn dữ liệu / glob không thống nhất: `kiem_metadata_kho` tự đoán thư mục dữ liệu, glob bộ đệm không escape
+  (C-10, E-9, C-13).
+- Sổ kho và kho đang dùng: xoá kho bỏ sót `db_cu`, sửa/xoá kho áp lại `dang_dung` của sổ, `dang_dung` trỏ kho không còn,
+  tự khôi phục từ `.bak` không báo, snapshot metadata sau «Tạo lại kho» lệch thư mục (C-11, C-14, C-15, C-16, WR-3).
+- Đua giữa dọn đệm và lượt quét: xoá bản đệm vừa dùng lại / file lượt khác đang quét, dấu «đang dùng» làm hỏng lượt
+  (D-24, WR-4, WR-5, WR-6); file DUNG cũ dừng lượt Watch mới (C-12); fsync gặp handle chỉ-đọc tạm thời (WR-7).
+- Tải phần đầu YouTube: lượt lỗi kéo theo tải trọn, `.part` cũ bị tính là «ffmpeg đã ghi», ffmpeg sống sót khi app chết
+  (D-16, D-18, D-23).
+- Cookie / client / phiên YouTube: client học ở lượt không cookie đứng đầu lượt có cookie, cookie dùng lại được vẫn báo
+  «không chấp nhận», byte không UTF-8 tắt vĩnh viễn bước ghi lại, request kênh không ghi vào phiên Watch (D-17, DR-9,
+  DR-4, D-20).
+- Trạng thái và link YouTube: thanh bên không theo lượt đồng bộ kênh, video chưa phát thành «lỗi khác», tab Shorts/Live
+  bị gắn `/videos`, tác vụ nền «ma» khi `Thread.start()` hỏng (D-14, DR-8, D-19, DR-6).
+- Tóm tắt kết quả trên giao diện nói sai: lỗi cấp lô che kết quả đã quét, câu tóm tắt đếm sai, «Đoạn 0» cho video chưa
+  quét, cảnh báo «một phần» nhầm, «Clip hiện tại (i/N)» lệch (F-9, F-10, F-11, F-12, F-13); hai phiên cùng bấm «Bắt đầu
+  quét» chạy hai lô (F-14).
+- Lộ dữ liệu / bí mật: CSV lịch sử không chặn công thức (E-8), thư mục người dùng Windows trong ghi chú lỗi và tài liệu
+  track (E-6, E-7), hook pre-push bắt nhầm base64 và bỏ qua thông điệp commit (WR-1, WR-8); khoá hồi quy tiêu đề hồ sơ .md
+  (WR-9).
+- Chưa sửa: B-13, F-16 (cần người dùng quyết); WR-2 không tái hiện được.
+→ **Mỗi lỗi đều nằm ở chỗ GIAO giữa hai phần** (lượt ↔ việc nền, sổ ↔ tiến trình, dọn đệm ↔ quét, cookie ↔ client): sửa
+  một phía thì viết test cho đúng chỗ giao, đừng chỉ test riêng từng phía.
