@@ -5398,7 +5398,9 @@ class Engine:
                              pham_vi_den_s=float(tong), che_do="File trong máy — quét như hiện tại",
                              ghi=f"File trong máy dài {hhmmss(tong)}")
                 tong_am = self.do_dai_am_thanh(path)
-                if tong_am and tong_am < tong - DUNG_SAI_PHU_S:
+                # Mọi khoảng chênh đều ghi, không chừa dải dung sai: `_cut_chunks` báo khúc thiếu
+                # > 1 s là cắt lỗi, nên đuôi không tiếng 1–2 s từng thành vùng lỗi ở mọi lượt (A-10).
+                if tong_am and tong_am < tong:
                     pv.het_am_thanh = float(tong_am)
                 doan = self._doan_quet_tang_dan(tong)
                 tho: list = []

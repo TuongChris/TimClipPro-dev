@@ -192,6 +192,26 @@ def test_quet_tron_khong_co_ket_qua_thi_la_am_tinh_day_du(tmp_path, monkeypatch)
     assert "QUÉT MỘT PHẦN" not in " ".join(str(o) for o in e.to_rows([kq])[0])
 
 
+@pytest.mark.parametrize("chenh", [0.5, 1.5, 3.0])
+def test_duoi_khong_tieng_chenh_nho_khong_phai_vung_loi(tmp_path, monkeypatch, chenh):
+    """Audit A-10: luồng tiếng hết trước hình 1–2 s (mp4/mkv trong máy) từng rơi vào dải
+    giữa dung sai 2 s của mốc hết tiếng và chốt 1 s của khúc cắt ngắn → đuôi thành vùng
+    lỗi, âm tính sạch thành ``error`` và Watch quét lại ở MỌI lượt."""
+    het_tieng = 300.0 - chenh
+    e = _eng(tmp_path)
+    e.duration_of = lambda p: 300.0
+    e.do_dai_am_thanh = lambda p: het_tieng
+    monkeypatch.setattr(engine_module, "chay_lenh_media", _ffmpeg_gia(het_tieng, 100))
+    e._match_chunks = lambda chunks, *a, **k: []
+    media = tmp_path / "q.mp4"
+    media.write_bytes(b"x")
+
+    kq = e.scan_media(str(media))
+
+    assert kq.status == "ok" and kq.vung_loi == [], (kq.status, kq.vung_loi, kq.note)
+    assert kq.quet_day_du and kq.pham_vi_quet_s == 300.0
+
+
 def test_huy_giua_quet_ghi_ly_do_huy(tmp_path, monkeypatch):
     e = _eng(tmp_path)
     e.duration_of = lambda p: 300.0
