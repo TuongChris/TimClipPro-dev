@@ -53,6 +53,7 @@ from truy_cap_youtube import (  # noqa: F401 — tái xuất
     TIEN_TO_HTTPONLY,
     UNKNOWN_YOUTUBE_ERROR,
     LoiTruyCapYouTube,
+    an_thu_muc_nguoi_dung,
     che_bi_mat,
     doc_cau_truc_cookie,
     go_ma_mau,
@@ -121,7 +122,7 @@ def giai_thich_loi(loi: Any, co_cookie: bool = False) -> str:
     da_phan_loai = tim_loi_truy_cap(loi)
     if da_phan_loai is not None and not isinstance(loi, LoiTruyCapYouTube):
         loi = LoiTruyCapYouTube(da_phan_loai)
-    tin = che_bi_mat(go_ma_mau(loi))
+    tin = an_thu_muc_nguoi_dung(che_bi_mat(go_ma_mau(loi)))
     if DAU_CHI_TIET in tin:
         return tin
     for moc in MOC_CAT_HUONG_DAN:
@@ -1038,21 +1039,6 @@ _LOAI_CO_THE_DO_JS = frozenset({FORMAT_OR_EXTRACTOR_ERROR, PLAYER_CLIENT_ERROR})
 # Video mà không cookie chắc chắn không xem được: lượt đã biết cookie chết (bước 5 của đường lui cookie) vẫn thử cookie
 # cho chúng — không bao giờ để lượt không-cookie thay cho đăng nhập ở video đòi đăng nhập.
 _LOAI_CAN_DANG_NHAP = frozenset({AUTH_REQUIRED, AGE_RESTRICTED, MEMBERS_ONLY})
-
-# Thư mục người dùng Windows — mang TÊN người dùng: «X:\Users\<tên>» (cả «\\» của repr Python và «/»). Tên có thể có dấu
-# cách, dấu nháy (O'Brien, O'Đức); dừng ở dấu phân cách đường dẫn, nháy đóng (nháy không đứng trước chữ/số), « | » (chỗ
-# ghép chi tiết), «…» (chỗ cắt), xuống dòng hay hết chuỗi — không nuốt phần chẩn đoán phía sau (review 14/10). Lookahead
-# chỉ xét tối đa một dấu cách → tuyến tính theo độ dài chuỗi.
-_RE_THU_MUC_NGUOI_DUNG = re.compile(
-    r"(?i)\b[a-z]:(?:\\{1,2}|/)(?:users|documents and settings)(?:\\{1,2}|/)"
-    r"[^\\/\"\r\n|…]+?(?= ?[|…]|[\\/\"\r\n]|'(?!\w)|$)")
-
-
-def an_thu_muc_nguoi_dung(van_ban: Any) -> str:
-    """Thay thư mục người dùng (mang tên người dùng Windows) bằng «~» trong chữ của yt-dlp/Node đi vào GHI CHÚ kết quả
-    (lịch sử, CSV, Google Sheets); phần còn lại của đường dẫn giữ để chẩn đoán. Luỹ đẳng."""
-    return _RE_THU_MUC_NGUOI_DUNG.sub("~", str(van_ban or ""))
-
 
 def chay_kem_duong_lui_cookie(
     cau_hinh: "CauHinhMang",

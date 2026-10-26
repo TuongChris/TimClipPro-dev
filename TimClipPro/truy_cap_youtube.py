@@ -373,8 +373,8 @@ def _xac_dinh_loai(thap: str, ma: Optional[int], lop: set) -> str:
 
 
 def tom_tat_ky_thuat(tin: Any, toi_da: int = 300) -> str:
-    """Dòng kỹ thuật an toàn để lưu: bỏ màu, cắt đuôi hướng dẫn, che bí mật, giới hạn độ dài."""
-    gon = che_bi_mat(cat_huong_dan(go_ma_mau(tin)))
+    """Dòng kỹ thuật an toàn để lưu: bỏ màu, cắt đuôi hướng dẫn, che bí mật, ẩn thư mục người dùng, giới hạn độ dài."""
+    gon = an_thu_muc_nguoi_dung(che_bi_mat(cat_huong_dan(go_ma_mau(tin))))
     gon = " ".join(gon.split())
     return gon if len(gon) <= toi_da else gon[: toi_da - 1] + "…"
 
@@ -478,6 +478,22 @@ def che_bi_mat(van_ban: Any) -> str:
     s = _RE_COOKIE_BANG.sub(lambda m: m.group(1) + m.group(2) + AN, s)
     s = _RE_COOKIE_CACH.sub(lambda m: m.group(1) + m.group(2) + AN, s)
     return s
+
+
+# Thư mục người dùng Windows — mang TÊN người dùng: «X:\Users\<tên>» (cả «\\» của repr Python và «/»). Tên có thể có dấu
+# cách, dấu nháy (O'Brien, O'Đức); dừng ở dấu phân cách đường dẫn, nháy đóng (nháy không đứng trước chữ/số), « | » (chỗ
+# ghép chi tiết), «…» (chỗ cắt), xuống dòng hay hết chuỗi — không nuốt phần chẩn đoán phía sau (review 14/10). Lookahead
+# chỉ xét tối đa một dấu cách → tuyến tính theo độ dài chuỗi. Cả hai cửa ghi chú (`tom_tat_ky_thuat` và
+# `ytdlp_chung.giai_thich_loi`) đi qua đây, vd. «could not find firefox cookies database in C:\Users\<tên>\…» (audit E-6).
+_RE_THU_MUC_NGUOI_DUNG = re.compile(
+    r"(?i)\b[a-z]:(?:\\{1,2}|/)(?:users|documents and settings)(?:\\{1,2}|/)"
+    r"[^\\/\"\r\n|…]+?(?= ?[|…]|[\\/\"\r\n]|'(?!\w)|$)")
+
+
+def an_thu_muc_nguoi_dung(van_ban: Any) -> str:
+    """Thay thư mục người dùng (mang tên người dùng Windows) bằng «~» trong chữ của yt-dlp/Node đi vào GHI CHÚ kết quả
+    (lịch sử, CSV, Google Sheets); phần còn lại của đường dẫn giữ để chẩn đoán. Luỹ đẳng."""
+    return _RE_THU_MUC_NGUOI_DUNG.sub("~", str(van_ban or ""))
 
 
 # =====================================================================
