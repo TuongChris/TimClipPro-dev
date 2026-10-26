@@ -16,7 +16,8 @@ from clip_metadata import (
     extract_youtube_id,
     load_metadata_strict,
 )
-from engine import Engine
+import runtime_paths
+from engine import Engine, thu_muc_data_mac_dinh
 
 
 for _stream in (sys.stdout, sys.stderr):
@@ -333,7 +334,14 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
     root = os.path.dirname(os.path.abspath(__file__))
-    eng, _registry = _engine_chi_doc(root, os.path.join(root, "data"), args.kho)
+    # Cùng MỘT bộ phân giải với Engine/cli (TIMCLIP_DATA_DIR, managed) — không tự ghép
+    # <mã>/data: dữ liệu DEV/Stable nằm ngoài cây mã, ghép tay thì soi (và --apply ghi) sổ sai.
+    try:
+        data_dir = thu_muc_data_mac_dinh(root)
+    except runtime_paths.LoiRuntime as e:
+        print(f"\nLỖI CẤU HÌNH: {e}", file=sys.stderr)
+        return 1
+    eng, _registry = _engine_chi_doc(root, data_dir, args.kho)
     report = _report(eng, args.kho, args.video_id)
     if args.repair_offline:
         repair = eng.khoi_phuc_metadata_offline(dry_run=not args.apply)
