@@ -49,6 +49,7 @@ from scan_ui import (
     canh_bao_nguon_kho,
     chua_quet_cua_lo,
     csv_nguon_chung,
+    dem_cau_tom_tat,
     df_nguon_chung,
     dong_trang_thai_youtube,
     goi_y_quet_mot_phan,
@@ -1192,8 +1193,12 @@ if not job["running"] and (job["results"] or job["error"]):
                        "khỏi báo cáo.")
 
         if tong_match:
-            st.success(f"✅ Đã chọn **{tong_match}** bằng chứng tốt nhất "
-                       f"từ {len(res)} nguồn đã quét.")
+            # Đếm theo đúng bảng/CSV bên dưới và bỏ video «Chưa quét» của cầu dao (audit F-10); toàn bộ
+            # bằng chứng nằm trong kết quả báo cáo V2 lỗi thì không có câu xanh — banner ⛔ của bảng giải thích.
+            so_bang_chung, so_da_quet = dem_cau_tom_tat(res)
+            if so_bang_chung:
+                st.success(f"✅ Đã chọn **{so_bang_chung}** bằng chứng tốt nhất "
+                           f"từ {so_da_quet} nguồn đã quét.")
             # Bị đổi tốc độ là dấu hiệu né nhận dạng có chủ ý — người dùng cần biết
             # để đưa vào hồ sơ khiếu nại, và để hiểu vì sao mốc thời gian hơi lệch.
             for x in res:

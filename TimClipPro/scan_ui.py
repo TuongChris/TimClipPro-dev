@@ -33,6 +33,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 import pandas as pd
 
+import bao_cao_v2
 import outbox
 import truy_cap_youtube as _tc
 from common_original import (
@@ -322,6 +323,16 @@ def thong_bao_lo_da_dung(da_dung: bool, chua_quet: Sequence[str], toi_da: int = 
         ds += f"\n- … và {len(chua_quet) - toi_da} video khác"
     return (f"{cau} — **{len(chua_quet)} video chưa quét** (chưa tải, chưa so khớp: KHÔNG phải «không có "
             f"vi phạm»; muốn kiểm thì quét lại):\n\n{ds}")
+
+def dem_cau_tom_tat(ket_qua: Sequence[Any]) -> tuple:
+    """``(số bằng chứng, số nguồn đã quét)`` cho câu xanh «Đã chọn N bằng chứng … từ M nguồn đã quét»
+    (audit F-10). N đếm ĐÚNG phần bảng/CSV hiện (``bang_ket_qua``: bỏ kết quả báo cáo V2 lỗi, chỉ nguồn
+    «ok»); M bỏ video cầu dao YouTube đã bỏ qua — «Chưa quét» không được tính là đã quét."""
+    hop_le, _ = bao_cao_v2.tach_loi_bao_cao(ket_qua)
+    so_bang_chung = sum(len(x.matches) for x in hop_le if x.status == "ok")
+    da_quet = sum(1 for x in ket_qua
+                  if getattr(getattr(x, "loi_truy_cap", None), "category", "") != _tc.BLOCKED_BY_BREAKER)
+    return so_bang_chung, da_quet
 
 # Ký hiệu "chưa có dữ liệu". Dùng chung để UI và test không lệch nhau.
 CHUA_CO = "—"
