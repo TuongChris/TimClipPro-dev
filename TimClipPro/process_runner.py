@@ -12,6 +12,8 @@ dài chạy trong một ``NhomTienTrinh``:
   job giết trọn cây dù cha đã chết; nếu chính tool chết, Windows đóng handle và tự
   dọn cây.
 * POSIX: process group riêng (``start_new_session``), dừng bằng ``killpg``.
+* Hậu duệ do thư viện tự ``Popen`` (ffmpeg của yt-dlp khi tải phần đầu): chính tool vào
+  một job, ``so_huu_hau_due_tien_trinh_nay`` (audit D-23).
 
 Không bao giờ giết theo tên chương trình, không giết PID cũ chưa xác minh.
 """
@@ -224,6 +226,28 @@ class NhomTienTrinh:
     def __del__(self) -> None:  # pragma: no cover - lưới an toàn cuối
         with contextlib.suppress(Exception):
             self.dong()
+
+
+_NHOM_CUA_TIEN_TRINH_NAY: Optional[NhomTienTrinh] = None
+_KHOA_NHOM_CUA_TIEN_TRINH_NAY = threading.Lock()
+
+
+def so_huu_hau_due_tien_trinh_nay() -> bool:
+    """Đưa CHÍNH process hiện tại (app / CLI / Watch) vào một ``NhomTienTrinh`` — MỘT lần mỗi process.
+
+    Cho hậu duệ mà tool không tự ``Popen`` nên không gắn được vào nhóm riêng: ffmpeg do yt-dlp (``FFmpegFD``)
+    sinh khi tải phần đầu. Tool chết đột ngột (End task, sập) → Windows đóng handle job → hậu duệ chết theo,
+    không mồ côi giữ ``.part`` khi luồng giám sát và khoá tải đã mất cùng app (audit D-23). Tool không có hậu
+    duệ nào cần sống lâu hơn nó; nơi gọi gọi MUỘN (ngay trước lượt tải) để tiến trình sinh trước đó không bị
+    cuốn vào. Không dùng được job (POSIX, Windows không cho lồng job): trả ``False``, không làm gì khác.
+    """
+    global _NHOM_CUA_TIEN_TRINH_NAY
+    with _KHOA_NHOM_CUA_TIEN_TRINH_NAY:
+        if _NHOM_CUA_TIEN_TRINH_NAY is None:
+            _NHOM_CUA_TIEN_TRINH_NAY = NhomTienTrinh()
+            if not _NHOM_CUA_TIEN_TRINH_NAY.gan_chinh_minh():
+                _NHOM_CUA_TIEN_TRINH_NAY.dong()
+        return _NHOM_CUA_TIEN_TRINH_NAY.dung_job
 
 
 @dataclass(frozen=True)

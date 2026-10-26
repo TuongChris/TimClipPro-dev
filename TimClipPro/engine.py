@@ -106,6 +106,7 @@ from process_runner import (
     ProcessSnapshot,
     chay_lenh_media,
     run_observed_process,
+    so_huu_hau_due_tien_trinh_nay,
 )
 from publication_date import ghi_log_chan_doan, resolve_publication_date
 
@@ -3965,6 +3966,9 @@ class Engine:
             self._bao(progress, 0.05,
                       f"Cách tải «{ten}» không được, đang thử cách khác...")
 
+        # ffmpeg của FFmpegFD do yt-dlp tự ``Popen`` — tool không gắn được vào nhóm riêng: đưa chính tiến trình
+        # vào job để app chết đột ngột thì ffmpeg chết theo, không mồ côi giữ ``.part`` (audit D-23).
+        so_huu_hau_due_tien_trinh_nay()
         giam_sat = giam_sat_tai.GiamSatTai(
             os.path.join(self.dl_dir, ten), file_tien_do, self.cancel_event,
             khi_so_lieu=so_lieu_ffmpeg, khi_nhip=self._td_nhip,
