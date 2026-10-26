@@ -968,6 +968,10 @@ class NguoiGuiNen:
         self.loi_cuoi = ""
         # Lý do tiến trình này là BẢN CŨ (đã có bản mới kích hoạt) — đã nhường quyền, không chạy lại nữa.
         self.ban_cu = ""
+        # Số lượt của vòng lặp đã BẮT ĐẦU / đã XONG (giành quyền + một vòng gửi, hoặc giành hụt):
+        # ``cho_gui_xong`` đợi một lượt trọn vẹn bắt đầu sau khi nó được gọi (audit B-6).
+        self.so_luot_bat_dau = 0
+        self.so_luot_xong = 0
 
     def start(self) -> None:
         with self._khoa_luong:
@@ -1007,6 +1011,7 @@ class NguoiGuiNen:
     def _vong(self) -> None:
         try:
             while not self._dung.is_set():
+                self.so_luot_bat_dau += 1
                 if self.nguoi_gui is None:
                     self.nguoi_gui = NguoiGui(self.db_path, self.data_dir, self._tao_cong(),
                                               dung=self._dung)
@@ -1018,6 +1023,7 @@ class NguoiGuiNen:
                     self.nguoi_gui.cong_bao_tri, maintenance_gate.CongBaoTri) else ""
                 if ly_do:
                     self._nhuong_cho_ban_moi(ly_do)
+                    self.so_luot_xong += 1
                     self._thuc.wait(self.chu_ky_gianh_s)
                     self._thuc.clear()
                     continue
@@ -1036,6 +1042,7 @@ class NguoiGuiNen:
                     self.loi_cuoi = f"{type(e).__name__}"
                     LOGGER.exception("event=outbox.round_failed")
                     cho = self.chu_ky_s
+                self.so_luot_xong += 1
                 self._thuc.wait(cho)
                 self._thuc.clear()
         finally:
@@ -1092,8 +1099,11 @@ def cho_gui_xong(db_path: str, data_dir: str, lo_id: str, *, han_s: float = 120.
     """Chờ CÓ HẠN tới khi việc gửi của lượt ``lo_id`` không còn chờ/đang gửi; trả số việc theo trạng
     thái. Người gửi khác (app) đang giữ quyền thì thôi chờ sớm — việc vẫn bền trong hàng đợi.
     ``RETRY_WAIT`` không bị chờ (đã hẹn giờ thử lại). Việc chỉ chờ vì TẠM DỪNG (``ly_do_tam_dung``)
-    cũng không bị chờ: người gửi không nhận cho tới khi người dùng bật lại. ``han_s <= 0``: không
-    khởi động người gửi, chỉ đếm. ``dung()`` trả True (yêu cầu dừng / Ctrl+C) → thôi chờ."""
+    cũng không bị chờ: người gửi không nhận cho tới khi người dùng bật lại. Dù lượt không còn gì chờ,
+    vẫn đợi người gửi chạy trọn MỘT lượt bắt đầu sau lời gọi: lượt Watch không có gì mới vẫn gửi việc
+    đã tới hạn của lượt trước, thay vì dừng người gửi trước khi nó kịp giành quyền (audit B-6).
+    ``han_s <= 0``: không khởi động người gửi, chỉ đếm. ``dung()`` trả True (yêu cầu dừng / Ctrl+C)
+    → thôi chờ."""
     if han_s <= 0:
         return tom_tat(db_path, lo_id=lo_id)
     tu_tao = nen is None
@@ -1102,11 +1112,14 @@ def cho_gui_xong(db_path: str, data_dir: str, lo_id: str, *, han_s: float = 120.
                           chu_ky_gianh_s=2.0)
         nen.start()
     bat_dau = time.monotonic()
+    moc_luot = nen.so_luot_bat_dau
     try:
         nen.danh_thuc()
         while True:
             tt = tom_tat(db_path, lo_id=lo_id)
-            if tt[PENDING] + tt[CLAIMED] + tt[SENDING] == 0 or ly_do_tam_dung(db_path, lo_id):
+            da_chay_luot = nen.so_luot_xong > moc_luot or not nen.dang_chay
+            if ((tt[PENDING] + tt[CLAIMED] + tt[SENDING] == 0 and da_chay_luot)
+                    or ly_do_tam_dung(db_path, lo_id)):
                 break
             da = time.monotonic() - bat_dau
             if da >= han_s or (not nen.co_quyen and da >= min(10.0, han_s)):

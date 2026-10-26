@@ -275,6 +275,8 @@ def test_cho_gui_xong_han_0_khong_khoi_dong_nguoi_gui(mt, monkeypatch):
 class _NenKhongGui:
     """Người gửi giữ quyền nhưng không bao giờ gửi: việc PENDING cứ chờ mãi."""
     co_quyen = True
+    dang_chay = True
+    so_luot_bat_dau = so_luot_xong = 0
 
     def danh_thuc(self):
         pass
