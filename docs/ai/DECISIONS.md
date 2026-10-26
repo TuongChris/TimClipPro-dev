@@ -15,6 +15,17 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-28 Đợt P3 audit 25/10: duyệt golden `file_tu_khop_chinh_no.json`, GIỮ chữ ký chính sách (người dùng, 2026-10-26)
+Quyết định (người dùng chọn trong phiên 26/10): A-7 (tự khớp không còn làm dừng sớm / chặn bù tốc độ ở nhánh quét
+thường) và A-16 (parser không còn bỏ dòng audfprint «to time -0.0 s») được giữ mà KHÔNG đổi chữ ký chính sách — Watch
+không quét lại âm tính đã chốt. Golden `tests/golden/file_tu_khop_chinh_no.json` sinh lại ở commit A-7 được duyệt: kết quả
+(0 vi phạm), đường đi và chẩn đoán cuối giữ nguyên; chỉ khác số khúc / dòng thô / dòng tiến độ vì lượt bù tốc độ nay chạy.
+Vì sao: hai trường hợp hiếm (file đang quét nằm sẵn trong kho; mảnh khớp đúng mép cửa sổ với `to time` âm 0); đổi chữ ký
+buộc Watch tải và quét lại TOÀN BỘ video đã chốt âm tính — chi phí lớn so với lợi ích. Fuzz `_merge` 10.000 tình huống
+giống hệt `a11dac4` (0 dương tính mới, 0 dòng mất).
+Ràng buộc: nếu sau này thấy video thật bị bỏ sót vì một trong hai lỗi, quét lại riêng video đó (`--quet-lai`), không đổi
+chữ ký hàng loạt. Bằng chứng: `tests/test_tu_khop_dung_som.py`, `tests/test_parser_to_time_am.py`; handoff PC2 26/10.
+
 ## D-27 Sửa «bóng» của âm thanh lặp trong `_merge` (P0) — PC2 viết 10/10 (`fix/pc2/loop-alias-p0`), đưa lên `fe461bd` 25/10 (người dùng duyệt)
 Quyết định (người dùng duyệt triển khai thử A + B + C' 10/10; duyệt đưa vào mã chạy 25/10 trong kế hoạch audit): mốc đầu clip
 chỉ lấy từ căn chỉnh CHÍNH; mảnh «bóng» (căn chỉnh khác của cùng clip nằm trong phạm vi một vị trí đặt mạnh hơn) vẫn được gom
