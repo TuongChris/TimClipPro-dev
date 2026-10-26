@@ -164,6 +164,8 @@ def _dong_bo_tac_vu_nen() -> None:
         return
     job.update(tv.anh())
     if not job["running"]:
+        if tv.phien_youtube is not None:             # «Trạng thái YouTube» = lượt vừa xong này (audit D-14)
+            eng.phien_youtube_cuoi = tv.phien_youtube
         st.session_state.pop("tac_vu_nen", None)     # xong: kết quả đã chép, thôi theo dõi
         tac_vu_nen.da_nhan(eng, tv)                  # phiên mở sau không nhận lại
 
@@ -251,10 +253,11 @@ def chay_nguon_chung(nguon: list) -> None:
     st.rerun()
 
 
-def chay_nen(kind: str, ham, *args, so_dong_bo=None, **kwargs):
+def chay_nen(kind: str, ham, *args, so_dong_bo=None, phien_youtube=None, **kwargs):
     """Chạy một tác vụ dài trong luồng nền để giao diện không bị đơ và nút Dừng vẫn bấm được.
     Vào cổng bảo trì TRƯỚC (đang cập nhật → báo, không chạy); lease trả khi tác vụ xong. Tác vụ ghi sổ mức tiến
-    trình (``tac_vu_nen``) để phiên mới (tải lại trang) nhận lại được; ``so_dong_bo``: sổ tiến độ đồng bộ kênh."""
+    trình (``tac_vu_nen``) để phiên mới (tải lại trang) nhận lại được; ``so_dong_bo``: sổ tiến độ đồng bộ kênh;
+    ``phien_youtube``: phiên YouTube của lượt (``ChannelSync.phien``) — xong thì thanh bên báo theo nó."""
     if dang_co_tac_vu():
         st.warning("Đang có tác vụ chạy; không tạo job trùng.")
         return
@@ -263,7 +266,7 @@ def chay_nen(kind: str, ham, *args, so_dong_bo=None, **kwargs):
     except DangChayRoi as e:
         st.error(f"Chưa chạy được: {e}")
         return
-    tv = tac_vu_nen.TacVuNen(kind, huy=eng.cancel, so_dong_bo=so_dong_bo)
+    tv = tac_vu_nen.TacVuNen(kind, huy=eng.cancel, so_dong_bo=so_dong_bo, phien_youtube=phien_youtube)
     job.update({"running": True, "pct": 0.0, "msg": "Đang khởi động...",
                 "results": [], "error": "", "kind": kind, "da_day_sheet": False})
     eng.cancel_event.clear()
@@ -1282,7 +1285,8 @@ with tab0:
                          player_clients=list(eng.config.ytdlp_player_clients),
                          cau_hinh_mang=eng.cau_hinh_mang(), theo_doi=st.session_state.so_dong_bo)
         chay_nen("channel", cs.sync, kenh_url.strip(), gioi_han or None, so_dong_bo=st.session_state.so_dong_bo,
-                 cancel_check=lambda: eng.cancel_event.is_set(), thu_lai_han_che=thu_lai_han_che)
+                 phien_youtube=cs.phien, cancel_check=lambda: eng.cancel_event.is_set(),
+                 thu_lai_han_che=thu_lai_han_che)
 
     if st.session_state.kho_dir and os.path.isdir(st.session_state.kho_dir.strip('" ')):
         tk = ChannelSync(st.session_state.kho_dir.strip('" ')).thong_ke()
@@ -1305,7 +1309,10 @@ with tab0:
                 try:
                     cs = ChannelSync(st.session_state.kho_dir.strip('" '),
                                      cau_hinh_mang=eng.cau_hinh_mang())
-                    r = cs.kiem_tra_thieu(kenh_url.strip(), gioi_han or None)
+                    try:
+                        r = cs.kiem_tra_thieu(kenh_url.strip(), gioi_han or None)
+                    finally:   # thanh bên (lần vẽ sau) báo theo lượt đọc danh sách này (audit D-14)
+                        eng.phien_youtube_cuoi = cs.phien
                     trong_so = r.get("trong_so_khong_file") or []
                     st.success(f"Kênh có {r['tong_kenh']} video — đã có **{r['co_roi']}**, "
                                f"còn thiếu **{len(r['thieu'])}**"
@@ -1363,7 +1370,7 @@ with tab0:
                                cau_hinh_mang=eng.cau_hinh_mang())
         # Nút Dừng chỉ đặt eng.cancel_event — phải nối vào đây như đồng bộ kênh, không thì
         # bấm Dừng vẫn hỏi YouTube hết kho (audit D-9).
-        chay_nen("va_title", cs_title.va_metadata, lay_title=True,
+        chay_nen("va_title", cs_title.va_metadata, lay_title=True, phien_youtube=cs_title.phien,
                  cancel_check=lambda: eng.cancel_event.is_set())
 
 # ---------------------------------------------------------------- TAB 1

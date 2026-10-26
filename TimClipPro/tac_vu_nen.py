@@ -128,10 +128,13 @@ def da_nhan(engine, tv: "TacVuNen") -> None:
 class TacVuNen:
     """Một tác vụ nền: một thread, trạng thái đọc qua ảnh chụp (``anh``) — không đối tượng nào của Streamlit."""
 
-    def __init__(self, kind: str, huy: Callable[[], None], so_dong_bo=None):
+    def __init__(self, kind: str, huy: Callable[[], None], so_dong_bo=None, phien_youtube=None):
         self.id = uuid.uuid4().hex
         self.kind = kind
         self.so_dong_bo = so_dong_bo          # sổ tiến độ đồng bộ kênh (chỉ đọc ảnh chụp ở giao diện)
+        # Phiên YouTube (cầu dao + số đo) của CHÍNH lượt này: phiên nhận kết quả công bố nó làm «lượt gần nhất»
+        # của thanh bên khi tác vụ xong (audit D-14).
+        self.phien_youtube = phien_youtube
         self._huy = huy
         self._khoa = threading.Lock()
         self._pct = 0.0
