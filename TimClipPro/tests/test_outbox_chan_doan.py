@@ -83,6 +83,23 @@ def test_403_api_chua_bat_noi_dung_nguyen_nhan_khong_bao_chia_se(gia):
     assert "123456" not in ly_do and "console.developers" not in ly_do          # không chép message gốc
 
 
+def test_403_access_not_configured_cung_la_api_chua_bat(gia):
+    """Reason thứ hai Google dùng cho «API chưa bật» (đột biến 26/10: bỏ dòng này khỏi bảng câu không test nào đỏ)."""
+    ly_do = _loi_gui(gia, LoiHttp(403, "Access Not Configured.", ly_do_google="ACCESS_NOT_CONFIGURED"))
+    assert "Google Sheets API" in ly_do and "chưa bật" in ly_do
+
+
+def test_401_khi_mo_bang_la_loi_truy_cap_kem_ngu_canh(gia):
+    """gspread chỉ đổi 403/404 khi mở bảng; 401 đi ra nguyên ``APIError`` — vẫn là lỗi truy cập."""
+    ly_do = _loi_gui(gia, LoiHttp(401, "Request had invalid authentication credentials."))
+    assert "HTTP 401" in ly_do and SA in ly_do and "timclip_02" in ly_do and ID_NGAN in ly_do
+
+
+def test_400_khong_phai_loi_truy_cap_khong_kem_ngu_canh(gia):
+    ly_do = _loi_gui(gia, LoiHttp(400, "Invalid requests[0]"))
+    assert "HTTP 400" in ly_do and SA not in ly_do and "timclip_02" not in ly_do
+
+
 def test_403_thieu_scope_noi_dung_nguyen_nhan(gia):
     ly_do = _loi_gui(gia, LoiHttp(403, "Request had insufficient authentication scopes.",
                                   ly_do_google="ACCESS_TOKEN_SCOPE_INSUFFICIENT"))
@@ -222,11 +239,29 @@ def test_san_sang_thi_bao_sap_gui(mt):
     assert "Sắp gửi" in _ly_do(mt, vid, bay_gio=1e9, nen=_nen())
 
 
+def test_khong_truyen_nen_thi_tra_nguoi_gui_nen_cua_db(mt, monkeypatch):
+    """Mặc định (không truyền ``nen``) tra người gửi nền đã đăng ký cho CHÍNH DB này trong tiến trình."""
+    vid = _xep(mt)
+    assert ob.nguoi_gui_nen(mt["db"]) is None
+    assert "chưa chạy" in _ly_do(mt, vid, bay_gio=1e9)
+    monkeypatch.setitem(ob._NEN, ob._khoa_db(mt["db"]), _nen())
+    assert "Sắp gửi" in _ly_do(mt, vid, bay_gio=1e9)
+
+
+def test_tam_dung_toan_bo_xet_truoc_hen_gio(mt):
+    """Thứ tự như người gửi xét: tạm dừng (chặn ngay ở lệnh claim) nói trước hẹn giờ."""
+    vid = _xep(mt)
+    _sua(mt, vid, trang_thai=ob.RETRY_WAIT, thu_lai_sau=2e9, loi="x")
+    ob.dat_tam_dung(mt["db"], True)
+    assert "tạm dừng toàn bộ" in _ly_do(mt, vid, bay_gio=1e9, nen=_nen())
+
+
 def test_claimed_lau_bat_thuong_bao_cach_xu_ly_khong_gui_trung(mt):
     vid = _xep(mt)
     _sua(mt, vid, trang_thai=ob.CLAIMED, claim_luc=1000.0)
-    assert "đang xử lý" in _ly_do(mt, vid, bay_gio=1010.0, nen=_nen())
-    lau = _ly_do(mt, vid, bay_gio=1000.0 + ob.HAN_GIU_VIEC_LAU_S + 1, nen=_nen())
+    ngan = _ly_do(mt, vid, bay_gio=1010.0, nen=_nen())
+    assert "đang xử lý" in ngan and "lâu bất thường" not in ngan
+    lau =_ly_do(mt, vid, bay_gio=1000.0 + ob.HAN_GIU_VIEC_LAU_S + 1, nen=_nen())
     assert "lâu bất thường" in lau and "chưa ghi gì" in lau
     assert "huỷ" in lau                    # CLAIMED huỷ được từ audit B-1 (fencing claim_token)
 
@@ -294,3 +329,6 @@ def test_kem_ngu_canh_giu_pham_vi_chan_theo_revision():
     assert loi.chi_revision is True and loi.tam_thoi is False and SA in loi.ly_do
     tab = ob.ChuaGui("tab", tam_thoi=False)
     assert ob._kem_ngu_canh(tab, gspread.exceptions.WorksheetNotFound("t"), _chot()) is tab
+    tam = ob.ChuaGui("tạm", tam_thoi=True)                 # chỉ lỗi truy cập VĨNH VIỄN mới kèm ngữ cảnh
+    assert ob._kem_ngu_canh(tam, PermissionError(), _chot()) is tam
+    assert ob._la_loi_truy_cap(gae.RefreshError("tạm", retryable=True)) is False
