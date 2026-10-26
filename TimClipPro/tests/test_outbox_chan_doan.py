@@ -430,3 +430,11 @@ def test_o_ly_do_giao_dien_giu_ngu_canh_khi_tai_khoan_dich_vu_dai(goc):
     dai = "x" * 500                                                                     # không có ngữ cảnh: cắt như cũ
     assert ui.o_ly_do(SimpleNamespace(loi=dai, da_xoa_job=False)) == dai[:ui.DO_DAI_O_LY_DO]
     assert "chỉ giữ biên nhận" in ui.o_ly_do(SimpleNamespace(loi="", da_xoa_job=True))
+
+
+def test_404_mo_bang_noi_ma_sai_hoac_bang_da_xoa_khong_bao_chia_se(gia):
+    """Sheets API trả 403 cho bảng CHƯA chia sẻ; 404 khi mở bảng = mã bảng sai / bảng đã xoá — khuyên «chia sẻ
+    lại» là sai hướng (người dùng chia sẻ một bảng không tồn tại)."""
+    ly_do = _loi_gui(gia, LoiHttp(404, "Requested entity was not found."))
+    assert "kiểm quyền chia sẻ" not in ly_do and "mã sai" in ly_do               # câu cũ khuyên chia sẻ lại
+    assert "mã" in ly_do and "xoá" in ly_do and ID_NGAN in ly_do

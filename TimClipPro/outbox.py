@@ -1398,8 +1398,10 @@ def phan_loai_loi(e: BaseException, *, da_phat: bool) -> Exception:
         return ChuaGui("Không thấy tab đã ghim (theo mã tab) — tab có thể đã bị xoá hoặc tạo lại; "
                        "không tự chọn tab khác.", tam_thoi=False)
     if isinstance(e, gspread.exceptions.SpreadsheetNotFound):
-        return ChuaGui("Không mở được bảng tính — kiểm quyền chia sẻ cho tài khoản dịch vụ.",
-                       tam_thoi=False)
+        # gspread: HTTP 404 khi mở bảng. Sheets API trả 403 (nhánh PermissionError) cho bảng CHƯA chia sẻ — 404 là
+        # mã bảng sai hoặc bảng đã bị xoá; khuyên chia sẻ lại là sai hướng.
+        return ChuaGui("Không thấy bảng tính với mã này (mã sai hoặc bảng đã bị xoá) — kiểm lại link trong hồ sơ "
+                       "đích; bảng chưa chia sẻ sẽ báo lỗi quyền (403), không phải lỗi này.", tam_thoi=False)
     if isinstance(e, gae.RefreshError):
         if getattr(e, "retryable", False):
             return ChuaGui("Google tạm thời chưa cấp phiên đăng nhập — thử lại sau.", tam_thoi=True)
