@@ -3,16 +3,31 @@
 
 from __future__ import annotations
 
+import contextlib
+import glob
 import os
 import shutil
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Optional
+
+from khoa import DangChayRoi, KhoaTienTrinh
 
 
 _BYTE_MOI_GB = 1024 ** 3
 _GIAY_MOI_NGAY = 24 * 60 * 60
 _DUOI_DANG_TAI = (".part", ".ytdl")
+
+# Kho đệm là ``<data>/downloads``; hai thư mục khoá dưới đây nằm cạnh nó, NGOÀI ``downloads/`` để bộ
+# đệm (``glob(<tên>.*)``) và chính việc dọn đệm không bao giờ thấy chúng.
+# - ``khoa_tai/<tên>.lock``: khoá tải MỘT mục đệm của engine (``Engine._khoa_tai_audio``) — dọn đệm
+#   cũng xoá file dưới khoá này nên không lọt giữa lúc một lượt quét nhận file và lúc nó đặt dấu.
+# - ``dem_dang_dung/<tên file>~<mã>.lock``: dấu «lượt quét đang dùng file đệm» (audit C-9). Mỗi lượt
+#   một file khoá HĐH riêng — nhiều lượt cùng dùng một file được; khoá HĐH tự nhả khi tiến trình chết,
+#   nên dấu của lượt bị kill/crash không giữ file mãi (dọn đệm lấy được khoá = dấu mồ côi, bỏ dấu).
+THU_MUC_KHOA_TAI = "khoa_tai"
+THU_MUC_DANG_DUNG = "dem_dang_dung"
 
 
 @dataclass
@@ -57,18 +72,84 @@ def chon_can_xoa(
     return can_xoa
 
 
+def ten_muc_dem(ten_file: str) -> str:
+    """Tên lượt tải (``<id>`` / ``<id>__p<giây>``) của file đệm ``<tên>.<đuôi>`` — khoá tải của
+    engine đặt theo tên này, bộ đệm tìm file bằng ``glob(<tên>.*)``."""
+    return ten_file.split(".", 1)[0]
+
+
+def _goc_du_lieu(thu_muc_dem: str) -> str:
+    return os.path.dirname(os.path.abspath(thu_muc_dem))
+
+
+def duong_khoa_tai(thu_muc_dem: str, ten: str) -> str:
+    """File khoá tải của mục đệm ``ten`` (``Engine._khoa_tai_audio`` dùng đúng đường này)."""
+    return os.path.join(_goc_du_lieu(thu_muc_dem), THU_MUC_KHOA_TAI, ten + ".lock")
+
+
+def dat_dau_dang_dung(thu_muc_dem: str, ten_file: str, ten_viec: str = "") -> KhoaTienTrinh:
+    """Đặt dấu «đang dùng» (đã giữ khoá) cho file đệm ``ten_file``; nhả bằng ``nha_dau_dang_dung``.
+
+    Người gọi phải đang giữ khoá tải của mục đó (``duong_khoa_tai``): dọn đệm kiểm dấu và xoá file
+    dưới CÙNG khoá, nên không có lúc nào dọn đệm đã thấy «không ai dùng» mà lượt quét vừa nhận file.
+    """
+    duong = os.path.join(_goc_du_lieu(thu_muc_dem), THU_MUC_DANG_DUNG,
+                         f"{ten_file}~{os.getpid()}_{uuid.uuid4().hex[:12]}.lock")
+    dau = KhoaTienTrinh(duong, ten_viec or f"Lượt quét đang dùng file đệm {ten_file}")
+    dau.__enter__()
+    return dau
+
+
+def nha_dau_dang_dung(dau: KhoaTienTrinh) -> None:
+    dau.__exit__()
+    with contextlib.suppress(OSError):
+        os.remove(dau.path)
+
+
+def _dang_duoc_dung(thu_muc_dem: str, ten_file: str, bo_dau_mo_coi: bool) -> bool:
+    """Còn lượt quét nào (tiến trình còn sống) giữ dấu «đang dùng» của ``ten_file`` không?
+
+    Lấy được khoá của một dấu = chủ của nó đã chết: dấu mồ côi, bỏ đi khi ``bo_dau_mo_coi`` (chỉ
+    bật khi đang giữ khoá tải của mục — xem ``dat_dau_dang_dung``).
+    """
+    mau = os.path.join(glob.escape(os.path.join(_goc_du_lieu(thu_muc_dem), THU_MUC_DANG_DUNG)),
+                       glob.escape(ten_file) + "~*.lock")
+    dang_dung = False
+    for duong in glob.glob(mau):
+        dau = KhoaTienTrinh(duong, "Dọn kho đệm: kiểm dấu đang dùng")
+        try:
+            dau.__enter__()
+        except (DangChayRoi, OSError):
+            # Không lấy được khoá (hay không mở được dấu): coi là ĐANG dùng — thận trọng.
+            dang_dung = True
+            continue
+        dau.__exit__()
+        if bo_dau_mo_coi:
+            with contextlib.suppress(OSError):
+                os.remove(duong)
+    return dang_dung
+
+
 def don_kho_dem(
     thu_muc: str,
     max_gb: float = 20.0,
     max_ngay: int = 7,
     thuc_hien: bool = True,
 ) -> dict:
-    """Quét và dọn các file trực tiếp trong kho đệm, không đi vào thư mục con."""
+    """Quét và dọn các file trực tiếp trong kho đệm, không đi vào thư mục con.
+
+    File một lượt quét ĐANG dùng (dấu ``dem_dang_dung``, audit C-9) không bao giờ bị chọn: GUI, CLI và
+    Watch dùng chung ``data/``, lượt quét chỉ giữ lease cổng bảo trì (không giữ ``tool.lock``) và cắt
+    khúc bằng từng lệnh FFmpeg riêng — giữa hai lệnh không ai mở file, nên xoá vẫn thành công và lượt
+    quét hỏng giữa chừng với câu lỗi đổ cho file. File đang dùng vẫn tính vào ngân sách dung lượng
+    (nó chiếm ổ thật): vượt ngân sách thì bỏ file nhàn rỗi thay vì file đang quét.
+    """
     ket_qua = {
         "tong_file": 0,
         "tong_gb": 0.0,
         "xoa_file": 0,
         "xoa_gb": 0.0,
+        "bo_qua_dang_dung": 0,
         "loi": [],
     }
     if not os.path.isdir(thu_muc):
@@ -76,6 +157,7 @@ def don_kho_dem(
 
     tat_ca = []
     co_the_xoa = []
+    dang_dung = []
     try:
         cac_muc = list(os.scandir(thu_muc))
     except OSError as e:
@@ -96,16 +178,26 @@ def don_kho_dem(
             lan_dung_cuoi=stat.st_mtime,
         )
         tat_ca.append(item)
-        if not entry.name.lower().endswith(_DUOI_DANG_TAI):
+        if entry.name.lower().endswith(_DUOI_DANG_TAI):
+            continue
+        if _dang_duoc_dung(thu_muc, entry.name, bo_dau_mo_coi=False):
+            dang_dung.append(item)
+        else:
             co_the_xoa.append(item)
 
     ket_qua["tong_file"] = len(tat_ca)
     ket_qua["tong_gb"] = (
         sum(item.kich_thuoc for item in tat_ca) / _BYTE_MOI_GB
     )
+    ket_qua["bo_qua_dang_dung"] = len(dang_dung)
+    ngan_sach = int(max_gb * _BYTE_MOI_GB)
+    if ngan_sach > 0 and dang_dung:
+        # Phần ngân sách còn lại cho file nhàn rỗi; file đang dùng một mình đã vượt thì bỏ mọi
+        # file nhàn rỗi (``chon_can_xoa`` hiểu ngân sách <= 0 là «không giới hạn» nên giữ >= 1).
+        ngan_sach = max(1, ngan_sach - sum(item.kich_thuoc for item in dang_dung))
     can_xoa = chon_can_xoa(
         co_the_xoa,
-        int(max_gb * _BYTE_MOI_GB),
+        ngan_sach,
         max_ngay * _GIAY_MOI_NGAY,
     )
 
@@ -118,11 +210,30 @@ def don_kho_dem(
 
     da_xoa_byte = 0
     for item in can_xoa:
+        ten_file = os.path.basename(item.path)
+        # Kiểm lại dấu và xoá DƯỚI khoá tải của mục: lượt quét nhận file đệm và đặt dấu dưới cùng
+        # khoá này, nên không lọt vào giữa lần kiểm ở trên và lúc xoá.
+        khoa = KhoaTienTrinh(duong_khoa_tai(thu_muc, ten_muc_dem(ten_file)),
+                             f"Dọn kho đệm: {ten_file}")
         try:
+            khoa.__enter__()
+        except DangChayRoi:
+            # Đang có lượt tải / nhận đúng mục này: để lần dọn sau.
+            ket_qua["bo_qua_dang_dung"] += 1
+            continue
+        except OSError as e:
+            ket_qua["loi"].append(f"{item.path}: {e}")
+            continue
+        try:
+            if _dang_duoc_dung(thu_muc, ten_file, bo_dau_mo_coi=True):
+                ket_qua["bo_qua_dang_dung"] += 1
+                continue
             os.remove(item.path)
         except OSError as e:
             ket_qua["loi"].append(f"{item.path}: {e}")
             continue
+        finally:
+            khoa.__exit__()
         ket_qua["xoa_file"] += 1
         da_xoa_byte += item.kich_thuoc
     ket_qua["xoa_gb"] = da_xoa_byte / _BYTE_MOI_GB

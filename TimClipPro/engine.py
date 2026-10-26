@@ -49,6 +49,7 @@ import channel
 import cau_hinh
 import truy_cap_youtube
 import ytdlp_chung
+import don_dep
 import dossier
 import giam_sat_tai
 import lich_su
@@ -644,8 +645,8 @@ DUNG_SAI_TAI_THIEU_S = 5.0
 DUNG_SAI_TAI_LAI_S = 1.0
 # Khoá MỘT lượt tải audio của một video (``Engine._khoa_tai_audio``): ``data/<THU_MUC_KHOA_TAI>/<tên>.lock``
 # — NGOÀI ``downloads/`` để bộ đệm (``glob(<tên>.*)``) và dọn đệm không bao giờ thấy nó. Lượt sau chờ
-# lượt đang tải, kiểm Dừng mỗi chu kỳ này.
-THU_MUC_KHOA_TAI = "khoa_tai"
+# lượt đang tải, kiểm Dừng mỗi chu kỳ này. Dọn đệm (``don_dep.don_kho_dem``) xoá file dưới CÙNG khoá này.
+THU_MUC_KHOA_TAI = don_dep.THU_MUC_KHOA_TAI
 CHU_KY_CHO_KHOA_TAI_S = 0.5
 # Đo độ dài âm thanh THẬT (``Engine.do_dai_audio_that``): bỏ cuộc khi bấy nhiêu giây không đọc thêm gói nào.
 IM_LANG_DO_AUDIO_S = 120.0
@@ -3638,7 +3639,7 @@ class Engine:
         ngoài những khoá người gọi đã có. File khoá nhỏ giữ lại trên đĩa (xoá file khoá khi còn người mở
         là đường đua kinh điển trên POSIX).
         """
-        duong = os.path.join(self.data_dir, THU_MUC_KHOA_TAI, ten + ".lock")
+        duong = don_dep.duong_khoa_tai(self.dl_dir, ten)   # = data/<THU_MUC_KHOA_TAI>/<tên>.lock
         da_bao = False
         while True:
             self._check_cancel()
@@ -3661,6 +3662,39 @@ class Engine:
         finally:
             khoa.__exit__()
 
+    @contextlib.contextmanager
+    def _giu_file_dem(self, path: str):
+        """Đánh dấu file đệm ``path`` (trực tiếp trong ``downloads/``) là ĐANG được lượt quét này dùng.
+
+        GUI, CLI và Watch dùng chung ``data/``; lượt quét không giữ ``tool.lock`` và cắt khúc bằng từng
+        lệnh FFmpeg riêng — giữa hai lệnh (và suốt lúc so khớp một đoạn quét tăng dần) không ai mở file,
+        nên dọn đệm của tiến trình khác (cuối lượt Watch, ``cli dondep``) xoá được nó và lượt quét hỏng
+        giữa chừng (audit C-9). Dấu đặt dưới khoá tải của mục (cùng khoá dọn đệm xoá file), nhả ở cuối;
+        tiến trình chết thì khoá HĐH tự nhả. File ngoài kho đệm: không làm gì.
+        """
+        goc = os.path.abspath(path)
+        if os.path.normcase(os.path.dirname(goc)) != os.path.normcase(os.path.abspath(self.dl_dir)):
+            yield
+            return
+        ten_file = os.path.basename(goc)
+        dau = None
+        with self._khoa_tai_audio(don_dep.ten_muc_dem(ten_file), ten_file):
+            try:
+                dau = don_dep.dat_dau_dang_dung(self.dl_dir, ten_file)
+            except OSError as e:
+                # Không đặt được dấu (ổ đầy / quyền): vẫn quét — chỉ mất lớp bảo vệ trước dọn đệm.
+                LOGGER_SCAN.warning("event=scan.cache_in_use_mark_failed file=%s err=%s",
+                                    ten_file, str(e)[:200])
+            with contextlib.suppress(OSError):
+                os.utime(goc)
+        try:
+            yield
+        finally:
+            if dau is not None:
+                with contextlib.suppress(OSError):
+                    os.utime(goc)   # lần dùng cuối = lúc lượt quét XONG
+                don_dep.nha_dau_dang_dung(dau)
+
     def _tai_audio_trong_khoa(self, url: str, video_id: str, ten: str,
                               progress: Optional[Callable],
                               gioi_han_giay: Optional[float]) -> str:
@@ -3672,6 +3706,10 @@ class Engine:
         if san_co:
             self._bao(progress, 0.40, "Đã có sẵn audio, bỏ qua bước tải.")
             self._td(tdq.GD_TAI, ghi="Dùng lại audio đã tải trước đó (bộ đệm) — không tải lại")
+            # Dọn đệm chọn theo mtime = LẦN DÙNG CUỐI (``MucDem.lan_dung_cuoi``), không phải lúc tải:
+            # file vừa dùng lại không được trông như đã nằm yên 9 ngày (audit C-9).
+            with contextlib.suppress(OSError):
+                os.utime(san_co[0])
             return san_co[0]
         # Tải một phần đi qua ffmpeg: chỉ biết byte ffmpeg GHI ra file (đầu ra), không biết byte mạng.
         dem_byte = {"byte_dau_ra": 0} if gioi_han_giay else {"byte_da_nhan": 0}
@@ -5301,7 +5339,9 @@ class Engine:
         try:
             if not os.path.isfile(path):
                 raise RuntimeError(f"Không tìm thấy file: {path}")
-            with self.scan_workspace() as ws:
+            # Dấu «đang dùng» giữ suốt lượt (mọi đoạn, mọi khúc): dọn đệm của tiến trình khác không
+            # được xoá file đệm đang quét giữa hai lệnh FFmpeg (audit C-9).
+            with self._giu_file_dem(path), self.scan_workspace() as ws:
                 tong = self.duration_of(path)
                 if not tong:
                     raise RuntimeError(f"Không đọc được thời lượng file: {path}")

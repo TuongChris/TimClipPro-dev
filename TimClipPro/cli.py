@@ -386,6 +386,8 @@ def _main():
                 f"{hanh_dong}: {ket_qua['xoa_file']} file, "
                 f"{ket_qua['xoa_gb']:.3f} GB."
             )
+            if ket_qua.get("bo_qua_dang_dung"):
+                print(f"Giữ lại {ket_qua['bo_qua_dang_dung']} file đệm đang có lượt quét dùng.")
             # Thư mục job quét mồ côi: quét xong bình thường là engine tự xoá, nên còn
             # sót nghĩa là có lượt bị kill/crash. Mỗi thư mục giữ chunk WAV đã giải mã,
             # đo thật 246 MB đến 3,2 GB một cái — không dọn thì đầy ổ lúc nào không hay.

@@ -76,7 +76,9 @@ app.py (Streamlit UI)   cli.py (dòng lệnh)   ← lớp giao diện, thay đư
 - Nếu sau này thật sự cần nhiều khoá, phải quy định và tuân thủ một thứ tự lấy khoá cố định
   trên toàn dự án. Không được lấy các khoá theo thứ tự tùy ý vì sẽ tạo kẹt chéo.
 - Thứ tự đã quy định (`docs/MANAGED_RUNTIME_DESIGN.md` §6): cổng bảo trì → lease của việc →
-  `data/tool.lock` → `data/khoa_tai/<tên>.lock` (một lượt tải audio của một video, audit D-3) → khoá
+  `data/tool.lock` → `data/khoa_tai/<tên>.lock` (một lượt tải audio của một video, audit D-3) →
+  `data/dem_dang_dung/<tên file>~<mã>.lock` (dấu lượt quét đang dùng file đệm, audit C-9 — dọn đệm chỉ
+  THỬ khoá, không chờ) → khoá
   JSON `.timclip.lock` → `data/hang_doi_gui.lock` (quyền người gửi Sheets) → giao dịch SQLite. Trong giao dịch ghi SQLite: không chờ khoá HĐH, không gọi mạng.
 
 ## Bất biến theo vùng — tự nạp từ `.claude/rules/` khi đụng file của vùng

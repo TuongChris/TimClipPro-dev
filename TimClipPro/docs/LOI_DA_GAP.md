@@ -374,6 +374,18 @@ lỗi (đóng G6 của `DATA_FLOW.md`). Đã sửa: `download_audio` giữ khoá
 đệm DƯỚI khoá. → Quy tắc: `continuedl` chỉ an toàn khi mỗi `.part` có đúng MỘT người ghi. Test:
 `tests/test_tai_audio_dong_thoi.py`.
 
+Audit C-9 (26/10/2026): dọn kho đệm (`don_kho_dem` ở cuối MỌI lượt Watch và trong `cli dondep`) chọn
+file chỉ theo `st_mtime` = lúc TẢI (dùng lại bản đệm không chạm mtime) và không biết file nào đang được
+quét. Lượt quét chỉ giữ lease cổng bảo trì (không giữ `tool.lock`) và cắt khúc bằng từng lệnh FFmpeg riêng
+— giữa hai lệnh, và suốt lúc so khớp một đoạn quét tăng dần, không ai mở file nên Windows không chặn
+`os.remove`: lượt quét hàng giờ hỏng giữa chừng với «Không đọc được thời lượng file» (đổ cho file). Đã sửa:
+`scan_media` giữ dấu «đang dùng» (`data/dem_dang_dung/<tên file>~<mã>.lock`, khoá HĐH riêng mỗi lượt,
+tự nhả khi tiến trình chết) đặt dưới khoá tải của mục; dọn đệm bỏ qua file có dấu sống, kiểm lại và xoá
+DƯỚI cùng khoá tải, vẫn tính file đang dùng vào ngân sách (bỏ file nhàn rỗi thay nó); dùng lại bản đệm làm
+mới mtime. → Quy tắc: «không ai đang mở file» ≠ «không ai đang dùng file» — dọn dữ liệu dùng chung giữa
+tiến trình phải hỏi dấu sử dụng, không suy từ khoá file của HĐH hay tuổi file. Test:
+`tests/test_don_dem_khong_xoa_file_dang_quet.py`.
+
 **14. "Tool hỏng rồi" hoá ra là ÂM TÍNH ĐÚNG — lỗi nằm ở câu chẩn đoán (21/08/2026).**
 
 Người dùng gửi 4 link kênh `SML Remix` kèm ảnh báo cáo 0 kết quả và hỏi "có phải hôm
