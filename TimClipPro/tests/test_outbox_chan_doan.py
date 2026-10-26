@@ -332,3 +332,41 @@ def test_kem_ngu_canh_giu_pham_vi_chan_theo_revision():
     tam = ob.ChuaGui("tạm", tam_thoi=True)                 # chỉ lỗi truy cập VĨNH VIỄN mới kèm ngữ cảnh
     assert ob._kem_ngu_canh(tam, PermissionError(), _chot()) is tam
     assert ob._la_loi_truy_cap(gae.RefreshError("tạm", retryable=True)) is False
+
+
+# ---------------------------------------------------------------- review sheets chẩn đoán (26/10)
+
+def test_gianh_quyen_loi_khong_bao_tien_trinh_khac_dang_giu(mt):
+    """Giành quyền LỖI (vd. ``phuc_hoi`` gặp ``database is locked`` → ``tha_quyen`` rồi ném) thì ``co_quyen`` =
+    False VÀ ``loi_cuoi`` có tên lỗi: không có tiến trình nào giữ quyền — không được nói «tiến trình khác đang giữ»."""
+    vid = _xep(mt)
+    ly_do = _ly_do(mt, vid, bay_gio=1e9, nen=_nen(co_quyen=False, loi_cuoi="OperationalError"))
+    assert "tiến trình khác" not in ly_do and "OperationalError" in ly_do
+    assert "tiến trình khác" in _ly_do(mt, vid, bay_gio=1e9, nen=_nen(co_quyen=False))   # DangChayRoi: đúng như cũ
+
+
+def test_gianh_quyen_loi_that_cua_nguoi_gui_nen(mt, monkeypatch):
+    """Người gửi nền THẬT: giành được khoá file rồi phục hồi lỗi DB → nhả khoá, ``loi_cuoi`` ghi lỗi."""
+    import os
+    import sqlite3
+    import time as _t
+
+    from outbox_gia import CongGia
+
+    vid = _xep(mt)
+
+    def hong(self):
+        raise sqlite3.OperationalError("database is locked")
+    monkeypatch.setattr(ob.NguoiGui, "phuc_hoi", hong)
+    data = os.path.dirname(mt["db"])
+    nen = ob.NguoiGuiNen(mt["db"], data, CongGia, chu_ky_s=0.05, chu_ky_gianh_s=0.05)
+    nen.start()
+    try:
+        het = _t.monotonic() + 5
+        while _t.monotonic() < het and not nen.loi_cuoi:
+            _t.sleep(0.02)
+        assert nen.loi_cuoi == "OperationalError" and not nen.co_quyen
+        ly_do = _ly_do(mt, vid, bay_gio=1e9, nen=nen)
+        assert "tiến trình khác" not in ly_do and "OperationalError" in ly_do
+    finally:
+        nen.stop(cho_s=5)

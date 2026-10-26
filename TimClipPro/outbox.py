@@ -1132,6 +1132,11 @@ def ly_do_chua_gui(db_path: str, v: ViecGui, *, bay_gio: Optional[float] = None,
         return "Người gửi nền chưa chạy trong tiến trình này — tải lại trang để khởi động."
     if getattr(nen, "ban_cu", ""):
         return "Tiến trình này chạy bản đã bị thay — đã nhường quyền gửi cho bản đang kích hoạt."
+    if not nen.co_quyen and nen.loi_cuoi:
+        # Giành quyền LỖI (khoá file giành được nhưng phục hồi gặp lỗi DB → đã nhả; hoặc không tạo được file
+        # khoá): không ai giữ quyền cả — chỉ ``DangChayRoi`` (``loi_cuoi`` rỗng) mới là «tiến trình khác đang giữ».
+        return (f"Người gửi chưa giành được quyền gửi — lần thử gần nhất lỗi ({nen.loi_cuoi}); tự thử lại mỗi "
+                "chu kỳ — xem nhật ký Tool.")
     if not nen.co_quyen:
         return ("Người gửi chưa giữ quyền gửi — một tiến trình khác (Watch/CLI hoặc cửa sổ Tool khác) đang giữ; "
                 "việc sẽ được gửi khi quyền được nhả.")
