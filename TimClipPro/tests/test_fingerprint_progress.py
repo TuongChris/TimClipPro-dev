@@ -104,6 +104,32 @@ def test_finish_trung_khong_lam_count_vuot_total(tmp_path):
     assert tracker.state.processed_count == 1
 
 
+def test_clip_hien_tai_la_so_thu_tu_cua_chinh_clip_dang_xu_ly(tmp_path):
+    """Audit F-13: «Bổ sung» phát ``skipped`` cho mọi clip đã có vân tay TRƯỚC (kể cả clip cuối),
+    rồi mới làm clip còn thiếu (vd. clip 0 hash thử lại, file bị thay — TCP-10). UI hiện
+    «Clip hiện tại ({current}/{total}): {file_name}» nên số và tên phải nói về CÙNG một clip,
+    không phải «4/4: b.opus». Thanh tiến độ vẫn không lùi (đi theo processed_count)."""
+    events = []
+    files = [str(tmp_path / f"{ten}.opus") for ten in ("a", "b", "c", "d")]
+    tracker = FingerprintProgressTracker(
+        "bo-sung", callback=events.append, logger=_logger_rong())
+    tracker.set_files(files)
+    for path in (files[0], files[2], files[3]):  # đã có vân tay → bỏ qua, gồm clip cuối
+        tracker.skipped(path)
+    tracker.clip_started(files[1])
+    assert (tracker.state.file_name, tracker.state.current) == ("b.opus", 2)
+    tracker.phase("decoding", "Đang giải mã", files[1])
+    assert (tracker.state.file_name, tracker.state.current) == ("b.opus", 2)
+    tracker.heartbeat(321, "Đang chạy")  # nhịp tim không đổi clip đang hiện
+    assert (tracker.state.file_name, tracker.state.current) == ("b.opus", 2)
+    tracker.clip_finished(files[1], success=True, elapsed=0.1)
+
+    s = tracker.state
+    assert (s.file_name, s.current, s.total) == ("b.opus", 2, 4)
+    assert all(a.percent <= b.percent for a, b in zip(events, events[1:]))
+    assert s.processed_count == 4
+
+
 class _EngineGia:
     def __init__(self):
         self.cancel_event = threading.Event()

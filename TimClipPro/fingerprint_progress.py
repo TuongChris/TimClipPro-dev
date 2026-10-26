@@ -223,7 +223,10 @@ class FingerprintProgressTracker:
                 status=status or old.status,
                 message=message if message is not None else old.message,
                 file_name=ten_file_an_toan(file_name) if file_name else old.file_name,
-                current=max(old.current, current or 0),
+                # «current» là số thứ tự của CHÍNH clip trong file_name (UI hiện «i/N: tên»),
+                # nên đổi cùng file_name, không ép tăng dần: «Bổ sung» bỏ qua cả clip cuối
+                # trước rồi mới làm clip đầu (audit F-13). Thanh tiến độ theo processed_count.
+                current=(current or 0) if file_name else old.current,
                 processed_count=processed,
                 elapsed_seconds=max(0.0, time.monotonic() - self._started_mono),
                 eta_seconds=eta,
