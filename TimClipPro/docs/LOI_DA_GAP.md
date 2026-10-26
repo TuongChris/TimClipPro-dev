@@ -589,3 +589,12 @@ CSV, hồ sơ, không cảnh báo (`Engine._bo_sung_ngay_goc` còn bỏ qua vì 
 → **Thêm người đọc mới cho một dấu cũ thì rà mọi nơi GHI dấu đó** và hỏi: nơi ghi có chắc như người đọc mới giả định?
   Entry đã bị bản cũ đóng dấu không phân biệt được với dấu đúng — chỉ `--repair-network` ghi lại được.
   Test: `tests/test_ngay_quy_doi_khong_thanh_ngay_nguyen_ban.py`.
+
+**21. fsync đặt sai chỗ: kho vân tay công bố bằng `os.replace` khi dữ liệu còn trong cache (26/10/2026, PC2, audit C-1).**
+`build_database` có fsync bản làm việc (chế độ «Bổ sung») nhưng TRƯỚC khi audfprint (tiến trình con, `gzip.open` +
+`pickle.dump`, không fsync) ghi lại toàn bộ file; cha chỉ ĐỌC kho tạm để kiểm (đọc không đẩy trang bẩn) rồi đổi tên đè
+kho cũ, trong khi sổ đăng ký ngay sau đó được fsync. Mất điện vài giây sau «Tạo lại kho»/«Bổ sung» → kho cụt/toàn số 0,
+kho cũ đã bị thay — mất hàng giờ tạo vân tay. Nhánh file cũ bị khoá có cùng lỗ hổng.
+→ **fsync file ĐÚNG bản sẽ công bố, SAU lần ghi cuối, ngay trước `os.replace`** — kể cả khi người ghi là tiến trình con
+  (mở `r+b` rồi `os.fsync`: Windows `FlushFileBuffers` cần quyền ghi). Một fsync ở bước trước không bảo vệ gì nếu
+  bước sau ghi lại file. Test: `tests/test_kho_cong_bo_ben_vung.py`.

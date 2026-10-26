@@ -2739,6 +2739,20 @@ class Engine:
                 "để tránh ghi nhầm kho. Hãy chạy lại."
             )
 
+    @staticmethod
+    def _day_kho_tam_xuong_dia(db_tam: str) -> None:
+        """Đẩy kho tạm xuống đĩa TRƯỚC khi công bố (audit C-1).
+
+        ``database.pklz`` do tiến trình con audfprint ghi (``gzip.open`` + ``pickle.dump``,
+        không fsync); việc đọc lại ở ``_kiem_kho_tam`` không đẩy trang bẩn xuống đĩa. Đổi
+        tên khi dữ liệu còn trong cache rồi mất điện → kho cụt/toàn số 0 trong khi kho cũ
+        đã bị thay và sổ đăng ký (đã fsync) trỏ tới nó. Chuẩn ghi nguyên tử của dự án:
+        file tạm + flush + ``os.fsync`` + ``os.replace``. Windows ``FlushFileBuffers`` cần
+        quyền ghi nên mở ``r+b`` (không đổi byte nào).
+        """
+        with open(db_tam, "r+b") as f:
+            os.fsync(f.fileno())
+
     def _kiem_kho_tam(self, db_tam: str, sub: str, cu_huu_ich: set,
                       can_xu_ly: list, *, lam_moi: frozenset = frozenset(),
                       da_go: frozenset = frozenset()) -> tuple:
@@ -3265,6 +3279,8 @@ class Engine:
                 # Sổ đăng ký vẫn trỏ kho đã ghim tới đúng file này? (TCP-01)
                 self._kiem_dich_cong_bo()
                 tracker.saving(tracker.state.active_subprocess_pid)
+                # Bền TRƯỚC khi đổi tên — áp cho cả nhánh file cũ bị khoá (audit C-1).
+                self._day_kho_tam_xuong_dia(db_tam)
                 self._cache_khoa = None
                 try:
                     os.replace(db_tam, self.db_file)
