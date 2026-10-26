@@ -732,3 +732,14 @@ liệt kê; `cli.py youtube|file --destination` báo LỖI CẤU HÌNH (mã 1) t
 Test: `tests/test_watch_destination_kiem_khoa_truoc_quet.py`.
 → **Kiểm tra «trước khi quét» phải nằm ở điểm hội tụ của mọi đường vào** (Watch, CLI, giao diện), không ở bước phân
   giải riêng của một đường; thêm đường vào mới thì thử cả khoá mất lẫn khoá khác tài khoản.
+
+**33. Lỗi của MỘT revision hồ sơ chặn cả nhóm: việc revision mới (đã sửa đúng) mang lý do của nhãn cũ (26/10/2026, audit B-3).**
+`_nhom` gom theo bảng + mã tab + khoá + lược đồ (không có `dich_id`/`phien_ban`), và `_xu_ly_chua_gui` coi MỌI lỗi
+không tạm là lỗi của cả nhóm. Lỗi «tab mã N hiện tên X, khác tên đối chiếu Y» lại thuộc NHÃN của một revision: tab đổi
+tên trên Google → người dùng sửa hồ sơ đúng (revision mới, cùng mã tab) → còn việc revision cũ chờ (tạm dừng gửi,
+RETRY_WAIT, hay bấm «Thử gửi lại» việc cũ) thì việc revision mới cũng bị BLOCKED_CONFIG với lời trỏ về tên CŨ, không tự
+khỏi, mỗi lần thử lại việc cũ chặn lại cả loạt. Đã sửa: `ChuaGui(chi_revision=True)` cho lỗi tên đối chiếu → `_chan_nhom`
+chỉ chặn việc chờ cùng `(dich_id, phien_ban)`; lỗi bảng/tab/khoá/tiêu đề vẫn chặn cả nhóm. Test:
+`tests/test_outbox_chan_theo_revision.py`.
+→ **Phạm vi chặn phải bằng phạm vi của lỗi**: lỗi mới `tam_thoi=False` thì hỏi nó thuộc bảng/tab (cả nhóm), revision,
+  hay riêng một việc — đừng mặc định cả nhóm.

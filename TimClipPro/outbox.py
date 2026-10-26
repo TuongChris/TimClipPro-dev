@@ -96,12 +96,15 @@ class LoiHangDoi(ValueError):
 
 
 class ChuaGui(Exception):
-    """CHẮC CHẮN Google chưa ghi. ``tam_thoi`` → thử lại có hạn mức; không → chặn tới khi sửa."""
+    """CHẮC CHẮN Google chưa ghi. ``tam_thoi`` → thử lại có hạn mức; không → chặn tới khi sửa. ``chi_revision``:
+    lỗi thuộc NHÃN của revision hồ sơ (tên đối chiếu), không thuộc bảng + tab + khoá + lược đồ → chỉ chặn việc chờ
+    CÙNG revision; việc của revision khác cùng nhóm (người dùng đã sửa hồ sơ) không bị kéo theo (audit B-3)."""
 
-    def __init__(self, ly_do: str, *, tam_thoi: bool):
+    def __init__(self, ly_do: str, *, tam_thoi: bool, chi_revision: bool = False):
         super().__init__(ly_do)
         self.ly_do = ly_do
         self.tam_thoi = tam_thoi
+        self.chi_revision = chi_revision
 
 
 class KhongRo(Exception):
@@ -761,19 +764,22 @@ class NguoiGui:
                 raise MatQuyen(viec_id)            # rollback: không để lại mã tab của người gửi đã mất claim
 
     @staticmethod
-    def _viec_cung_nhom(con, nhom: tuple, tru_id: str) -> list:
+    def _viec_cung_nhom(con, nhom: tuple, tru_id: str, revision: Optional[tuple] = None) -> list:
+        """Việc CHỜ khác cùng nhóm; ``revision`` = ``(dich_id, phien_ban)`` → chỉ việc của đúng revision đó."""
         ids = []
         for h in con.execute("SELECT id, dich_json FROM hang_doi_gui WHERE trang_thai IN (?,?)"
                              " AND id != ?", (*CO_THE_CLAIM, tru_id)):
             with contextlib.suppress(sd.LoiDichGui):
-                if _nhom(sd.DichGuiChot.from_json(h["dich_json"])) == nhom:
+                c = sd.DichGuiChot.from_json(h["dich_json"])
+                if _nhom(c) == nhom and (revision is None or (c.dich_id, c.phien_ban) == revision):
                     ids.append(h["id"])
         return ids
 
-    def _chan_nhom(self, nhom: tuple, ly_do: str, tru_id: str) -> None:
-        """Lỗi cấu hình: chặn luôn các việc CHỜ khác cùng nhóm — không đập vào bảng lỗi từng việc."""
+    def _chan_nhom(self, nhom: tuple, ly_do: str, tru_id: str, revision: Optional[tuple] = None) -> None:
+        """Lỗi cấu hình: chặn luôn các việc CHỜ khác cùng nhóm — không đập vào bảng lỗi từng việc. Lỗi thuộc nhãn
+        của MỘT revision (``revision``) chỉ chặn việc của revision đó (audit B-3)."""
         with sd.ket_noi(self.db_path, ghi=True) as con:
-            for vid in self._viec_cung_nhom(con, nhom, tru_id):
+            for vid in self._viec_cung_nhom(con, nhom, tru_id, revision):
                 con.execute("UPDATE hang_doi_gui SET trang_thai=?, loi=?, sua_luc=? WHERE id=?",
                             (BLOCKED_CONFIG, ly_do, time.time(), vid))
 
@@ -845,7 +851,7 @@ class NguoiGui:
             if da_chot is None and chot.worksheet_id is not None and ten != chot.worksheet_ten:
                 raise ChuaGui(f"Tab mã {gid} hiện tên «{ten}», khác tên đối chiếu «{chot.worksheet_ten}» "
                               "của hồ sơ — kiểm lại link/tên tab trong hồ sơ (chưa ghi gì).",
-                              tam_thoi=False)
+                              tam_thoi=False, chi_revision=True)
             self._bat_dau_gui(viec_id, token, chot, gid, ten)      # chốt mã tab + SENDING: MỘT giao dịch
             da_phat["co"], da_phat["gid"] = True, gid
 
@@ -884,7 +890,8 @@ class NguoiGui:
         if not e.tam_thoi:
             self._chot(v.id, token, BLOCKED_CONFIG, loi=e.ly_do)
             if nhom is not None:
-                self._chan_nhom(nhom, e.ly_do, v.id)
+                revision = (v.dich.dich_id, v.dich.phien_ban) if e.chi_revision else None
+                self._chan_nhom(nhom, e.ly_do, v.id, revision)
             return "bi_chan"
         so_lan = lay_viec(self.db_path, v.id).so_lan_thu
         if so_lan >= self.so_lan_toi_da:
