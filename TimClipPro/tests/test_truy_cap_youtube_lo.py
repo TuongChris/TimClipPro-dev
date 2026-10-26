@@ -228,8 +228,12 @@ def test_cookie_chet_duoc_ghi_vao_phien_va_canh_bao(tmp_path, monkeypatch):
     ket = list(e.scan_iter([_url(_ma(1))]))
     assert ydl.dem("info") == 2
     phien = e.phien_youtube_cuoi
-    assert phien.cookie_bi_tu_choi and phien.tom_tat()["cookie_fallbacks"] == 1
+    assert phien.tom_tat()["cookie_fallbacks"] == 1
     assert "hết hiệu lực" in ket[0].note
+    # Bước tải sau đó CÓ cookie vẫn thành công: cookie không bị coi là bị từ chối nữa (audit DR-9), nhưng thao tác đã
+    # lùi không cookie vẫn được nói rõ trong câu trạng thái.
+    ma, cau = phien.trang_thai_dang_nhap(True)
+    assert not phien.cookie_bi_tu_choi and ma != "BI_TU_CHOI" and "1 thao tác đã chạy KHÔNG cookie" in cau
 
 
 def test_bi_mat_trong_loi_khong_vao_ghi_chu_hay_lich_su(tmp_path, monkeypatch):

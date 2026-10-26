@@ -835,7 +835,10 @@ class PhienYouTube:
         self._lien_tiep: dict = {}
         self._so = {k: 0 for k in TRUONG_SO_DO}
         self._su_kien: list = []
-        self.cookie_bi_tu_choi = False
+        # Hai nguồn của «YouTube không nhận cookie» (gộp ở `cookie_bi_tu_choi`): yt-dlp báo thẳng «cookies are no longer
+        # valid» (giữ cả lượt) và SUY RA từ đường lui không cookie — thao tác có cookie thành công sau đó thì gỡ (audit DR-9).
+        self._cookie_thu_hoi = False
+        self._lui_cookie_suy_ra = False
         # ĐỐI CHỨNG trong lượt này: một thao tác có cookie chỉ còn «không định dạng» (YouTube chỉ trả storyboard —
         # `ytdlp_chung.DAU_HIEU_COOKIE_CHET`) mà CÙNG thao tác bỏ cookie thì được. Có rồi thì các thao tác sau của lượt
         # chạy thẳng không cookie, vẫn báo rõ (`ytdlp_chung.chay_kem_duong_lui_cookie` bước 5) — khỏi lặp lại chuỗi client
@@ -853,6 +856,13 @@ class PhienYouTube:
         self.bat_dau = time.time()
 
     # ---------- trạng thái ----------
+
+    @property
+    def cookie_bi_tu_choi(self) -> bool:
+        """YouTube không nhận phiên cookie: yt-dlp báo thu hồi, hoặc lượt đã lùi không cookie mà CHƯA có thao tác có
+        cookie nào thành công sau đó."""
+        with self._lock:
+            return self._cookie_thu_hoi or self._lui_cookie_suy_ra
 
     @property
     def mo(self) -> bool:
@@ -922,19 +932,22 @@ class PhienYouTube:
                                                  "JavaScript của YouTube")
                 return
             self._so["cookie_fallbacks"] += 1
-            self.cookie_bi_tu_choi = True
+            self._lui_cookie_suy_ra = True
 
     def ghi_cookie_khong_hop_le(self) -> None:
         """yt-dlp báo "cookies are no longer valid": YouTube đã thu hồi phiên đăng nhập."""
         with self._lock:
             self._so["cookie_rejected_warnings"] += 1
-            self.cookie_bi_tu_choi = True
+            self._cookie_thu_hoi = True
 
     def ghi_cookie_chet_trong_luot(self, chet: bool = True) -> None:
         """``True``: vừa có đối chứng YouTube không nhận phiên cookie (có cookie chỉ còn «không định dạng», bỏ cookie thì
         được) — các thao tác sau của lượt khỏi gửi cookie. ``False``: một thao tác CÓ cookie vừa thành công — đối chứng cũ
-        không còn đúng, thao tác sau thử cookie lại."""
+        không còn đúng, thao tác sau thử cookie lại — và kết luận cookie bị từ chối SUY RA từ đường lui cũng gỡ (audit DR-9;
+        cảnh báo thu hồi của yt-dlp thì giữ)."""
         with self._lock:
+            if not chet:
+                self._lui_cookie_suy_ra = False
             if bool(chet) == self.cookie_chet_trong_luot:
                 return
             self.cookie_chet_trong_luot = bool(chet)
@@ -986,10 +999,15 @@ class PhienYouTube:
 
     def trang_thai_dang_nhap(self, co_cookie: bool) -> tuple:
         """:meth:`_trang_thai_dang_nhap_goc`, thêm câu nói rõ số video đã tải KHÔNG đăng nhập vì mọi client nhận cookie
-        bị HTTP 403 (:meth:`ghi_tai_khong_dang_nhap_403`) — mã giữ nguyên: cookie không bị coi là hỏng."""
+        bị HTTP 403 (:meth:`ghi_tai_khong_dang_nhap_403`) — mã giữ nguyên: cookie không bị coi là hỏng — và số thao tác
+        đã lùi không cookie khi cookie sau đó lại dùng được (kết luận bị từ chối đã gỡ, audit DR-9)."""
         ma, cau = self._trang_thai_dang_nhap_goc(co_cookie)
         with self._lock:
             an_danh = self._so["anonymous_client_downloads"]
+            lui = self._so["cookie_fallbacks"]
+        if co_cookie and lui and ma not in ("BI_TU_CHOI", "KHONG_DANG_NHAP"):
+            cau += (f" {lui} thao tác đã chạy KHÔNG cookie vì có dấu hiệu YouTube không nhận cookie; sau đó thao tác có "
+                    "cookie lại thành công nên cookie KHÔNG bị coi là hỏng.")
         if co_cookie and an_danh:
             cau += (f" {an_danh} video tải KHÔNG đăng nhập: mọi cách tải có đăng nhập bị YouTube từ chối (HTTP 403), "
                     "đã tải bằng client không nhận cookie (cookie KHÔNG bị coi là hỏng).")

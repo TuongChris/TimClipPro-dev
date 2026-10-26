@@ -218,6 +218,26 @@ def test_video_doi_dang_nhap_van_thu_cookie_thanh_cong_thi_bo_ghi_nho(tmp_path, 
     assert phien.cookie_chet_trong_luot is False, "có cookie tải được: đối chứng cũ sai, thao tác sau thử cookie lại"
 
 
+def test_cookie_thanh_cong_sau_duong_lui_khong_con_bao_bi_tu_choi(tmp_path, may):
+    """Audit DR-9: video A lùi không cookie (đối chứng cookie chết) rồi video B giới hạn tuổi tải được BẰNG cookie trong
+    cùng lượt — kết luận «YouTube KHÔNG chấp nhận cookie … Xuất lại cookie» phải gỡ cùng đối chứng, câu trạng thái vẫn
+    nói rõ đã có thao tác chạy không cookie. Cảnh báo thẳng của yt-dlp («cookies are no longer valid») thì vẫn giữ."""
+    ch = y.CauHinhMang(cookiefile=_cookie_gia(tmp_path / "c.txt"))
+    phien, nhan = t.PhienYouTube(), []
+    y.chay_kem_duong_lui_cookie(ch, _TaiGia(phien), khi_bo_cookie=_bao_vao(phien, nhan), phien=phien)
+    assert phien.cookie_chet_trong_luot is True and phien.trang_thai_dang_nhap(True)[0] == "BI_TU_CHOI"
+    tai_b = _TaiGia(phien, co_cookie=None, khong_cookie=AUTH)
+    assert y.chay_kem_duong_lui_cookie(ch, tai_b, khi_bo_cookie=_bao_vao(phien, nhan), phien=phien) == "co_cookie"
+    assert tai_b.goi == [("", False), ("", True)] and phien.cookie_chet_trong_luot is False
+    ma, cau = phien.trang_thai_dang_nhap(True)
+    assert ma != "BI_TU_CHOI", f"cookie vừa tải được video đòi đăng nhập mà vẫn báo bị từ chối: {ma}: {cau}"
+    assert "KHÔNG cookie" in cau, f"các thao tác đã chạy không cookie phải được nói rõ: {cau}"
+    assert phien.tom_tat()["cookie_rejected"] is False and phien.tom_tat()["cookie_fallbacks"] == 2
+    phien.ghi_cookie_khong_hop_le()
+    phien.ghi_cookie_chet_trong_luot(False)
+    assert phien.trang_thai_dang_nhap(True)[0] == "BI_TU_CHOI", "yt-dlp báo cookie bị thu hồi: không tự gỡ"
+
+
 def test_video_doi_dang_nhap_cookie_chet_khong_thu_lai_khong_cookie_lan_hai(tmp_path, may):
     ch = y.CauHinhMang(cookiefile=_cookie_gia(tmp_path / "c.txt"))
     phien = t.PhienYouTube()
