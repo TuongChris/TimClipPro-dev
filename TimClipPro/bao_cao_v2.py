@@ -598,7 +598,8 @@ def dong_ngang(bc: BaoCaoV2) -> list:
     doan = list(bc.doan[:SO_DOAN_NGANG]) if bc.trang_thai == "ok" else []
     dong = [
         bc.thoi_diem_quet, bc.kenh_link, bc.kenh_ten, bc.kenh_id, bc.link_video, bc.tieu_de,
-        hien_thi_moc(giay_moc(bc.thoi_luong_s)) if giay_moc(bc.thoi_luong_s) is not None else "",
+        # Thời lượng 0 = CHƯA RÕ (vd. YouTube không cho biết): ô trống, không «00:00:00» (audit A-5).
+        hien_thi_thoi_luong(bc.thoi_luong_s),
         bc.ngay_dang.hien_thi(),
     ]
     for i in range(SO_DOAN_NGANG):

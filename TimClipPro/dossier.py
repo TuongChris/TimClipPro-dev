@@ -42,6 +42,12 @@ class HoSo:
     pham_vi: str = ""
 
 
+def _thoi_luong_hien_thi(giay) -> str:
+    """Thời lượng video vi phạm; không dương = CHƯA RÕ → ``""`` (không khẳng định video dài
+    00:00:00 — audit A-5)."""
+    return engine.hhmmss(giay) if giay and giay > 0 else ""
+
+
 def dung_ho_so(
     kq: engine.ScanResult,
     meta: dict | None = None,
@@ -81,7 +87,7 @@ def dung_ho_so(
     return HoSo(
         tieu_de_vi_pham=kq.source_name,
         link_vi_pham=kq.source_ref,
-        thoi_luong_hhmmss=engine.hhmmss(kq.duration_s),
+        thoi_luong_hhmmss=_thoi_luong_hien_thi(kq.duration_s),
         ngay_lap=datetime.now().strftime("%Y-%m-%d"),
         tong_giay_vi_pham=tong_giay_vi_pham,
         ty_le_video=ty_le_video,
@@ -106,7 +112,7 @@ def dung_ho_so_v2(bc) -> HoSo:
     return HoSo(
         tieu_de_vi_pham=bc.tieu_de,
         link_vi_pham=bc.link_video,
-        thoi_luong_hhmmss=engine.hhmmss(thoi_luong),
+        thoi_luong_hhmmss=_thoi_luong_hien_thi(thoi_luong),
         ngay_lap=datetime.now().strftime("%Y-%m-%d"),
         tong_giay_vi_pham=tong_giay_vi_pham,
         ty_le_video=round(100 * tong_giay_vi_pham / thoi_luong, 1) if thoi_luong > 0 else 0.0,
@@ -127,11 +133,13 @@ def render_markdown(ho_so: HoSo) -> str:
         "## Thông tin chung",
         f"- **Tiêu đề video vi phạm:** {ho_so.tieu_de_vi_pham}",
         f"- **Link video vi phạm:** {ho_so.link_vi_pham}",
-        f"- **Thời lượng:** {ho_so.thoi_luong_hhmmss}",
+        f"- **Thời lượng:** {hien_thi(ho_so.thoi_luong_hhmmss)}",
         f"- **Ngày lập:** {ho_so.ngay_lap}",
         f"- **Tổng số đoạn vi phạm:** {len(ho_so.muc)}",
         f"- **Tổng thời gian vi phạm:** {engine.hhmmss(ho_so.tong_giay_vi_pham)}",
-        f"- **Tỷ lệ video bị chiếm:** {ho_so.ty_le_video}%",
+        # Chưa rõ thời lượng thì không có mẫu số: «—», không phải «0.0%».
+        "- **Tỷ lệ video bị chiếm:** "
+        + (f"{ho_so.ty_le_video}%" if ho_so.thoi_luong_hhmmss else "—"),
     ]
     if ho_so.pham_vi:
         cac_dong.append(

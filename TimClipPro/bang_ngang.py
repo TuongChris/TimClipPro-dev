@@ -94,7 +94,8 @@ def dung_dong_ngang(
         # Quét chưa trọn (dừng sớm, chỉ tải phần đầu, khúc lỗi) phải hiện ngay trên
         # dòng báo cáo — cột này vốn đã mang trạng thái "(LỖI: …)", không thêm cột mới.
         f"(LỖI: {kq.note})" if loi else (kq.source_name or "") + nhan_pham_vi(kq),
-        hhmmss(kq.duration_s),
+        # Thời lượng 0 = CHƯA RÕ: ô trống, không «00:00:00» (audit A-5).
+        hhmmss(kq.duration_s) if kq.duration_s and kq.duration_s > 0 else "",
         dinh_dang_ngay(kq.upload_date),
     ]
 

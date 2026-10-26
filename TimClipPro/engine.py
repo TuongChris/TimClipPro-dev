@@ -4484,9 +4484,9 @@ class Engine:
         `_gan_chi_so` đã dán theo file đang xử lý, còn báo cáo đọc `duration_s`. Dán cho MỌI
         ứng viên — cả đoạn bị loại và tập đạt chuẩn trước Top-N — để một kết quả không mang
         hai trục thời gian (CLAUDE.md mục 13: đổi trường phái sinh thì rà mọi thứ tính từ nó).
+        Thời lượng video CHƯA RÕ (0) → nhãn rỗng (hợp đồng ``_nhan_vung``), không giữ nhãn theo
+        file: phần đầu 3 giờ của một video không rõ độ dài không nói được «Cuối» (audit A-5).
         """
-        if not r.duration_s:
-            return
         for m in {id(x): x for x in (*r.matches, *r.matches_loai, *r.ung_vien_dat)}.values():
             m.vung = self._nhan_vung(m.start_s, r.duration_s)
 
@@ -4882,7 +4882,11 @@ class Engine:
             # Không đọc được (0) = CHƯA xác minh = thiếu; không bao giờ mặc nhiên coi là đủ.
             return dai <= 0 or self._thieu_duoi(can_den, dai)
 
-        if co_san and thieu_that(dai_file):
+        # Không rõ thời lượng nguồn: không có mốc để phân biệt bản đệm bị cụt với video vốn ngắn hơn
+        # giới hạn — bản đệm đọc được thì dùng như bản vừa tải (lượt đầu cũng nhận đúng bản đó); bản
+        # không bằng chứng mà thiếu thì bị bỏ ở cuối lượt (nhánh ``tong <= 0``), nên không bao giờ
+        # giam lượt sau vào một bản cụt (audit A-5).
+        if co_san and (dai_file <= 0 if tong <= 0 else thieu_that(dai_file)):
             # Bản đệm của lượt trước bị cụt (tải đứt giữa chừng): không dùng lại, tải lại MỘT lần.
             self._td(ghi=f"Bản đệm cũ chỉ có {hhmmss(dai_file)} âm thanh — bỏ và tải lại một lần")
             with contextlib.suppress(OSError):
@@ -4905,12 +4909,18 @@ class Engine:
             # Không rõ thời lượng nguồn: không khẳng định đã quét trọn hay một phần (vung_da_khop None
             # = «không biết» — báo cáo ghi «Chưa rõ»), và không bao giờ là âm tính.
             r.vung_da_khop, r.duration_s, r.pham_vi_quet_s = None, 0.0, dai_file
+            # Nhãn Đầu/Giữa/Cuối đang tính theo FILE phần đầu: video thật dài bao nhiêu chưa biết
+            # → bỏ nhãn (audit A-5; LOI_DA_GAP mục 16).
+            self._dan_lai_nhan_vung(r)
             r.ly_do_pham_vi = "thoi_luong_chua_ro"
             tin = (f"YouTube không cho biết thời lượng video — đã giới hạn tải tối đa {hhmmss(gioi_han)} "
                    f"đầu và quét {hhmmss(dai_file)}; CHƯA xác nhận đã quét trọn video.")
             if not r.matches:
                 r.status = "error"
                 tin += " Chưa thể kết luận video này không chứa clip gốc."
+                if thieu and self._trong_thu_muc_dem(f):
+                    with contextlib.suppress(OSError):
+                        os.remove(f)      # có thể là bản cụt: lượt sau tải lại, không quét lại nó
             r.note = "\n".join(x for x in (r.note, tin) if x)
             return r, f
         r.duration_s = tong
