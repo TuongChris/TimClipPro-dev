@@ -251,6 +251,29 @@ def thong_bao_youtube_chan(ket_qua: Sequence[Any]) -> str:
             return cau.split("Chưa quét — ", 1)[-1]
     return ""
 
+
+def chua_quet_cua_lo(anh: Any, so_ket_qua: int) -> list:
+    """Nguồn của lô CHƯA BAO GIỜ được quét: ``scan_iter`` trả kết quả theo đúng thứ tự nguồn và dừng
+    (bấm Dừng) TRƯỚC khi nhận video kế — mọi nguồn sau ``so_ket_qua`` kết quả đầu không có ScanResult nào."""
+    return [v.nguon for v in tuple(getattr(anh, "videos", ()) or ())[max(0, int(so_ket_qua)):]]
+
+
+def thong_bao_lo_da_dung(da_dung: bool, chua_quet: Sequence[str], toi_da: int = 10) -> str:
+    """Câu cấp LÔ cho màn kết quả khi người dùng bấm Dừng (rỗng nếu lô chạy hết): nói rõ lô ĐÃ DỪNG và
+    những video CHƯA QUÉT — cùng tinh thần banner cầu dao YouTube: video chưa quét KHÔNG phải âm tính,
+    không được trông như «đã quét, không có gì» (audit F-5). Link là chữ ngoài: thoát Markdown."""
+    chua_quet = list(chua_quet or ())
+    if not da_dung and not chua_quet:
+        return ""
+    cau = "⏹️ Đã dừng theo yêu cầu" if da_dung else "⚠️ Lô quét chưa chạy hết"
+    if not chua_quet:
+        return cau + " — mọi video của lô đã được bắt đầu; video bị huỷ giữa chừng ghi ở dòng lỗi bên dưới."
+    ds = "\n".join(f"- {thoat_markdown(n)}" for n in chua_quet[:toi_da])
+    if len(chua_quet) > toi_da:
+        ds += f"\n- … và {len(chua_quet) - toi_da} video khác"
+    return (f"{cau} — **{len(chua_quet)} video chưa quét** (chưa tải, chưa so khớp: KHÔNG phải «không có "
+            f"vi phạm»; muốn kiểm thì quét lại):\n\n{ds}")
+
 # Ký hiệu "chưa có dữ liệu". Dùng chung để UI và test không lệch nhau.
 CHUA_CO = "—"
 

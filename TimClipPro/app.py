@@ -47,12 +47,14 @@ from scan_ui import (
     build_nguon_chung_status_dataframe,
     build_scan_status_dataframe,
     canh_bao_nguon_kho,
+    chua_quet_cua_lo,
     csv_nguon_chung,
     df_nguon_chung,
     dong_trang_thai_youtube,
     goi_y_quet_mot_phan,
     huong_dan_kho_sau_dong_bo,
     thoat_markdown,
+    thong_bao_lo_da_dung,
     thong_bao_youtube_chan,
     tom_tat_dong_bo_kenh,
 )
@@ -986,6 +988,12 @@ if job["running"]:
             job["running"] = False
             job["results"] = scan_controller.results()
             job["error"] = scan_controller.error
+            # Bấm Dừng: engine không nhận video kế → các nguồn sau KHÔNG có kết quả nào. Chép cờ dừng + danh
+            # sách chưa quét vào job NGAY lúc chép kết quả (ảnh chụp SAU khi lô đã dừng): màn kết quả phải nói
+            # lô đã dừng và video nào chưa quét, kể cả ở tab nhận lại lô (audit F-5).
+            anh_cuoi = scan_controller.snapshot()
+            job["lo_da_dung"] = anh_cuoi.cancelled
+            job["chua_quet"] = chua_quet_cua_lo(anh_cuoi, len(job["results"]))
 
         st.header("🔍 Đang quét video")
         # Chỉ số đo THẬT (ui_tien_do_quet): thanh lô đếm video đã xong; bước hiện tại chỉ có thanh
@@ -1158,6 +1166,11 @@ if not job["running"] and (job["results"] or job["error"]):
         bi_chan = thong_bao_youtube_chan(res)
         if bi_chan:
             st.error("🚫 " + bi_chan)
+        # Người dùng bấm Dừng: nói ở cấp LÔ, trước mọi con số — video chưa quét không được lẫn vào
+        # «… nguồn đã quét» như một lô đã chạy hết (audit F-5).
+        da_dung = thong_bao_lo_da_dung(bool(job.get("lo_da_dung")), job.get("chua_quet") or ())
+        if da_dung:
+            st.warning(da_dung)
 
         # Không có kết quả thì PHẢI nói mất ở tầng nào. Trước đây chỗ này chỉ nói
         # "không tìm thấy" và khuyên hạ ngưỡng xuống 60% của kết quả mạnh nhất —
