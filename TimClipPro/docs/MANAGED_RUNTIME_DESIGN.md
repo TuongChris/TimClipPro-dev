@@ -186,9 +186,13 @@ minh), tạo runtime tại đường dẫn cuối, ghi `TimClipPro.bat` mới, x
 * Hai PC cùng gửi một bảng: không có dedup toàn cục; khuyến nghị mỗi lịch Watch do một máy phụ trách.
 * Không fsync được thư mục trên Windows; cam kết sống qua mất điện dựa trên `FlushFileBuffers` của file +
   thay thế nguyên tử của NTFS.
-* (M2) Việc kẹt ở `SENDING` trong một tiến trình CÒN SỐNG (ví dụ ghi biên nhận lỗi vì DB bị khoá quá 30 s)
-  chỉ thành `UNKNOWN_DELIVERY` ở lần người gửi giành quyền kế tiếp (khởi động lại app/Watch) — không bao
-  giờ tự quay về `PENDING`.
+* (M2, sửa ở audit B-1) Lần ghi trạng thái sau claim gặp lỗi DB trong tiến trình CÒN SỐNG (ví dụ ghi biên nhận
+  lỗi vì DB bị khoá quá 30 s, đĩa đầy): người gửi nhớ đúng lần ghi đó (`SENT` + biên nhận đã kiểm, `RETRY_WAIT`…;
+  lỗi ngoài dự kiến trước dispatch → trả claim theo luật lỗi tạm; sau dispatch → `UNKNOWN_DELIVERY`) và ghi lại
+  ở đầu vòng sau / trước khi nhả quyền, có fencing (`claim_token` + trạng thái đang bay). Còn lại: tiến trình
+  CHẾT trước khi ghi lại được → như cũ, `SENDING` thành `UNKNOWN_DELIVERY` ở lần giành quyền kế tiếp — không bao
+  giờ tự quay về `PENDING`. `CLAIMED` (chưa phát) huỷ được: huỷ xoá `claim_token` nên người gửi đang cầm việc
+  không qua được bước CLAIMED→`SENDING`.
 * (M2) «Kiểm cấu hình (chỉ đọc)» chứng minh ĐỌC được bảng/tab/tiêu đề, KHÔNG chứng minh quyền ghi; lỗi
   quyền ghi chỉ lộ ra ở lần gửi thật (Google trả 403 → `BLOCKED_CONFIG`, không ghi gì).
 * (M2) Kết quả lưu theo luật báo cáo cũ (trước V2) không được hàng đợi nhận (`BLOCKED_REPORT`) — cần quét

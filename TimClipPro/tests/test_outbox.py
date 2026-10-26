@@ -368,12 +368,23 @@ def test_unknown_xac_nhan_da_gui_hoac_gui_lai_co_the_trung(moi_truong):
     assert _tt(moi_truong, v2) == ob.SENT and len(cong.bang) == 2
 
 
-@pytest.mark.parametrize("tu", [ob.SENDING, ob.CLAIMED, ob.SENT])
+@pytest.mark.parametrize("tu", [ob.SENDING, ob.SENT])
 def test_khong_huy_viec_dang_gui_hoac_da_gui(moi_truong, tu):
     vid = _xep(moi_truong, moi_truong["a"], 24)
     _ep_trang_thai(moi_truong, vid, tu)
     with pytest.raises(ob.LoiHangDoi):
         ob.huy(moi_truong["db"], vid)
+
+
+def test_huy_viec_claimed_thi_nguoi_gui_dang_cam_khong_phat(moi_truong):
+    """CLAIMED = chưa phát request (thiết kế §5: CANCELLED = chưa SENDING) → huỷ được (audit B-1: việc kẹt CLAIMED
+    phải huỷ được). Huỷ ngay trước dispatch: fencing CLAIMED→SENDING chặn người gửi đang cầm việc — không ghi gì."""
+    vid = _xep(moi_truong, moi_truong["a"], 24)
+    cong = CongGia()
+    cong.ke_hoach = [("hook", lambda: ob.huy(moi_truong["db"], vid))]
+    _nguoi_gui(moi_truong, cong).chay_mot_vong()
+    assert cong.bang == [] and _tt(moi_truong, vid) == ob.CANCELLED
+    assert ob.lay_viec(moi_truong["db"], vid).gui_luc is None
 
 
 def test_huy_va_thu_lai_chi_tu_trang_thai_hop_le(moi_truong):

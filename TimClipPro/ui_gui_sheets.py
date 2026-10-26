@@ -300,7 +300,7 @@ def _ve_hang_doi(eng) -> None:
                 if _thu(outbox.thu_lai, _db(eng), v.id):
                     dam_bao_nguoi_gui(eng, bat_buoc=True)
                     st.rerun()
-        if v.trang_thai in (outbox.PENDING, outbox.RETRY_WAIT, outbox.BLOCKED_CONFIG,
+        if v.trang_thai in (outbox.PENDING, outbox.RETRY_WAIT, outbox.CLAIMED, outbox.BLOCKED_CONFIG,
                             outbox.BLOCKED_REPORT, outbox.UNKNOWN):
             huy = st.checkbox("Tôi muốn huỷ việc gửi này", key=f"gui_huy_xn_{v.id}")
             if st.button("✖ Huỷ việc gửi", key="gui_huy", disabled=not huy):

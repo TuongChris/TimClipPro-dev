@@ -709,3 +709,15 @@ dựng kho, lô nguồn chung; controller rảnh của phiên nhường cho lô 
 ký trỏ cho kho đang chọn (`_theo_file_kho_moi`). Test: `tests/test_tai_lai_trang_nhan_lai_tac_vu_dai.py`.
 → **Việc dài MỚI của giao diện phải ghi sổ mức tiến trình** (`SoViecDai`) — đừng giữ trạng thái chỉ trong
   `st.session_state`; thử bằng hai AppTest cùng thư mục dữ liệu (F5, tab mở trước, việc xong khi không ai vẽ).
+
+**31. Lần ghi trạng thái CUỐI của outbox lỗi DB làm việc kẹt trong tay người gửi còn sống (26/10/2026, audit B-1).**
+`NguoiGui._xu_ly` chỉ bọc `cong.gui()`; mọi `_chot` sau đó mở giao dịch ghi riêng và có thể ném `database is locked`
+(DB bị giữ > 30 s) hay `SQLITE_FULL` (data\ chung ổ với file tải nhiều GB). Ngoại lệ thoát vòng, `NguoiGuiNen._vong`
+chỉ log `round_failed` mà vẫn giữ quyền; vòng sau chỉ chọn PENDING/RETRY_WAIT, phục hồi chỉ chạy khi giành quyền →
+việc kẹt «Đang chuẩn bị»/«Đang gửi» tới khi khởi động lại; lúc đó lần ghi Google ĐÃ xác nhận (biên nhận hợp lệ) thành
+KHÔNG RÕ với lời «tiến trình trước đã dừng», «Gửi lại» được mở → trùng dòng. Việc CLAIMED (chưa gửi gì) không huỷ được.
+Đã sửa: `_chot` lỗi → nhớ đúng lần ghi đó; ngoại lệ khác sau claim → chưa phát thì trả claim theo luật lỗi tạm, đã phát
+thì KHÔNG RÕ; `ghi_lai_treo` ghi lại ở đầu vòng sau / trước khi nhả quyền, fencing `claim_token` + trạng thái đang bay;
+`huy` nhận CLAIMED (fencing CLAIMED→SENDING chặn người gửi đang cầm). Test: `tests/test_outbox_loi_db_sau_claim.py`.
+→ **Vòng lặp sống lâu bắt mọi ngoại lệ thì mỗi việc nó «cầm» phải có đường nhả trong CHÍNH tiến trình đó**; đừng
+  dựa vào phục hồi lúc khởi động cho lỗi của một tiến trình còn sống.

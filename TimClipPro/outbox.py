@@ -30,6 +30,10 @@ Hợp đồng
   audit 78ba20c).
 * Khởi động người gửi: ``CLAIMED`` (chưa dispatch) → ``PENDING``; ``SENDING`` của chủ cũ →
   ``UNKNOWN_DELIVERY`` (KHÔNG suy "chưa ghi" từ việc tiến trình đã chết).
+* Lần ghi trạng thái SAU claim gặp lỗi DB (khoá quá hạn chờ, đĩa đầy…) trong tiến trình CÒN SỐNG: người gửi nhớ
+  đúng lần ghi đó (``SENT`` với biên nhận đã kiểm, ``RETRY_WAIT``…; lỗi ngoài dự kiến trước dispatch → trả claim
+  theo luật lỗi tạm) và ghi lại ở đầu vòng sau / trước khi nhả quyền, có fencing — không để việc kẹt ``CLAIMED`` /
+  ``SENDING`` tới lần khởi động lại rồi biến lần ghi Google ĐÃ xác nhận thành ``UNKNOWN_DELIVERY`` (audit B-1).
 * ``SENT`` chỉ khi biên nhận khớp: ``spreadsheetId`` máy chủ trả đúng bảng, ``replies`` đúng số request của lô
   NGUYÊN TỬ, và ``sheetId`` TRONG THÂN REQUEST đã phát = mã vừa chốt, dòng trong request = payload. Bất thường →
   ``UNKNOWN_DELIVERY``.
@@ -358,9 +362,11 @@ def ly_do_khong_gui_lai(db_path: str, v: ViecGui) -> str:
 
 
 def huy(db_path: str, viec_id: str) -> None:
-    """Huỷ việc chưa ở trong tay người gửi. Đang gửi/đã gửi thì không huỷ được."""
+    """Huỷ việc CHƯA phát request (thiết kế §5: CANCELLED = chưa SENDING). Đang gửi/đã gửi thì không huỷ được.
+    ``CLAIMED`` huỷ được (audit B-1): huỷ xoá ``claim_token`` nên người gửi đang cầm việc không qua được bước
+    CLAIMED→SENDING có fencing (``_bat_dau_gui`` → ``MatQuyen``, rollback) — không request nào được phát."""
     _doi_trang_thai_tay(db_path, viec_id,
-                        (PENDING, RETRY_WAIT, BLOCKED_CONFIG, BLOCKED_REPORT, UNKNOWN), CANCELLED)
+                        (PENDING, RETRY_WAIT, CLAIMED, BLOCKED_CONFIG, BLOCKED_REPORT, UNKNOWN), CANCELLED)
 
 
 def kiem_khoa_cuc_bo(db_path: str, chot: sd.DichGuiChot) -> str:
@@ -565,6 +571,8 @@ class NguoiGui:
         self.dung = dung or threading.Event()
         self.chu = f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
         self._khoa: Optional[KhoaTienTrinh] = None
+        # Lần ghi trạng thái sau claim chưa vào được DB (lỗi DB) — {viec_id: hàm ghi lại có fencing} (audit B-1).
+        self._ghi_treo: dict = {}
 
     # ---------- quyền ----------
 
@@ -580,6 +588,7 @@ class NguoiGui:
             return False
         self._khoa = khoa
         try:
+            self.ghi_lai_treo()       # lần ghi dở của CHÍNH người gửi này trước phục hồi (SENT không thành KHÔNG RÕ)
             self.phuc_hoi()
         except BaseException:
             self.tha_quyen()
@@ -587,6 +596,11 @@ class NguoiGui:
         return True
 
     def tha_quyen(self) -> None:
+        if self._khoa is not None and self._ghi_treo:
+            try:
+                self.ghi_lai_treo()
+            except Exception:  # noqa: BLE001 — vẫn nhả quyền; người giành quyền kế phục hồi như cũ
+                LOGGER.exception("event=outbox.pending_final_write_failed")
         khoa, self._khoa = self._khoa, None
         if khoa is not None:
             khoa.__exit__(None, None, None)
@@ -611,11 +625,21 @@ class NguoiGui:
                            ve_cho, khong_ro)
         return {"ve_cho": ve_cho, "khong_ro": khong_ro}
 
+    def ghi_lai_treo(self) -> None:
+        """Ghi lại các lần chốt trạng thái sau claim từng gặp lỗi DB (khoá quá hạn chờ, đĩa đầy…) — có fencing
+        ``claim_token`` + trạng thái đang bay, nên việc đã bị huỷ / đã được phục hồi thì không đụng. Lỗi DB lần
+        nữa → ngoại lệ thoát ra (vòng gửi log ``round_failed``), giữ lại để lần sau thử tiếp."""
+        for viec_id, ghi in list(self._ghi_treo.items()):
+            n = ghi()
+            del self._ghi_treo[viec_id]
+            LOGGER.warning("event=outbox.pending_final_write id=%s applied=%d", viec_id[:12], n)
+
     # ---------- vòng gửi ----------
 
     def chay_mot_vong(self) -> dict:
         if self._khoa is None:
             raise RuntimeError("Chưa giữ quyền người gửi — không được gửi.")
+        self.ghi_lai_treo()
         dem = dict(da_gui=0, thu_lai=0, bi_chan=0, khong_ro=0, bo_qua=0, tam_dung=0)
         if dang_tam_dung(self.db_path):
             dem["tam_dung"] = 1
@@ -669,17 +693,46 @@ class NguoiGui:
         return token if n == 1 else None
 
     def _chot(self, viec_id: str, token: str, trang_thai: str, **cot) -> bool:
-        """Cập nhật cuối có fencing: chỉ khi claim vẫn là của mình."""
+        """Cập nhật cuối có fencing: chỉ khi claim vẫn là của mình. Lỗi DB → nhớ lần ghi này để ghi lại
+        (``ghi_lai_treo``) rồi ném tiếp."""
+        try:
+            n = self._ghi_chot(viec_id, token, trang_thai, cot)
+        except Exception:
+            self._ghi_treo[viec_id] = lambda: self._ghi_chot(viec_id, token, trang_thai, cot)
+            raise
+        if n != 1:
+            LOGGER.error("event=outbox.fencing_lost id=%s state=%s", viec_id[:12], trang_thai)
+        return n == 1
+
+    def _ghi_chot(self, viec_id: str, token: str, trang_thai: str, cot: dict) -> int:
         gia_tri = {"trang_thai": trang_thai, "sua_luc": time.time(), **cot}
         if trang_thai not in DANG_BAY:
             gia_tri.update(claim_token="", chu_so_huu="")
         with sd.ket_noi(self.db_path, ghi=True) as con:
-            n = con.execute(
+            return con.execute(
                 f"UPDATE hang_doi_gui SET {', '.join(f'{k}=?' for k in gia_tri)}"
-                " WHERE id=? AND claim_token=?", (*gia_tri.values(), viec_id, token)).rowcount
-        if n != 1:
-            LOGGER.error("event=outbox.fencing_lost id=%s state=%s", viec_id[:12], trang_thai)
-        return n == 1
+                " WHERE id=? AND claim_token=? AND trang_thai IN (?,?)",
+                (*gia_tri.values(), viec_id, token, *DANG_BAY)).rowcount
+
+    def _tra_claim(self, viec_id: str, token: str, ly_do: str, bay_gio: float) -> int:
+        """Lỗi ngoài dự kiến TRƯỚC dispatch (việc vẫn ``CLAIMED``): trả claim theo luật lỗi tạm — ``RETRY_WAIT``
+        có hạn chờ, quá số lần → ``BLOCKED_CONFIG``. Chỉ từ ``CLAIMED`` của chính mình: không bao giờ
+        ``SENDING`` → chờ gửi."""
+        with sd.ket_noi(self.db_path, ghi=True) as con:
+            h = con.execute("SELECT so_lan_thu FROM hang_doi_gui WHERE id=? AND claim_token=? AND trang_thai=?",
+                            (viec_id, token, CLAIMED)).fetchone()
+            if h is None:
+                return 0
+            so_lan = int(h["so_lan_thu"])
+            if so_lan >= self.so_lan_toi_da:
+                tt, loi, sau = (BLOCKED_CONFIG,
+                                f"{ly_do} — quá số lần thử ({so_lan}); bấm «Thử gửi lại» khi đã ổn.", bay_gio)
+            else:
+                tt, loi, sau = RETRY_WAIT, ly_do, bay_gio + _thoi_gian_cho(so_lan)
+            return con.execute(
+                "UPDATE hang_doi_gui SET trang_thai=?, loi=?, thu_lai_sau=?, claim_token='', chu_so_huu='',"
+                " sua_luc=? WHERE id=? AND claim_token=? AND trang_thai=?",
+                (tt, loi, sau, time.time(), viec_id, token, CLAIMED)).rowcount
 
     def _bat_dau_gui(self, viec_id: str, token: str, chot: sd.DichGuiChot, gid: int, ten: str) -> None:
         """Điểm không quay lại — MỘT giao dịch: chốt mã tab ``gid`` cho revision (lần đầu thắng) rồi COMMIT
@@ -736,6 +789,25 @@ class NguoiGui:
         token = self._claim(viec_id, bay_gio)
         if token is None:
             return "bo_qua"
+        da_phat = {"co": False, "gid": None}
+        try:
+            return self._xu_ly_da_claim(viec_id, token, nhom, bay_gio, da_phat)
+        except Exception as e:
+            # Ngoại lệ thoát khỏi việc đã claim (lỗi DB khi đọc/ghi…): KHÔNG để việc kẹt trong tay người gửi còn
+            # sống tới lần khởi động lại (audit B-1). Lần chốt lỗi đã tự nhớ (``_chot``); còn lại: chưa phát → trả
+            # claim theo luật lỗi tạm, đã phát → KHÔNG RÕ (như lỗi sau dispatch của transport).
+            if viec_id not in self._ghi_treo:
+                ten = type(e).__name__
+                if da_phat["co"]:
+                    cot = {"loi": f"{ten} sau khi gửi — không rõ Google đã ghi chưa."}
+                    self._ghi_treo[viec_id] = lambda: self._ghi_chot(viec_id, token, UNKNOWN, cot)
+                else:
+                    self._ghi_treo[viec_id] = lambda: self._tra_claim(
+                        viec_id, token, f"Lỗi trước khi gửi: {ten}", bay_gio)
+            raise
+
+    def _xu_ly_da_claim(self, viec_id: str, token: str, nhom: Optional[tuple], bay_gio: float,
+                        da_phat: dict) -> str:
         v = lay_viec(self.db_path, viec_id)
         try:
             chot = v.dich
@@ -766,7 +838,6 @@ class NguoiGui:
         if ly_do_tab:
             self._chot(viec_id, token, BLOCKED_CONFIG, loi=ly_do_tab)
             return "bi_chan"
-        da_phat = {"co": False, "gid": None}
 
         def truoc_khi_gui(gid: int, ten: str) -> None:
             # Transport đã tìm được tab (theo mã/tên) và kiểm tiêu đề, CHƯA ghi gì. Revision chưa từng phát
