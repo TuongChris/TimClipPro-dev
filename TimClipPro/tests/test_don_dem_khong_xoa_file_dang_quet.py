@@ -264,3 +264,40 @@ def test_file_dem_vua_chon_tu_bo_dem_khong_bi_don_cuoi_luot_watch(engine):
     assert os.path.normcase(duong) == os.path.normcase(dem)
     kq = don_dep.don_kho_dem(e.dl_dir, max_gb=e.config.dem_max_gb, max_ngay=e.config.dem_max_ngay)
     assert os.path.exists(duong) and kq["xoa_file"] == 0, kq
+
+
+@pytest.mark.parametrize("ly_do_chon", ["qua_tuoi", "qua_ngan_sach"])
+def test_dung_lai_ban_dem_giua_luc_don_dem_liet_ke_va_luc_xoa_thi_khong_xoa(
+        engine, monkeypatch, ly_do_chon):
+    """Audit WR-4 (cùng gốc C-9): dọn đệm (cuối lượt Watch) liệt kê kho đệm và chọn file theo mtime
+    cũ, NGAY SAU đó lượt quét giao diện nhận lại bản đệm («Đã có sẵn audio» — làm mới mtime dưới khoá
+    tải rồi nhả khoá) và còn đang đo độ dài thật trước khi đặt dấu «đang dùng». Dọn đệm lấy được khoá
+    tải, không thấy dấu → trước đây xoá theo lựa chọn CŨ. Đúng: lần dùng mới hơn lúc liệt kê thì
+    không xoá (file vừa được dùng lại, lượt quét sắp mở nó)."""
+    import don_dep
+    e = engine
+    os.makedirs(e.dl_dir, exist_ok=True)
+    if ly_do_chon == "qua_tuoi":
+        dem = _tao_dem(e.dl_dir, f"{VID}.webm", 8)
+        max_gb = 20
+    else:
+        # File cũ nhất (2 ngày) trong kho vượt ngân sách; file kia nhàn rỗi, mới hơn.
+        dem = _tao_dem(e.dl_dir, f"{VID}.webm", 2, 3 * MB)
+        _tao_dem(e.dl_dir, "ZzZzZzZzZzZ.webm", 1, 3 * MB)
+        max_gb = 4 * MB / 1024 ** 3
+    goc_chon = don_dep.chon_can_xoa
+    nhan = []
+
+    def chon_roi_luot_quet_nhan_file(*a, **k):
+        chon = goc_chon(*a, **k)
+        assert any(os.path.normcase(m.path) == os.path.normcase(dem) for m in chon), \
+            "thiết lập sai: dọn đệm chưa chọn bản đệm"
+        nhan.append(e.download_audio(URL, VID))          # khoá tải lấy rồi NHẢ ở đây
+        return chon
+
+    monkeypatch.setattr(don_dep, "chon_can_xoa", chon_roi_luot_quet_nhan_file)
+    kq = don_dep.don_kho_dem(e.dl_dir, max_gb=max_gb, max_ngay=7)
+    assert nhan and os.path.normcase(nhan[0]) == os.path.normcase(dem)
+    assert os.path.exists(dem), (
+        f"[{ly_do_chon}] dọn đệm xoá bản đệm vừa được lượt quét nhận lại: {kq!r}")
+    assert kq["bo_qua_dang_dung"] >= 1 and not kq["loi"], kq

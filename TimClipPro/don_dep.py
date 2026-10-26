@@ -91,7 +91,8 @@ def dat_dau_dang_dung(thu_muc_dem: str, ten_file: str, ten_viec: str = "") -> Kh
     """Đặt dấu «đang dùng» (đã giữ khoá) cho file đệm ``ten_file``; nhả bằng ``nha_dau_dang_dung``.
 
     Người gọi phải đang giữ khoá tải của mục đó (``duong_khoa_tai``): dọn đệm kiểm dấu và xoá file
-    dưới CÙNG khoá, nên không có lúc nào dọn đệm đã thấy «không ai dùng» mà lượt quét vừa nhận file.
+    dưới CÙNG khoá. Từ lúc ``download_audio`` trả file tới lúc dấu được đặt, file chỉ được bảo vệ
+    bằng mtime vừa làm mới: dọn đệm stat lại dưới khoá và bỏ file đã đổi kể từ lúc liệt kê (WR-4).
     """
     duong = os.path.join(_goc_du_lieu(thu_muc_dem), THU_MUC_DANG_DUNG,
                          f"{ten_file}~{os.getpid()}_{uuid.uuid4().hex[:12]}.lock")
@@ -226,6 +227,14 @@ def don_kho_dem(
             continue
         try:
             if _dang_duoc_dung(thu_muc, ten_file, bo_dau_mo_coi=True):
+                ket_qua["bo_qua_dang_dung"] += 1
+                continue
+            # Lựa chọn ở trên dựa trên ảnh chụp mtime lúc LIỆT KÊ. Lượt quét nhận lại bản đệm làm mới
+            # mtime dưới cùng khoá này rồi nhả khoá, và chỉ đặt dấu sau khi đo xong độ dài file (có
+            # thể hàng chục giây): file đổi kể từ lúc liệt kê = vừa được dùng/tải lại → không xoá
+            # theo lựa chọn cũ, để lần dọn sau (audit WR-4).
+            st = os.stat(item.path, follow_symlinks=False)
+            if st.st_mtime != item.lan_dung_cuoi or st.st_size != item.kich_thuoc:
                 ket_qua["bo_qua_dang_dung"] += 1
                 continue
             os.remove(item.path)
