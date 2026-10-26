@@ -109,7 +109,39 @@ def test_dem_cau_tom_tat_thuan():
         SimpleNamespace(status="error", matches=[4], bao_cao=None, loi_truy_cap=tran),
         SimpleNamespace(status="error", matches=[], bao_cao=None, loi_truy_cap=cau_dao),
     ]
-    # Bằng chứng: chỉ nguồn «ok» có báo cáo hợp lệ (đúng bảng/CSV). Đã quét: mọi nguồn trừ cầu dao
-    # (nguồn lỗi thường vẫn ĐÃ được thử quét — dòng «Có nguồn bị lỗi» nói riêng).
-    assert dem_cau_tom_tat(ket_qua) == (2, 3)
+    # Bằng chứng: chỉ nguồn «ok» có báo cáo hợp lệ (đúng bảng/CSV). Đã quét: chỉ nguồn quét RA kết quả
+    # («ok», kể cả báo cáo V2 lỗi — đã quét xong, banner ⛔ nói riêng); nguồn lỗi tải / bị huỷ / cầu dao
+    # KHÔNG tính — dòng «Có nguồn bị lỗi» liệt kê riêng (review audit P3).
+    assert dem_cau_tom_tat(ket_qua) == (2, 2)
     assert dem_cau_tom_tat([]) == (0, 0)
+
+
+def _huy_theo_yeu_cau(url: str):
+    """Đúng hình dạng nhánh ``except Cancelled`` của ``Engine._scan_youtube``."""
+    return engine_mod.ScanResult(source_name=url, source_ref=url, status="error",
+                                 note="Đã hủy theo yêu cầu.", ly_do_pham_vi="huy")
+
+
+def _tai_hong(url: str):
+    """Đúng hình dạng nhánh ``except Exception`` khi tải audio hỏng (lỗi chưa phân loại → None)."""
+    return engine_mod.ScanResult(source_name=url, source_ref=url, status="error",
+                                 note="Không tải được audio của video này.", loi_truy_cap=None)
+
+
+def test_dem_cau_tom_tat_khong_tinh_nguon_huy_hay_tai_hong():
+    ok = SimpleNamespace(status="ok", matches=[1], bao_cao=None, loi_truy_cap=None)
+    ket_qua = [ok, _huy_theo_yeu_cau("https://youtu.be/vidthu00001"),
+               _tai_hong("https://youtu.be/vidthu00002")]
+    assert dem_cau_tom_tat(ket_qua) == (1, 1)
+
+
+def test_nguon_huy_hay_tai_hong_khong_tinh_la_da_quet_tren_giao_dien(tmp_path, monkeypatch):
+    ket_qua = [_ok("Video mot", "vidthu00000"),
+               _huy_theo_yeu_cau("https://www.youtube.com/watch?v=vidthu00001"),
+               _tai_hong("https://www.youtube.com/watch?v=vidthu00002")]
+    at = _man_ket_qua(tmp_path, monkeypatch, ket_qua)
+    do = "\n".join(str(e.value) for e in at.error)
+    # Tiền đề: hai nguồn này đã được báo RIÊNG ở dòng «Có nguồn bị lỗi».
+    assert "Có nguồn bị lỗi" in do and "Đã hủy theo yêu cầu" in do and "Không tải được audio" in do, do
+    xanh = _cau_xanh(at)
+    assert "Đã chọn **1** bằng chứng tốt nhất từ 1 nguồn đã quét" in xanh, xanh

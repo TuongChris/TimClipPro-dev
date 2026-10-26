@@ -327,11 +327,12 @@ def thong_bao_lo_da_dung(da_dung: bool, chua_quet: Sequence[str], toi_da: int = 
 def dem_cau_tom_tat(ket_qua: Sequence[Any]) -> tuple:
     """``(số bằng chứng, số nguồn đã quét)`` cho câu xanh «Đã chọn N bằng chứng … từ M nguồn đã quét»
     (audit F-10). N đếm ĐÚNG phần bảng/CSV hiện (``bang_ket_qua``: bỏ kết quả báo cáo V2 lỗi, chỉ nguồn
-    «ok»); M bỏ video cầu dao YouTube đã bỏ qua — «Chưa quét» không được tính là đã quét."""
+    «ok»); M chỉ đếm nguồn quét RA kết quả (status «ok»). Nguồn «error» — cầu dao YouTube bỏ qua
+    («Chưa quét»), bị huỷ, tải hỏng, quét dở chưa kết luận — KHÔNG phải đã quét; dòng «Có nguồn bị lỗi»
+    của màn kết quả liệt kê riêng chúng (review audit P3)."""
     hop_le, _ = bao_cao_v2.tach_loi_bao_cao(ket_qua)
     so_bang_chung = sum(len(x.matches) for x in hop_le if x.status == "ok")
-    da_quet = sum(1 for x in ket_qua
-                  if getattr(getattr(x, "loi_truy_cap", None), "category", "") != _tc.BLOCKED_BY_BREAKER)
+    da_quet = sum(1 for x in ket_qua if x.status == "ok")
     return so_bang_chung, da_quet
 
 # Ký hiệu "chưa có dữ liệu". Dùng chung để UI và test không lệch nhau.

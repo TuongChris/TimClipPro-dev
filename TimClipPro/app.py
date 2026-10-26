@@ -1193,7 +1193,8 @@ if not job["running"] and (job["results"] or job["error"]):
                        "khỏi báo cáo.")
 
         if tong_match:
-            # Đếm theo đúng bảng/CSV bên dưới và bỏ video «Chưa quét» của cầu dao (audit F-10); toàn bộ
+            # Đếm theo đúng bảng/CSV bên dưới; «nguồn đã quét» chỉ gồm nguồn quét ra kết quả — cầu dao,
+            # huỷ, tải hỏng đã nằm ở dòng «Có nguồn bị lỗi» (audit F-10, review P3); toàn bộ
             # bằng chứng nằm trong kết quả báo cáo V2 lỗi thì không có câu xanh — banner ⛔ của bảng giải thích.
             so_bang_chung, so_da_quet = dem_cau_tom_tat(res)
             if so_bang_chung:
