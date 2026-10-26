@@ -348,6 +348,8 @@ def test_chu_ky_base64_chua_doan_giong_id_bang_khong_bi_chan(tmp_path, ca):
     f"APIError: https://sheets.googleapis.com/v4/spreadsheets/{_SHEET_ID}/values/A1:append",
     f"GET https://sheets.googleapis.com/v4/spreadsheets/{_SHEET_ID}?fields=sheets",
     f"https://docs.google.com/spreadsheets/d/{_SHEET_ID}/edit#gid=0",
+    f"https://docs.google.com/spreadsheets/u/0/d/{_SHEET_ID}/edit#gid=0",     # đăng nhập nhiều tài khoản
+    f"https://docs.google.com/spreadsheets/u/12/d/{_SHEET_ID}/edit",
 ])
 def test_id_bang_44_ky_tu_van_bi_bat_sau_khi_thu_hep_luat(tmp_path, dong):
     """Đối chứng WR-1: thu hẹp luật để bỏ đoạn trong base64 KHÔNG được để lọt ID bảng trần hay trong URL API."""
@@ -372,6 +374,7 @@ def _commit_thong_diep(clone, thong_diep, ten="docs/ghi_chu.md"):
 
 @pytest.mark.parametrize("dong, loai", [
     (f"Bảng lỗi: https://docs.google.com/spreadsheets/d/{_SHEET_ID}/edit#gid=0", "link / ID bảng tính 44 ký tự"),
+    (f"Bảng: https://docs.google.com/spreadsheets/u/0/d/{_SHEET_ID}/edit#gid=0", "link / ID bảng tính 44 ký tự"),
     (f"gspread báo 403 với ID bảng {_SHEET_ID}", "link / ID bảng tính 44 ký tự"),
     (f"khoá thử = {_KHOA_API}", "khoá API / token"),
     ("+ email svc-thu@du-an-thu.iam.gserviceaccount.com", "metadata service account"),   # gia-khong-bi-mat

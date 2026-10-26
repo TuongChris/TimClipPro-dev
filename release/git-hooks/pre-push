@@ -43,8 +43,9 @@ quet_noi_dung() {
       if (d ~ /aiza[0-9a-z_-]{35}/ || d ~ /ya29\.[0-9a-z_-]{20,}/ || d ~ /gh[pousr]_[0-9a-z]{36}/ ||
           d ~ /github_pat_[0-9a-z_]{22,}/) bao("khoá API / token")
       # ID trần: biên không phải ký tự base64 («+», «/», «=» dính vào = đoạn giữa chữ ký/khoá base64, WR-1); ID
-      # sau «/» chỉ trong URL bảng (docs.google.com/spreadsheets/d/…, sheets.googleapis.com/v4/spreadsheets/…).
-      if (d ~ /spreadsheets\/(d\/)?[0-9a-z_-]{20,}/ ||
+      # sau «/» chỉ trong URL bảng (docs.google.com/spreadsheets/d/…, …/spreadsheets/u/<n>/d/… khi trình duyệt đăng
+      # nhập nhiều tài khoản Google, sheets.googleapis.com/v4/spreadsheets/…).
+      if (d ~ /spreadsheets\/(u\/[0-9]+\/)?(d\/)?[0-9a-z_-]{20,}/ ||
           d ~ /(^|[^0-9a-z_+\/-])1[0-9a-z_-]{43}([^0-9a-z_+\/=-]|$)/) bao("link / ID bảng tính 44 ký tự")
       if (d ~ /installation_id["\047]?[ \t]*[:=][ \t]*["\047]?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/)
         bao("định danh cài đặt (installation_id)")
