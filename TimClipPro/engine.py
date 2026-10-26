@@ -59,6 +59,8 @@ import sheet_destinations
 import tien_do_quet as tdq
 from chan_doan_quet import (
     AUDFPRINT_KHONG_RA_MATCH,
+    MO_TA_GIAI_DOAN,
+    PARSER_HONG,
     ChanDoanQuet,
     ghi_nhan_bi_loai,
 )
@@ -4608,6 +4610,20 @@ class Engine:
         if cd.giai_doan_mat and kq.status == "ok":
             with contextlib.suppress(Exception):
                 self._luu_chan_doan(kq, cd)
+            if cd.giai_doan_mat == PARSER_HONG:
+                # audfprint CÓ in dòng khớp mà tool đọc 0 dòng = lỗi code, không phải bằng
+                # chứng âm: "chạy xong nhưng xử lý 0 dòng" là lỗi (audit A-3). Để "ok" thì
+                # lịch sử chốt âm tính trọn (Watch không quét lại) và chế độ nguồn chung
+                # loại video gốc bằng lượt này. Đổi ở đây — trước báo cáo và `save_job`.
+                kq.status = "error"
+                tin = (f"{MO_TA_GIAI_DOAN[PARSER_HONG]} (audfprint trả về "
+                       f"{cd.dong_co_matched} dòng khớp, tool đọc được 0.) Chưa thể kết luận "
+                       "video này không chứa clip gốc — hãy quét lại sau khi sửa.")
+                kq.note = "\n".join(x for x in (kq.note, tin) if x)
+                LOGGER_SCAN.error(
+                    "event=scan.parser_mismatch_error source_id=%s matched_lines=%d",
+                    kq.source_id or kq.source_name, cd.dong_co_matched,
+                )
         return cd
 
     def _luu_chan_doan(self, kq: ScanResult, cd: ChanDoanQuet) -> None:

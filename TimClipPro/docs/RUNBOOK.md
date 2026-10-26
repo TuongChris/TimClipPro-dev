@@ -211,7 +211,7 @@ lý theo bảng:
 |---|---|---|
 | `khong_cat_duoc_khuc` | ffmpeg không cắt được khúc nào | Kiểm file tải về trong `data\downloads` có phát được không |
 | `audfprint_khong_ra_match` | Không có một dòng khớp nào | Kiểm đang chọn **đúng kho**; kiểm kho có clip (`db_clips`) |
-| `parser_hong` | audfprint có ra dòng khớp nhưng đọc không được | **Lỗi code** — định dạng output đã đổi, phải sửa `RE_MATCH` |
+| `parser_hong` | audfprint có ra dòng khớp nhưng đọc không được | **Lỗi code** — định dạng output đã đổi, phải sửa `RE_MATCH`. Lượt quét được ghi là LỖI (không chốt «không có», Watch tự quét lại ở lượt sau) |
 | `bang_chung_qua_yeu` | Có dòng khớp nhưng quá ngắn/quá ít hash | Nhiều khả năng video không chứa clip gốc nào |
 | `khong_dat_chap_nhan` | Có ứng viên nhưng chưa đạt chuẩn | Xem "ứng viên mạnh nhất bị loại" — xem mục dưới |
 | `chon_loc_bo_het` | Đạt chuẩn nhưng Top-N bỏ hết | **Lỗi logic chọn lọc**, phải sửa |
