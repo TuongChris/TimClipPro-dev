@@ -743,6 +743,10 @@ class _PhamViQuet:
     # bằng chứng, không được tính khi xét mục tiêu (AUD-022) lẫn khi xét dừng sớm / bù tốc
     # độ của nhánh thường (audit A-7). Đặt cho MỌI lượt quét.
     ten_tu_khop: str = ""
+    # Mã video YouTube THẬT của nguồn đang quét (nhánh thường): clip kho mang hậu tố ``[mã]``
+    # trùng mã đó chính là video gốc đang bị quét lại — cũng là TỰ KHỚP (audit A-14). Tên file
+    # tải về là ``<mã>.<đuôi>`` nên ``ten_tu_khop`` không bao giờ bắt được ca này.
+    ma_video_tu_khop: str = ""
 
 
 @dataclass
@@ -5097,7 +5101,17 @@ class Engine:
         """
         pv = getattr(self, "_pham_vi", None)
         ten = getattr(pv, "ten_tu_khop", "") if pv is not None else ""
-        return [m for m in ung_vien if not ten or m.clip.lower() != ten]
+        return [m for m in ung_vien
+                if not (ten and m.clip.lower() == ten) and not self._tu_khop_theo_ma(m)]
+
+    def _tu_khop_theo_ma(self, m: Match) -> bool:
+        """Clip kho có hậu tố ``[mã]`` trùng mã video YouTube THẬT đang quét (audit A-14).
+
+        So với mã do YouTube trả cho chính video đang quét, không suy từ tên file tải về.
+        """
+        pv = getattr(self, "_pham_vi", None)
+        ma = getattr(pv, "ma_video_tu_khop", "") if pv is not None else ""
+        return bool(ma) and extract_youtube_id(os.path.basename(m.clip)) == ma
 
     def _ung_vien_dat(self, tho: list, duration: float) -> list:
         """Các ứng viên đạt tiêu chí chấp nhận, đã bỏ tự khớp. Không đụng chẩn đoán cuối."""
@@ -5363,6 +5377,9 @@ class Engine:
         pv.ten_tu_khop = os.path.basename(path).lower()
         if muc_tieu is not None:
             pv.muc_tieu = muc_tieu
+        elif source_type == "youtube":
+            # Chế độ nguồn chung giữ hành vi cũ: ``canh_bao_goc`` cảnh báo link trùng video gốc.
+            pv.ma_video_tu_khop = getattr(self, "_ma_video_nguon", "")
         theo_dich = muc_tieu is not None and muc_tieu.mode == MUC_TIEU_XAC_MINH
         try:
             if not os.path.isfile(path):
@@ -5438,7 +5455,14 @@ class Engine:
                     self._bao(progress, p_match1, f"⚠️ {canh_bao}")
             # Chặn tự khớp: nếu chính file đang quét cũng nằm trong kho vân tay
             # (do lỡ để chung thư mục), nó sẽ khớp 100% với chính nó — vô nghĩa.
+            # Quét link của CHÍNH video gốc cũng vậy, nhưng phải nói ra (audit A-14).
+            goc_bi_bo = sorted({m.clip for m in tat_ca if self._tu_khop_theo_ma(m)})
             tat_ca = self._bo_tu_khop(tat_ca)
+            if goc_bi_bo:
+                tin = (f"Video đang quét (mã {pv.ma_video_tu_khop}) chính là video gốc "
+                       + ", ".join(f"«{c}»" for c in goc_bi_bo)
+                       + " trong kho — đã bỏ khỏi kết quả (tự khớp, không phải vi phạm).")
+                kq.note = "\n".join([x for x in (kq.note, tin) if x])
             self._gan_chi_so(tat_ca, tong)
             self.chan_doan_quet.gop_lai = len(tat_ca)
             # Hợp đồng cũ giữ nguyên: số ứng viên ĐẠT chuẩn TRƯỚC khi cắt còn Top-N.
@@ -5602,6 +5626,9 @@ class Engine:
         # Chỉ chuyển mục tiêu xuống các lượt quét lồng khi có — lời gọi kiểu cũ y nguyên.
         mt = {} if muc_tieu is None else {"muc_tieu": muc_tieu}
         theo_dich = muc_tieu is not None and muc_tieu.mode == MUC_TIEU_XAC_MINH
+        # Mã video đang quét cho các lượt ``scan_media`` lồng (chặn tự khớp theo mã — audit
+        # A-14). Đặt lại ở đầu MỖI video: bản ghim của một lô dùng chung cho nhiều video.
+        self._ma_video_nguon = ""
         try:
             self._bao(progress, 0.02, "Đang lấy thông tin video...")
             self._td(tdq.GD_METADATA, ghi="Đang lấy thông tin video từ YouTube")
@@ -5609,6 +5636,7 @@ class Engine:
                 info = self.youtube_info(url)
             kq.source_name = info["title"] or url
             kq.source_id = info["id"]
+            self._ma_video_nguon = str(info["id"] or "")
             kq.channel_name = info["channel"]
             kq.channel_id = info["channel_id"]
             kq.channel_url = info["channel_url"]
