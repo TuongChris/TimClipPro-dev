@@ -1897,8 +1897,11 @@ with tab5:
             } for m in ms])
             st.dataframe(df, width="stretch", hide_index=True)
             if not loi_bc_chon:
+                # Bảng hiển thị giữ nguyên; chỉ bản CSV tải về chặn công thức ở tầng ghi như
+                # mọi đường xuất CSV khác (tên clip kho máy có thể bắt đầu bằng = + - @).
                 st.download_button("⬇️ Tải CSV lần quét này",
-                                   df.to_csv(index=False).encode("utf-8-sig"),
+                                   df.map(o_bang_tinh_an_toan).to_csv(index=False)
+                                   .encode("utf-8-sig"),
                                    file_name=f"ketqua_job{chon}.csv", mime="text/csv")
         else:
             st.info("Lần quét này không có kết quả nào.")
