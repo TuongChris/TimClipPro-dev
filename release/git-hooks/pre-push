@@ -5,8 +5,65 @@
 # fast-forward tới ĐÚNG đầu một nhánh việc đã có trên remote (đã đẩy để mở PR).
 # Chặn: mọi tag (tag stable-* chỉ do «gh release create» tạo khi người dùng duyệt phát hành), xoá ref, force-push,
 # nhánh ngoài quy ước, tạo mới integration/current.
+# Nội dung (audit E-4 — repo CÔNG KHAI): mọi dòng THÊM trong các commit sắp đẩy (chưa có trên remote) được quét mẫu
+# bí mật chắc chắn (khoá PEM/JSON, metadata service account, token, link/ID bảng tính, định danh cài đặt, dòng cookie
+# Netscape) và tên file nhạy cảm (như .gitignore gốc). Mẫu GIẢ có chủ đích trong test: ghi «gia-khong-bi-mat» trên CÙNG
+# dòng. Hook chỉ in commit + file + loại, KHÔNG in nội dung dòng. Lệnh quét tay của GIT_WORKFLOW.md vẫn bắt buộc.
+# Commit chưa đẩy đã mang mẫu GIẢ mà thiếu dấu (vd. tạo trước bản hook này): NGƯỜI DÙNG xem danh sách, duyệt, rồi đẩy
+# MỘT lần với TIMCLIP_MAU_GIA_DA_DUYET="<SHA đủ 40 ký tự> ..." — chỉ bỏ qua đúng các commit đó (vẫn in ra stderr);
+# không phải --no-verify (CẤM): ref, tag, xoá, force-push và mọi commit khác vẫn bị kiểm.
 remote="$1"
 z=0000000000000000000000000000000000000000
+
+# In «<commit> <file>: <loại>» cho mỗi chỗ nhạy cảm trong các commit từ $2 chưa có trên remote $1 (rỗng = sạch).
+quet_noi_dung() {
+  git -c core.quotePath=false log -p --text --no-color --no-ext-diff --format='commit %H' "$2" --not \
+      --remotes="$1" -- </dev/null | awk -v duyet=" ${TIMCLIP_MAU_GIA_DA_DUYET:-} " '
+    function bao(loai,   k) {
+      k = c SUBSEP f SUBSEP loai
+      if (k in da_bao) return
+      da_bao[k] = 1
+      if (index(duyet, " " ct " ")) {
+        print "pre-push: bỏ qua (người dùng duyệt là mẫu GIẢ) " c " " f ": " loai > "/dev/stderr"
+        return
+      }
+      n++
+      if (n <= 30) print "  " c " " f ": " loai
+    }
+    BEGIN { gsub(/[ \t,;]+/, " ", duyet); duyet = tolower(duyet) }
+    /^commit [0-9a-f]+$/ { ct = $2; c = substr($2, 1, 10); next }
+    /^\+\+\+ / {
+      f = substr($0, 5); sub(/^"?b\//, "", f); sub(/"$/, "", f)
+      if (f == "/dev/null") next
+      t = tolower(f)
+      if (t ~ /\.(pem|key|p12|pfx)$/ || t ~ /(^|\/)khoa_rieng[^\/]*$/) bao("file khoá")
+      else if (t ~ /(^|\/)(google_key|khoa_google)[^\/]*$/ || t ~ /service[^\/]*account[^\/]*\.json$/ ||
+               t ~ /(^|\/)credentials\.json$/ || t ~ /(^|\/)client_secret[^\/]*\.json$/ ||
+               t ~ /\.key\.json$/ || t ~ /\.json\.key$/ || t ~ /-[0-9a-f]{12}\.json$/) bao("file khoá Google")
+      else if (t ~ /cookie[^\/]*\.txt$/) bao("file cookie")
+      else if (t ~ /(^|\/)installation\.json$/) bao("file định danh cài đặt")
+      else if (t ~ /(^|\/)(secrets|credentials)\//) bao("thư mục bí mật")
+      next
+    }
+    /^\+/ {
+      if (index($0, "gia-khong-bi-mat")) next
+      d = tolower($0)
+      if (d ~ /-----begin [a-z0-9 ]*private key-----/ || d ~ /"private_key"[ \t]*:/) bao("khoá riêng")
+      if (d ~ /"type"[ \t]*:[ \t]*"service_account"/ || d ~ /"private_key_id"[ \t]*:/ ||
+          d ~ /[a-z0-9._-]+@[a-z0-9-]+\.iam\.gserviceaccount\.com/) bao("metadata service account")
+      if (d ~ /"(client_secret|refresh_token)"[ \t]*:/) bao("client secret / refresh token")
+      if (d ~ /aiza[0-9a-z_-]{35}/ || d ~ /ya29\.[0-9a-z_-]{20,}/ || d ~ /gh[pousr]_[0-9a-z]{36}/ ||
+          d ~ /github_pat_[0-9a-z_]{22,}/) bao("khoá API / token")
+      if (d ~ /docs\.google\.com\/spreadsheets\/d\/[0-9a-z_-]{20,}/ ||
+          d ~ /(^|[^0-9a-z_-])1[0-9a-z_-]{43}([^0-9a-z_-]|$)/) bao("link / ID bảng tính 44 ký tự")
+      if (d ~ /installation_id["\047]?[ \t]*[:=][ \t]*["\047]?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/)
+        bao("định danh cài đặt (installation_id)")
+      if (d ~ /^\+#[ \t]*(netscape[ \t]+)?http[ \t]+cookie[ \t]+file/ ||
+          d ~ /^\+(#httponly_)?[^\t#]+\t(true|false)\t[^\t]*\t(true|false)\t[0-9]+\t[^\t]+\t/) bao("cookie Netscape")
+    }
+    END { if (n > 30) print "  … và " (n - 30) " chỗ khác" }'
+}
+
 while read lref lsha rref rsha; do
   case "$rref" in
     refs/heads/feature/pc1/*|refs/heads/feature/pc2/*|refs/heads/fix/pc1/*|refs/heads/fix/pc2/*) ;;
@@ -36,6 +93,20 @@ while read lref lsha rref rsha; do
       echo "pre-push: CHẶN integration/current -> $lsha: không phải ĐẦU một nhánh việc trên $remote (đẩy nhánh + PR trước, rồi git fetch $remote)" >&2
       exit 1
     fi
+  fi
+  if ! git rev-list --count "$lsha" --not --remotes="$remote" -- >/dev/null 2>&1; then
+    echo "pre-push: CHẶN $rref — không đọc được các commit sắp đẩy để quét nội dung" >&2
+    exit 1
+  fi
+  nhay_cam="$(quet_noi_dung "$remote" "$lsha")"
+  if [ -n "$nhay_cam" ]; then
+    {
+      echo "pre-push: CHẶN $rref — nội dung nhạy cảm trong commit sắp đẩy (repo CÔNG KHAI; nội dung dòng không in ra):"
+      echo "$nhay_cam"
+      echo "  Bỏ khỏi MỌI commit chưa đẩy (thêm rồi xoá ở commit sau vẫn bị đẩy), rồi báo người dùng. Mẫu GIẢ có chủ đích"
+      echo "  trong test: ghi «gia-khong-bi-mat» trên cùng dòng (docs/ai/GIT_WORKFLOW.md «Quét trước MỖI lần đẩy»)."
+    } >&2
+    exit 1
   fi
 done
 exit 0

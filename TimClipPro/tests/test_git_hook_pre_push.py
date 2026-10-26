@@ -31,8 +31,8 @@ def _commit(cwd, ten):
     return _git(cwd, "rev-parse", "HEAD").stdout.strip()
 
 
-@pytest.fixture()
-def may(tmp_path):
+def _tao_may(tmp_path):
+    """Repo tạm: remote bare + clone «private» có hook dùng chung (dùng lại ở test_git_hook_pre_push_quet_bi_mat)."""
     remote = str(tmp_path / "remote.git")
     _git(str(tmp_path), "init", "-q", "--bare", remote)
     goc = str(tmp_path / "goc")
@@ -45,6 +45,11 @@ def may(tmp_path):
     os.makedirs(hooks, exist_ok=True)
     shutil.copyfile(HOOK, os.path.join(hooks, "pre-push"))
     return clone
+
+
+@pytest.fixture()
+def may(tmp_path):
+    return _tao_may(tmp_path)
 
 
 def _day(clone, *ref):

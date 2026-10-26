@@ -49,7 +49,7 @@ Quy trình phát hành: `TimClipPro/docs/PHAT_HANH_HAI_MAY.md`. Khoá ký mỗi 
 - Người dùng duyệt (trong phiên): đẩy nhánh / mở PR (một duyệt cho cả việc), gộp vào `integration/current`, phát hành
   một bản (MỘT điểm duyệt — phủ ký → công bố, `PHAT_HANH_HAI_MAY.md` §2), đổi cấu hình GitHub (ruleset, khoá deploy).
 - Rào chắn kỹ thuật: hook cục bộ (chặn NHẦM: tag, xoá, force-push, nhánh lạ, integration không phải fast-forward tới
-  đầu nhánh việc đã đẩy — bỏ qua được bằng `--no-verify`: CẤM); ruleset GitHub (máy chủ — áp cho MỌI khoá/tài khoản):
+  đầu nhánh việc đã đẩy, nội dung nhạy cảm trong commit sắp đẩy — bỏ qua được bằng `--no-verify`: CẤM); ruleset GitHub (máy chủ — áp cho MỌI khoá/tài khoản):
   `release/github/ruleset_integration_current.json` (chặn xoá + force-push `integration/current`) và
   `release/github/ruleset_tag_stable.json` (tag `stable-*` không xoá/không dời). Bật (chủ repo, một lần):
   `gh api -X POST repos/TuongChris/TimClipPro-dev/rulesets --input release/github/<file>.json`; kiểm:
@@ -57,10 +57,18 @@ Quy trình phát hành: `TimClipPro/docs/PHAT_HANH_HAI_MAY.md`. Khoá ký mỗi 
   nút Merge của GitHub đổi SHA).
 
 ## Quét trước MỖI lần đẩy (cả hai máy — repo công khai)
-Quét TỪNG commit sắp đẩy (bí mật thêm rồi xoá ở commit sau vẫn bị đẩy); phải rỗng, trừ mẫu GIẢ đã biết trong test:
-`git log -p --text --format=%B private/integration/current..HEAD | grep -n -i -E "AIza|ya29\.|gh[pousr]_|github_pat_|BEGIN [A-Z ]*PRIVATE|docs\.google\.com/spreadsheets|__Secure-|SAPISID|cookies?\.txt|@gmail\.com|[A-Z]:\\\\Users\\\\"`
-và thêm: không file `.pem`/`.key`/`google_key.json`, không định danh cài đặt (`installation_id`), không đường dẫn riêng
-máy. Có phát hiện MỚI → dừng, báo người dùng.
+Hai lớp, cả hai bắt buộc (audit E-4). Quét TỪNG commit sắp đẩy — bí mật thêm rồi xoá ở commit sau vẫn bị đẩy.
+1. Tự động — hook `pre-push` (mục dưới) CHẶN khi một dòng THÊM trong commit chưa có trên remote mang mẫu chắc chắn: khoá
+   PEM / khoá JSON, metadata service account (type = service_account, private_key_id, email `*.iam.gserviceaccount.com`),
+   client secret / refresh token, khoá API / token Google, GitHub, link hoặc ID bảng tính 44 ký tự TRẦN, `installation_id`
+   gán UUID, tiêu đề / dòng cookie Netscape (mọi tên cookie); hoặc file tên khoá / cookie / `installation.json` /
+   `secrets/` (như `.gitignore` gốc). Hook chỉ in commit + file + loại, KHÔNG in nội dung. Mẫu GIẢ có chủ đích (test):
+   ghi `gia-khong-bi-mat` trên CÙNG dòng. Commit chưa đẩy đã lỡ mang mẫu giả không dấu (vd. tạo trước bản hook này):
+   NGƯỜI DÙNG xem danh sách hook in, duyệt, rồi đẩy MỘT lần với `TIMCLIP_MAU_GIA_DA_DUYET="<SHA 40 ký tự> …"` — chỉ bỏ
+   qua đúng các commit đó; `--no-verify` vẫn CẤM. Bí mật thật → bỏ khỏi commit chưa đẩy, báo người dùng.
+2. Tay — phải rỗng, trừ mẫu GIẢ đã biết trong test (tên file `cookies.txt` không còn trong mẫu: lớp 1 + `.gitignore` lo):
+`git log -p --text --format=%B private/integration/current..HEAD | grep -n -i -E "AIza|ya29\.|gh[pousr]_|github_pat_|BEGIN [A-Z ]*PRIVATE|\"private_key|service_account\"|gserviceaccount\.com|client_secret|refresh_token|docs\.google\.com/spreadsheets|(^|[^A-Za-z0-9_-])1[A-Za-z0-9_-]{43}([^A-Za-z0-9_-]|$)|installation_id.{0,4}[0-9a-f]{8}-|__Secure-|SAPISID|LOGIN_INFO|HTTP Cookie File|@gmail\.com|[A-Z]:\\\\Users\\\\"`
+   và thêm: không đường dẫn riêng máy, không dữ liệu khách hàng. Có phát hiện MỚI → dừng, báo người dùng.
 
 ## Hook `pre-push` (cả hai máy)
 Cài (Git Bash, gốc clone hoặc worktree): `H="$(git rev-parse --path-format=absolute --git-path hooks)"; cp release/git-hooks/pre-push "$H/pre-push"`
@@ -69,7 +77,8 @@ rồi kiểm `cmp release/git-hooks/pre-push "$H/pre-push" && head -c2 "$H/pre-p
 chỗ khác bị bỏ qua — báo người dùng). Thử bằng ref CHƯA có trên remote (dry-run, không gửi gì):
 `git push --dry-run private HEAD:refs/heads/thu-hook-chan` và `git push --dry-run private HEAD:refs/tags/thu-hook-chan`
 phải in «pre-push: CHẶN»; `git push --dry-run private HEAD:refs/heads/fix/pc2/thu-hook` phải qua. Test tự động:
-`TimClipPro/tests/test_git_hook_pre_push.py` (repo tạm).
+`TimClipPro/tests/test_git_hook_pre_push.py`, `test_git_hook_pre_push_quet_bi_mat.py` (repo tạm). Bản hook mới chỉ có
+hiệu lực sau khi CÀI LẠI trên từng máy (người dùng duyệt) — bản đã cài là ảnh chụp.
 
 ## Pull Request, review, gộp (máy nào cũng làm)
 1. PR: `gh pr create --repo TuongChris/TimClipPro-dev --base integration/current --head <nhánh> --title … --body-file …`.

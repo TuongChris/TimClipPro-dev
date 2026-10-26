@@ -754,3 +754,14 @@ tiêu đề video gốc chung ở `app.py`. CSV/Sheets/lịch sử vẫn nhận 
 `tests/test_tieu_de_ngoai_ho_so_va_ket_qua.py`, `tests/test_tieu_de_ngoai_khong_markdown.py`.
 → **Chữ ngoài vào BẤT KỲ đích Markdown nào (phần tử Streamlit hay file .md) phải qua `thoat_markdown`**, hoặc đi qua
   phần tử không diễn giải (`st.text`, `st.code`, `st.dataframe`); thêm đích Markdown mới thì thử với `![](url)`, `[a](url)`, `$x$`.
+
+**35. Rào quét bí mật trước khi đẩy chỉ xét tên ref + một grep tay thiếu mẫu — repo CÔNG KHAI (26/10/2026, audit E-4).**
+Hook `pre-push` dùng chung chỉ đọc `$rref` (tag/xoá/force/nhánh lạ); nội dung dựa vào lệnh grep tay trong
+`docs/ai/GIT_WORKFLOW.md`, yếu hơn chính mẫu của `dong_goi.py`: metadata service account không `private_key`
+(`client_email`, `private_key_id`), ID bảng 44 ký tự trần, `installation_id` gán UUID, dòng cookie Netscape không mang
+SAPISID/`__Secure-` đều lọt cả hai lớp; còn `cookies?\.txt` khớp tràn lan → người đẩy quen bỏ qua. Đã sửa: hook quét
+dòng THÊM của mọi commit chưa có trên remote (từng commit — thêm rồi xoá vẫn bị chặn) + tên file nhạy cảm, chỉ in
+commit/file/loại; mẫu GIẢ ghi `gia-khong-bi-mat` cùng dòng, commit cũ thiếu dấu → người dùng duyệt đúng SHA
+(`TIMCLIP_MAU_GIA_DA_DUYET`); grep tay bổ sung mẫu, bỏ `cookies?\.txt`. Test: `tests/test_git_hook_pre_push_quet_bi_mat.py`.
+→ **Kiểm bí mật phải tự động và theo NỘI DUNG, mẫu không yếu hơn bộ lọc phát hành**; thêm mẫu giả vào test thì ghi dấu,
+  và thêm mẫu nhạy cảm mới vào `dong_goi.py` thì thêm cả vào hook.
