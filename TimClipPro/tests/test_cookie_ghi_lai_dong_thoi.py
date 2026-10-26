@@ -432,3 +432,22 @@ def test_phien_dong_sau_co_ban_xoay_moi_hon_van_ghi(tmp_path):
     b.close()
     a.close()
     assert _dong_cua(p.read_text(encoding="utf-8"), "CK_00")[0].endswith("\tcua_a_cap_sau")
+
+
+def test_byte_khong_utf8_o_dong_khac_khong_tat_vinh_vien_ghi_lai(tmp_path, caplog):
+    """Audit DR-4: file có MỘT byte không phải UTF-8 (0xE9 Latin-1 — file sửa tay, lưu ANSI) ở dòng của cookie không liên
+    quan. Cổng và bản chụp đọc ``errors='replace'`` nên NHẬN file (phiên có đăng nhập); bước ghi lại từng đọc lại đĩa
+    bằng UTF-8 nghiêm → ``UnicodeDecodeError`` bị nuốt → mọi lượt ghi lại của file đó bị bỏ, mãi mãi. File cổng đã nhận
+    thì cookie vừa xoay phải về file; dòng không đổi giữ NGUYÊN byte (không thay bằng U+FFFD)."""
+    p = tmp_path / "cookies.txt"
+    dong = [b"\t".join([b".youtube.com", b"TRUE", b"/", b"TRUE", b"9999999999", ten, gia_tri])
+            for ten, gia_tri in ((b"SID", b"gia_tri_gia_sid_xxxxxxxx"), (b"SIDCC", b"gia_cu_gia"),
+                                 (b"PREF", b"hl=fr&nom=caf\xe9"))]
+    p.write_bytes(b"\n".join([b"# Netscape HTTP Cookie File", b"# ghi ch\xfa tay", b"", *dong]) + b"\n")
+    with yt_dlp.YoutubeDL(_opts(y.CauHinhMang(cookiefile=str(p)))) as ydl:
+        _cookie(ydl.cookiejar, "SIDCC").value = "vC_moi_xoay_trong_phien"
+    sau = p.read_bytes().replace(b"\r\n", b"\n")  # Windows ghi văn bản bằng CRLF — không phải điều test khẳng định
+    assert "write_back_skipped" not in caplog.text, caplog.text
+    assert b"\tSIDCC\tvC_moi_xoay_trong_phien\n" in sau, "cookie YouTube vừa xoay không về file của người dùng"
+    assert b"\tPREF\thl=fr&nom=caf\xe9\n" in sau and b"# ghi ch\xfa tay\n" in sau, "dòng không đổi phải giữ nguyên byte"
+    assert b"\xef\xbf\xbd" not in sau, "không được thay byte của người dùng bằng U+FFFD"

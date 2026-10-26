@@ -452,7 +452,8 @@ def _ghi_de_nguyen_tu(duong_dan: str, van_ban: str) -> None:
             os.remove(cu)
     tam = f"{duong_dan}{_DUOI_TAM_COOKIE}{os.getpid()}-{uuid.uuid4().hex[:8]}.tmp"
     try:
-        with io.open(tam, "w", encoding="utf-8") as f:
+        # surrogateescape: byte không phải UTF-8 đọc vào (:meth:`LuongCookieFile.gop_vao_file`) ra lại ĐÚNG byte đó.
+        with io.open(tam, "w", encoding="utf-8", errors="surrogateescape") as f:
             f.write(van_ban)
             f.flush()
             os.fsync(f.fileno())
@@ -518,7 +519,9 @@ class LuongCookieFile:
                 LOGGER.warning("event=ytdlp.cookie.write_back_skipped file=%s reason=missing", ten)
                 return
             with khoa_json(self.duong_dan, han_cho_s=HAN_CHO_KHOA_COOKIE_S):
-                with io.open(self.duong_dan, encoding="utf-8") as f:
+                # Cổng/bản chụp nhận file có byte không phải UTF-8 (đọc `replace`): đọc nghiêm ở đây thì mọi lượt ghi lại của
+                # file đó bị bỏ mãi (audit DR-4). surrogateescape giữ nguyên byte của dòng không đổi khi ghi ra.
+                with io.open(self.duong_dan, encoding="utf-8", errors="surrogateescape") as f:
                     hien_tai = f.read()
                 ct = doc_cau_truc_cookie(hien_tai)
                 if ct.dinh_dang != "netscape" or ct.dong_hong or not ct.co_tieu_de or not ct.so_ban_ghi:
