@@ -8,12 +8,28 @@ import signal
 from typing import Any
 
 
+def mtime_file_dung_cu(file_dung: str, moc_bat_dau: float | None) -> float | None:
+    """mtime của file dừng có từ TRƯỚC mốc bắt đầu lượt (yêu cầu cũ, bị bỏ qua); None nếu không có."""
+    if not file_dung or moc_bat_dau is None:
+        return None
+    try:
+        mtime = os.path.getmtime(file_dung)
+    except OSError:
+        return None
+    return mtime if mtime < moc_bat_dau else None
+
+
 class YeuCauDung:
     """Gom mọi nguồn tín hiệu dừng về một chỗ."""
 
-    def __init__(self, engine: Any = None, file_dung: str = "") -> None:
+    def __init__(self, engine: Any = None, file_dung: str = "",
+                 moc_bat_dau: float | None = None) -> None:
         self.engine = engine
         self.file_dung = file_dung
+        # Mốc (time.time()) lượt bắt đầu: file dừng sửa TRƯỚC mốc là yêu cầu cũ (lượt trước bị
+        # kill trước `finally`, hay `cli.py dung` khi không có lượt nào chạy) — không dừng lượt này.
+        # Không xoá file đó: `cli.py dung` mới ghi đè file → mtime mới → vẫn dừng được (audit C-12).
+        self.moc_bat_dau = moc_bat_dau
         self._da_dat = False
         self._so_tin_hieu = 0
 
@@ -37,7 +53,9 @@ class YeuCauDung:
         cancel_event = getattr(self.engine, "cancel_event", None)
         if cancel_event is not None and cancel_event.is_set():
             return True
-        return bool(self.file_dung and os.path.exists(self.file_dung))
+        if not (self.file_dung and os.path.exists(self.file_dung)):
+            return False
+        return mtime_file_dung_cu(self.file_dung, self.moc_bat_dau) is None
 
     def dat(self) -> None:
         """Đặt cờ nội bộ và chuyển yêu cầu xuống Engine nếu có."""

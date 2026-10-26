@@ -33,7 +33,7 @@ class _ChannelSyncGia:
 
 
 class _YeuCauDungGia:
-    def __init__(self, engine=None, file_dung=""):
+    def __init__(self, engine=None, file_dung="", moc_bat_dau=None):
         self.engine = engine
         self.file_dung = file_dung
 

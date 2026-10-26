@@ -227,7 +227,7 @@ def test_cli_watch_luon_don_file_dung_sau_khi_xong(
     da_don = []
 
     class DungGia:
-        def __init__(self, engine=None, file_dung=""):
+        def __init__(self, engine=None, file_dung="", moc_bat_dau=None):
             self.file_dung = file_dung
 
         def bat_tin_hieu(self):
@@ -257,3 +257,114 @@ def test_cli_watch_luon_don_file_dung_sau_khi_xong(
         cli.main()
 
     assert da_don == [str(tmp_path / "DUNG")]
+
+
+# --- Audit C-12: file DUNG CŨ (có từ TRƯỚC khi lượt bắt đầu) không được dừng oan lượt mới. ---
+# `cli.py dung` khi không có lượt nào chạy, hay lượt bị kill trước `finally: don_file_dung()`,
+# để lại file; lượt Watch theo lịch kế tiếp từng quét 0 video, ghi «Đã dừng theo yêu cầu», mã 1.
+
+
+def _file_dung_cu(tmp_path, tuoi_s=3600):
+    import os
+    import time
+
+    path = tmp_path / "DUNG"
+    path.write_text("Yêu cầu dừng từ CLI.\n", encoding="utf-8")
+    cu = time.time() - tuoi_s
+    os.utime(path, (cu, cu))
+    return path
+
+
+def test_file_dung_cu_hon_moc_bat_dau_bi_bo_qua(tmp_path):
+    import time
+
+    path = _file_dung_cu(tmp_path)
+    yeu_cau = YeuCauDung(file_dung=str(path), moc_bat_dau=time.time())
+
+    assert yeu_cau.can_dung() is False
+    assert dung_lai.mtime_file_dung_cu(str(path), yeu_cau.moc_bat_dau) is not None
+    # Không xoá file lúc bắt đầu: `finally` cuối lượt mới dọn.
+    assert path.exists()
+
+
+def test_dung_moi_sau_moc_ghi_de_file_cu_van_dung(tmp_path):
+    import time
+
+    path = _file_dung_cu(tmp_path)
+    yeu_cau = YeuCauDung(file_dung=str(path), moc_bat_dau=time.time() - 60)
+    assert yeu_cau.can_dung() is False
+
+    # `cli.py dung` trong lúc lượt chạy ghi đè file → mtime mới → dừng.
+    path.write_text("Yêu cầu dừng từ CLI.\n", encoding="utf-8")
+
+    assert yeu_cau.can_dung() is True
+    assert dung_lai.mtime_file_dung_cu(str(path), yeu_cau.moc_bat_dau) is None
+
+
+def test_cli_watch_bo_qua_file_dung_cu_tu_truoc_khi_bat_dau(tmp_path, monkeypatch, capsys):
+    import cli
+    from watch import MucTheoDoi as Muc, WatchList as DanhSach
+
+    # Không đụng handler tín hiệu thật của tiến trình pytest.
+    monkeypatch.setattr(dung_lai.signal, "signal", lambda *a, **k: None)
+    _file_dung_cu(tmp_path)
+    engine_gia = SimpleNamespace(
+        data_dir=str(tmp_path),
+        out_dir=str(tmp_path / "ketqua"),
+        config=SimpleNamespace(ncores=1),
+        cancel_event=None,
+    )
+    wl = DanhSach(muc=[Muc("link", "https://youtu.be/abcDEF12345")])
+    monkeypatch.setattr("sys.argv", ["cli.py", "watch"])
+    monkeypatch.setattr(cli, "Engine", lambda *a, **k: engine_gia)
+    monkeypatch.setattr(cli.watch, "doc_watchlist", lambda path: wl)
+    thay = {}
+
+    def chay_gia(engine, wl, progress=None, **kw):
+        # Điểm `_thuc_hien_giam_sat` hỏi can_dung() trước video đầu tiên.
+        thay["can_dung_luc_bat_dau"] = kw["dung_lai"].can_dung()
+        return SimpleNamespace(tom_tat=lambda: "tóm tắt giả", ban=False, chan_youtube="", loi=[])
+
+    monkeypatch.setattr(cli.watch, "chay_giam_sat", chay_gia)
+
+    cli.main()
+
+    assert thay["can_dung_luc_bat_dau"] is False, (
+        "file DUNG có từ 1 giờ TRƯỚC khi lượt Watch bắt đầu vẫn dừng lượt mới ngay trước video đầu"
+    )
+    assert "Bỏ qua yêu cầu dừng cũ" in capsys.readouterr().out
+    assert not (tmp_path / "DUNG").exists()
+
+
+def test_cli_watch_dung_gui_luc_dang_nap_engine_van_dung_luot(tmp_path, monkeypatch):
+    import cli
+    from watch import MucTheoDoi as Muc, WatchList as DanhSach
+
+    monkeypatch.setattr(dung_lai.signal, "signal", lambda *a, **k: None)
+    engine_gia = SimpleNamespace(
+        data_dir=str(tmp_path),
+        out_dir=str(tmp_path / "ketqua"),
+        config=SimpleNamespace(ncores=1),
+        cancel_event=None,
+    )
+
+    def engine_dang_nap(*a, **k):
+        # `cli.py dung` gõ trong lúc lượt đang nạp kho (sau mốc bắt đầu của lượt).
+        (tmp_path / "DUNG").write_text("Yêu cầu dừng từ CLI.\n", encoding="utf-8")
+        return engine_gia
+
+    wl = DanhSach(muc=[Muc("link", "https://youtu.be/abcDEF12345")])
+    monkeypatch.setattr("sys.argv", ["cli.py", "watch"])
+    monkeypatch.setattr(cli, "Engine", engine_dang_nap)
+    monkeypatch.setattr(cli.watch, "doc_watchlist", lambda path: wl)
+    thay = {}
+
+    def chay_gia(engine, wl, progress=None, **kw):
+        thay["can_dung"] = kw["dung_lai"].can_dung()
+        return SimpleNamespace(tom_tat=lambda: "tóm tắt giả", ban=False, chan_youtube="", loi=[])
+
+    monkeypatch.setattr(cli.watch, "chay_giam_sat", chay_gia)
+
+    cli.main()
+
+    assert thay["can_dung"] is True

@@ -16,6 +16,7 @@ import argparse
 import contextlib
 import os
 import sys
+import time
 import uuid
 
 import bao_cao_v2
@@ -29,7 +30,7 @@ import sheet_destinations
 import watch
 from channel import ChannelSync
 from clip_metadata import configure_metadata_logging
-from dung_lai import YeuCauDung
+from dung_lai import YeuCauDung, mtime_file_dung_cu
 from khoa import DangChayRoi
 from engine import (Engine, LoiLuuBen, SoKhoHong, liet_ke_media, mo_ta_pham_vi,
                     thu_muc_data_mac_dinh)
@@ -126,16 +127,20 @@ def _lenh_dich_va_gui(a) -> None:
     raise SystemExit(0)
 
 
-def _chay_lenh_watch(a, eng: Engine) -> None:
+def _chay_lenh_watch(a, eng: Engine, moc_bat_dau: float | None = None) -> None:
     """Chạy nhánh watch; caller chịu trách nhiệm mở và đóng nhật ký."""
     watchlist_path = a.file or "watchlist.json"
     wl = watch.doc_watchlist(watchlist_path)
     # Đích gửi chốt TRƯỚC khi đăng ký tín hiệu dừng: hồ sơ sai là lỗi cấu hình ngay, không để lại gì.
     y_dinh_lenh = _y_dinh_lenh(eng, a) if (wl.muc and getattr(a, "destination", "")) else None
-    dung_lai = YeuCauDung(
-        eng,
-        os.path.join(eng.data_dir, "DUNG"),
-    )
+    file_dung = os.path.join(eng.data_dir, "DUNG")
+    if moc_bat_dau is None:
+        moc_bat_dau = time.time()
+    dung_lai = YeuCauDung(eng, file_dung, moc_bat_dau=moc_bat_dau)
+    cu = mtime_file_dung_cu(file_dung, moc_bat_dau)
+    if cu is not None:
+        print(f"Bỏ qua yêu cầu dừng cũ từ {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(cu))} "
+              "(có trước khi lượt này bắt đầu).")
     dung_lai.bat_tin_hieu()
     if not wl.muc:
         print(
@@ -359,6 +364,8 @@ def _main():
         _thoat_neu_youtube_chan(phien_meta.thong_bao_dung() if phien_meta is not None else "")
         return
 
+    # Mốc lượt chạy chốt TRƯỚC khi nạp Engine: `cli.py dung` gõ lúc đang nạp kho vẫn dừng lượt này.
+    moc_bat_dau = time.time()
     eng = Engine()
     eng.config.ncores = a.ncores
     # Cảnh báo lúc khởi động (sổ đăng ký kho hỏng/mất…): giao diện hiện ở thanh bên, CLI
@@ -436,7 +443,7 @@ def _main():
         if a.log:
             nhat_ky.mo_nhat_ky(eng.out_dir)
         try:
-            _chay_lenh_watch(a, eng)
+            _chay_lenh_watch(a, eng, moc_bat_dau)
         finally:
             if a.log:
                 nhat_ky.dong_nhat_ky()

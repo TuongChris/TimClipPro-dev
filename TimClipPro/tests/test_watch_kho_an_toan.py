@@ -141,7 +141,7 @@ class _EngineCli:
 
 
 class _YeuCauDungGia:
-    def __init__(self, engine=None, file_dung=""):
+    def __init__(self, engine=None, file_dung="", moc_bat_dau=None):
         pass
 
     def bat_tin_hieu(self):
