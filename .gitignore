@@ -46,3 +46,20 @@ CLAUDE.local.md
 *.p12
 *.pfx
 khoa_rieng*
+
+# Khoá Google (service account) và cookie — MỌI tên, ở BẤT KỲ thư mục nào (audit E-1). Repo này
+# công khai; TimClipPro/.gitignore chỉ phủ thư mục mã và trước đây chỉ khớp đúng tên google_key.json,
+# nên khoá thứ hai, bản .bak, file tải về chưa đổi tên hay cookie ở gốc/docs/release đều lọt `git add -A`.
+google_key*
+khoa_google*
+*service*account*.json
+credentials.json
+client_secret*.json
+# File khoá do Google Cloud tải về, chưa đổi tên: <project>-<12 hex>.json
+*-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].json
+*.key.json
+*.json.key
+cookies.txt
+*cookie*.txt
+credentials/
+secrets/
