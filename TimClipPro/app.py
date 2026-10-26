@@ -57,6 +57,7 @@ from scan_ui import (
     thong_bao_lo_da_dung,
     thong_bao_youtube_chan,
     tom_tat_dong_bo_kenh,
+    tom_tat_tao_van_tay,
 )
 from channel import ChannelSync
 from tien_do_dong_bo import SoDongBo
@@ -1098,12 +1099,10 @@ if not job["running"] and (job["results"] or job["error"]):
         getattr(st, muc_kho)(cau_kho)
     elif job["kind"] == "db":
         r = job["results"]
-        thong_bao = st.warning if r.get("da_huy") else st.success
-        thong_bao(
-            f"{'⏹️ Đã dừng' if r.get('da_huy') else '✅ Hoàn tất tạo vân tay'}: "
-            f"đã xử lý {r.get('da_xu_ly', r['so_clip'])}/{r['so_clip']} clip "
-            f"trong {r['giay']:.0f} giây."
-        )
+        # Tiêu đề theo KẾT QUẢ THẬT (scan_ui.tom_tat_tao_van_tay, audit F-4): bổ sung mà mọi clip mới đều lỗi → kho
+        # không ghi → đỏ, không «✅ Hoàn tất».
+        for muc_vt, cau_vt in tom_tat_tao_van_tay(r):
+            getattr(st, muc_vt)(cau_vt)
         m1, m2, m3 = st.columns(3)
         m1.metric("Tạo mới", r.get("thanh_cong", r.get("da_xu_ly", 0)))
         m2.metric("Đã tồn tại", r.get("bo_qua", 0))

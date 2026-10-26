@@ -3281,6 +3281,7 @@ class Engine:
                 "loi_file": [],
                 "giay": state.elapsed_seconds,
                 "canh_bao": canh_bao,
+                "da_ghi_kho": False,
             }
 
         workspace = os.path.join(self.data_dir, "fingerprint_jobs", tracker.job_id)

@@ -195,6 +195,49 @@ def tom_tat_dong_bo_kenh(r: Mapping[str, Any]) -> list:
     return ra
 
 
+def trang_thai_tao_van_tay(r: Mapping[str, Any]) -> str:
+    """Mã trạng thái THẬT của một lượt tạo / bổ sung vân tay (dict của ``Engine.build_database``) — dùng chung cho
+    tiêu đề giao diện và chữ trạng thái CLI (audit F-4). ``DA_HUY`` · ``KHONG_GHI_CO_LOI`` (có clip lỗi mà kho KHÔNG
+    ghi: bổ sung mà mọi clip mới đều lỗi — TCP-02 cố ý không raise, kho giữ nguyên) · ``KHONG_CO_GI_MOI`` (mọi clip
+    đã có vân tay) · ``MOT_PHAN`` (kho đã ghi nhưng còn clip lỗi) · ``DAY_DU``. Dict cũ thiếu ``da_ghi_kho``: chỉ coi
+    là «không ghi» khi đồng thời có clip lỗi, hoặc không tạo mới clip nào (nhánh «không có gì mới» chưa mang khoá)."""
+    if r.get("da_huy"):
+        return "DA_HUY"
+    that_bai, thanh_cong = int(r.get("that_bai") or 0), int(r.get("thanh_cong") or 0)
+    da_ghi = r.get("da_ghi_kho")
+    if da_ghi is None:
+        da_ghi = thanh_cong > 0
+    if not da_ghi:
+        return "KHONG_GHI_CO_LOI" if that_bai else "KHONG_CO_GI_MOI"
+    return "MOT_PHAN" if that_bai else "DAY_DU"
+
+
+def tom_tat_tao_van_tay(r: Mapping[str, Any]) -> list:
+    """Các dòng ``(mức, câu)`` cho kết quả một lượt tạo / bổ sung vân tay; dòng đầu là tiêu đề. CHỈ «✅ Hoàn tất tạo
+    vân tay» màu xanh khi kho đã ghi và không clip nào lỗi — như ``tom_tat_dong_bo_kenh`` (audit F-4: bổ sung mà mọi
+    clip mới đều lỗi, kho không ghi, vẫn báo xanh «đã xử lý 3/3 clip» → quét tiếp mà các clip đó không có vân tay).
+    Không đọc file; số đếm, cảnh báo, danh sách lỗi vẽ riêng bên dưới như cũ."""
+    tong = int(r.get("so_clip") or 0)
+    da_xu_ly = int(r.get("da_xu_ly", tong) or 0)
+    that_bai, thanh_cong = int(r.get("that_bai") or 0), int(r.get("thanh_cong") or 0)
+    giay = float(r.get("giay") or 0)
+    tt = trang_thai_tao_van_tay(r)
+    if tt == "DA_HUY":
+        return [("warning", f"⏹️ Đã dừng: đã xử lý {da_xu_ly}/{tong} clip trong {giay:.0f} giây.")]
+    if tt == "KHONG_GHI_CO_LOI":
+        so_gui = that_bai + thanh_cong
+        return [("error", f"❌ Chưa bổ sung được clip nào: {that_bai}/{so_gui} clip mới đều lỗi, kho vân tay giữ "
+                          "nguyên — các clip này CHƯA có vân tay nên quét sẽ KHÔNG nhận ra chúng. Xem danh sách lỗi "
+                          "bên dưới, sửa file rồi bấm «Bổ sung clip mới vào kho» lại.")]
+    if tt == "KHONG_CO_GI_MOI":
+        return [("success", f"✅ Không có gì mới: mọi clip đã có vân tay ({tong} clip); kho giữ nguyên.")]
+    if tt == "MOT_PHAN":
+        return [("warning", f"⚠️ Hoàn tất MỘT PHẦN: tạo mới {thanh_cong}, lỗi {that_bai} — các clip lỗi CHƯA có vân "
+                            f"tay nên quét sẽ không nhận ra chúng (đã xử lý {da_xu_ly}/{tong} clip trong "
+                            f"{giay:.0f} giây). Xem danh sách lỗi bên dưới.")]
+    return [("success", f"✅ Hoàn tất tạo vân tay: đã xử lý {da_xu_ly}/{tong} clip trong {giay:.0f} giây.")]
+
+
 def _cung_thu_muc(a: str, b: str) -> bool:
     import os
 

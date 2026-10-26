@@ -765,3 +765,15 @@ commit/file/loại; mẫu GIẢ ghi `gia-khong-bi-mat` cùng dòng, commit cũ t
 (`TIMCLIP_MAU_GIA_DA_DUYET`); grep tay bổ sung mẫu, bỏ `cookies?\.txt`. Test: `tests/test_git_hook_pre_push_quet_bi_mat.py`.
 → **Kiểm bí mật phải tự động và theo NỘI DUNG, mẫu không yếu hơn bộ lọc phát hành**; thêm mẫu giả vào test thì ghi dấu,
   và thêm mẫu nhạy cảm mới vào `dong_goi.py` thì thêm cả vào hook.
+
+**36. Tiêu đề kết quả chọn màu theo «có huỷ không», không theo «đã làm được gì» (26/10/2026, audit F-4).** «Bổ sung
+clip mới vào kho» mà MỌI clip mới đều lỗi (file cụt, 0 hash): engine cố ý không raise và không ghi kho (TCP-02, kho
+giữ nguyên byte, `da_ghi_kho=False`), nhưng `app.py` chỉ xét `da_huy` nên tiêu đề vẫn xanh «✅ Hoàn tất tạo vân tay:
+đã xử lý 3/3 clip» (CLI in «XONG»); lỗi chỉ nằm ở ô «Lỗi» và hộp cảnh báo bên dưới. Chủ kênh quét tiếp tưởng clip mới
+đã có vân tay → mọi bản re-upload của chúng bị bỏ sót, không lỗi nào. Cùng loại với sự cố đồng bộ kênh 15/10/2026 và
+audit D-10 (mục 17). Đã sửa: hàm thuần `scan_ui.trang_thai_tao_van_tay` / `tom_tat_tao_van_tay` (như
+`tom_tat_dong_bo_kenh`) cho cả giao diện và CLI: không ghi + có lỗi → đỏ «Chưa bổ sung được clip nào … kho giữ
+nguyên»; ghi nhưng còn lỗi → vàng «Hoàn tất MỘT PHẦN»; không có gì mới → xanh riêng. Engine/tracker không đổi
+(`completed` = vòng đời job, không phải «đã ghi kho»). Test: `tests/test_tieu_de_tao_van_tay.py`.
+→ **Tiêu đề đầu tiên của MỌI màn kết quả dựng từ kết quả THẬT** (đã ghi gì, bao nhiêu lỗi) bằng một hàm thuần có test
+  từng trường hợp — xanh chỉ khi mọi việc cần làm đã xong; đừng để chi tiết đúng nằm dưới một tiêu đề sai.

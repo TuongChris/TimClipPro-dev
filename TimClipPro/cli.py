@@ -476,7 +476,11 @@ def _main():
         if not a.muc:
             ap.error("Thiếu đường dẫn thư mục clip gốc.")
         r = eng.build_database(a.muc[0], "new" if a.lenh == "taodb" else "add", in_tien_do)
-        trang_thai = "ĐÃ DỪNG" if r.get("da_huy") else "XONG"
+        from scan_ui import trang_thai_tao_van_tay
+
+        # Chữ trạng thái theo KẾT QUẢ THẬT (audit F-4); mã thoát giữ nguyên — engine cố ý không raise (TCP-02).
+        trang_thai = {"DA_HUY": "ĐÃ DỪNG", "KHONG_GHI_CO_LOI": "CHƯA BỔ SUNG ĐƯỢC CLIP NÀO",
+                      "MOT_PHAN": "XONG MỘT PHẦN"}.get(trang_thai_tao_van_tay(r), "XONG")
         print(
             f"\n{trang_thai}: {r['da_xu_ly']}/{r['so_clip']} clip; "
             f"tạo mới {r.get('thanh_cong', r['da_xu_ly'])}, "
