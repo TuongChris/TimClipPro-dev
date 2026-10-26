@@ -3653,6 +3653,16 @@ class Engine:
         """
         return f"{video_id}__p{int(gioi_han_giay)}"
 
+    def _file_trong_dem(self, ten: str) -> list:
+        """Mọi file ``<dl_dir>/<ten>.*`` (kể cả .part/.ytdl — bên gọi tự lọc).
+
+        Phải ``glob.escape`` cả thư mục: ``[`` / ``]`` hợp lệ trong đường dẫn Windows
+        (vd. ``TIMCLIP_DATA_DIR=C:\\Dev\\[PC2]\\data``) nhưng là lớp ký tự với glob, nên
+        mẫu không escape luôn rỗng — bộ đệm không bao giờ trúng và mọi lượt tải báo
+        «không thấy file sau khi tải» (audit C-13).
+        """
+        return glob.glob(os.path.join(glob.escape(self.dl_dir), glob.escape(ten) + ".*"))
+
     def download_audio(self, url: str, video_id: str,
                        progress: Optional[Callable] = None,
                        gioi_han_giay: Optional[float] = None) -> str:
@@ -3747,7 +3757,7 @@ class Engine:
         """Thân của ``download_audio`` — CHỈ gọi khi đang giữ ``_khoa_tai_audio(ten)``."""
         import yt_dlp
 
-        san_co = [f for f in glob.glob(os.path.join(self.dl_dir, ten + ".*"))
+        san_co = [f for f in self._file_trong_dem(ten)
                   if not f.endswith((".part", ".ytdl"))]
         if san_co:
             self._bao(progress, 0.40, "Đã có sẵn audio, bỏ qua bước tải.")
@@ -3891,7 +3901,7 @@ class Engine:
             Mỗi client trả một format khác nhau; `continuedl=True` gặp .part cũ sẽ nối
             byte của luồng MỚI vào luồng CŨ, ra file audio hỏng mà không báo lỗi.
             """
-            for f in glob.glob(os.path.join(self.dl_dir, ten + ".*")):
+            for f in self._file_trong_dem(ten):
                 if f.endswith((".part", ".ytdl")):
                     with contextlib.suppress(OSError):
                         os.remove(f)
@@ -3966,7 +3976,7 @@ class Engine:
                 with contextlib.suppress(OSError):
                     os.remove(file_tien_do)
 
-        san_co = [f for f in glob.glob(os.path.join(self.dl_dir, ten + ".*"))
+        san_co = [f for f in self._file_trong_dem(ten)
                   if not f.endswith((".part", ".ytdl"))]
         if not san_co:
             raise RuntimeError("Tải audio thất bại (không thấy file sau khi tải).")
@@ -4782,7 +4792,7 @@ class Engine:
         # lại file rác 0 byte. Xem `luu_tru.ten_file_hop_le`.
         ten = ten_file_hop_le(f"{ban_ghi['video']}_{int(time.time())}") + ".json"
         ghi_json_an_toan(os.path.join(thu_muc, ten), ban_ghi)
-        cu = sorted(glob.glob(os.path.join(thu_muc, "*.json")), key=os.path.getmtime)
+        cu = sorted(glob.glob(os.path.join(glob.escape(thu_muc), "*.json")), key=os.path.getmtime)
         for path in cu[:-200]:
             with contextlib.suppress(OSError):
                 os.remove(path)
@@ -5009,7 +5019,7 @@ class Engine:
                   + (f" / {hhmmss(tong)}" if tong else "") + "...")
         ten_tai = self._ten_phan_dau(info["id"], gioi_han)
         co_san = any(not p.endswith((".part", ".ytdl"))
-                     for p in glob.glob(os.path.join(self.dl_dir, ten_tai + ".*")))
+                     for p in self._file_trong_dem(ten_tai))
         f = self.download_audio(url, info["id"], progress, gioi_han_giay=gioi_han)
         self._td(tdq.GD_KIEM_AUDIO,
                  ghi="Kiểm độ dài audio đã nhận (đọc tới gói audio cuối — không tin metadata/mã thoát)")
@@ -5811,7 +5821,7 @@ class Engine:
         """Bỏ MỌI bản đệm đầy đủ của video. True = không còn bản nào, nên lần tải sau chắc
         chắn là một bản MỚI chứ không phải bản cũ lấy lại từ đệm."""
         con_lai = []
-        for p in glob.glob(os.path.join(self.dl_dir, video_id + ".*")):
+        for p in self._file_trong_dem(video_id):
             if p.endswith((".part", ".ytdl")):
                 continue
             try:
