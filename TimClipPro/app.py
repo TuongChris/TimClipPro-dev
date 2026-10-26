@@ -1074,7 +1074,11 @@ if job["running"]:
 
 # Tác vụ vừa xong → hiện kết quả
 if not job["running"] and (job["results"] or job["error"]):
-    if job["error"]:
+    # Lô quét lỗi CẤP LÔ giữa chừng (vd. ``LoiLuuBen``: đĩa đầy, ``lichsu.db`` bị khoá) vẫn giữ kết quả các video
+    # đã xong trước đó (đã lưu lịch sử/xếp hàng gửi): báo lỗi NHƯNG vẫn hiện chúng — MANAGED_RUNTIME_DESIGN §3
+    # «kết quả vẫn trả về UI» (audit F-9). Tác vụ khác lỗi thì chỉ báo lỗi như cũ.
+    loi_lo_quet_co_ket_qua = bool(job["error"]) and job["kind"] == "scan" and bool(job["results"])
+    if job["error"] and not loi_lo_quet_co_ket_qua:
         st.error(f"Lỗi: {job['error']}")
     elif job["kind"] == "channel":
         r = job["results"]
@@ -1159,6 +1163,10 @@ if not job["running"] and (job["results"] or job["error"]):
                        "— chúng sẽ được tải lại ở lần đồng bộ tới.")
     else:
         res = job["results"]
+        if loi_lo_quet_co_ket_qua:
+            st.error(f"Lỗi: {job['error']}")
+            st.info(f"Lô dừng giữa chừng vì lỗi trên. Kết quả của {len(res)} video đã quét xong TRƯỚC lỗi vẫn ở "
+                    "bên dưới; các video còn lại chưa có kết quả — quét lại chúng sau khi xử lý lỗi.")
         tong_match = sum(len(x.matches) for x in res)
         tong_loai = sum(len(getattr(x, "matches_loai", [])) for x in res)
         loi = [x for x in res if x.status != "ok"]
