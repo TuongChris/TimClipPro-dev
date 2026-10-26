@@ -6,6 +6,7 @@ from __future__ import annotations
 import contextlib
 import glob
 import json
+import logging
 import os
 import re
 import threading
@@ -15,6 +16,8 @@ from datetime import datetime
 from typing import Any, Callable
 
 from khoa import DangChayRoi, KhoaTienTrinh
+
+LOGGER = logging.getLogger("luu_tru")
 
 
 class LoiDuLieu(Exception):
@@ -285,9 +288,15 @@ def doc_json_an_toan(
     path: str,
     mac_dinh: Any = None,
     tu_phuc_hoi: bool = True,
+    khi_phuc_hoi: Callable[[str], None] | None = None,
 ) -> Any:
     """
     Đọc JSON, phục hồi từ bản sao khi có thể và không âm thầm nuốt file hỏng.
+
+    ``.bak`` chậm MỘT lần ghi so với file chính, nên phục hồi từ nó là quay về bản CŨ HƠN —
+    thay đổi gần nhất có thể mất (audit C-16). Vì vậy mỗi lần phục hồi đều ghi nhật ký, và gọi
+    ``khi_phuc_hoi(<đường dẫn bản hỏng được giữ>)`` (chuỗi rỗng nếu không đổi tên được) để
+    người gọi đưa thành cảnh báo cho người dùng.
     """
     duong_dan = os.path.abspath(path)
     file_bak = duong_dan + ".bak"
@@ -306,13 +315,21 @@ def doc_json_an_toan(
                     pass
                 else:
                     # Giữ lại bản hỏng để còn điều tra, rồi mới phục hồi từ bản sao.
-                    with contextlib.suppress(OSError):
-                        os.replace(duong_dan, _duong_dan_file_hong(duong_dan))
+                    file_hong = _duong_dan_file_hong(duong_dan)
+                    try:
+                        os.replace(duong_dan, file_hong)
+                    except OSError:
+                        file_hong = ""
                     ghi_json_an_toan(
                         duong_dan,
                         du_lieu_bak,
                         giu_ban_sao=False,
                     )
+                    LOGGER.warning(
+                        "event=json.recovered_from_bak path=%s bak=%s hong=%s loi=%s",
+                        duong_dan, file_bak, file_hong or "-", type(loi_file_chinh).__name__)
+                    if khi_phuc_hoi is not None:
+                        khi_phuc_hoi(file_hong)
                     return du_lieu_bak
 
             file_hong = _duong_dan_file_hong(duong_dan)

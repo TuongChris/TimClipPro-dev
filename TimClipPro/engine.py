@@ -1154,7 +1154,12 @@ class Engine:
         «Lưu cấu hình» ghi đè lên file. Chỉ file không đọc được mới về mặc định cả file.
         """
         try:
-            du_lieu = cau_hinh.doc_cau_hinh(self.data_dir)
+            du_lieu = cau_hinh.doc_cau_hinh(
+                self.data_dir,
+                khi_phuc_hoi=lambda hong: self._bao_phuc_hoi_tu_bak(
+                    cau_hinh.TEN_FILE, hong,
+                    "Thiết lập lưu lần gần nhất có thể đã mất — kiểm lại rồi bấm «Lưu cấu hình»."),
+            )
             bi_bo_qua, bi_tu_choi = [], []
             if du_lieu:  # chưa có file: giữ nguyên Config, như trước
                 self.config, bi_bo_qua, bi_tu_choi = cau_hinh.ap_tung_khoa_co_kiem(
@@ -1223,9 +1228,25 @@ class Engine:
         d = doc_json_an_toan(
             self.kho_file,
             {"dang_dung": "", "danh_sach": []},
+            khi_phuc_hoi=lambda hong: self._bao_phuc_hoi_tu_bak(
+                os.path.basename(self.kho_file), hong,
+                "Kho tạo/sửa/xoá lần gần nhất có thể đã mất khỏi danh sách (file vân tay .pklz "
+                "của nó vẫn nằm trong thư mục data) — kiểm lại danh sách kho trước khi quét."),
         )
         self._kiem_luoc_do_khos(d)
         return d
+
+    def _bao_phuc_hoi_tu_bak(self, ten_file: str, file_hong: str, hau_qua: str) -> None:
+        """File JSON hỏng vừa được lớp lưu trữ phục hồi từ ``.bak`` — bản CHẬM một lần ghi.
+
+        Chính sách phục hồi giữ nguyên; chỉ không được im lặng (audit C-16): thêm cảnh báo khởi
+        động nêu file, bản sao đã dùng, bản hỏng được giữ và thay đổi nào có thể đã mất.
+        """
+        giu = (f"bản hỏng giữ ở {os.path.basename(file_hong)}" if file_hong
+               else "không giữ được bản hỏng")
+        self.canh_bao_khoi_dong.append(
+            f"{ten_file} không đọc được nên tool đã tự khôi phục từ bản sao {ten_file}.bak "
+            f"({giu}). Bản sao chậm một lần lưu: {hau_qua}")
 
     @staticmethod
     def _kiem_luoc_do_khos(d: object) -> None:

@@ -6,7 +6,7 @@ from __future__ import annotations
 import copy
 import os
 from dataclasses import fields
-from typing import Any
+from typing import Any, Callable
 
 from luu_tru import LoiDuLieu, doc_json_an_toan, ghi_json_an_toan
 
@@ -27,9 +27,12 @@ def _duong_dan(data_dir: str) -> str:
     return os.path.join(data_dir, TEN_FILE)
 
 
-def doc_cau_hinh(data_dir: str) -> dict:
-    """Đọc cấu hình người dùng. Chưa có file thì trả về dict rỗng."""
-    du_lieu = doc_json_an_toan(_duong_dan(data_dir), {})
+def doc_cau_hinh(data_dir: str, khi_phuc_hoi: Callable[[str], None] | None = None) -> dict:
+    """Đọc cấu hình người dùng. Chưa có file thì trả về dict rỗng.
+
+    ``khi_phuc_hoi``: chuyển cho ``doc_json_an_toan`` — được gọi khi file hỏng và vừa quay về
+    bản sao ``.bak`` (cũ hơn một lần lưu, audit C-16)."""
+    du_lieu = doc_json_an_toan(_duong_dan(data_dir), {}, khi_phuc_hoi=khi_phuc_hoi)
     if not isinstance(du_lieu, dict):
         raise LoiDuLieu(
             f"Cấu hình tại {_duong_dan(data_dir)} phải là một đối tượng JSON."
