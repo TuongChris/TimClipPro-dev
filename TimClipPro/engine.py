@@ -1392,6 +1392,14 @@ class Engine:
         def them(d: dict) -> dict:
             if any(k["ten"] == ten for k in d["danh_sach"]):
                 raise RuntimeError(f"Đã có kho tên «{ten}» rồi.")
+            # Tên file suy từ tên kho nên kho tạo lại cùng tên trúng đúng file cũ (mồ côi
+            # của một lần xoá dở, hoặc chép tay). Kho mới là kho KHÁC: không thừa hưởng
+            # vân tay đó, cũng không xoá/ghi đè nó — nhận tên file mới, cùng mẫu với
+            # nhánh công bố dự phòng của build (audit C-4).
+            dang_tro = {k.get("db") for k in d["danh_sach"]}
+            while (kho["db"] in dang_tro
+                   or os.path.exists(os.path.join(self.data_dir, kho["db"]))):
+                kho["db"] = f"kho_{self._slug(ten)}_{uuid.uuid4().hex[:6]}.pklz"
             d["danh_sach"].append(kho)
             d["dang_dung"] = ten
             return d
@@ -1442,7 +1450,17 @@ class Engine:
                 return
             if xoa_van_tay:
                 self._cache_khoa = None
-                self._xoa_an_toan(self._duong_dan_db_kho(kho["db"]))
+                db = self._duong_dan_db_kho(kho["db"])
+                # `_xoa_an_toan` không ném lỗi, chỉ trả False khi file vẫn bị giữ sau các
+                # lần thử. Bỏ mục khỏi sổ lúc đó = báo xoá xong trong khi file vân tay nằm
+                # lại mồ côi (kho tạo lại cùng tên từng thừa hưởng nó) → dừng, chưa sửa sổ
+                # (audit C-4).
+                if not self._xoa_an_toan(db):
+                    raise RuntimeError(
+                        f"Chưa xoá được kho «{ten}»: file vân tay {os.path.basename(db)} "
+                        "đang bị một tiến trình khác giữ (lượt quét ở cửa sổ/CLI khác, "
+                        "hoặc phần mềm diệt virus/sao lưu). Chưa xoá gì cả, kho vẫn còn "
+                        "nguyên. Chờ việc đó xong rồi bấm xoá lại.")
 
             def bo(d: dict) -> dict:
                 d["danh_sach"] = [k for k in d["danh_sach"] if k["ten"] != ten]

@@ -1368,6 +1368,9 @@ with tab1:
             except DangChayRoi as e:
                 # Build/Watch/sửa metadata đang giữ khoá kho: không xoá gì cả.
                 st.error(f"Chưa xoá được kho «{xoa}» vì đang có tác vụ khác dùng kho. {e}")
+            except RuntimeError as e:
+                # File vân tay đang bị tiến trình khác giữ: kho còn nguyên (audit C-4).
+                st.error(str(e))
             else:
                 st.rerun()
 

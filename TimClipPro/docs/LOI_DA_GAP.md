@@ -640,3 +640,14 @@ lúc «Đang tạo bản làm việc an toàn…» (`da_huy=True`, giao diện b
   và Watch); không đặt ở %TEMP% hệ thống — runner đặt bảng hash cạnh `--dbase` (bản làm việc). Job dài phải có nhịp sống
   trên đĩa (chạm `clips.txt` mỗi nhịp tim) để reaper không nhầm job đang chạy.
   Test: `tests/test_don_ban_lam_viec_van_tay.py`.
+
+**26. Hàm «không ném lỗi» trả False bị bỏ qua: xoá kho báo xong khi file vân tay còn, kho tạo lại cùng tên thừa hưởng nó (26/10/2026, PC2, audit C-4).**
+`_xoa_an_toan` theo hợp đồng KHÔNG ném lỗi, chỉ trả False khi file vẫn bị giữ sau 6 lần thử (diệt virus/sao lưu, lượt
+quét CLI khác, thuộc tính read-only). `delete_kho` vứt giá trị đó, bỏ mục khỏi `khos.json`, giao diện `st.rerun()` lặng lẽ
+→ file 66–315 MB nằm lại mồ côi. `add_kho` suy tên file từ tên kho (`kho_<slug>.pklz`, tất định) nên tạo lại kho cùng tên
+«để làm lại từ đầu» trúng đúng file cũ: kho id MỚI hiện «Đã có vân tay ✅», quét/CSV/Sheets đối chiếu vân tay người dùng
+tin đã xoá.
+→ **Hàm báo lỗi bằng giá trị trả về thì người gọi PHẢI kiểm**; thất bại thì dừng TRƯỚC khi sửa sổ và báo rõ «chưa xoá gì».
+→ **Tên file suy từ tên hiển thị không được thừa hưởng file có sẵn**: đã tồn tại (hoặc có mục khác trỏ tới) thì nhận tên
+  mới có hậu tố uuid; không xoá/ghi đè file mồ côi của người dùng.
+  Test: `tests/test_xoa_kho_that_bai.py`.
