@@ -226,18 +226,45 @@ def _ten_ban_sao(path: str, nhan: str) -> str:
     return ten
 
 
+class LoiLichSuHong(sqlite3.DatabaseError):
+    """``lichsu.db`` không mở/đọc được (trang đầu hỏng sau mất điện, không phải file SQLite…) — audit B-8.
+
+    Lỗi vận hành cần NGƯỜI khôi phục: GUI/CLI/Watch báo gọn tiếng Việt kèm cách kiểm/khôi phục, không
+    traceback. Vẫn là ``sqlite3.DatabaseError`` cho nơi bắt lỗi SQLite chung. CSDL bị KHOÁ/bận không vào đây
+    (giữ ``OperationalError`` gốc: tạm thời — ``health_check.la_loi_tam_thoi`` dựa vào đó).
+    """
+
+
+def _la_khoa_hoac_ban(e: sqlite3.Error) -> bool:
+    return isinstance(e, sqlite3.OperationalError) and any(
+        x in str(e).lower() for x in ("locked", "busy"))
+
+
 def dam_bao_luoc_do(path: str, *, sao_luu: bool = True, han_cho_s: float = 30.0) -> dict:
     """Tạo mới hoặc nâng cấp ``lichsu.db`` lên ``PHIEN_BAN``. Idempotent.
 
     Trả về ``{"da_nang_cap", "sao_luu", "phien_ban_cu", "phien_ban"}``. ``sao_luu`` là
     đường dẫn bản sao (rỗng khi không cần — DB mới tạo hoặc đã ở phiên bản mới).
+    File không đọc được như CSDL SQLite → ``LoiLichSuHong`` (không sửa gì trên đĩa).
     """
     thu_muc = os.path.dirname(os.path.abspath(path))
     os.makedirs(thu_muc, exist_ok=True)
     con = sqlite3.connect(path, timeout=han_cho_s)
     try:
-        # Đường nhanh, CHỈ ĐỌC: mọi lần mở app sau khi đã nâng cấp đi qua đây.
-        if not _can_nang_cap(con):
+        # Đường nhanh, CHỈ ĐỌC: mọi lần mở app sau khi đã nâng cấp đi qua đây. Lỗi đọc ở đây = file
+        # hỏng (chưa ghi gì) → báo cách kiểm/khôi phục thay vì traceback sqlite3 thô (audit B-8).
+        try:
+            can_nang_cap = _can_nang_cap(con)
+        except sqlite3.DatabaseError as e:
+            if _la_khoa_hoac_ban(e):
+                raise
+            raise LoiLichSuHong(
+                f"Không đọc được lịch sử {os.path.abspath(path)} — file hỏng hoặc không phải CSDL SQLite "
+                f"({e}). Chưa sửa gì trên file. Tắt tool, kiểm bằng «python lich_su.py --kiem <lichsu.db>»; "
+                f"khôi phục từ bản sao lưu (lichsu.db.v*_*.bak cùng thư mục) bằng «python lich_su.py "
+                f"--khoi-phuc <bản_sao.bak> <file_mới.db>» rồi thay file (docs/DATA_MIGRATION_AND_RECOVERY.md "
+                f"§3, §9).") from e
+        if not can_nang_cap:
             return {"da_nang_cap": False, "sao_luu": "", "phien_ban": PHIEN_BAN,
                     "phien_ban_cu": PHIEN_BAN}
         con.execute("BEGIN IMMEDIATE")

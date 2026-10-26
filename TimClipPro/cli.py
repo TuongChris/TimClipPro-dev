@@ -212,6 +212,10 @@ def main():
         # Không ghi được lịch sử: lần quét chưa lưu, chưa xếp hàng gửi — báo rõ, không traceback.
         print(f"\nLỖI LƯU BỀN: {e}", file=sys.stderr)
         raise SystemExit(1) from None
+    except lich_su.LoiLichSuHong as e:
+        # lichsu.db hỏng (audit B-8): cần người kiểm/khôi phục — câu lỗi đã chỉ cách, không traceback.
+        print(f"\nLỖI LỊCH SỬ: {e}", file=sys.stderr)
+        raise SystemExit(1) from None
     except LoiTruyCapYouTube as e:
         # Lỗi vận hành ĐÃ PHÂN LOẠI (liệt kê kênh bị chặn, link không phải video…): câu tiếng
         # Việt, không traceback. Bị chặn truy cập → mã 3; còn lại (link sai, video gỡ) → mã 1.

@@ -79,9 +79,9 @@ if "eng" not in st.session_state:
             data_dir=os.environ.get("TIMCLIP_DATA_DIR") or None,
             out_dir=os.environ.get("TIMCLIP_OUTPUT_DIR") or None,
         )
-    except (runtime_paths.LoiRuntime, sheet_destinations.LoiDichGui) as e:
-        # Cấu hình runtime sai (bản managed thiếu state root, lịch sử của máy khác…): dừng rõ
-        # ràng — không đoán thư mục dữ liệu, không tạo DB ở chỗ đoán.
+    except (runtime_paths.LoiRuntime, sheet_destinations.LoiDichGui, lich_su.LoiLichSuHong) as e:
+        # Cấu hình runtime sai (bản managed thiếu state root, lịch sử của máy khác…) hoặc lichsu.db
+        # hỏng (audit B-8): dừng rõ ràng — không đoán thư mục dữ liệu, không tạo DB ở chỗ đoán.
         st.error(f"Không khởi động được TimClip Pro: {e}")
         st.stop()
 du_lieu_giao_dien = st.session_state.eng.cau_hinh_da_luu
