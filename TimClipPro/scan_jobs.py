@@ -196,6 +196,8 @@ class ScanJobController:
         self._message = ""
         self._error = ""
         self._y_dinh_gui = None
+        # Đã giữ chỗ trong ``_DANG_CHAY`` nhưng ``start`` chưa xong (chưa ``_running``): phiên khác coi là bận.
+        self._giu_cho = False
 
     # ---------- điều khiển ----------
 
@@ -210,10 +212,30 @@ class ScanJobController:
         """``y_dinh_gui``: ý định gửi đã chụp lúc bấm Bắt đầu (``sheet_destinations.YDinhGui``) —
         ghim trên bản Engine của lô, đổi lựa chọn trên giao diện giữa chừng không ảnh hưởng.
         ``gioi_han_video_dai``: chế độ giới hạn video dài (``engine.GHVD_*``) của lô; ``None`` = như cũ."""
-        khac = ScanJobController.dang_chay_cua(self.engine)
-        if khac is not None and khac is not self:
-            raise RuntimeError("Đang có lô quét chạy ở một cửa sổ/phiên khác của Tool — tải lại trang "
-                               "để xem tiến độ; không tạo lô trùng.")
+        # Kiểm «phiên khác đang chạy?» và GIỮ CHỖ trong sổ chung trong CÙNG một lần khoá: kiểm rồi mới ghi
+        # sổ ở lần khoá sau thì hai phiên bấm cùng lúc đều lọt qua bước kiểm → hai lô trên một kho (audit F-14).
+        khoa = _khoa_lo(self.engine)
+        with _KHOA_DANG_CHAY:
+            khac = _DANG_CHAY.get(khoa)
+            if khac is not None and khac is not self and (khac._giu_cho or khac.running):
+                raise RuntimeError("Đang có lô quét chạy ở một cửa sổ/phiên khác của Tool — tải lại trang "
+                                   "để xem tiến độ; không tạo lô trùng.")
+            _DANG_CHAY[khoa] = self
+            self._giu_cho = True
+        try:
+            return self._bat_dau(nguon, source_type, on_result, y_dinh_gui, gioi_han_video_dai)
+        except BaseException:
+            # Không bắt đầu được (đang bảo trì, batch của chính phiên còn chạy...): trả chỗ — trừ khi
+            # chính controller này đang chạy lô thật (chỗ đó là của lô đang chạy).
+            with _KHOA_DANG_CHAY:
+                if _DANG_CHAY.get(khoa) is self and not self.running:
+                    del _DANG_CHAY[khoa]
+            raise
+        finally:
+            self._giu_cho = False
+
+    def _bat_dau(self, nguon: list, source_type: str, on_result: Optional[Callable], y_dinh_gui,
+                 gioi_han_video_dai: Optional[str]) -> str:
         with self._lock:
             if self._running or (self._thread and self._thread.is_alive()):
                 raise RuntimeError("Đang có batch quét chạy; không tạo batch trùng.")
@@ -237,8 +259,6 @@ class ScanJobController:
             self._gioi_han_video_dai = gioi_han_video_dai or ""
             batch_id = self._batch_id
         self.so_tien_do.bat_dau_lo(batch_id, len(nguon))
-        with _KHOA_DANG_CHAY:
-            _DANG_CHAY[_khoa_lo(self.engine)] = self
 
         self.engine.cancel_event.clear()
         LOGGER.info(
