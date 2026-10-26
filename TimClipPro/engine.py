@@ -1512,7 +1512,19 @@ class Engine:
             return d
 
         d = self._sua_khos(sua)
-        self._ap_dung_kho(d.get("dang_dung", ""), d)
+        self._ap_dung_kho(self._kho_giu_lai_sau_sua_so(d), d)
+
+    def _kho_giu_lai_sau_sua_so(self, d: dict) -> str:
+        """Kho mà tiến trình NÀY tiếp tục dùng sau khi sửa/xoá một kho trong sổ.
+
+        ``dang_dung`` của sổ dùng chung có thể vừa bị tiến trình khác ghi (Watch theo lịch gọi
+        ``use_kho`` cho kho của watchlist, cùng thư mục dữ liệu — D-26). Áp lại giá trị đó thì sửa
+        thư mục/xoá một kho khác lặng lẽ đổi kho của giao diện (audit C-14). Giữ lựa chọn trong
+        tiến trình khi kho đó còn trong sổ; không còn (vừa bị xoá) mới lùi về ``dang_dung``."""
+        if self.kho_dang_dung and any(
+                k.get("ten") == self.kho_dang_dung for k in d["danh_sach"]):
+            return self.kho_dang_dung
+        return d.get("dang_dung", "")
 
     def delete_kho(self, ten: str, xoa_van_tay: bool = True) -> None:
         """Xoá kho khỏi danh sách. KHÔNG bao giờ đụng vào file video/audio gốc.
@@ -1557,7 +1569,7 @@ class Engine:
                 return d
 
             d = self._sua_khos(bo)
-            self._ap_dung_kho(d.get("dang_dung", ""), d)
+            self._ap_dung_kho(self._kho_giu_lai_sau_sua_so(d), d)
 
     # =================================================================
     #  NGỮ CẢNH JOB — ghim kho và cấu hình suốt một job (audit TCP-01)
