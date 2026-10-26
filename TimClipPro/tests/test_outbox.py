@@ -349,6 +349,30 @@ def test_tam_dung_toan_bo_va_tam_dung_ho_so(moi_truong):
     assert _tt(moi_truong, va) == ob.SENT
 
 
+def test_tam_dung_toan_bo_giua_vong_khong_claim_them_viec(moi_truong):
+    # Audit F-15: vòng gửi đã chọn 5 ứng viên; chủ máy bật «Tạm dừng toàn bộ» (UI chỉ ghi cờ DB) đúng lúc việc
+    # ĐẦU đang bay. Việc đã claim được đi nốt; 4 việc chưa claim phải ở nguyên PENDING — không ghi thêm lên Sheets.
+    viec = [_xep(moi_truong, moi_truong["a"], 100 + i) for i in range(5)]
+    cong = CongGia()
+    cong.ke_hoach = [("hook", lambda: ob.dat_tam_dung(moi_truong["db"], True))]
+    dem = _nguoi_gui(moi_truong, cong).chay_mot_vong()
+    assert len(cong.bang) == 1 and _tt(moi_truong, viec[0]) == ob.SENT
+    assert [_tt(moi_truong, v) for v in viec[1:]] == [ob.PENDING] * 4
+    assert dem["da_gui"] == 1 and dem["tam_dung"] == 1
+
+
+def test_tam_dung_ho_so_giua_vong_khong_claim_them_viec_cua_ho_so_do(moi_truong):
+    # Audit F-15 (hồ sơ): tạm dừng hồ sơ A giữa vòng → việc chưa claim của A ở nguyên PENDING; hồ sơ B vẫn gửi.
+    va = [_xep(moi_truong, moi_truong["a"], 110 + i) for i in range(3)]
+    vb = _xep(moi_truong, moi_truong["b"], 120)
+    cong = CongGia()
+    cong.ke_hoach = [("hook", lambda: sd.doi_trang_thai(moi_truong["db"], moi_truong["a"].id, sd.TT_TAM_DUNG))]
+    _nguoi_gui(moi_truong, cong).chay_mot_vong()
+    assert _tt(moi_truong, va[0]) == ob.SENT
+    assert [_tt(moi_truong, v) for v in va[1:]] == [ob.PENDING] * 2
+    assert _tt(moi_truong, vb) == ob.SENT and len(cong.bang) == 2
+
+
 # ---------- thao tác người dùng ----------
 
 def test_unknown_xac_nhan_da_gui_hoac_gui_lai_co_the_trung(moi_truong):

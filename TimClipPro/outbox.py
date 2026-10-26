@@ -699,20 +699,27 @@ class NguoiGui:
                 ket = self._xu_ly(h["id"], nhom, bay_gio)
             finally:
                 lease.tra()
+            if ket == "tam_dung":
+                dem["tam_dung"] = 1                  # tạm dừng toàn bộ giữa vòng: dừng vòng, không claim thêm
+                break
             dem[ket] = dem.get(ket, 0) + 1
             if ket == "bi_chan" and nhom is not None:
                 bi_chan_vong.add(nhom)
         return dem
 
     def _claim(self, viec_id: str, bay_gio: float) -> Optional[str]:
+        """Tạm dừng (toàn bộ / hồ sơ) được kiểm NGAY trong lệnh claim, không chỉ lúc chọn ứng viên đầu vòng: tạm dừng
+        đã ghi trước lần claim thì việc chưa claim ở nguyên chờ gửi (audit F-15). Việc đã claim vẫn đi tới kết cục."""
         token = uuid.uuid4().hex
         with sd.ket_noi(self.db_path, ghi=True) as con:
             n = con.execute(
                 "UPDATE hang_doi_gui SET trang_thai=?, claim_token=?, chu_so_huu=?, claim_luc=?,"
                 " so_lan_thu=so_lan_thu+1, sua_luc=? WHERE id=? AND trang_thai IN (?,?)"
-                " AND thu_lai_sau <= ?",
+                " AND thu_lai_sau <= ?"
+                " AND NOT EXISTS (SELECT 1 FROM cai_dat_may WHERE khoa=? AND gia_tri='1')"
+                " AND dich_id NOT IN (SELECT id FROM dich_gui WHERE trang_thai=?)",
                 (CLAIMED, token, self.chu, bay_gio, time.time(), viec_id, *CO_THE_CLAIM,
-                 bay_gio)).rowcount
+                 bay_gio, _KHOA_TAM_DUNG, sd.TT_TAM_DUNG)).rowcount
         return token if n == 1 else None
 
     def _chot(self, viec_id: str, token: str, trang_thai: str, **cot) -> bool:
@@ -814,7 +821,7 @@ class NguoiGui:
     def _xu_ly(self, viec_id: str, nhom: Optional[tuple], bay_gio: float) -> str:
         token = self._claim(viec_id, bay_gio)
         if token is None:
-            return "bo_qua"
+            return "tam_dung" if dang_tam_dung(self.db_path) else "bo_qua"
         da_phat = {"co": False, "gid": None}
         try:
             return self._xu_ly_da_claim(viec_id, token, nhom, bay_gio, da_phat)
