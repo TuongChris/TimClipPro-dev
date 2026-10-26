@@ -445,6 +445,34 @@ def build_nguon_chung_status_dataframe(videos: Sequence[Any]) -> pd.DataFrame:
     return khung.astype({cot: "string" for cot in COT_NGUON_CHUNG})
 
 
+def tien_do_nguon_chung(anh: Any) -> tuple[float, str]:
+    """Giá trị (0..1) + chữ của thanh tiến độ lô nguồn chung (``NguonChungSnapshot``).
+
+    Đơn vị là LƯỢT quét, không phải video: lượt bổ sung / quét lại mốc chạy trên video ĐÃ có
+    lượt, nên «video đã quét / tổng» đã đủ N/N trong khi lô còn tải + so khớp lại (audit F-6).
+    Mẫu số = lượt đã xong + phần việc tối thiểu còn lại (lượt đang chạy + mỗi video chưa quét
+    một lượt) — không đoán số lượt bổ sung chưa lên lịch. Lô còn chạy thì chưa bao giờ 100%.
+    """
+    videos = tuple(getattr(anh, "videos", ()) or ())
+    tong = int(getattr(anh, "tong", 0) or 0)
+    if not tong or not videos:
+        return 0.0, "Đang chuẩn bị..."
+    luot_xong = sum(int(getattr(v, "so_luot", 0) or 0) for v in videos)
+    da_quet = sum(1 for v in videos if getattr(v, "so_luot", 0))
+    dang = next((v for v in videos if getattr(v, "dang_quet", False)), None)
+    quet_lai = dang is not None and bool(getattr(dang, "so_luot", 0))
+    con_lai = (tong - da_quet) + (1 if quet_lai else 0)
+    tien_do = min(1.0, max(0.0, float(getattr(anh, "tien_do", 0.0) or 0.0))) if dang else 0.0
+    mau = luot_xong + con_lai
+    gia_tri = min(1.0, (luot_xong + tien_do) / mau) if mau else 0.0
+    if getattr(anh, "running", False):
+        gia_tri = min(gia_tri, 0.99)
+    chu = f"Đã quét {da_quet}/{tong} video"
+    if quet_lai:
+        chu += f" — đang quét thêm video {getattr(dang, 'thu_tu', '')} (lượt {luot_xong + 1})"
+    return gia_tri, chu
+
+
 def df_nguon_chung(kql: Any) -> pd.DataFrame:
     """Bảng kết quả lô (một dòng mỗi video) với cột số ĐÚNG KIỂU (xem CLAUDE.md mục 7)."""
     df = pd.DataFrame(dong_bao_cao(kql, an_toan=False), columns=HEADER_NGUON_CHUNG)

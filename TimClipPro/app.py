@@ -56,6 +56,7 @@ from scan_ui import (
     thoat_markdown,
     thong_bao_lo_da_dung,
     thong_bao_youtube_chan,
+    tien_do_nguon_chung,
     tom_tat_dong_bo_kenh,
     tom_tat_tao_van_tay,
 )
@@ -1022,11 +1023,9 @@ if job["running"]:
             CommonOriginalJobController.da_nhan(eng, common_controller)   # phiên mở sau không hiện lại
 
         st.header("🧩 Đang tìm video gốc chung cho cả lô")
-        da_quet = sum(1 for v in anh.videos if v.so_luot)
-        st.progress(
-            min(1.0, (da_quet + anh.tien_do) / anh.tong) if anh.tong else 0.0,
-            text=f"Đã quét {da_quet}/{anh.tong} video" if anh.tong else "Đang chuẩn bị...",
-        )
+        # Đếm theo LƯỢT: lượt bổ sung chạy trên video đã có lượt — đếm video thì N/N = 100% (audit F-6).
+        gia_tri, chu = tien_do_nguon_chung(anh)
+        st.progress(gia_tri, text=chu)
         b1, b2, b3, b4 = st.columns(4)
         b1.metric("Giai đoạn", TEN_PHA_NGUON_CHUNG.get(anh.pha, anh.pha))
         b2.metric("Đã xác minh", f"{anh.so_xac_minh}/{anh.tong}" if anh.ung_vien else "—")
