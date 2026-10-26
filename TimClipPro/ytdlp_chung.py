@@ -1166,6 +1166,11 @@ class NhoClientTotNhat:
 
     An toàn theo thiết kế: đây chỉ là gợi ý THỨ TỰ. Đường lui vẫn thử đủ mọi client,
     nên nhớ nhầm thì chỉ chậm hơn một chút chứ không bao giờ làm hỏng việc tải.
+
+    Một bộ nhớ phục vụ cả lượt CÓ lẫn KHÔNG cookie (``Engine.nho_client`` / ``ChannelSync.nho_client``): client không
+    nhận cookie (:func:`client_khong_ho_tro_cookie`) học ở lượt không cookie thì KHÔNG đưa lên đầu lượt có cookie —
+    yt-dlp gỡ nó khi có cookie đăng nhập nên lượt thử đó chắc chắn hỏng (audit D-17). Học ngay trong lượt có cookie
+    (file cookie không đăng nhập, yt-dlp không gỡ) thì vẫn dùng.
     """
 
     def __init__(self, song_giay: float = 1800.0, dong_ho: Callable[[], float] = time.monotonic):
@@ -1173,24 +1178,30 @@ class NhoClientTotNhat:
         self._dong_ho = dong_ho
         self._client: Optional[str] = None
         self._luc: float = 0.0
+        self._hoc_co_cookie = False
 
     def _con_han(self) -> bool:
         return self._client is not None and (self._dong_ho() - self._luc) < self.song_giay
 
-    def sap_xep(self, clients: list) -> list:
+    def sap_xep(self, clients: list, co_cookie: bool = False) -> list:
         """Đưa client đã biết là tải được lên đầu, giữ nguyên thứ tự còn lại."""
         ds = list(clients or [""])
         if not self._con_han() or self._client not in ds:
             return ds
+        if co_cookie and not self._hoc_co_cookie and self._client in client_khong_ho_tro_cookie():
+            return ds
         return [self._client] + [c for c in ds if c != self._client]
 
-    def ghi_nhan(self, client: str) -> None:
+    def ghi_nhan(self, client: str, co_cookie: bool = False) -> None:
         """Mốc tính từ lúc HỌC client. Tải được liên tục bằng client đang nhớ KHÔNG gia hạn — trước đây mỗi lần tải
         được lại đặt lại mốc nên một lượt đồng bộ dài không bao giờ dò lại (15/10: một lần 403 → cả 88 video đi
         `android`, mp4 CÓ HÌNH). Hết hạn mà dò lại vẫn phải lùi về chính client đó thì học lại, sang chu kỳ mới."""
         if client != self._client or not self._con_han():
             self._client = client
             self._luc = self._dong_ho()
+            self._hoc_co_cookie = co_cookie
+        else:
+            self._hoc_co_cookie = self._hoc_co_cookie or co_cookie
 
     def quen(self) -> None:
         self._client = None
@@ -1261,7 +1272,7 @@ def thu_tung_client(
     bi_go: list = []        # client không nhận cookie mà lượt có cookie chỉ còn «không định dạng» (yt-dlp đã gỡ)
     dung_som = False
     if bo_nho is not None:
-        clients = bo_nho.sap_xep(clients)
+        clients = bo_nho.sap_xep(clients, co_cookie=co_cookie)
     for client in (clients or [""]):
         rieng = dict(opts)
         if client:
@@ -1288,7 +1299,7 @@ def thu_tung_client(
                 break
         else:
             if bo_nho is not None:
-                bo_nho.ghi_nhan(client)
+                bo_nho.ghi_nhan(client, co_cookie=co_cookie)
             if khi_thanh_cong:
                 khi_thanh_cong(client or "mặc định", list(da_thu))
             return ket_qua

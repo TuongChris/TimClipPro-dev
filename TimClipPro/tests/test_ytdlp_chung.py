@@ -403,3 +403,65 @@ def test_nho_client_sai_thi_van_khong_hong_viec():
         return "ok"
 
     assert y.thu_tung_client(["", "android", "tv"], chay, {}, bo_nho=n) == "ok"
+
+
+def _client_cua(opts):
+    return ((opts.get("extractor_args") or {}).get("youtube", {}).get("player_client") or [""])[0]
+
+
+def test_client_hoc_luc_khong_cookie_khong_dung_dau_luot_co_cookie():
+    """Audit D-17: CÙNG một bộ nhớ (``Engine.nho_client`` / ``ChannelSync.nho_client``) phục vụ cả lượt KHÔNG cookie
+    (cookie chết → đường lui, máy chưa có JS, job không cookie) lẫn lượt CÓ cookie. Lượt không cookie học ``android``
+    thì lượt có cookie ngay sau đó không được thử ``android`` trước: yt-dlp gỡ nó («does not support cookies») nên lượt
+    thử đó chắc chắn hỏng «No video formats found!» — phá đúng điều :func:`sap_xep_player_clients` sắp đặt."""
+    gio = [1000.0]
+    n = y.NhoClientTotNhat(dong_ho=lambda: gio[0])
+    khong_nhan = y.client_khong_ho_tro_cookie()
+    assert "android" in khong_nhan                 # tiền đề: yt-dlp gỡ android khi có cookie đăng nhập
+
+    def chay_an_danh(opts):
+        if _client_cua(opts) == "":
+            raise RuntimeError("ERROR: unable to download video data: HTTP Error 403: Forbidden")
+        return "ok"
+
+    ds = list(y.PLAYER_CLIENTS_MAC_DINH)
+    assert y.thu_tung_client(y.CauHinhMang().player_clients(ds), chay_an_danh, {}, bo_nho=n) == "ok"
+
+    gio[0] += 300                                  # 5 phút sau, lượt có cookie
+    da_thu = []
+
+    def chay_co_cookie(opts):
+        da_thu.append(_client_cua(opts))
+        if _client_cua(opts) in khong_nhan:       # yt-dlp: «Skipping client ... does not support cookies»
+            raise RuntimeError("ERROR: [youtube] vid00000001: No video formats found!")
+        return "ok"
+
+    co_cookie = y.CauHinhMang(cookiefile="cookies_gia.txt")
+    assert y.thu_tung_client(co_cookie.player_clients(ds), chay_co_cookie, {"cookiefile": "cookies_gia.txt"},
+                             bo_nho=n) == "ok"
+    assert da_thu == [""], f"lượt có cookie thử trước client yt-dlp chắc chắn gỡ: {da_thu}"
+
+    gio[0] += 60                                   # lượt không cookie sau đó: điều đã học (client mặc định) vẫn dùng
+    da_thu.clear()
+    assert y.thu_tung_client(["", "android"], lambda o: da_thu.append(_client_cua(o)) or "ok", {}, bo_nho=n) == "ok"
+    assert da_thu == [""]
+
+
+def test_client_khong_nhan_cookie_hoc_trong_luot_co_cookie_van_dung_dau():
+    """Ngược lại: file cookie KHÔNG có cookie đăng nhập thì yt-dlp không gỡ ``android`` — học được nó NGAY trong lượt
+    có cookie là bằng chứng nó chạy ở chế độ đó, lượt có cookie sau vẫn đi thẳng vào nó (không tốn một lượt 403)."""
+    n = y.NhoClientTotNhat()
+    opts = {"cookiefile": "cookies_khong_dang_nhap_gia.txt"}
+    da_thu = []
+
+    def chay(o):
+        da_thu.append(_client_cua(o))
+        if _client_cua(o) != "android":
+            raise RuntimeError("ERROR: unable to download video data: HTTP Error 403: Forbidden")
+        return "ok"
+
+    ds = y.sap_xep_player_clients(["", "android", "tv"], co_cookie=True)
+    assert y.thu_tung_client(ds, chay, opts, bo_nho=n) == "ok"
+    da_thu.clear()
+    assert y.thu_tung_client(ds, chay, opts, bo_nho=n) == "ok"
+    assert da_thu == ["android"]
