@@ -469,3 +469,41 @@ def test_c_phay_van_gop_khi_bong_gom_kem_lam_loang_mot_phan():
     tho = [_manh(50.0, 60.0, 200.0, 4200), _manh(50.0, 240.0, 380.0, 3900), _manh(58.0, 100.0, 380.0, 300)]
     _, dat, chon = _chuoi(_engine({CLIP: 36981}), tho, duration=900.0)
     assert len(dat) == 1 and chon[0].start_s == pytest.approx(50.0, abs=0.01) and chon[0].vung_khop_s == 60.0
+
+
+# ------------------------------------------------------------------ P0-4 (audit 25/10): chi phí phân loại mảnh
+def _tho_clip_lap(n: int) -> list:
+    """Video «10 giờ lặp» một clip ~3 phút: mỗi lần đặt (cách nhau 180 s) = 1 căn chỉnh thật (2.500–3.200 hash, khớp
+    170 s) + 11 bóng lệch bội 1,06 s (80–700 hash) — ở trần 200 mảnh / khúc 3.600 s, ~2.000 mảnh cho MỘT clip."""
+    import random
+    rnd = random.Random(1)
+    ds: list = []
+    p = 0
+    while len(ds) < n:
+        goc = p * 180.0
+        for k in range(12):
+            align = goc + k * 1.06
+            bat_dau = goc + (0.0 if k == 0 else rnd.uniform(0.0, 10.0))
+            so_hash = rnd.randint(2500, 3200) if k == 0 else rnd.randint(80, 700)
+            ds.append(_manh(align, bat_dau, bat_dau + 170.0, so_hash))
+        p += 1
+    return ds[:n]
+
+
+def test_clip_lap_dai_moi_manh_chi_xet_vi_tri_goi_len_vung_cua_no(monkeypatch):
+    """Mỗi mảnh chỉ cần xét các vị trí đặt có bao gối lên vùng video của nó (ngoài vùng ``_xet_phu`` luôn «không phủ,
+    không bóng»): số lần ``_xet_phu`` phải cỡ O(số mảnh). Mã cũ xét MỌI vị trí đã giữ cho mỗi mảnh (~84 lần/mảnh ở
+    2.000 mảnh, bậc hai) — ``_merge`` chạy lại sau mỗi đoạn quét tăng dần, video lặp 66 giờ thêm cỡ vài phút."""
+    import chong_bong_lap
+    so_manh = 2000
+    dem = {"xet_phu": 0}
+    goc = chong_bong_lap._xet_phu
+
+    def xet_phu_dem(*a, **k):
+        dem["xet_phu"] += 1
+        return goc(*a, **k)
+
+    monkeypatch.setattr(chong_bong_lap, "_xet_phu", xet_phu_dem)
+    ds = _engine({CLIP: 10 ** 9})._merge(_tho_clip_lap(so_manh))
+    assert len(ds) == -(-so_manh // 12)        # mỗi lần đặt đúng một dòng, bóng không thành dòng
+    assert dem["xet_phu"] <= 10 * so_manh, f"{dem['xet_phu'] / so_manh:.0f} lần _xet_phu / mảnh"

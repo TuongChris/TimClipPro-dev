@@ -66,6 +66,8 @@ Module thuần: không I/O.
 
 from __future__ import annotations
 
+import bisect
+import math
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -77,6 +79,8 @@ TY_LE_BONG = 0.5                # ≤ 50% hash mảnh mạnh nhất của vị t
 LECH_ALIGN_GOC_S = 0.1          # C': phần lệch align không do trôi (khung 23 ms của audfprint, khúc gối)
 TRAN_LECH_CUNG_VI_TRI_S = 1.0   # C': trần lệch align của hai mảnh cùng vị trí đặt
 SO_MOC_THAY_THE_TOI_DA = 20
+O_CHI_MUC_S = 60.0              # P0-4: ô thời gian video của chỉ mục bao vị trí đặt — chỉ đổi tốc độ, không đổi nhãn
+TRAN_O_CHI_MUC = 100_000        # bao / mảnh trải quá chừng ấy ô (hay không hữu hạn): xét tuần tự như cũ
 
 CHINH = "chinh"
 BONG = "bong"
@@ -165,6 +169,25 @@ def _dat_vi_tri(vt: ViTriDat, manh: list) -> None:
         vt.hash_manh_nhat = max(int(manh[j]["hash"]) for j in vt.cs)
 
 
+def _cac_o(tu: float, den: float):
+    """Các ô ``O_CHI_MUC_S`` mà đoạn video [tu, den] chạm; ``None`` khi không hữu hạn hoặc quá ``TRAN_O_CHI_MUC`` ô."""
+    if not (math.isfinite(tu) and math.isfinite(den)):
+        return None
+    dau, cuoi = math.floor(tu / O_CHI_MUC_S), math.floor(den / O_CHI_MUC_S)
+    return range(dau, cuoi + 1) if cuoi - dau < TRAN_O_CHI_MUC else None
+
+
+def _cac_o_vi_tri(vt: ViTriDat, manh: list):
+    """Ô của BAO vị trí ``vt`` lúc tạo — ``None``: luôn xét vị trí này.
+
+    Ngoài bao, ``_xet_phu`` luôn trả ``(False, [])`` với mảnh có ``khop > 0``: mọi nhánh «phủ» và «bóng của x» đều
+    cần một phần dương gối lên vùng mảnh. Bao chỉ CO lại (mảnh chính bị rút khi đổi nhãn), nên bao lúc tạo là tập
+    trùm an toàn. Vị trí có mảnh ``khop <= 0`` (``_merge`` đã lọc; gọi trực tiếp thì có thể) không có tính chất ấy."""
+    if not vt.cs or any(not manh[j]["khop"] > 0 for j in vt.cs):
+        return None
+    return _cac_o(*_bao(manh, vt.cs))
+
+
 def _nhan_bi_phu(x: dict, vt: int, vi_tri: list) -> NhanManh:
     ty_so = x["hash"] / max(1, vi_tri[vt].hash_manh_nhat)
     return NhanManh(BONG if ty_so <= TY_LE_BONG else DOI_THU, vt, ty_so)
@@ -186,6 +209,11 @@ def phan_loai_manh(manh: list, cua_so_s: float) -> tuple:
 
     Phải gom cụm TRƯỚC rồi mới xét: xét từng mảnh theo hash thì một đối thủ mạnh hơn các mảnh YẾU của vị trí thật
     được xét trước khi bằng chứng của vị trí thật kịp có mặt ở chỗ nó, và thành một vị trí riêng. Thứ tự xét tất định.
+
+    Chi phí (P0-4, audit 25/10): clip ngắn lặp suốt video dài cho hàng nghìn mảnh và cụm của MỘT khoá, ``_merge`` chạy
+    lại sau mỗi đoạn quét tăng dần. Tìm cụm qua đầu cụm xếp theo align (``bisect``), và mỗi mảnh chỉ ``_xet_phu`` các
+    vị trí có bao chạm ô thời gian của nó (``_cac_o_vi_tri``) — vẫn theo thứ tự ``giu``, nên nhãn y hệt cách duyệt
+    tuần tự; quét tuần tự mọi cụm / mọi vị trí là bậc hai theo số mảnh.
     """
     nhan: list = [None] * len(manh)
     vi_tri: list = []
@@ -194,20 +222,36 @@ def phan_loai_manh(manh: list, cua_so_s: float) -> tuple:
         theo_khoa.setdefault((x["clip"], he_so(x)), []).append(i)
     for chi_so in theo_khoa.values():
         cum: list = []                  # mỗi cụm: chỉ số mảnh, mảnh mạnh nhất đứng đầu
+        dau_cum: list = []              # (align đầu cụm, số thứ tự cụm), xếp theo align — chỉ align hữu hạn
         for i in sorted(chi_so, key=lambda i: (-manh[i]["hash"], -manh[i]["khop"], manh[i]["align"], i)):
-            c = next((c for c in cum if abs(manh[i]["align"] - manh[c[0]]["align"]) <= DUNG_SAI_ALIGN_S), None)
+            a = manh[i]["align"]
+            c = None
+            if math.isfinite(a):        # align không hữu hạn không bao giờ lệch ≤ dung sai với align nào
+                # Cụm TẠO SỚM NHẤT có đầu cụm lệch ≤ dung sai (như duyệt tuần tự); xét rộng gấp đôi dung sai rồi lọc
+                # bằng đúng phép so cũ, để làm tròn số thực không đổi kết quả.
+                k = bisect.bisect_left(dau_cum, (a - 2 * DUNG_SAI_ALIGN_S,))
+                while k < len(dau_cum) and dau_cum[k][0] <= a + 2 * DUNG_SAI_ALIGN_S:
+                    if abs(a - dau_cum[k][0]) <= DUNG_SAI_ALIGN_S and (c is None or dau_cum[k][1] < c):
+                        c = dau_cum[k][1]
+                    k += 1
             if c is None:
+                if math.isfinite(a):
+                    bisect.insort(dau_cum, (a, len(cum)))
                 cum.append([i])
             else:
-                c.append(i)
+                cum[c].append(i)
         giu: list = []                  # vị trí đặt đã giữ của khoá này, mạnh trước
+        o_giu: dict = {}                # ô thời gian video → vị trí đã giữ có bao (lúc tạo) chạm ô ấy
+        luon_xet: list = []             # vị trí không đưa được vào ô: luôn xét
         for c in sorted(cum, key=lambda c: (-sum(manh[i]["hash"] for i in c), c[0])):
             chinh: list = []
             doi_nhan: dict = {}         # mảnh chính của vị trí cũ là bóng của mảnh chính mới: chỉ số → vị trí cũ
             for i in c:
                 x = manh[i]
                 trum, loai_tru = None, []
-                for v in giu:
+                o = _cac_o(x["bat_dau"], x["bat_dau"] + x["khop"]) if x["khop"] > 0 else None
+                xet = giu if o is None else sorted({v for k in o for v in o_giu.get(k, ())}.union(luon_xet))
+                for v in xet:           # cùng thứ tự với giu: vị trí phủ đầu tiên không đổi
                     phu, bong_cua_x = _xet_phu(x, manh, vi_tri[v], cua_so_s)
                     if phu:
                         trum = v
@@ -224,6 +268,12 @@ def phan_loai_manh(manh: list, cua_so_s: float) -> tuple:
             vi_tri.append(ViTriDat(manh[chinh[0]]["align"], 0, list(chinh)))
             _dat_vi_tri(vi_tri[moi], manh)
             giu.append(moi)
+            o_moi = _cac_o_vi_tri(vi_tri[moi], manh)
+            if o_moi is None:
+                luon_xet.append(moi)
+            else:
+                for k in o_moi:
+                    o_giu.setdefault(k, []).append(moi)
             for i in chinh:
                 nhan[i] = NhanManh(CHINH, moi)
             for j, v in doi_nhan.items():
