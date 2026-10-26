@@ -250,3 +250,17 @@ def test_suot_luot_quet_file_dem_mang_dau_dang_dung_song(engine, monkeypatch):
     assert thay and thay[0] is True and thay[1] == 1, thay
     assert os.path.exists(dem) and kq.status != "error", kq.note
     assert not don_dep._dang_duoc_dung(e.dl_dir, f"{VID}.webm", bo_dau_mo_coi=False)
+
+
+def test_file_dem_vua_chon_tu_bo_dem_khong_bi_don_cuoi_luot_watch(engine):
+    """Audit D-24 (cùng gốc C-9): lượt quét giao diện vừa nhận bản đệm 8 ngày tuổi («Đã có sẵn
+    audio») thì lời gọi dọn y như cuối lượt Watch (cấu hình MẶC ĐỊNH) không được xoá nó trước khi
+    lượt quét kịp mở file."""
+    import don_dep
+    e = engine
+    os.makedirs(e.dl_dir, exist_ok=True)
+    dem = _tao_dem(e.dl_dir, f"{VID}.webm", 8)
+    duong = e.download_audio(URL, VID)
+    assert os.path.normcase(duong) == os.path.normcase(dem)
+    kq = don_dep.don_kho_dem(e.dl_dir, max_gb=e.config.dem_max_gb, max_ngay=e.config.dem_max_ngay)
+    assert os.path.exists(duong) and kq["xoa_file"] == 0, kq
