@@ -739,8 +739,9 @@ class _PhamViQuet:
     # Mục tiêu của lượt quét (chế độ một video gốc chung); None = hành vi cũ. Nằm trong sổ
     # của MỘT lượt nên không thể rò sang video sau hay sang Engine gốc.
     muc_tieu: Optional["ScanObjective"] = None
-    # Basename (chữ thường) của file đang quét: ứng viên trùng tên là TỰ KHỚP, không được
-    # tính khi xét mục tiêu (AUD-022 — nhánh cũ giữ nguyên hành vi).
+    # Basename (chữ thường) của file đang quét: ứng viên trùng tên là TỰ KHỚP — không phải
+    # bằng chứng, không được tính khi xét mục tiêu (AUD-022) lẫn khi xét dừng sớm / bù tốc
+    # độ của nhánh thường (audit A-7). Đặt cho MỌI lượt quét.
     ten_tu_khop: str = ""
 
 
@@ -4780,7 +4781,7 @@ class Engine:
         cfg = self.config
         if not tho:
             return None
-        ung_vien = self._merge(tho)
+        ung_vien = self._bo_tu_khop(self._merge(tho))
         if not ung_vien:
             return None
         self._gan_chi_so(ung_vien, duration)
@@ -4876,10 +4877,7 @@ class Engine:
         Chung tiêu chí với ``_ung_vien_dat`` (cùng ``_merge`` + ``loc_chap_nhan``): chế độ
         nguồn chung không có chính sách nhận diện riêng, chỉ có điều kiện dừng riêng.
         """
-        dat = self._ung_vien_dat(tho, duration)
-        pv = getattr(self, "_pham_vi", None)
-        ten = getattr(pv, "ten_tu_khop", "") if pv is not None else ""
-        return [m for m in dat if not ten or m.clip.lower() != ten]
+        return self._ung_vien_dat(tho, duration)
 
     def _quet_tho_xac_minh(self, chunks: list, duration: float,
                            progress: Optional[Callable], pct0: float, giua: float,
@@ -5090,11 +5088,22 @@ class Engine:
             tu += buoc
         return doan or [(0.0, tong)]
 
+    def _bo_tu_khop(self, ung_vien: list) -> list:
+        """Bỏ ứng viên TỰ KHỚP (cùng tên với file đang quét) — một nguồn cho mọi quyết định.
+
+        Dừng sớm, bù tốc độ, mục tiêu và kết quả cuối phải cùng loại tự khớp: chỉ lọc ở kết
+        quả cuối thì tự khớp vẫn «đủ bằng chứng» để dừng, rồi lượt quét ra 0 kết quả mà phần
+        sau của file chưa từng được so khớp (audit A-7).
+        """
+        pv = getattr(self, "_pham_vi", None)
+        ten = getattr(pv, "ten_tu_khop", "") if pv is not None else ""
+        return [m for m in ung_vien if not ten or m.clip.lower() != ten]
+
     def _ung_vien_dat(self, tho: list, duration: float) -> list:
-        """Các ứng viên đạt tiêu chí chấp nhận. Không đụng chẩn đoán cuối."""
+        """Các ứng viên đạt tiêu chí chấp nhận, đã bỏ tự khớp. Không đụng chẩn đoán cuối."""
         if not tho:
             return []
-        ung_vien = self._merge(tho)
+        ung_vien = self._bo_tu_khop(self._merge(tho))
         if not ung_vien:
             return []
         self._gan_chi_so(ung_vien, duration)
@@ -5351,9 +5360,9 @@ class Engine:
         self.chan_doan_quet = ChanDoanQuet()
         # Sổ phạm vi THẬT của lượt quét này: khúc nào đã gửi đi khớp, khúc nào lỗi.
         pv = self._pham_vi = _PhamViQuet()
+        pv.ten_tu_khop = os.path.basename(path).lower()
         if muc_tieu is not None:
             pv.muc_tieu = muc_tieu
-            pv.ten_tu_khop = os.path.basename(path).lower()
         theo_dich = muc_tieu is not None and muc_tieu.mode == MUC_TIEU_XAC_MINH
         try:
             if not os.path.isfile(path):
@@ -5429,8 +5438,7 @@ class Engine:
                     self._bao(progress, p_match1, f"⚠️ {canh_bao}")
             # Chặn tự khớp: nếu chính file đang quét cũng nằm trong kho vân tay
             # (do lỡ để chung thư mục), nó sẽ khớp 100% với chính nó — vô nghĩa.
-            goc = os.path.basename(path).lower()
-            tat_ca = [m for m in tat_ca if m.clip.lower() != goc]
+            tat_ca = self._bo_tu_khop(tat_ca)
             self._gan_chi_so(tat_ca, tong)
             self.chan_doan_quet.gop_lai = len(tat_ca)
             # Hợp đồng cũ giữ nguyên: số ứng viên ĐẠT chuẩn TRƯỚC khi cắt còn Top-N.

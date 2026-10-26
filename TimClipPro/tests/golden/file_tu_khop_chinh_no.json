@@ -3,10 +3,15 @@
   "chan_doan": {
    "canh_bao": [],
    "da_chon": 0,
-   "da_thu_toc_do": [],
+   "da_thu_toc_do": [
+    "lưới cao độ 0.960",
+    "lưới cao độ 0.980",
+    "lưới cao độ 1.020",
+    "lưới cao độ 1.040"
+   ],
    "dau_hieu_nhac_hieu": false,
    "dong_co_matched": 2,
-   "dong_tho": 5,
+   "dong_tho": 25,
    "duoc_chap_nhan": 0,
    "duong_di": "quet_bu_toan_bo",
    "giai_doan_mat": "bang_chung_qua_yeu",
@@ -20,7 +25,7 @@
    "qua_min_hash": 2,
    "qua_min_match_s": 2,
    "so_clip_kho": 0,
-   "so_khuc": 5,
+   "so_khuc": 25,
    "so_khuc_cham_tran": 0,
    "ten_kho": "",
    "toc_do_tim_duoc": "",
@@ -117,6 +122,130 @@
     "chunk_0000420.wav",
     "chunk_0000560.wav"
    ]
+  ],
+  [
+   "bien_doi",
+   "chunk_0000000_k104167.wav"
+  ],
+  [
+   "bien_doi",
+   "chunk_0000140_k104167.wav"
+  ],
+  [
+   "bien_doi",
+   "chunk_0000280_k104167.wav"
+  ],
+  [
+   "bien_doi",
+   "chunk_0000420_k104167.wav"
+  ],
+  [
+   "bien_doi",
+   "chunk_0000560_k104167.wav"
+  ],
+  [
+   "khop",
+   "_k104167_resample",
+   [
+    "chunk_0000000_k104167.wav",
+    "chunk_0000140_k104167.wav",
+    "chunk_0000280_k104167.wav",
+    "chunk_0000420_k104167.wav",
+    "chunk_0000560_k104167.wav"
+   ]
+  ],
+  [
+   "bien_doi",
+   "chunk_0000000_k102041.wav"
+  ],
+  [
+   "bien_doi",
+   "chunk_0000140_k102041.wav"
+  ],
+  [
+   "bien_doi",
+   "chunk_0000280_k102041.wav"
+  ],
+  [
+   "bien_doi",
+   "chunk_0000420_k102041.wav"
+  ],
+  [
+   "bien_doi",
+   "chunk_0000560_k102041.wav"
+  ],
+  [
+   "khop",
+   "_k102041_resample",
+   [
+    "chunk_0000000_k102041.wav",
+    "chunk_0000140_k102041.wav",
+    "chunk_0000280_k102041.wav",
+    "chunk_0000420_k102041.wav",
+    "chunk_0000560_k102041.wav"
+   ]
+  ],
+  [
+   "bien_doi",
+   "chunk_0000000_k098039.wav"
+  ],
+  [
+   "bien_doi",
+   "chunk_0000140_k098039.wav"
+  ],
+  [
+   "bien_doi",
+   "chunk_0000280_k098039.wav"
+  ],
+  [
+   "bien_doi",
+   "chunk_0000420_k098039.wav"
+  ],
+  [
+   "bien_doi",
+   "chunk_0000560_k098039.wav"
+  ],
+  [
+   "khop",
+   "_k098039_resample",
+   [
+    "chunk_0000000_k098039.wav",
+    "chunk_0000140_k098039.wav",
+    "chunk_0000280_k098039.wav",
+    "chunk_0000420_k098039.wav",
+    "chunk_0000560_k098039.wav"
+   ]
+  ],
+  [
+   "bien_doi",
+   "chunk_0000000_k096154.wav"
+  ],
+  [
+   "bien_doi",
+   "chunk_0000140_k096154.wav"
+  ],
+  [
+   "bien_doi",
+   "chunk_0000280_k096154.wav"
+  ],
+  [
+   "bien_doi",
+   "chunk_0000420_k096154.wav"
+  ],
+  [
+   "bien_doi",
+   "chunk_0000560_k096154.wav"
+  ],
+  [
+   "khop",
+   "_k096154_resample",
+   [
+    "chunk_0000000_k096154.wav",
+    "chunk_0000140_k096154.wav",
+    "chunk_0000280_k096154.wav",
+    "chunk_0000420_k096154.wav",
+    "chunk_0000560_k096154.wav"
+   ]
   ]
  ],
  "tien_do": [
@@ -179,6 +308,118 @@
   [
    0.95,
    "Đang so khớp vân tay... khúc 4/4"
+  ],
+  [
+   0.95,
+   "Thử bù tốc độ (lượt 1) — lưới cao độ 0.960..."
+  ],
+  [
+   0.95,
+   "Đang nạp kho vân tay và bắt đầu so khớp..."
+  ],
+  [
+   0.95,
+   "Đang so khớp vân tay... khúc 1/5"
+  ],
+  [
+   0.95,
+   "Đang so khớp vân tay... khúc 2/5"
+  ],
+  [
+   0.95,
+   "Đang so khớp vân tay... khúc 3/5"
+  ],
+  [
+   0.95,
+   "Đang so khớp vân tay... khúc 4/5"
+  ],
+  [
+   0.95,
+   "Đang so khớp vân tay... khúc 5/5"
+  ],
+  [
+   0.95,
+   "Thử bù tốc độ (lượt 2) — lưới cao độ 0.980..."
+  ],
+  [
+   0.95,
+   "Đang nạp kho vân tay và bắt đầu so khớp..."
+  ],
+  [
+   0.95,
+   "Đang so khớp vân tay... khúc 1/5"
+  ],
+  [
+   0.95,
+   "Đang so khớp vân tay... khúc 2/5"
+  ],
+  [
+   0.95,
+   "Đang so khớp vân tay... khúc 3/5"
+  ],
+  [
+   0.95,
+   "Đang so khớp vân tay... khúc 4/5"
+  ],
+  [
+   0.95,
+   "Đang so khớp vân tay... khúc 5/5"
+  ],
+  [
+   0.95,
+   "Thử bù tốc độ (lượt 3) — lưới cao độ 1.020..."
+  ],
+  [
+   0.95,
+   "Đang nạp kho vân tay và bắt đầu so khớp..."
+  ],
+  [
+   0.95,
+   "Đang so khớp vân tay... khúc 1/5"
+  ],
+  [
+   0.95,
+   "Đang so khớp vân tay... khúc 2/5"
+  ],
+  [
+   0.95,
+   "Đang so khớp vân tay... khúc 3/5"
+  ],
+  [
+   0.95,
+   "Đang so khớp vân tay... khúc 4/5"
+  ],
+  [
+   0.95,
+   "Đang so khớp vân tay... khúc 5/5"
+  ],
+  [
+   0.95,
+   "Thử bù tốc độ (lượt 4) — lưới cao độ 1.040..."
+  ],
+  [
+   0.95,
+   "Đang nạp kho vân tay và bắt đầu so khớp..."
+  ],
+  [
+   0.95,
+   "Đang so khớp vân tay... khúc 1/5"
+  ],
+  [
+   0.95,
+   "Đang so khớp vân tay... khúc 2/5"
+  ],
+  [
+   0.95,
+   "Đang so khớp vân tay... khúc 3/5"
+  ],
+  [
+   0.95,
+   "Đang so khớp vân tay... khúc 4/5"
+  ],
+  [
+   0.95,
+   "Đang so khớp vân tay... khúc 5/5"
   ],
   [
    1.0,
