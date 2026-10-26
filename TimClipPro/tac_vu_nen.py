@@ -77,6 +77,14 @@ class SoViecDai:
                 del self._dang_chay[k]
                 self._vua_xong[k] = viec
 
+    def bo(self, engine, viec) -> None:
+        """Bỏ ``viec`` khỏi sổ mà KHÔNG vào ô «vừa xong»: việc đã ghi sổ nhưng thread chưa từng khởi động (audit
+        DR-6) — không có kết quả nào để phiên khác nhận."""
+        k = _khoa(engine)
+        with self._khoa:
+            if self._dang_chay.get(k) is viec:
+                del self._dang_chay[k]
+
     def nhan_vua_xong(self, engine):
         """Lấy (và bỏ khỏi sổ) việc đã XONG mà chưa phiên nào chép kết quả — đúng một phiên nhận được."""
         with self._khoa:
@@ -161,7 +169,8 @@ class TacVuNen:
     def bat_dau(self, engine, ham, args: tuple, kwargs: dict, *, job: dict, lease=None) -> None:
         """Ghi sổ rồi chạy ``ham(*args, progress=..., **kwargs)`` trong thread nền. ``job``: dict của phiên đã bấm —
         vẫn được ghi như trước. Phiên khác đã có tác vụ chạy trên cùng thư mục dữ liệu → ``DangCoTacVuKhac``
-        (chưa chạy gì; người gọi tự trả ``lease``)."""
+        (chưa chạy gì; người gọi tự trả ``lease``). Thread không khởi động được (hết tài nguyên luồng) → gỡ mọi dấu
+        «đang chạy» (sổ, ``running``, ``job``), trả ``lease`` rồi ném lại lỗi (audit DR-6)."""
         def danh_dau():
             with self._khoa:
                 self._running = True
@@ -190,4 +199,16 @@ class TacVuNen:
                 job["results"], job["error"] = ket_qua, loi
                 job["running"] = False
 
-        threading.Thread(target=target, daemon=True, name=f"tac-vu-nen-{self.kind}").start()
+        try:
+            threading.Thread(target=target, daemon=True, name=f"tac-vu-nen-{self.kind}").start()
+        except BaseException as e:
+            # Thread chưa từng chạy nên ``finally`` của ``target`` không dọn: không gỡ thì sổ giữ một tác vụ ma — mọi
+            # lần bấm sau trên thư mục dữ liệu này bị ``DangCoTacVuKhac`` tới khi tắt Tool, updater chờ lease mãi.
+            with self._khoa:
+                self._error = str(e)
+                self._running = False
+            SO_TAC_VU_NEN.bo(engine, self)
+            if lease is not None:
+                lease.tra()
+            job["error"], job["running"] = str(e), False
+            raise
