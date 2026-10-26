@@ -991,9 +991,11 @@ def liet_ke_media(thumuc: str, bo_thu_muc_lam_viec: bool = False) -> list:
 
 # Dòng kết quả của audfprint:
 # Matched  54.5 s starting at 402.7 s in <khúc> to time 2.7 s in <clip gốc> with 321 of 605 common hashes at rank 0
+# «to time» có thể là `-0.0`: audfprint lấy hash phân vị trong cửa sổ mode ± --match-win,
+# hash ở 1–2 khung đầu clip lệch +1/+2 khung cho giá trị −0,02…−0,05 s (audit A-16).
 RE_MATCH = re.compile(
     r"Matched\s+([\d.]+)\s+s\s+starting\s+at\s+([\d.]+)\s+s\s+in\s+(.+?)"
-    r"\s+to\s+time\s+([\d.]+)\s+s\s+in\s+(.+?)\s+with\s+(\d+)\s+of\s+(\d+)\s+common\s+hashes"
+    r"\s+to\s+time\s+(-?[\d.]+)\s+s\s+in\s+(.+?)\s+with\s+(\d+)\s+of\s+(\d+)\s+common\s+hashes"
 )
 
 # Tên khúc: `chunk_<mốc bắt đầu>.wav`, hoặc `chunk_<mốc>_k<hệ số x100000>.wav` khi
@@ -4220,7 +4222,8 @@ class Engine:
                     khop = float(m.group(1))
                     t_khuc = float(m.group(2))
                     file_khuc = m.group(3).strip()
-                    t_clip = float(m.group(4))
+                    # Âm chỉ là sai số làm tròn của cửa sổ lệch: mốc thật là đầu clip.
+                    t_clip = max(0.0, float(m.group(4)))
                     file_clip = m.group(5).strip()
                     so_hash = int(m.group(6))
                     ten_khuc = os.path.basename(file_khuc)
