@@ -351,3 +351,60 @@ def test_bo_ban_dem_cut_cua_video_dai_khong_xoa_file_luot_khac_dang_dung(engine,
     assert os.path.exists(dem), f"[{ca}] xoá bản đệm mà lượt quét khác đang giữ dấu «đang dùng»"
     with open(dem, "rb") as fh:
         assert fh.read() == b"ban-dem-luot-khac-dang-quet", f"[{ca}] bản đệm lượt khác đang dùng bị thay"
+
+
+def test_lan_do_dau_cua_don_dem_trung_luc_dat_dau_khong_lam_hong_luot_quet(engine, monkeypatch):
+    """Audit WR-6 (cùng gốc C-9): vòng lọc đầu của ``don_kho_dem`` dò dấu «đang dùng» NGOÀI khoá tải
+    (lấy khoá dấu rồi nhả ngay). Lượt quét đặt dấu: tạo file dấu (``open`` + ghi + ``fsync``) rồi mới
+    khoá — lần dò của tiến trình khác thấy file mới và khoá trước đúng trong cửa sổ đó. Trước đây
+    lượt quét ném ``DangChayRoi`` (không phải ``OSError``) ra khỏi ``_giu_file_dem`` → lượt quét lỗi
+    «Đã có tiến trình khác đang chạy» dù chẳng ai tranh chấp. Đúng: dấu mang tên riêng của lượt quét,
+    lần dò chỉ giữ thoáng qua → lượt quét vẫn đặt được dấu và chạy tiếp."""
+    import sys
+    import threading
+
+    import don_dep
+    import khoa
+    e = engine
+    os.makedirs(e.dl_dir, exist_ok=True)
+    ten_file = f"{VID}.webm"
+    dem = _tao_dem(e.dl_dir, ten_file, 1)
+    thu_muc_dau = os.path.normcase(os.path.join(os.path.abspath(e.data_dir), don_dep.THU_MUC_DANG_DUNG))
+    ten_lay = "_lay_khoa_windows" if sys.platform.startswith("win") else "_lay_khoa_posix"
+    goc_lay = getattr(khoa, ten_lay)
+    do_da_khoa = threading.Event()
+    luot_quet_da_thu = threading.Event()
+    ket_qua_do = []
+    luong_do = []
+
+    def lan_do():
+        # Đúng lời gọi của vòng lọc đầu ``don_kho_dem`` (tiến trình khác: cuối lượt Watch / cli dondep).
+        ket_qua_do.append(don_dep._dang_duoc_dung(e.dl_dir, ten_file, bo_dau_mo_coi=False))
+
+    def lay(f):
+        if os.path.normcase(os.path.dirname(os.path.abspath(f.name))) != thu_muc_dau:
+            return goc_lay(f)
+        if luong_do and threading.current_thread() is luong_do[0]:
+            goc_lay(f)                       # lần dò khoá dấu TRƯỚC lượt quét
+            do_da_khoa.set()
+            luot_quet_da_thu.wait(5)         # còn đang ghi + fsync thông tin của nó
+            return None
+        if not luong_do:
+            # Lượt quét vừa tạo file dấu, chưa kịp khoá: lần dò chen vào đúng lúc này.
+            luong_do.append(threading.Thread(target=lan_do, daemon=True))
+            luong_do[0].start()
+            assert do_da_khoa.wait(5), "thiết lập sai: lần dò không thấy file dấu"
+            try:
+                return goc_lay(f)
+            finally:
+                luot_quet_da_thu.set()
+        return goc_lay(f)
+
+    monkeypatch.setattr(khoa, ten_lay, lay)
+    with e._giu_file_dem(dem):
+        assert luong_do, "thiết lập sai: lượt quét không đặt dấu"
+        luong_do[0].join(5)
+        # Lượt quét chạy tiếp và dấu của nó SỐNG: dọn đệm sau đó vẫn thấy file đang dùng.
+        assert don_dep._dang_duoc_dung(e.dl_dir, ten_file, bo_dau_mo_coi=False) is True
+    assert ket_qua_do == [False]
+    assert not don_dep._dang_duoc_dung(e.dl_dir, ten_file, bo_dau_mo_coi=False)

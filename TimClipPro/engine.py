@@ -3781,8 +3781,9 @@ class Engine:
         with self._khoa_tai_audio(don_dep.ten_muc_dem(ten_file), ten_file):
             try:
                 dau = don_dep.dat_dau_dang_dung(self.dl_dir, ten_file)
-            except OSError as e:
-                # Không đặt được dấu (ổ đầy / quyền): vẫn quét — chỉ mất lớp bảo vệ trước dọn đệm.
+            except (OSError, DangChayRoi) as e:
+                # Không đặt được dấu (ổ đầy / quyền / lần dò của dọn đệm giữ quá lâu — WR-6): vẫn quét
+                # — chỉ mất lớp bảo vệ trước dọn đệm.
                 LOGGER_SCAN.warning("event=scan.cache_in_use_mark_failed file=%s err=%s",
                                     ten_file, str(e)[:200])
             with contextlib.suppress(OSError):

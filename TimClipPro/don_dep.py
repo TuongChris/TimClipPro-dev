@@ -28,6 +28,8 @@ _DUOI_DANG_TAI = (".part", ".ytdl")
 #   nên dấu của lượt bị kill/crash không giữ file mãi (dọn đệm lấy được khoá = dấu mồ côi, bỏ dấu).
 THU_MUC_KHOA_TAI = "khoa_tai"
 THU_MUC_DANG_DUNG = "dem_dang_dung"
+# Lần dò dấu của dọn đệm chỉ giữ khoá dấu trong lúc ghi + fsync vài dòng thông tin: chờ tối đa bấy nhiêu.
+_CHO_LAN_DO_DAU_S = 2.0
 
 
 @dataclass
@@ -93,12 +95,23 @@ def dat_dau_dang_dung(thu_muc_dem: str, ten_file: str, ten_viec: str = "") -> Kh
     Người gọi phải đang giữ khoá tải của mục đó (``duong_khoa_tai``): dọn đệm kiểm dấu và xoá file
     dưới CÙNG khoá. Từ lúc ``download_audio`` trả file tới lúc dấu được đặt, file chỉ được bảo vệ
     bằng mtime vừa làm mới: dọn đệm stat lại dưới khoá và bỏ file đã đổi kể từ lúc liệt kê (WR-4).
+
+    Dấu mang tên riêng của lượt này, nên khoá nó chỉ có thể đang bị lần DÒ của dọn đệm giữ thoáng qua
+    (vòng lọc đầu dò ngoài khoá tải và thấy file dấu vừa tạo, chưa kịp khoá): chờ lần dò nhả rồi khoá
+    lại, không coi là «tiến trình khác đang chạy» (audit WR-6).
     """
     duong = os.path.join(_goc_du_lieu(thu_muc_dem), THU_MUC_DANG_DUNG,
                          f"{ten_file}~{os.getpid()}_{uuid.uuid4().hex[:12]}.lock")
-    dau = KhoaTienTrinh(duong, ten_viec or f"Lượt quét đang dùng file đệm {ten_file}")
-    dau.__enter__()
-    return dau
+    han = time.monotonic() + _CHO_LAN_DO_DAU_S
+    while True:
+        dau = KhoaTienTrinh(duong, ten_viec or f"Lượt quét đang dùng file đệm {ten_file}")
+        try:
+            dau.__enter__()
+            return dau
+        except DangChayRoi:
+            if time.monotonic() >= han:
+                raise
+            time.sleep(0.02)
 
 
 def nha_dau_dang_dung(dau: KhoaTienTrinh) -> None:
