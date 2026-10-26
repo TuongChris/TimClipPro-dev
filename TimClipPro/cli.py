@@ -490,6 +490,13 @@ def _main():
     y_dinh = None
     if getattr(a, "destination", ""):
         y_dinh = _y_dinh_lenh(eng, a, lo_id=uuid.uuid4().hex)
+        # Preflight khoá CỤC BỘ trước khi quét (như giao diện và Watch — audit B-2): chot_y_dinh không
+        # đọc file khoá; khoá mất/sai tài khoản mà vẫn quét thì mọi việc gửi BLOCKED_CONFIG.
+        ly_do_khoa = outbox.kiem_khoa_cuc_bo(eng.sqlite_file, y_dinh.dich)
+        if ly_do_khoa:
+            raise sheet_destinations.LoiDichGui(
+                f"Đích «{y_dinh.dich.nhan}» chưa dùng được — {ly_do_khoa} Đã dừng TRƯỚC khi quét "
+                "(muốn quét ngay mà không gửi thì bỏ --destination).")
     ghim = eng.ghim_y_dinh_gui(y_dinh) if y_dinh is not None else contextlib.nullcontext()
 
     if a.lenh == "youtube":

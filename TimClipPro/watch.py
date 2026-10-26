@@ -626,6 +626,15 @@ def _thuc_hien_giam_sat(
         if not callable(getattr(engine, "ghim_y_dinh_gui", None)):
             bao_cao.loi.append("Engine không hỗ trợ hàng đợi gửi — đã dừng lượt trước khi quét.")
             return bao_cao
+        # Preflight khoá CỤC BỘ như giao diện (chot_cho_lo): hồ sơ đích (--destination) chỉ chốt trong
+        # DB, không đọc file khoá — file mất / thuộc tài khoản dịch vụ khác thì mọi việc gửi sẽ
+        # BLOCKED_CONFIG sau khi lịch sử đã ghi video là đã quét (audit B-2).
+        ly_do_khoa = outbox.kiem_khoa_cuc_bo(engine.sqlite_file, y_dinh.dich)
+        if ly_do_khoa:
+            bao_cao.sheets_note = (f"Không dùng được đích Google Sheets «{y_dinh.dich.nhan}»: "
+                                   f"{ly_do_khoa}")
+            bao_cao.loi.append(bao_cao.sheets_note + " — đã dừng lượt TRƯỚC khi quét.")
+            return bao_cao
         y_dinh = replace(y_dinh, lo_id=uuid.uuid4().hex)
         bao_cao.dich_gui = y_dinh.dich.nhan
 

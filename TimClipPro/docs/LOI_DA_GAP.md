@@ -721,3 +721,14 @@ thì KHÔNG RÕ; `ghi_lai_treo` ghi lại ở đầu vòng sau / trước khi nh
 `huy` nhận CLAIMED (fencing CLAIMED→SENDING chặn người gửi đang cầm). Test: `tests/test_outbox_loi_db_sau_claim.py`.
 → **Vòng lặp sống lâu bắt mọi ngoại lệ thì mỗi việc nó «cầm» phải có đường nhả trong CHÍNH tiến trình đó**; đừng
   dựa vào phục hồi lúc khởi động cho lỗi của một tiến trình còn sống.
+
+**32. Preflight khoá chỉ có ở MỘT số đường vào: `--destination` quét rồi mới biết khoá hỏng (26/10/2026, audit B-2).**
+Giao diện (`chot_cho_lo` → `outbox.kiem_khoa_cuc_bo`) và `--sheet` (`nhap_link_cu` đọc file khoá) dừng TRƯỚC khi quét
+khi khoá Google không dùng được; còn `cli.py watch|youtube|file --destination` đi qua `chot_y_dinh` — chỉ chốt trong
+DB, không đọc file khoá. File khoá bị chuyển/xoá hay bị chép đè bằng khoá của tài khoản dịch vụ khác → Watch vẫn
+liệt kê, tải, quét; lịch sử ghi video là đã quét (lượt sau bỏ qua), mỗi việc gửi BLOCKED_CONFIG, phải «Thử gửi lại»
+từng việc. Đã sửa: `watch.chay_giam_sat` gọi `kiem_khoa_cuc_bo` cho MỌI ý định gửi (truyền vào hay từ link) trước khi
+liệt kê; `cli.py youtube|file --destination` báo LỖI CẤU HÌNH (mã 1) trước khi quét.
+Test: `tests/test_watch_destination_kiem_khoa_truoc_quet.py`.
+→ **Kiểm tra «trước khi quét» phải nằm ở điểm hội tụ của mọi đường vào** (Watch, CLI, giao diện), không ở bước phân
+  giải riêng của một đường; thêm đường vào mới thì thử cả khoá mất lẫn khoá khác tài khoản.
