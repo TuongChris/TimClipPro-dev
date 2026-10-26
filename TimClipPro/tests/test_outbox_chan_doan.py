@@ -32,7 +32,6 @@ ID_NGAN = ID[:6]
 HEADER = [f"Cột {i}" for i in range(1, 35)]
 ROWS = [["v1"] + [""] * 33]
 SA = "gui@du-an-gia.invalid"
-_CHUA_SUA = pytest.mark.xfail(strict=True, reason="chưa có bản sửa chẩn đoán — commit sửa gỡ dấu này")
 
 
 @pytest.fixture()
@@ -76,7 +75,6 @@ def _nem(loi):
 
 # ---------------------------------------------------------------- lý do theo reason của Google
 
-@_CHUA_SUA
 def test_403_api_chua_bat_noi_dung_nguyen_nhan_khong_bao_chia_se(gia):
     ly_do = _loi_gui(gia, LoiHttp(403, "Google Sheets API has not been used in project 123456 before or it is "
                                        "disabled. Enable it by visiting https://console.developers.google.com",
@@ -85,39 +83,33 @@ def test_403_api_chua_bat_noi_dung_nguyen_nhan_khong_bao_chia_se(gia):
     assert "123456" not in ly_do and "console.developers" not in ly_do          # không chép message gốc
 
 
-@_CHUA_SUA
 def test_403_thieu_scope_noi_dung_nguyen_nhan(gia):
     ly_do = _loi_gui(gia, LoiHttp(403, "Request had insufficient authentication scopes.",
                                   ly_do_google="ACCESS_TOKEN_SCOPE_INSUFFICIENT"))
     assert "phạm vi" in ly_do and "insufficient" not in ly_do
 
 
-@_CHUA_SUA
 def test_403_khong_co_quyen_neu_tai_khoan_binding_va_bang_rut_gon(gia):
     ly_do = _loi_gui(gia, LoiHttp(403, "The caller does not have permission"))
     assert "chia sẻ" in ly_do                                        # giữ hướng dẫn cũ cho đúng trường hợp này
     assert SA in ly_do and "timclip_02" in ly_do and ID_NGAN in ly_do
 
 
-@_CHUA_SUA
 def test_404_khong_thay_bang_neu_tai_khoan_va_bang_rut_gon(gia):
     ly_do = _loi_gui(gia, LoiHttp(404, "Requested entity was not found."))
     assert SA in ly_do and "timclip_02" in ly_do and ID_NGAN in ly_do
 
 
-@_CHUA_SUA
 def test_khoa_bi_google_tu_choi_neu_tai_khoan(gia):
     ly_do = _loi_gui(gia, gae.RefreshError("invalid_grant: account not found"))
     assert SA in ly_do and "timclip_02" in ly_do and "invalid_grant" not in ly_do
 
 
-@_CHUA_SUA
 def test_403_khi_doc_tieu_de_cung_neu_reason(gia):
     ly_do = _loi_gui(gia, LoiHttp(403, "disabled", ly_do_google="SERVICE_DISABLED"), noi=DOC)
     assert "Google Sheets API" in ly_do and "chưa bật" in ly_do
 
 
-@_CHUA_SUA
 def test_404_khi_doc_tieu_de_cung_kem_ngu_canh(gia):
     ly_do = _loi_gui(gia, LoiHttp(404, "Requested entity was not found."), noi=DOC)
     assert SA in ly_do and "timclip_02" in ly_do and ID_NGAN in ly_do
@@ -131,7 +123,6 @@ def test_loi_tam_va_lo_cau_hinh_khac_khong_bi_gan_ngu_canh(gia):
     assert e.value.tam_thoi is True and SA not in e.value.ly_do
 
 
-@_CHUA_SUA
 def test_kiem_chi_doc_cung_chan_doan_dung(gia):
     gia["may"].loi_mo = LoiHttp(403, "disabled", ly_do_google="SERVICE_DISABLED")
     ok, tb = ob.CongGspread().kiem(_chot(), gia["khoa"], HEADER)
@@ -182,21 +173,18 @@ def _sua(mt, vid, **cot):
         con.execute(f"UPDATE hang_doi_gui SET {', '.join(f'{k}=?' for k in cot)} WHERE id=?", (*cot.values(), vid))
 
 
-@_CHUA_SUA
 def test_cho_vi_tam_dung_toan_bo(mt):
     vid = _xep(mt)
     ob.dat_tam_dung(mt["db"], True)
     assert "tạm dừng toàn bộ" in _ly_do(mt, vid, bay_gio=1e9, nen=_nen())
 
 
-@_CHUA_SUA
 def test_cho_vi_ho_so_tam_dung(mt):
     vid = _xep(mt)
     sd.doi_trang_thai(mt["db"], mt["a"].id, sd.TT_TAM_DUNG)
     assert "Hồ sơ đích đang tạm dừng" in _ly_do(mt, vid, bay_gio=1e9, nen=_nen())
 
 
-@_CHUA_SUA
 def test_cho_vi_hen_gio_thu_lai(mt):
     vid = _xep(mt)
     _sua(mt, vid, trang_thai=ob.RETRY_WAIT, thu_lai_sau=2e9, loi="Lỗi mạng khi kiểm bảng (ConnectionError).")
@@ -204,7 +192,6 @@ def test_cho_vi_hen_gio_thu_lai(mt):
     assert "Hẹn thử" in ly_do and "Lỗi mạng" in ly_do
 
 
-@_CHUA_SUA
 def test_gio_do_tang_giao_dien_dinh_dang(mt):
     vid = _xep(mt)
     _sua(mt, vid, trang_thai=ob.RETRY_WAIT, thu_lai_sau=2e9, loi="x")
@@ -212,14 +199,12 @@ def test_gio_do_tang_giao_dien_dinh_dang(mt):
     assert "lúc" not in _ly_do(mt, vid, bay_gio=1e9, nen=_nen())          # lõi không tự đổi epoch sang giờ
 
 
-@_CHUA_SUA
 def test_cho_vi_hoan_theo_nhom(mt):
     vid = _xep(mt)
     _sua(mt, vid, thu_lai_sau=2e9)
     assert "cùng bảng/tab" in _ly_do(mt, vid, bay_gio=1e9, nen=_nen())
 
 
-@_CHUA_SUA
 @pytest.mark.parametrize("nen, mau", [
     (None, "chưa chạy"),
     (_nen(dang_chay=False), "chưa chạy"),
@@ -232,22 +217,20 @@ def test_cho_vi_nguoi_gui(mt, nen, mau):
     assert mau in _ly_do(mt, vid, bay_gio=1e9, nen=nen)
 
 
-@_CHUA_SUA
 def test_san_sang_thi_bao_sap_gui(mt):
     vid = _xep(mt)
     assert "Sắp gửi" in _ly_do(mt, vid, bay_gio=1e9, nen=_nen())
 
 
-@_CHUA_SUA
 def test_claimed_lau_bat_thuong_bao_cach_xu_ly_khong_gui_trung(mt):
     vid = _xep(mt)
     _sua(mt, vid, trang_thai=ob.CLAIMED, claim_luc=1000.0)
     assert "đang xử lý" in _ly_do(mt, vid, bay_gio=1010.0, nen=_nen())
     lau = _ly_do(mt, vid, bay_gio=1000.0 + ob.HAN_GIU_VIEC_LAU_S + 1, nen=_nen())
     assert "lâu bất thường" in lau and "chưa ghi gì" in lau
+    assert "huỷ" in lau                    # CLAIMED huỷ được từ audit B-1 (fencing claim_token)
 
 
-@_CHUA_SUA
 @pytest.mark.parametrize("trang_thai", [ob.SENT, ob.BLOCKED_CONFIG, ob.UNKNOWN, ob.CANCELLED, ob.SENDING])
 def test_trang_thai_khac_khong_co_ly_do_cho(mt, trang_thai):
     vid = _xep(mt)
@@ -257,10 +240,57 @@ def test_trang_thai_khac_khong_co_ly_do_cho(mt, trang_thai):
 
 # ---------------------------------------------------------------- bảng hồ sơ nói rõ bảng + tài khoản dịch vụ
 
-@_CHUA_SUA
 def test_dong_ho_so_hien_bang_rut_gon_va_tai_khoan_dich_vu(mt):
     import ui_gui_sheets as ui
     xt = {x.ref: x for x in sd.ds_xac_thuc(mt["db"])}
     dong = ui.dong_ho_so(sd.lay_dich(mt["db"], mt["a"].id), xt)
     assert dong["Bảng"].startswith(ID_NGAN) and ID not in dong["Bảng"]
     assert dong["Tài khoản dịch vụ"] == "gui@du-an-gia.invalid" and dong["Khoá"] == "mac_dinh"
+
+
+# ---------------------------------------------------------------- khớp thiết kế hiện tại (chuyển từ nhánh 12/10)
+
+def test_anh_chup_mot_lan_cho_ca_bang_khong_mo_db_tung_dong(mt, monkeypatch):
+    """Giao diện chụp ``anh_chup_cho_gui`` MỘT lần; ``ly_do_chua_gui`` với ảnh chụp không mở DB cho từng dòng."""
+    vid = _xep(mt)
+    ob.dat_tam_dung(mt["db"], True)
+    v, anh = ob.lay_viec(mt["db"], vid), ob.anh_chup_cho_gui(mt["db"])
+
+    def cam(*a, **k):
+        raise AssertionError("mở DB cho từng dòng")
+    monkeypatch.setattr(sd, "ket_noi", cam)
+    assert "tạm dừng toàn bộ" in ob.ly_do_chua_gui(mt["db"], v, bay_gio=1e9, nen=_nen(), anh=anh)
+
+
+def test_claimed_khi_vua_tam_dung_van_bao_dang_xu_ly(mt):
+    """Tạm dừng chỉ chặn lần CLAIM (audit F-15); việc đã claim vẫn đi tới kết cục — không báo «tạm dừng»."""
+    vid = _xep(mt)
+    _sua(mt, vid, trang_thai=ob.CLAIMED, claim_luc=1000.0)
+    ob.dat_tam_dung(mt["db"], True)
+    sd.doi_trang_thai(mt["db"], mt["a"].id, sd.TT_TAM_DUNG)
+    ly_do = _ly_do(mt, vid, bay_gio=1010.0, nen=_nen())
+    assert "đang xử lý" in ly_do and "tạm dừng" not in ly_do
+
+
+def test_403_than_khong_phai_json_giu_ma_that_va_kem_ngu_canh():
+    """Thân lỗi HTML (audit B-7: gspread đặt code = -1, không có details): không reason → câu theo mã HTTP THẬT;
+    vẫn là lỗi truy cập nên kèm binding + tài khoản dịch vụ + bảng rút gọn."""
+    import requests
+
+    r = requests.models.Response()
+    r.status_code, r._content, r.encoding = 403, b"<html><body>Error 403</body></html>", "utf-8"
+    r.headers["Content-Type"] = "text/html"
+    e = gspread.exceptions.APIError(r)
+    assert ob._reason_google(e) == set()
+    loi = ob._kem_ngu_canh(ob.phan_loai_loi(e, da_phat=False), e, _chot())
+    assert isinstance(loi, ob.ChuaGui) and loi.tam_thoi is False
+    assert "HTTP 403" in loi.ly_do and "-1" not in loi.ly_do and SA in loi.ly_do and ID not in loi.ly_do
+
+
+def test_kem_ngu_canh_giu_pham_vi_chan_theo_revision():
+    """Chỉ đổi CÂU: ``chi_revision`` (audit B-3) và ``tam_thoi`` giữ nguyên; lỗi không thuộc truy cập không bị gắn."""
+    goc = ob.ChuaGui("x", tam_thoi=False, chi_revision=True)
+    loi = ob._kem_ngu_canh(goc, PermissionError(), _chot())
+    assert loi.chi_revision is True and loi.tam_thoi is False and SA in loi.ly_do
+    tab = ob.ChuaGui("tab", tam_thoi=False)
+    assert ob._kem_ngu_canh(tab, gspread.exceptions.WorksheetNotFound("t"), _chot()) is tab

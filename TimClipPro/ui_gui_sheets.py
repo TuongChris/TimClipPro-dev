@@ -256,13 +256,20 @@ def _ve_hang_doi(eng) -> None:
         except sd.LoiDichGui:
             return "(đích đã ghim bị hỏng)"
 
+    # Chụp MỘT lần cho cả bảng (tạm dừng, hồ sơ tạm dừng, mốc nhận việc, người gửi nền) — không mở DB từng dòng.
+    nen, anh = outbox.nguoi_gui_nen(db), outbox.anh_chup_cho_gui(db)
+
+    def gio(t: float) -> str:
+        return datetime.fromtimestamp(t).strftime("%H:%M:%S")
+
     st.dataframe(pd.DataFrame([{
         "Mã": v.id[:8], "Lần quét": f"#{v.job_id}" if v.job_id else "—",
         "Nguồn": "tự động" if v.nguon == outbox.NGUON_AUTO else "thủ công",
         "Đích (đã ghim)": nhan_dich(v), "Trạng thái": outbox.NHAN_TRANG_THAI.get(v.trang_thai),
         "Lần thử": v.so_lan_thu, "Dòng": v.so_dong,
         "Lý do / ghi chú": (v.loi or ("đã xoá lần quét — chỉ giữ biên nhận" if v.da_xoa_job
-                                      else ""))[:160],
+                                      else ""))[:220],
+        "Vì sao chưa gửi": outbox.ly_do_chua_gui(db, v, nen=nen, gio=gio, anh=anh),
         "Cập nhật": datetime.fromtimestamp(v.sua_luc).strftime("%d/%m %H:%M:%S"),
     } for v in ds]), width="stretch", hide_index=True)
     with st.expander("Xử lý một việc gửi", expanded=False):
@@ -316,20 +323,29 @@ def _dich_doc_duoc(v) -> bool:
         return False
 
 
+def dong_ho_so(d, xt_theo_ref: dict) -> dict:
+    """Một dòng bảng hồ sơ: nói rõ hồ sơ mở BẢNG nào (mã rút gọn — không in nguyên mã/link) bằng TÀI KHOẢN DỊCH VỤ
+    nào — để thấy ngay hồ sơ dùng nhầm binding hay dán nhầm bảng."""
+    xt = xt_theo_ref.get(d.xac_thuc_ref)
+    return {
+        "Tên": d.ten, "Bảng": d.spreadsheet_id[:6] + "…", "Tab": d.worksheet_ten,
+        # Cột trộn số (mã tab) với chữ làm Arrow không chuyển được («Could not convert 'theo tên
+        # …' … int64», PC2 12/10/2026): hiển thị TOÀN CHUỖI — giá trị lưu trong DB không đổi.
+        "Mã tab": (str(d.worksheet_id) if d.worksheet_id is not None
+                   else str(d.gid_da_chot) if d.gid_da_chot is not None
+                   else "theo tên — chốt ở lần gửi đầu"),
+        "Định dạng": sd.SCHEMA_NHAN.get(d.schema_id), "Trạng thái": d.trang_thai,
+        "Revision": d.phien_ban, "Khoá": d.xac_thuc_ref,
+        "Tài khoản dịch vụ": xt.principal if xt is not None else "(binding không còn)",
+    }
+
+
 def _ve_ho_so(eng) -> None:
     db = _db(eng)
     ds = sd.ds_dich(db)
     if ds:
-        st.dataframe(pd.DataFrame([{
-            "Tên": d.ten, "Tab": d.worksheet_ten,
-            # Cột trộn số (mã tab) với chữ làm Arrow không chuyển được («Could not convert 'theo tên
-            # …' … int64», PC2 12/10/2026): hiển thị TOÀN CHUỖI — giá trị lưu trong DB không đổi.
-            "Mã tab": (str(d.worksheet_id) if d.worksheet_id is not None
-                       else str(d.gid_da_chot) if d.gid_da_chot is not None
-                       else "theo tên — chốt ở lần gửi đầu"),
-            "Định dạng": sd.SCHEMA_NHAN.get(d.schema_id), "Trạng thái": d.trang_thai,
-            "Revision": d.phien_ban, "Khoá": d.xac_thuc_ref,
-        } for d in ds]), width="stretch", hide_index=True)
+        xt_theo_ref = {x.ref: x for x in sd.ds_xac_thuc(db)}
+        st.dataframe(pd.DataFrame([dong_ho_so(d, xt_theo_ref) for d in ds]), width="stretch", hide_index=True)
     xt = sd.ds_xac_thuc(db)
     with st.expander("➕ Thêm hồ sơ đích", expanded=not ds):
         if not xt:

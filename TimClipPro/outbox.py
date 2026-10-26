@@ -1070,6 +1070,75 @@ _NEN: dict = {}
 _NEN_KHOA = threading.RLock()
 _DA_DANG_KY_THOAT = False
 
+# CLAIMED lâu hơn mức này là bất thường: một lần xử lý tự giới hạn (kết nối 10 s + đọc 60 s mỗi request, vài
+# request, làm mới khoá) — quá thì người gửi có thể đã dừng giữa chừng.
+HAN_GIU_VIEC_LAU_S = 300.0
+_CHUA_TRUYEN = object()
+
+
+def nguoi_gui_nen(db_path: str) -> Optional["NguoiGuiNen"]:
+    """Luồng người gửi nền của DB này trong tiến trình này (``None`` = chưa khởi động)."""
+    with _NEN_KHOA:
+        return _NEN.get(_khoa_db(db_path))
+
+
+def anh_chup_cho_gui(db_path: str) -> dict:
+    """Ảnh chụp CHỈ ĐỌC (một kết nối) những gì ``ly_do_chua_gui`` cần: cờ tạm dừng toàn bộ, hồ sơ đang tạm dừng
+    (đúng hai điều kiện lệnh claim xét — audit F-15), mốc nhận của việc ``CLAIMED``. Giao diện chụp MỘT lần mỗi
+    lần vẽ bảng thay vì mở DB cho từng dòng."""
+    with sd.ket_noi(db_path) as con:
+        h = con.execute("SELECT gia_tri FROM cai_dat_may WHERE khoa=?", (_KHOA_TAM_DUNG,)).fetchone()
+        ho_so = {r["id"] for r in con.execute("SELECT id FROM dich_gui WHERE trang_thai=?", (sd.TT_TAM_DUNG,))}
+        claim = {r["id"]: float(r["claim_luc"] or 0) for r in con.execute(
+            "SELECT id, claim_luc FROM hang_doi_gui WHERE trang_thai=?", (CLAIMED,))}
+    return {"tam_dung": h is not None and h["gia_tri"] == "1", "ho_so_tam_dung": ho_so, "claim_luc": claim}
+
+
+def ly_do_chua_gui(db_path: str, v: ViecGui, *, bay_gio: Optional[float] = None, nen=_CHUA_TRUYEN,
+                   gio: Optional[Callable[[float], str]] = None, anh: Optional[dict] = None) -> str:
+    """VÌ SAO một việc «Chờ gửi / Chờ thử lại / Đang chuẩn bị» chưa đi — cho giao diện. CHỈ ĐỌC; rỗng với trạng
+    thái khác. Theo đúng thứ tự người gửi xét: tạm dừng toàn bộ → hồ sơ tạm dừng (cả hai kiểm ngay trong lệnh
+    claim) → hẹn giờ → người gửi nền. ``anh``: ``anh_chup_cho_gui`` chụp sẵn (không truyền thì tự chụp).
+    ``gio``: hàm hiển thị một mốc epoch (tầng GIAO DIỆN truyền vào — module lõi không tự đổi epoch sang giờ,
+    xem ``test_khong_module_nao_tu_doi_epoch_sang_ngay_dang``); không truyền thì câu không kèm giờ."""
+    if v.trang_thai not in (PENDING, RETRY_WAIT, CLAIMED):
+        return ""
+    bay_gio = time.time() if bay_gio is None else bay_gio
+    anh = anh_chup_cho_gui(db_path) if anh is None else anh
+
+    def luc_(t: float) -> str:
+        return f" lúc {gio(t)}" if gio is not None and t else ""
+
+    if v.trang_thai == CLAIMED:
+        # Đã claim thì đi tới kết cục kể cả khi vừa bật tạm dừng. CLAIMED = chưa commit SENDING = chưa phát request.
+        luc = anh["claim_luc"].get(v.id, 0.0)
+        cau = f"📤 Người gửi đang xử lý (nhận{luc_(luc)})." if luc else "📤 Người gửi đang xử lý."
+        if luc and bay_gio - luc > HAN_GIU_VIEC_LAU_S:
+            cau += (" Giữ lâu bất thường — người gửi có thể đã dừng giữa chừng. Việc CHƯA tới bước gửi nên chưa ghi "
+                    "gì; khởi động lại Tool sẽ trả việc về «Chờ gửi» (không gửi trùng), hoặc huỷ việc này (huỷ "
+                    "xoá quyền giữ việc, người gửi không phát được request nào).")
+        return cau
+    if anh["tam_dung"]:
+        return "⏸ Đang tạm dừng toàn bộ việc gửi — tắt công tắc tạm dừng để gửi."
+    if v.dich_id in anh["ho_so_tam_dung"]:
+        return "⏸ Hồ sơ đích đang tạm dừng gửi — bấm «▶ Bật lại» ở hồ sơ đó."
+    if v.thu_lai_sau > bay_gio:
+        if v.trang_thai == RETRY_WAIT:
+            return f"⏳ Hẹn thử lại{luc_(v.thu_lai_sau)} sau lỗi tạm: {(v.loi or '')[:120]}"
+        return f"⏳ Hẹn gửi{luc_(v.thu_lai_sau)} — hoãn theo việc cùng bảng/tab vừa gặp lỗi tạm."
+    if nen is _CHUA_TRUYEN:
+        nen = nguoi_gui_nen(db_path)
+    if nen is None or not nen.dang_chay:
+        return "Người gửi nền chưa chạy trong tiến trình này — tải lại trang để khởi động."
+    if getattr(nen, "ban_cu", ""):
+        return "Tiến trình này chạy bản đã bị thay — đã nhường quyền gửi cho bản đang kích hoạt."
+    if not nen.co_quyen:
+        return ("Người gửi chưa giữ quyền gửi — một tiến trình khác (Watch/CLI hoặc cửa sổ Tool khác) đang giữ; "
+                "việc sẽ được gửi khi quyền được nhả.")
+    if nen.loi_cuoi:
+        return f"Vòng gửi gần nhất lỗi ({nen.loi_cuoi}) — xem nhật ký Tool."
+    return "Sắp gửi (vòng gửi kế tiếp)."
+
 
 def _dung_tat_ca_khi_thoat() -> None:
     """Hook thoát tiến trình (app tắt êm): dừng mọi người gửi nền — CHỜ việc đang bay xong để nó không
@@ -1197,6 +1266,66 @@ def _ma_http(e: BaseException) -> int:
     return -1
 
 
+# Lỗi 401/403 của Google nói rõ nguyên nhân ở ``error.details[].reason`` (giá trị LIỆT KÊ, không chứa URL/mã).
+# gspread ``open_by_key`` bọc MỌI 403 thành ``PermissionError`` trần (gspread 6.2.1 client.py:172) — reason chỉ
+# còn ở ``__cause__``. Chỉ dùng nó để CHỌN CÂU; phân loại chưa gửi/mơ hồ vẫn theo KIỂU ngoại lệ + mã HTTP như cũ.
+_CAU_API_CHUA_BAT = ("Google Sheets API chưa bật trong project Google Cloud của tài khoản dịch vụ — bật «Google "
+                     "Sheets API» cho project đó (chia sẻ bảng thôi là chưa đủ).")
+_CAU_THEO_REASON = {
+    "SERVICE_DISABLED": _CAU_API_CHUA_BAT,
+    "ACCESS_NOT_CONFIGURED": _CAU_API_CHUA_BAT,
+    "ACCESS_TOKEN_SCOPE_INSUFFICIENT": ("Khoá được cấp thiếu phạm vi quyền (scope) Google Sheets — tool cần quyền "
+                                        "đọc/ghi bảng tính."),
+}
+
+
+def _reason_google(e: BaseException) -> set:
+    """``{reason}`` của ``APIError`` gốc — tự ``e`` hoặc chuỗi ``__cause__`` (``PermissionError`` /
+    ``SpreadsheetNotFound`` của gspread). Không đọc ``message`` (có thể mang mã bảng/URL). Thân lỗi không phải
+    JSON (audit B-7: ``code = -1``) không có ``details`` → rỗng."""
+    import gspread
+
+    x, da_xem = e, set()
+    while x is not None and id(x) not in da_xem:
+        da_xem.add(id(x))
+        if isinstance(x, gspread.exceptions.APIError):
+            loi = getattr(x, "error", None)
+            chi_tiet = loi.get("details") if isinstance(loi, dict) else None
+            if not isinstance(chi_tiet, list):
+                return set()
+            return {d["reason"] for d in chi_tiet if isinstance(d, dict) and isinstance(d.get("reason"), str)}
+        x = x.__cause__
+    return set()
+
+
+def _cau_theo_reason(e: BaseException) -> str:
+    ly_do = _reason_google(e)
+    return next((_CAU_THEO_REASON[r] for r in sorted(ly_do) if r in _CAU_THEO_REASON), "")
+
+
+def _la_loi_truy_cap(e: BaseException) -> bool:
+    """Lỗi nằm ở QUYỀN TRUY CẬP (khoá/tài khoản/bảng), không phải ở tab, tiêu đề hay mạng."""
+    import google.auth.exceptions as gae
+    import gspread
+
+    if isinstance(e, (PermissionError, gspread.exceptions.SpreadsheetNotFound)):
+        return True
+    if isinstance(e, gae.RefreshError):
+        return not getattr(e, "retryable", False)
+    return isinstance(e, gspread.exceptions.APIError) and _ma_http(e) in (401, 403, 404)
+
+
+def _kem_ngu_canh(loi: Exception, e: BaseException, chot: sd.DichGuiChot) -> Exception:
+    """Lỗi TRUY CẬP vĩnh viễn: kèm binding + tài khoản dịch vụ + mã bảng RÚT GỌN của CHÍNH việc — thấy ngay việc
+    đang dùng khoá của tài khoản nào, mở bảng nào (khoá nhầm tài khoản, dán nhầm bảng). Email tài khoản dịch vụ là
+    địa chỉ để chia sẻ (giao diện vẫn hiện), không phải bí mật; mã bảng chỉ 6 ký tự đầu. Giữ nguyên phân loại
+    (``tam_thoi``) và phạm vi chặn (``chi_revision``, audit B-3) — chỉ đổi CÂU."""
+    if not isinstance(loi, ChuaGui) or loi.tam_thoi or not _la_loi_truy_cap(e):
+        return loi
+    return ChuaGui(f"{loi.ly_do} [khoá «{chot.xac_thuc_ref}» → {chot.principal}; bảng "
+                   f"{chot.spreadsheet_id[:6]}…]", tam_thoi=False, chi_revision=loi.chi_revision)
+
+
 def phan_loai_loi(e: BaseException, *, da_phat: bool) -> Exception:
     """Đổi ngoại lệ của gspread/requests/google-auth thành ``ChuaGui``/``KhongRo``.
 
@@ -1220,8 +1349,10 @@ def phan_loai_loi(e: BaseException, *, da_phat: bool) -> Exception:
     if isinstance(e, PermissionError):
         # gspread.open_by_key: HTTP 403 → PermissionError (built-in, là OSError) — PHẢI xét trước nhánh
         # OSError/mạng: bảng chưa chia sẻ cho tài khoản dịch vụ là lỗi CẤU HÌNH, thử lại không ích gì.
-        return ChuaGui("Tài khoản dịch vụ không có quyền mở bảng — chia sẻ bảng (Người chỉnh sửa) cho "
-                       "địa chỉ của binding khoá.", tam_thoi=False)
+        # MỌI 403 đều thành PermissionError (cả «API chưa bật») — reason của Google chọn câu đúng.
+        return ChuaGui(_cau_theo_reason(e) or (
+            "Tài khoản dịch vụ không có quyền mở bảng — chia sẻ bảng (Người chỉnh sửa) cho địa chỉ của binding "
+            "khoá; kiểm hồ sơ dùng ĐÚNG binding và ĐÚNG bảng."), tam_thoi=False)
     if isinstance(e, gspread.exceptions.WorksheetNotFound):
         return ChuaGui("Không thấy tab đã ghim (theo mã tab) — tab có thể đã bị xoá hoặc tạo lại; "
                        "không tự chọn tab khác.", tam_thoi=False)
@@ -1246,7 +1377,7 @@ def phan_loai_loi(e: BaseException, *, da_phat: bool) -> Exception:
         if da_phat and (ma == 408 or ma < 400 or ma >= 500):
             return KhongRo(mo_ta + " sau khi gửi — không rõ Google đã ghi chưa.")
         if 400 <= ma < 500 and ma != 408:
-            return ChuaGui(mo_ta + " — kiểm quyền/tab/cấu hình.", tam_thoi=False)
+            return ChuaGui(_cau_theo_reason(e) or (mo_ta + " — kiểm quyền/tab/cấu hình."), tam_thoi=False)
         return ChuaGui(mo_ta + " — thử lại sau.", tam_thoi=True)
     if not da_phat:
         if isinstance(e, (requests.exceptions.RequestException, OSError)):
@@ -1353,7 +1484,7 @@ class CongGspread:
                                f"«{ten_doi_chieu}» của hồ sơ — kiểm lại link/tên tab.")
             trong = sheets.kiem_tieu_de_nghiem_ngat(_TabTheoMa(sh, ws.id), header, ws.title)
         except Exception as e:  # noqa: BLE001 — chỉ đọc: mọi lỗi là "chưa gửi"
-            loi = phan_loai_loi(e, da_phat=False)
+            loi = _kem_ngu_canh(phan_loai_loi(e, da_phat=False), e, chot)
             return False, getattr(loi, "ly_do", str(loi))
         return True, (f"Đã đọc được tab «{ws.title}» (mã {ws.id}): "
                       + ("trang tính trống — lần gửi đầu sẽ ghi hàng tiêu đề." if trong
@@ -1373,7 +1504,7 @@ class CongGspread:
             yeu_cau = dung_yeu_cau_ghi(gid, ([list(header)] if can_tieu_de else []) + [list(r) for r in rows],
                                        ws.col_count)
         except Exception as e:  # noqa: BLE001 — trước dispatch: chưa có request ghi nào
-            raise phan_loai_loi(e, da_phat=False) from None
+            raise _kem_ngu_canh(phan_loai_loi(e, da_phat=False), e, chot) from None
         truoc_khi_gui(gid, ten)                      # có thể ném ChuaGui/MatQuyen — chưa ghi gì
         try:
             phan_hoi = sh.batch_update(yeu_cau)
