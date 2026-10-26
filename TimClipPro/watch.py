@@ -92,12 +92,14 @@ class BaoCao:
             g = self.gui
             cho = sum(g.get(t, 0) for t in (outbox.PENDING, outbox.RETRY_WAIT,
                                              outbox.CLAIMED, outbox.SENDING))
+            # Bị chặn = cấu hình + báo cáo, như CLI `_in_tong_ket_gui` và giao diện (audit B-11).
+            bi_chan = g.get(outbox.BLOCKED_CONFIG, 0) + g.get(outbox.BLOCKED_REPORT, 0)
             trang_thai_sheets = (
                 f"«{self.dich_gui}» — đã gửi {g.get(outbox.SENT, 0)} việc "
                 f"({self.sheets_so_dong} dòng)"
                 + (f", còn chờ {cho} (đã lưu bền, {self.gui_tam_dung or 'sẽ tự gửi tiếp'})"
                    if cho else "")
-                + (f", bị chặn {g[outbox.BLOCKED_CONFIG]}" if g.get(outbox.BLOCKED_CONFIG) else "")
+                + (f", bị chặn {bi_chan}" if bi_chan else "")
                 + (f", KHÔNG RÕ {g[outbox.UNKNOWN]}" if g.get(outbox.UNKNOWN) else ""))
         elif self.sheets_ok:
             trang_thai_sheets = (
@@ -567,11 +569,19 @@ def _tong_ket_gui(engine: Any, nen: Any, y_dinh: Any, bao_cao: BaoCao, cho_gui_s
     bao_cao.gui = tt
     bao_cao.sheets_so_dong = sum(v.so_dong for v in outbox.ds_viec(
         db, lo_id=lo, trang_thai=(outbox.SENT,)))
-    bao_cao.sheets_ok = tt[outbox.BLOCKED_CONFIG] == 0 and tt[outbox.UNKNOWN] == 0
+    bao_cao.sheets_ok = (tt[outbox.BLOCKED_CONFIG] == 0 and tt[outbox.BLOCKED_REPORT] == 0
+                         and tt[outbox.UNKNOWN] == 0)
     if tt[outbox.BLOCKED_CONFIG]:
         ly_do = next((v.loi for v in outbox.ds_viec(db, lo_id=lo, trang_thai=(
             outbox.BLOCKED_CONFIG,))), "")
         bao_cao.loi.append(f"Google Sheets: {tt[outbox.BLOCKED_CONFIG]} việc bị chặn — {ly_do}")
+    if tt[outbox.BLOCKED_REPORT]:
+        # Việc không bao giờ gửi, không tự thử lại; video đã lưu 'ok' nên Watch không quét lại → phải
+        # báo (audit B-11). Báo cáo V2 lỗi đã có dòng «<video>: <thông báo>» lúc quét — không lặp.
+        chua_bao = [v.loi for v in outbox.ds_viec(db, lo_id=lo, trang_thai=(outbox.BLOCKED_REPORT,))
+                    if not any(v.loi and v.loi in dong for dong in bao_cao.loi)]
+        if chua_bao:
+            bao_cao.loi.append(f"Google Sheets: {len(chua_bao)} việc bị chặn (báo cáo) — {chua_bao[0]}")
     if tt[outbox.UNKNOWN]:
         bao_cao.loi.append(
             f"Google Sheets: {tt[outbox.UNKNOWN]} việc KHÔNG RÕ đã ghi chưa — đối soát trên Sheet "
