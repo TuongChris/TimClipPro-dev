@@ -608,3 +608,13 @@ một kho (đúng sự cố 15/10).
   phiên bản mới (`_ghi_phien_ban_sau_cong_bo(thu_muc=…)`). «Bổ sung» vẫn ghi sớm vì nguồn đã được chứng minh trùng.
 → **Lớp chặn dựa vào một bản ghi thì mọi đường thoát (huỷ/lỗi/không công bố) phải để bản ghi đó khớp dữ liệu thật.**
   Test: `tests/test_tao_lai_kho_giu_nguon_khi_khong_cong_bo.py`.
+
+**23. Nhánh đa nhân khác ngữ nghĩa nhánh một nhân: clip 0 hash thử lại thành HAI bản ghi (26/10/2026, PC2, audit C-3).**
+Clip hỏng/im lặng được ghi TÊN với 0 hash và «Bổ sung» thử lại nó (chỉ clip CÓ hash mới bị bỏ qua). Một nhân
+(`HashTable.store` → `name_to_id`) tái dùng id cũ; đa nhân (GUI mặc định, `ncores=0` → tự dò > 1) chạy
+`instrumented_multiproc_add` → `HashTable.merge` chỉ nối `names`, không khử trùng → x(0) + x(N): đếm clip +1 mỗi lần,
+«Một video gốc chung» coi x là trùng tên mãi mãi («CHƯA KẾT LUẬN», cảnh báo đổ lỗi chép/đổi thư mục kho). Test cũ dùng
+runner giả gọi `store` nên không bao giờ thấy.
+→ **Hai đường cho cùng một thao tác phải cùng ngữ nghĩa**; test phải đi qua ĐÚNG đường người dùng chạy (đa nhân thật),
+  không chỉ đường dễ giả. Sửa ở lớp bọc (`giai_phong_ban_ghi_rong` trước `merge`), không sửa thư viện vendored.
+  Test: `tests/test_bo_sung_da_nhan_khong_trung_ten.py`.

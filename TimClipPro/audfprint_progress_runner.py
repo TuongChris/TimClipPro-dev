@@ -202,6 +202,32 @@ def _worker_ghi_hash_table(
             pass
 
 
+def giai_phong_ban_ghi_rong(hash_tab, ten_moi) -> int:
+    """Nhả mọi bản ghi 0 hash của ``hash_tab`` mang tên có trong ``ten_moi``; trả số ô đã nhả.
+
+    Clip hỏng/im lặng vẫn được ghi TÊN với 0 hash (``--continue-on-error``) và được thử
+    lại ở lần «Bổ sung» sau. Nhánh một nhân (``HashTable.store`` → ``name_to_id``) tái dùng
+    đúng id cũ; nhánh đa nhân ``merge`` chỉ nối ``names`` không khử trùng, nên thiếu bước
+    này clip có thêm một bản ghi mỗi lần thử lại — đếm clip sai, «Một video gốc chung» coi
+    là trùng tên mãi mãi (audit C-3). Ô 0 hash không có giá trị nào trong bảng hash nên
+    đặt ``None`` (ô trống, ``store`` sau này dùng lại được) là tương đương ``store``.
+    Bản ghi CÓ hash không bị đụng: engine luôn gỡ chúng (``audfprint remove``) trước khi
+    thêm lại.
+    """
+    can = {ten for ten in ten_moi or () if ten}
+    so_hash = getattr(hash_tab, "hashesperid", None)
+    if not can or so_hash is None or getattr(hash_tab, "names", None) is None:
+        return 0
+    da_nha = 0
+    for i, ten in enumerate(hash_tab.names):
+        if ten in can and i < len(so_hash) and int(so_hash[i]) == 0:
+            hash_tab.names[i] = None
+            da_nha += 1
+    if da_nha:
+        hash_tab.dirty = True
+    return da_nha
+
+
 def instrumented_multiproc_add(analyzer, hash_tab, filename_iter, report, ncores):
     """Bản thay thế ``multiproc_add`` — cùng thuật toán, không kẹt vĩnh viễn.
 
@@ -313,6 +339,9 @@ def instrumented_multiproc_add(analyzer, hash_tab, filename_iter, report, ncores
                 + str(len(hash_tabx.names))
                 + " files " + str(sum(hash_tabx.counts)) + " hashes"
             ])
+            # Clip 0 hash của lần trước được thử lại: nhả ô rỗng cũ TRƯỚC khi merge, nếu
+            # không clip có hai bản ghi (audit C-3).
+            giai_phong_ban_ghi_rong(hash_tab, hash_tabx.names)
             hash_tab.merge(hash_tabx)
             del hash_tabx
             pr[core].join(timeout=60)
