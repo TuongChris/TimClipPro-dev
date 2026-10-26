@@ -3,6 +3,15 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-10-25 — link «Đoạn vi phạm» dạng `watch?v=<ID>&t=<giây>` (nhánh fix/pc2/link-doan-vi-pham-watch)
+- Chủ dự án yêu cầu: link nhảy mốc báo cáo V2 (ô «Đoạn vi phạm N…» bảng Ngang/Sheets, cột «🔗 Nhảy tới đúng mốc vi phạm»,
+  CSV, hồ sơ, báo cáo nguồn chung) đổi `https://youtu.be/<ID>?t=` → `https://www.youtube.com/watch?v=<ID>&t=` cho lượt quét
+  MỚI. Người dùng viết `?t=`; dùng `&t=` vì `?` thứ hai làm giây dính vào mã video (đã báo người dùng).
+- Sửa một chỗ `bao_cao_v2.link_nhay`. KHÔNG đổi: ảnh chụp đã lưu (link đã chụp), hàng đợi gửi đã xếp, Sheet cũ, luật cũ
+  (`Engine.link_moc`, lùi 3 s), link video gốc. Apps Script đọc ô nguyên văn, regex `[?&]v=` vẫn nhận mã → không sửa.
+- Test (chặn mạng, venv `TimClipPro_CookieFix`): 13 đỏ trên mã cũ → xanh; +2 (tách `v`/`t` bằng `parse_qs`; ảnh chụp cũ giữ
+  link cũ); đột biến 5/5; nhanh 2795 = 2793/2/0 (240 s); ruff sạch; không đụng quét → không chạy chậm. Bằng chứng
+  `2026-10-25_link_watch`. Nhánh dựng trên `c2a66f0` (PR #13): fast-forward `integration/current` tới đây gộp cả D-26.
 ### 2026-10-15 (khuya) — PC2 DEV-ONLY: Development vận hành dữ liệu thật (D-26, nhánh feature/pc2/dev-van-hanh)
 - Stable 1.1.2 ĐÃ công bố (GitHub, ký `d02702dd741c3e4f`, diễn tập 14/14) nhưng KHÔNG cài lên PC2. Tự động hoá cập nhật
   bị lớp quyền chặn («Production Deploy», «Self-Modification»); người dùng chọn DEV-ONLY.
