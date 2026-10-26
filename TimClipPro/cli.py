@@ -104,8 +104,12 @@ def _lenh_dich_va_gui(a) -> None:
         if not ds:
             print("Chưa có hồ sơ đích nào — tạo trong ứng dụng, mục «📤 Gửi Google Sheets».")
         for d in ds:
-            print(f"{d.id}  [{d.trang_thai}]  {d.nhan}  (revision {d.phien_ban}, "
-                  f"tab id {d.worksheet_id if d.worksheet_id is not None else 'chưa chốt'})")
+            # Như giao diện (ui_gui_sheets._ve_ho_so): hồ sơ theo tên đã gửi thì mã tab là mã chốt ở
+            # request ghi đầu của revision (gid_da_chot) — người gửi ghi vào ĐÚNG tab đó.
+            tab = (d.worksheet_id if d.worksheet_id is not None
+                   else d.gid_da_chot if d.gid_da_chot is not None
+                   else "theo tên — chốt ở lần gửi đầu")
+            print(f"{d.id}  [{d.trang_thai}]  {d.nhan}  (revision {d.phien_ban}, tab id {tab})")
         for x in sheet_destinations.ds_xac_thuc(db):
             print(f"binding «{x.ref}» → {x.principal} [{x.trang_thai}]")
         return
