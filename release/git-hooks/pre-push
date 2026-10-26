@@ -31,7 +31,7 @@ quet_noi_dung() {
       if (n <= 30) print "  " c " " f ": " loai
     }
     BEGIN { gsub(/[ \t,;]+/, " ", duyet); duyet = tolower(duyet) }
-    /^commit [0-9a-f]+$/ { ct = $2; c = substr($2, 1, 10); next }
+    /^commit [0-9a-f]+$/ { ct = $2; c = $2; next }    # SHA ĐỦ 40 ký tự: dán thẳng vào TIMCLIP_MAU_GIA_DA_DUYET
     /^\+\+\+ / {
       f = substr($0, 5); sub(/^"?b\//, "", f); sub(/"$/, "", f)
       if (f == "/dev/null") next
@@ -105,6 +105,8 @@ while read lref lsha rref rsha; do
       echo "$nhay_cam"
       echo "  Bỏ khỏi MỌI commit chưa đẩy (thêm rồi xoá ở commit sau vẫn bị đẩy), rồi báo người dùng. Mẫu GIẢ có chủ đích"
       echo "  trong test: ghi «gia-khong-bi-mat» trên cùng dòng (docs/ai/GIT_WORKFLOW.md «Quét trước MỖI lần đẩy»)."
+      echo "  Commit cũ đã mang mẫu GIẢ (sửa ở commit mới không gỡ được): NGƯỜI DÙNG xem từng chỗ, duyệt, rồi đẩy lại MỘT lần"
+      echo "  với TIMCLIP_MAU_GIA_DA_DUYET=\"<SHA 40 ký tự ở đầu dòng> ...\" — chỉ bỏ qua đúng commit đó; --no-verify vẫn CẤM."
     } >&2
     exit 1
   fi

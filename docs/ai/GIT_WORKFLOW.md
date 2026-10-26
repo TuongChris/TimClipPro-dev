@@ -64,7 +64,8 @@ Hai lớp, cả hai bắt buộc (audit E-4). Quét TỪNG commit sắp đẩy �
    gán UUID, tiêu đề / dòng cookie Netscape (mọi tên cookie); hoặc file tên khoá / cookie / `installation.json` /
    `secrets/` (như `.gitignore` gốc). Hook chỉ in commit + file + loại, KHÔNG in nội dung. Mẫu GIẢ có chủ đích (test):
    ghi `gia-khong-bi-mat` trên CÙNG dòng. Commit chưa đẩy đã lỡ mang mẫu giả không dấu (vd. tạo trước bản hook này):
-   NGƯỜI DÙNG xem danh sách hook in, duyệt, rồi đẩy MỘT lần với `TIMCLIP_MAU_GIA_DA_DUYET="<SHA 40 ký tự> …"` — chỉ bỏ
+   NGƯỜI DÙNG xem danh sách hook in (đầu mỗi dòng = SHA đủ 40 ký tự), duyệt, rồi đẩy MỘT lần với
+   `TIMCLIP_MAU_GIA_DA_DUYET="<SHA 40 ký tự> …"` — chỉ bỏ
    qua đúng các commit đó; `--no-verify` vẫn CẤM. Bí mật thật → bỏ khỏi commit chưa đẩy, báo người dùng.
 2. Tay — phải rỗng, trừ mẫu GIẢ đã biết trong test (tên file `cookies.txt` không còn trong mẫu: lớp 1 + `.gitignore` lo):
 `git log -p --text --format=%B private/integration/current..HEAD | grep -n -i -E "AIza|ya29\.|gh[pousr]_|github_pat_|BEGIN [A-Z ]*PRIVATE|\"private_key|service_account\"|gserviceaccount\.com|client_secret|refresh_token|docs\.google\.com/spreadsheets|(^|[^A-Za-z0-9_-])1[A-Za-z0-9_-]{43}([^A-Za-z0-9_-]|$)|installation_id.{0,4}[0-9a-f]{8}-|__Secure-|SAPISID|LOGIN_INFO|HTTP Cookie File|@gmail\.com|[A-Z]:\\\\Users\\\\"`

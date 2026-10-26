@@ -768,6 +768,9 @@ commit/file/loại; mẫu GIẢ ghi `gia-khong-bi-mat` cùng dòng, commit cũ t
 (`TIMCLIP_MAU_GIA_DA_DUYET`); grep tay bổ sung mẫu, bỏ `cookies?\.txt`. Test: `tests/test_git_hook_pre_push_quet_bi_mat.py`.
 → **Kiểm bí mật phải tự động và theo NỘI DUNG, mẫu không yếu hơn bộ lọc phát hành**; thêm mẫu giả vào test thì ghi dấu,
   và thêm mẫu nhạy cảm mới vào `dong_goi.py` thì thêm cả vào hook.
+→ Review audit đợt 2: chính test E-1 (commit `18ceddb`, tạo TRƯỚC hook) mang JSON service account giả không dấu → hook
+  mới chặn nhánh sửa audit; hook lại chỉ in 10 ký tự SHA trong khi duyệt đòi đủ 40. Nay hook in SHA đủ 40 ký tự + cách
+  duyệt; test «mọi file đang theo dõi tự qua bộ quét của hook» (ngoại lệ: danh sách file có trước hook, chỉ được thu nhỏ).
 
 **36. Tiêu đề kết quả chọn màu theo «có huỷ không», không theo «đã làm được gì» (26/10/2026, audit F-4).** «Bổ sung
 clip mới vào kho» mà MỌI clip mới đều lỗi (file cụt, 0 hash): engine cố ý không raise và không ghi kho (TCP-02, kho

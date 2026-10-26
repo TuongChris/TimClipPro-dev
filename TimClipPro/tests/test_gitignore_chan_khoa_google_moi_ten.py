@@ -25,10 +25,10 @@ _MA = os.path.dirname(_TESTS)                 # TimClipPro/
 _REPO = os.path.dirname(_MA)                  # gốc repo
 
 _KHOA_GIA = json.dumps({
-    "type": "service_account",
+    "type": "service_account",                                                    # gia-khong-bi-mat
     "project_id": "du-an-gia",
-    "client_email": "x@y.iam.gserviceaccount.com",
-    "private_key": "-----BEGIN PRIVATE KEY-----\nFAKE\n-----END PRIVATE KEY-----\n",
+    "client_email": "x@y.iam.gserviceaccount.com",                                # gia-khong-bi-mat
+    "private_key": "-----BEGIN PRIVATE KEY-----\nFAKE\n-----END PRIVATE KEY-----\n",  # gia-khong-bi-mat
 })
 _COOKIE_GIA = "# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t0\tSID\tGIA\n"
 

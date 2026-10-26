@@ -156,7 +156,7 @@ def test_them_roi_xoa_o_commit_sau_van_bi_chan_va_khong_in_noi_dung(may):
     dau = _sha(may)
     _commit_file(may, "docs/x.md", "khoa = (đã gỡ)\n")
     rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
-    assert rc != 0 and f"{dau[:10]} docs/x.md: khoá API / token" in out
+    assert rc != 0 and f"{dau} docs/x.md: khoá API / token" in out
     assert _KHOA_API not in out and "Gia0" not in out                     # chỉ commit + file + loại
     assert _git(may, "ls-remote", "private", "refs/heads/fix/pc2/thu").stdout.strip() == ""
 
@@ -208,7 +208,7 @@ def test_nguoi_dung_duyet_dung_sha_day_du_chi_bo_qua_commit_do(may):
     _commit_file(may, "TimClipPro/tests/b.py", "B = '" + _DONG_SA.strip() + "'\n")
     b = _sha(may)
     rc, out = _day_env(may, "fix/pc2/thu:fix/pc2/thu", TIMCLIP_MAU_GIA_DA_DUYET=a)
-    assert rc != 0 and f"{b[:10]} TimClipPro/tests/b.py" in out and "bỏ qua (người dùng duyệt là mẫu GIẢ)" in out
+    assert rc != 0 and f"{b} TimClipPro/tests/b.py" in out and "bỏ qua (người dùng duyệt là mẫu GIẢ)" in out
     rc, out = _day_env(may, "fix/pc2/thu:fix/pc2/thu", TIMCLIP_MAU_GIA_DA_DUYET=f"{a[:10]} {b[:10]}")
     assert rc != 0                                                          # SHA rút gọn không phải duyệt
     rc, out = _day_env(may, "fix/pc2/thu:fix/pc2/thu", TIMCLIP_MAU_GIA_DA_DUYET=f"{a.upper()}, {b}")
@@ -228,3 +228,91 @@ def test_commit_da_co_tren_remote_khong_quet_lai(may, tmp_path):
     assert _day(may, "fix/pc2/tiep:fix/pc2/tiep")[0] == 0
     _git(may, "fetch", "-q", "private")
     assert _day(may, f"{_sha(may)}:refs/heads/integration/current")[0] == 0
+
+
+# --- Review audit đợt 2: hook không được chặn chính repo, và lời hướng dẫn của hook phải tự làm theo được ---
+
+def _ham_quet_cua_hook() -> str:
+    """Nguyên văn hàm ``quet_noi_dung`` của hook dùng chung (không chép tay mẫu)."""
+    with open(HOOK, encoding="utf-8") as f:
+        m = re.search(r"^quet_noi_dung\(\) \{\n.*?^\}\n", f.read(), re.S | re.M)
+    assert m, "hook không còn hàm quet_noi_dung"
+    return m.group(0)
+
+
+def _quet_cay_lam_viec(tmp_path, cac_file) -> str:
+    """Chạy ĐÚNG hàm quét của hook trên một patch giả «mọi dòng của mỗi file là dòng THÊM» — như khi một commit
+    tạo hoặc sửa từng file đó. ``git`` trong hàm được thay bằng hàm sh đọc patch giả (không đụng repo thật)."""
+    patch = tmp_path / "patch.txt"
+    with open(patch, "w", encoding="utf-8", newline="\n") as f:
+        for rel, noi_dung in cac_file:
+            f.write("commit " + "0" * 40 + "\n+++ b/" + rel + "\n")
+            f.writelines("+" + d + "\n" for d in noi_dung.splitlines())
+    kich_ban = tmp_path / "quet.sh"
+    with open(kich_ban, "w", encoding="utf-8", newline="\n") as f:
+        f.write(_ham_quet_cua_hook() + 'git() { cat "$PATCH_GIA"; }\nquet_noi_dung private HEAD\n')
+    r = subprocess.run(["sh", str(kich_ban)], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       env={**os.environ, "PATCH_GIA": str(patch), "TIMCLIP_MAU_GIA_DA_DUYET": ""})
+    assert r.returncode == 0, r.stderr
+    return r.stdout
+
+
+def _file_dang_theo_doi():
+    r = subprocess.run(["git", "-C", _GOC_REPO, "ls-files", "-z"], capture_output=True)
+    if r.returncode != 0 or not r.stdout:
+        pytest.skip("không phải cây git (bản đóng gói) — không có danh sách file để tự quét")
+    for rel in r.stdout.decode("utf-8").split("\0"):
+        p = os.path.join(_GOC_REPO, *rel.split("/"))
+        if not rel or not os.path.isfile(p):
+            continue
+        with open(p, "rb") as f:
+            du_lieu = f.read()
+        if b"\0" not in du_lieu:                                            # bỏ file nhị phân như git --text
+            yield rel, du_lieu.decode("utf-8", errors="replace")
+
+
+@pytest.mark.skipif(not shutil.which("sh"), reason="cần sh")
+def test_khung_tu_quet_bat_mau_gia_thieu_dau(tmp_path):
+    """Đối chứng cho test tự quét: cùng khung, một mẫu giả THIẾU dấu phải bị bắt, có dấu thì qua."""
+    out = _quet_cay_lam_viec(tmp_path, [("TimClipPro/tests/a.py", "A = '" + _DONG_SA.strip() + "'\n"),
+                                        ("TimClipPro/tests/b.py", "B = '" + _DONG_SA.strip() + "'  # gia-khong-bi-mat\n")])
+    assert "TimClipPro/tests/a.py: metadata service account" in out and "b.py" not in out
+
+
+# File đã lên remote TRƯỚC hook quét nội dung (E-4) mà có dòng khớp mẫu (mẫu giả trong test, câu hướng dẫn nêu dạng
+# email service account). Hook chỉ quét dòng THÊM, nên chúng chỉ bị bắt khi chính dòng đó bị sửa
+# hoặc file bị viết lại — khi đó thêm dấu và gỡ khỏi danh sách. KHÔNG thêm file mới vào đây: file mới mang dấu ngay.
+_DA_CO_TRUOC_HOOK_E4 = frozenset({
+    "TimClipPro/docs/HARDENING_PLAN.md", "TimClipPro/sheets.py", "TimClipPro/tests/dien_tap_phat_hanh.py",
+    "TimClipPro/tests/outbox_gia.py", "TimClipPro/tests/test_bao_cao_v2_sheets.py",
+    "TimClipPro/tests/test_bao_cao_v2_sheets_trong.py", "TimClipPro/tests/test_danh_sach_video.py",
+    "TimClipPro/tests/test_dong_goi_bi_mat.py", "TimClipPro/tests/test_dong_goi_may_chay.py",
+    "TimClipPro/tests/test_sheet_destinations.py", "TimClipPro/tests/test_sheets_session.py",
+})
+
+
+@pytest.mark.skipif(not shutil.which("sh"), reason="cần sh")
+def test_moi_file_dang_theo_doi_cua_repo_tu_qua_quet_noi_dung_cua_hook(tmp_path):
+    """Mọi file đang theo dõi (mã, test, tài liệu) đi qua đúng bộ quét của hook như thể vừa được thêm: mẫu GIẢ trong
+    test phải mang dấu «gia-khong-bi-mat» trên cùng dòng (review audit đợt 2: test E-1 mang JSON service account giả
+    không dấu → hook chặn chính nhánh sửa audit). Ngoại lệ duy nhất: ``_DA_CO_TRUOC_HOOK_E4`` — và mục nào đã sạch thì
+    phải gỡ khỏi danh sách để danh sách không phình."""
+    out = _quet_cay_lam_viec(tmp_path, list(_file_dang_theo_doi()))
+    bi_bat = {d.strip().split(" ", 1)[1].rsplit(": ", 1)[0] for d in out.splitlines() if d.strip()}
+    moi = sorted(bi_bat - _DA_CO_TRUOC_HOOK_E4)
+    assert moi == [], ("file bị bộ quét của hook bắt — mẫu GIẢ thì ghi «gia-khong-bi-mat» trên cùng dòng, không thì gỡ "
+                       "khỏi commit:\n" + "\n".join(d for d in out.splitlines() if any(f in d for f in moi)))
+    assert sorted(_DA_CO_TRUOC_HOOK_E4 - bi_bat) == [], "đã sạch — gỡ khỏi _DA_CO_TRUOC_HOOK_E4"
+
+
+def test_hook_in_sha_du_40_ky_tu_va_cach_duyet_mau_gia(may):
+    """Hướng dẫn của hook (duyệt mẫu GIẢ qua TIMCLIP_MAU_GIA_DA_DUYET = SHA ĐỦ 40 ký tự) phải tự làm theo được từ chính
+    thông báo chặn: in SHA đầy đủ, nêu tên biến — người dùng không lập trình không phải tự tra SHA."""
+    _nhanh(may)
+    _commit_file(may, "TimClipPro/tests/a.py", "A = '" + _DONG_SA.strip() + "'\n")
+    a = _sha(may)
+    rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
+    assert rc != 0 and f"  {a} TimClipPro/tests/a.py: metadata service account" in out, out
+    assert "TIMCLIP_MAU_GIA_DA_DUYET" in out, out
+    rc, out = _day_env(may, "fix/pc2/thu:fix/pc2/thu", TIMCLIP_MAU_GIA_DA_DUYET=a)
+    assert rc == 0, out
