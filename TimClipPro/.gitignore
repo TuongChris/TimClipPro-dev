@@ -7,6 +7,16 @@ cau_hinh.json
 # Neu theo doi, moi lan `git checkout` khi tu cap nhat se ghi de hoac gay xung dot
 # tren danh sach giam sat cua may do. Ban mau van duoc theo doi: watchlist.example.json
 watchlist.json
+# Mọi bản dẫn xuất của watchlist / danh sách link (dữ liệu khách hàng = link vi phạm) sinh CẠNH mã
+# (audit E-5): chia_watchlist.py -> watchlist.may1.json...; luu_tru.ghi_json_an_toan -> <file>.bak và
+# <file>.<pid>.<hex>.tmp mồ côi khi writer chết; luu_tru.doc_json_an_toan -> <file>.hong.<giờ> (file
+# hỏng giữ nguyên nội dung); `cli.py youtube --file links.txt`.
+watchlist*.json
+!watchlist.example.json
+*.bak
+*.hong.*
+*.tmp
+*link*.txt
 cookies.txt
 *.cookies.txt
 # Mọi biến thể tên cookie (YouTube_cookies.txt, www.youtube.com_cookies.txt...) và

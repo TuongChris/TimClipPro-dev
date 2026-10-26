@@ -63,3 +63,12 @@ cookies.txt
 *cookie*.txt
 credentials/
 secrets/
+
+# Dữ liệu khách hàng (watchlist thật, danh sách link vi phạm) và bản dẫn xuất — BẤT KỲ thư mục nào
+# (audit E-5; chi tiết nguồn sinh ở TimClipPro/.gitignore). Bản mẫu watchlist.example.json vẫn theo dõi.
+watchlist*.json
+!watchlist.example.json
+*.bak
+*.hong.*
+*.tmp
+*link*.txt
