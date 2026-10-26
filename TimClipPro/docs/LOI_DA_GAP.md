@@ -618,3 +618,14 @@ runner giả gọi `store` nên không bao giờ thấy.
 → **Hai đường cho cùng một thao tác phải cùng ngữ nghĩa**; test phải đi qua ĐÚNG đường người dùng chạy (đa nhân thật),
   không chỉ đường dễ giả. Sửa ở lớp bọc (`giai_phong_ban_ghi_rong` trước `merge`), không sửa thư viện vendored.
   Test: `tests/test_bo_sung_da_nhan_khong_trung_ten.py`.
+
+**24. «Đọc được JSON» bị coi là «sổ dùng được»: khos.json sửa tay sai cấu trúc làm vỡ cả ba lối vào (26/10/2026, PC2, audit C-6).**
+Tài liệu phục hồi (§4.9) bảo người dùng tự sửa `khos.json`; kết quả hay gặp là `{}`, `null`, một kho mất «db»/«ten».
+`doc_json_an_toan` trả nguyên mọi giá trị parse được, `_init_kho`/`_ap_dung_kho` chỉ bắt `LoiDuLieu` rồi đánh chỉ mục
+thẳng → KeyError/TypeError thô trong `Engine()`: giao diện, CLI, Watch chết trước khi vẽ gì, không câu nào nói là do sổ.
+Lớp chặn `SoKhoHong` lại chỉ nhìn DẤU VẾT file (`.hong.*`, `.bak` khi mất) nên sổ hỏng mà không để dấu vết vẫn lùi
+lặng lẽ về `data/db.pklz`.
+→ **Kiểm HÌNH DẠNG ngay ở chỗ đọc** (`_kiem_luoc_do_khos` trong `_doc_khos` và trong giao dịch `_sua_khos`) và ném đúng
+  loại lỗi mà các lối vào đã biết xử lý; sổ sai thì KHÔNG ghi đè file người dùng đang sửa.
+→ **Lớp chặn dựa trên trạng thái thật** (sổ không dùng được lúc mở), không chỉ dựa trên dấu vết một kiểu hỏng.
+  Test: `tests/test_so_kho_sai_luoc_do.py`.

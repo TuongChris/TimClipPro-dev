@@ -1159,10 +1159,43 @@ class Engine:
         return (sach or "kho") + "_" + hashlib.md5(ten.encode("utf-8")).hexdigest()[:6]
 
     def _doc_khos(self) -> dict:
-        return doc_json_an_toan(
+        d = doc_json_an_toan(
             self.kho_file,
             {"dang_dung": "", "danh_sach": []},
         )
+        self._kiem_luoc_do_khos(d)
+        return d
+
+    @staticmethod
+    def _kiem_luoc_do_khos(d: object) -> None:
+        """Sổ đọc được (JSON hợp lệ) nhưng SAI CẤU TRÚC thì ném ``LoiDuLieu`` (audit C-6).
+
+        Sửa tay khos.json (docs/DATA_MIGRATION_AND_RECOVERY.md §4.9) dễ ra ``{}``, ``null``
+        hay một kho mất «db»/«ten»: trước đây là KeyError/TypeError thô ngay trong
+        ``Engine()`` — giao diện, CLI, Watch đều vỡ mà không ai biết là do sổ. Chỉ kiểm hình
+        dạng; tên file vân tay có hợp lệ không vẫn do ``_duong_dan_db_kho`` quyết.
+        """
+        def sai(chi_tiet: str) -> LoiDuLieu:
+            return LoiDuLieu(
+                f"Sổ đăng ký kho (khos.json) đọc được nhưng sai cấu trúc: {chi_tiet}. Tool "
+                "không sửa file này, không quét và không tạo kho bằng data/db.pklz để khỏi "
+                "đối chiếu nhầm kho. Khi app đã dừng, sửa lại khos.json (mỗi kho cần «ten» và "
+                "«db») hoặc chép khos.json.bak thành khos.json rồi mở lại.")
+
+        if not isinstance(d, dict):
+            raise sai(f"cần một đối tượng JSON, gặp {type(d).__name__}")
+        if not isinstance(d.get("danh_sach"), list):
+            raise sai("thiếu danh sách kho «danh_sach»")
+        if not isinstance(d.get("dang_dung", ""), str):
+            raise sai("«dang_dung» không phải tên kho")
+        for i, k in enumerate(d["danh_sach"], 1):
+            if not isinstance(k, dict):
+                raise sai(f"mục kho thứ {i} không phải đối tượng")
+            for truong in ("ten", "db"):
+                if not isinstance(k.get(truong), str) or not k[truong]:
+                    raise sai(f"mục kho thứ {i} thiếu «{truong}»")
+            if not isinstance(k.get("thu_muc", ""), str):
+                raise sai(f"mục kho thứ {i} có «thu_muc» không phải đường dẫn")
 
     def _ghi_khos(self, d: dict) -> None:
         """Ghi đè TOÀN BỘ sổ đăng ký. Thao tác sửa vài trường phải dùng ``_sua_khos``."""
@@ -1174,10 +1207,15 @@ class Engine:
         Giao diện, Watch, build và thiết lập máy phụ đều sửa sổ đăng ký, có khi từ các
         process khác nhau. Đọc ở đầu thao tác rồi ghi đè cả file ở cuối sẽ xoá mất
         thay đổi của bên kia; ở đây đọc bản MỚI NHẤT và ghi dưới cùng một khoá.
-        Trả về đúng giá trị mà ``ham_sua`` trả về.
+        Trả về đúng giá trị mà ``ham_sua`` trả về. Sổ sai cấu trúc thì ném ``LoiDuLieu`` và
+        KHÔNG ghi gì — không đè lên file người dùng đang sửa tay (audit C-6).
         """
+        def sua_neu_dung_luoc_do(d: dict):
+            self._kiem_luoc_do_khos(d)
+            return ham_sua(d)
+
         return cap_nhat_json(
-            self.kho_file, ham_sua, mac_dinh={"dang_dung": "", "danh_sach": []}
+            self.kho_file, sua_neu_dung_luoc_do, mac_dinh={"dang_dung": "", "danh_sach": []}
         )
 
     def _duong_dan_db_kho(self, ten_file: str) -> str:
@@ -1252,15 +1290,25 @@ class Engine:
             return ""
 
     def _so_kho_vua_hong(self) -> bool:
-        """Sổ đăng ký trống vì vừa hỏng/mất (không phải cài mới chưa từng có kho)?"""
-        return not getattr(self, "kho_dang_dung", "") and bool(self._dau_vet_so_kho_hong())
+        """Sổ đăng ký trống vì vừa hỏng/mất/sai cấu trúc (không phải cài mới chưa từng có kho)?
+
+        Sổ không dùng được lúc mở Engine (sai cấu trúc, hỏng mà không đổi tên được, kho đang
+        chọn trỏ file vân tay sai) KHÔNG để lại ``khos.json.hong.*`` nhưng Engine vẫn lùi về
+        ``data/db.pklz`` — chặn y như sổ hỏng cho tới khi có kho thật được mở (audit C-6).
+        """
+        if getattr(self, "kho_dang_dung", ""):
+            return False
+        return (bool(getattr(self, "_so_kho_loi_khi_mo", False))
+                or bool(self._dau_vet_so_kho_hong()))
 
     def _init_kho(self) -> None:
         """Nạp kho đang dùng. Tự chuyển đổi dữ liệu từ phiên bản cũ (1 kho duy nhất)."""
+        self._so_kho_loi_khi_mo = False
         try:
             d = self._doc_khos()
         except LoiDuLieu as e:
             self.canh_bao_khoi_dong.append(str(e))
+            self._so_kho_loi_khi_mo = True
             self._ap_dung_kho(
                 "",
                 {"dang_dung": "", "danh_sach": []},
@@ -1294,6 +1342,7 @@ class Engine:
             self._ap_dung_kho(d.get("dang_dung", ""), d)
         except LoiDuLieu as e:
             self.canh_bao_khoi_dong.append(str(e))
+            self._so_kho_loi_khi_mo = True
             self._ap_dung_kho("", {"dang_dung": "", "danh_sach": []})
 
     def _ap_dung_kho(self, ten: str, d: Optional[dict] = None) -> None:
@@ -1315,8 +1364,14 @@ class Engine:
         self.canh_bao_metadata = []
 
     def list_khos(self) -> list:
-        """Danh sách các kho + trạng thái (đã có vân tay chưa, bao nhiêu clip)."""
-        d = self._doc_khos()
+        """Danh sách các kho + trạng thái (đã có vân tay chưa, bao nhiêu clip).
+
+        Sổ sai cấu trúc → danh sách rỗng: thanh bên gọi hàm này mỗi lần vẽ lại, lý do đã
+        nằm trong cảnh báo khởi động (audit C-6)."""
+        try:
+            d = self._doc_khos()
+        except LoiDuLieu:
+            return []
         ds = []
         for k in d["danh_sach"]:
             db = self._duong_dan_db_kho(k["db"])
@@ -1688,10 +1743,10 @@ class Engine:
     def require(self, can_ytdlp: bool = False, can_db: bool = False) -> None:
         if self._so_kho_vua_hong():
             raise SoKhoHong(
-                "Sổ đăng ký kho (data\\khos.json) đã hỏng hoặc bị mất — tool không quét và "
-                "không tạo kho bằng data\\db.pklz để khỏi đối chiếu nhầm kho. Khôi phục "
-                "khos.json (từ bản hỏng khos.json.hong.* hoặc khos.json.bak) khi app đã dừng "
-                "rồi mở lại; xem cảnh báo lúc khởi động.")
+                "Sổ đăng ký kho (data\\khos.json) đã hỏng, sai cấu trúc hoặc bị mất — tool "
+                "không quét và không tạo kho bằng data\\db.pklz để khỏi đối chiếu nhầm kho. "
+                "Khôi phục hoặc sửa lại khos.json (từ bản hỏng khos.json.hong.* hoặc "
+                "khos.json.bak) khi app đã dừng rồi mở lại; xem cảnh báo lúc khởi động.")
         env = self.check_env()
         thieu = []
         if not env["ffmpeg"]:
