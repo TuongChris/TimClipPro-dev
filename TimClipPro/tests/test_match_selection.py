@@ -377,6 +377,28 @@ def test_loc_du_bang_chung_khong_bao_gio_tra_rong():
     assert giu[0].clip == "b.opus"
 
 
+@pytest.mark.parametrize("khoa", ["ty_le", "hashes"])
+def test_san_chi_so_trong_cung_bac_clip_goc_thu_hai_vao_top_n(engine, khoa):
+    """Audit A-11: sàn bằng chứng chỉ so «trong cùng nhóm» (§8), bậc phân loại quyết định trước (§4).
+
+    Config MẶC ĐỊNH (top_n=5, phân bổ đều, ưu tiên clip khác nhau, sàn 0,70). Video 3 giờ dùng
+    clip X năm lần (20000 hash, 600 s) và clip Y MỘT lần (6000 hash, 300 s — vẫn là bằng chứng
+    mạnh). Trước đây lần lặp của X (đã dùng) đặt mốc sàn và loại Y TRƯỚC khi bậc «clip chưa dùng»
+    được xét, nên Top-5 toàn X với khoá ``ty_le`` mà có Y với khoá ``hashes``.
+    """
+    engine.config = Config(khoa_chat_luong=khoa)
+    assert engine.config.top_n == 5 and engine.config.uu_tien_clip_khac_nhau
+    assert engine.config.phan_bo_deu and engine.config.san_bang_chung > 0
+    ds = [_voi_ty_le(M("X.opus", start=i * 1800.0, hashes=20000, matched=600.0), 40.0)
+          for i in range(5)]
+    y = _voi_ty_le(M("Y.opus", start=5000.0, hashes=6000, matched=300.0), 55.0)
+
+    chon_ds, loai = engine._chon_loc([*ds, y], 3 * GIO)
+
+    assert y in chon_ds, ([m.clip for m in chon_ds], [(m.clip, m.start_s) for m in loai])
+    assert len(chon_ds) == 5
+
+
 def test_config_tu_choi_khoa_va_san_vo_ly():
     with pytest.raises(ValueError, match="khoa_chat_luong"):
         Config(khoa_chat_luong="linh_tinh").validate()

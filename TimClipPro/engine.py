@@ -885,6 +885,11 @@ def chon_dai_dien(ung_vien: list, duration: float, dung_sai: float, khoa_chat_lu
     if len(ung_vien) == 1:
         return ung_vien[0]
 
+    # Bậc phân loại (bằng chứng mạnh, clip chưa dùng) quyết định TRƯỚC; sàn chỉ so trong bậc
+    # cao nhất (audit A-11). Chạy sàn trên cả nhóm thì một lần lặp của clip đã dùng đặt mốc
+    # và loại mất clip gốc khác — dù bậc «clip chưa dùng» lẽ ra đã đưa nó lên trước.
+    bac_cao_nhat = max(khoa_chat_luong(m)[:-1] for m in ung_vien)
+    ung_vien = [m for m in ung_vien if khoa_chat_luong(m)[:-1] == bac_cao_nhat]
     ung_vien = loc_du_bang_chung(ung_vien, san_bang_chung)
     if len(ung_vien) == 1:
         return ung_vien[0]
