@@ -1176,10 +1176,16 @@ def _co_nguyen_nhan(e: BaseException, kieu: tuple) -> bool:
     return False
 
 
+def _la_ma_http(x) -> bool:
+    return isinstance(x, int) and not isinstance(x, bool) and 100 <= x <= 599
+
+
 def _ma_http(e: BaseException) -> int:
-    for ung_vien in (getattr(e, "code", None),
-                     getattr(getattr(e, "response", None), "status_code", None)):
-        if isinstance(ung_vien, int) and not isinstance(ung_vien, bool):
+    """Mã HTTP THẬT của phản hồi trước, ``e.code`` sau. Thân lỗi không phải JSON (trang lỗi HTML, proxy)
+    thì gspread đặt ``code = -1`` — mã giả đó không được che mã thật (audit B-7)."""
+    for ung_vien in (getattr(getattr(e, "response", None), "status_code", None),
+                     getattr(e, "code", None)):
+        if _la_ma_http(ung_vien):
             return ung_vien
     return -1
 
@@ -1225,7 +1231,8 @@ def phan_loai_loi(e: BaseException, *, da_phat: bool) -> Exception:
         ma = _ma_http(e)
         trang_thai = ""
         with contextlib.suppress(Exception):
-            trang_thai = str(e.error.get("status") or "")[:40]
+            if _la_ma_http(e.error.get("code")):          # -1 = gspread không đọc được JSON: «status» là lỗi phân tích
+                trang_thai = str(e.error.get("status") or "")[:40]
         mo_ta = f"Google trả lỗi HTTP {ma}{(' ' + trang_thai) if trang_thai else ''}"
         if ma == 429:
             return ChuaGui(mo_ta + " (quá hạn mức) — thử lại sau.", tam_thoi=True)
