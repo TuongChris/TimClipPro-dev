@@ -1862,7 +1862,9 @@ with tab5:
                             next(j["source_name"] for j in jobs if j["id"] == i))
         job_chon = next(j for j in jobs if j["id"] == chon)
         pham_vi_chon = lich_su.mo_ta_pham_vi(job_chon)
-        if pham_vi_chon != "Trọn video":
+        # Cảnh báo theo DỮ LIỆU phạm vi, không so chữ nhãn (audit F-12): lượt trọn có lý do kèm
+        # theo (vd. âm thanh YouTube ngắn hơn) vẫn là trọn; 0 = một phần, NULL = lịch sử cũ chưa rõ.
+        if job_chon.get("day_du") != 1:
             st.warning(f"Kho: {lich_su.mo_ta_kho(job_chon)} · Phạm vi: {pham_vi_chon}. "
                        "Kết quả bên dưới chỉ nói về phần đã quét.")
         # Báo cáo của lần quét: dựng lại TỪ ẢNH CHỤP lúc quét (báo cáo V2), không tra metadata
