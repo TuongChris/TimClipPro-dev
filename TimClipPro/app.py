@@ -587,7 +587,8 @@ def hien_ket_qua_nguon_chung(kql: nguon_chung.KetQuaLo) -> None:
                      "(KHÔNG phải nguồn chung)")
         with st.container(border=True):
             st.markdown(f"**{nhan}**")
-            st.markdown(f"### {tt_goc.get('title') or goc.clip}")
+            # Tiêu đề/tên file từ metadata kho — chữ ngoài, thoát trước khi vào Markdown (audit E-3).
+            st.markdown(f"### {thoat_markdown(tt_goc.get('title') or goc.clip)}")
             c1, c2, c3 = st.columns(3)
             c1.markdown(f"🔗 {tt_goc.get('url') or '—'}")
             if kql.chinh_sach_bao_cao == bao_cao_v2.CHINH_SACH_V2:

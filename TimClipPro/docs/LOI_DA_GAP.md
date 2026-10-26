@@ -743,3 +743,14 @@ chỉ chặn việc chờ cùng `(dich_id, phien_ban)`; lỗi bảng/tab/khoá/t
 `tests/test_outbox_chan_theo_revision.py`.
 → **Phạm vi chặn phải bằng phạm vi của lỗi**: lỗi mới `tam_thoi=False` thì hỏi nó thuộc bảng/tab (cả nhóm), revision,
   hay riêng một việc — đừng mặc định cả nhóm.
+
+**34. Tiêu đề YouTube (chữ của bên bị khiếu nại) vào Markdown chưa thoát — cả FILE hồ sơ .md, không chỉ màn hình (26/10/2026, audit D-8, E-3).**
+Streamlit diễn giải GFM + LaTeX trong `st.markdown/caption/info/warning/error/success`; file hồ sơ `.md` cũng vậy với
+mọi trình xem Markdown. Tiêu đề `![](https://may-ngoai/p.gif)` → ảnh do máy người vận hành tự tải (lộ IP + giờ quét),
+`[Cấp lại quyền Google Sheets](url)` → link bấm được trông như chữ của tool, `$5 … $9` → công thức (mất chữ). D-8 thoát
+ở các màn quét/kết quả; `dossier.render_markdown` vẫn ghi tiêu đề thô. Đã sửa: hàm thuần `markdown_an_toan.thoat_markdown`
+(scan_ui xuất lại; dossier không nhập được scan_ui vì vòng engine → dossier) dùng cho tiêu đề/tên clip trong hồ sơ và
+tiêu đề video gốc chung ở `app.py`. CSV/Sheets/lịch sử vẫn nhận tiêu đề nguyên văn. Test:
+`tests/test_tieu_de_ngoai_ho_so_va_ket_qua.py`, `tests/test_tieu_de_ngoai_khong_markdown.py`.
+→ **Chữ ngoài vào BẤT KỲ đích Markdown nào (phần tử Streamlit hay file .md) phải qua `thoat_markdown`**, hoặc đi qua
+  phần tử không diễn giải (`st.text`, `st.code`, `st.dataframe`); thêm đích Markdown mới thì thử với `![](url)`, `[a](url)`, `$x$`.

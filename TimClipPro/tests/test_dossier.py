@@ -150,7 +150,8 @@ def test_render_moi_truong_chuoi_rong_deu_hien_gach():
         dong for dong in phan_doan.splitlines() if dong.startswith("- **")
     ]
 
-    assert "Video *X*_[1]" in s
+    # Tiêu đề là chữ ngoài: thoát Markdown (trình xem .md hiện lại đúng «Video *X*_[1]») — audit E-3.
+    assert r"Video \*X\*\_\[1\]" in s
     assert "**Khoảng thời gian:** — – —" in phan_doan
     assert "**Tên clip gốc:** —" in phan_doan
     assert "**Tiêu đề video gốc:** —" in phan_doan

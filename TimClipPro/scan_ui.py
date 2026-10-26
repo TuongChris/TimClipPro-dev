@@ -41,22 +41,9 @@ from common_original import (
     TEN_TRANG_THAI_CAP,
     dong_bao_cao,
 )
-
-# Dấu câu ASCII — CommonMark cho phép thoát MỌI ký tự này bằng «\» (hiện ra đúng ký tự, không còn cú pháp).
-_DAU_CAU_ASCII = frozenset("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")
-
-
-def thoat_markdown(chu: Any) -> str:
-    """Chữ NGOÀI (tiêu đề video YouTube, tên file, câu lỗi có tiêu đề) → chữ thường an toàn cho phần tử Streamlit
-    diễn giải Markdown + LaTeX (``st.markdown/caption/info/warning/error/success``) — audit D-8.
-
-    Tiêu đề do người đăng lại đặt: ``[chữ](url)`` thành link bấm được ngay trong tool, ``$500 … $5000`` thành công
-    thức LaTeX (mất chữ), ``# * _`` đổi định dạng dòng; URL trần cũng tự thành link (GFM). Thoát mọi dấu câu ASCII
-    (``\\$`` cả cho LaTeX của Streamlit) — người dùng vẫn đọc đúng từng ký tự; xuống dòng gộp thành dấu cách để chữ
-    ngoài không mở khối Markdown mới. Chỉ dùng cho HIỂN THỊ — CSV/Sheets/hồ sơ vẫn nhận tiêu đề gốc.
-    """
-    chu = " ".join(str(chu or "").splitlines())
-    return "".join("\\" + k if k in _DAU_CAU_ASCII else k for k in chu)
+# Thoát chữ ngoài cho Markdown: hàm ở module thuần markdown_an_toan (dossier cũng dùng — engine nhập dossier
+# nên dossier không nhập được scan_ui); xuất lại ở đây cho các chỗ gọi sẵn có (audit D-8, E-3).
+from markdown_an_toan import thoat_markdown as thoat_markdown
 
 
 def dong_trang_thai_youtube(cd: Any, phien: Any = None, js: Any = None) -> list:

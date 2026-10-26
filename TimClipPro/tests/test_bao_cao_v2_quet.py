@@ -16,6 +16,7 @@ import golden_quet as gq
 from clip_metadata import ClipMetadataResolver
 from engine import Engine, ScanResult
 from golden_quet import Dat, KichBan
+from markdown_an_toan import thoat_markdown
 
 _B = "B [bbbbbbbbbbb].opus"
 _C = "C [ccccccccccc].opus"
@@ -254,7 +255,8 @@ def test_moi_exporter_cung_ten_link_url_ngay(tmp_path, monkeypatch):
         assert dong[5] == TIEU_DE and link in dong[8] and dong[13] == goc
         assert dong[7] == "15/03/2026"
     assert doc[1] == TIEU_DE and doc[10] == link and doc[5] == goc
-    assert f"**Tiêu đề video vi phạm:** {TIEU_DE}" in md and link in md and goc in md
+    # Hồ sơ .md là Markdown: cùng tên, ở dạng đã thoát (trình xem .md hiện lại đúng «[thật]») — audit E-3.
+    assert f"**Tiêu đề video vi phạm:** {thoat_markdown(TIEU_DE)}" in md and link in md and goc in md
     assert "QUÉT MỘT PHẦN" not in md.split("Phạm vi đã quét")[0]
     assert "Phạm vi đã quét" in md
     assert nghiem_ngat is True and header == bang_ngang.HEADER_NGANG

@@ -9,6 +9,7 @@ from datetime import datetime
 import bao_cao_v2
 from clip_metadata import ClipMetadataResolver
 import engine
+from markdown_an_toan import thoat_markdown
 
 
 @dataclass
@@ -123,15 +124,23 @@ def dung_ho_so_v2(bc) -> HoSo:
 
 
 def render_markdown(ho_so: HoSo) -> str:
-    """Trả về nội dung Markdown hoàn chỉnh của hồ sơ. Không ghi file."""
+    """Trả về nội dung Markdown hoàn chỉnh của hồ sơ. Không ghi file.
+
+    Tiêu đề / tên clip là chữ NGOÀI (tiêu đề video vi phạm do chính bên bị khiếu nại đặt): thoát trước khi vào
+    Markdown — trình xem .md nào mở hồ sơ cũng biến ``![](url)`` thành ảnh tải từ máy ngoài, ``[chữ](url)``
+    thành link, ``$..$`` thành công thức (audit E-3). Link do tool dựng giữ nguyên để bấm được.
+    """
     def hien_thi(gia_tri: str) -> str:
         return gia_tri if gia_tri and gia_tri.strip() else "—"
+
+    def chu_ngoai(gia_tri: str) -> str:
+        return thoat_markdown(hien_thi(gia_tri))
 
     cac_dong = [
         "# Hồ sơ khiếu nại bản quyền",
         "",
         "## Thông tin chung",
-        f"- **Tiêu đề video vi phạm:** {ho_so.tieu_de_vi_pham}",
+        f"- **Tiêu đề video vi phạm:** {thoat_markdown(ho_so.tieu_de_vi_pham)}",
         f"- **Link video vi phạm:** {ho_so.link_vi_pham}",
         f"- **Thời lượng:** {hien_thi(ho_so.thoi_luong_hhmmss)}",
         f"- **Ngày lập:** {ho_so.ngay_lap}",
@@ -158,8 +167,8 @@ def render_markdown(ho_so: HoSo) -> str:
             f"- **Khoảng thời gian:** {hien_thi(muc.tu_hhmmss)} – "
             f"{hien_thi(muc.den_hhmmss)}",
             f"- **Link nhảy tới mốc:** {hien_thi(muc.link_moc)}",
-            f"- **Tên clip gốc:** {hien_thi(muc.ten_clip_goc)}",
-            f"- **Tiêu đề video gốc:** {hien_thi(muc.tieu_de_goc)}",
+            f"- **Tên clip gốc:** {chu_ngoai(muc.ten_clip_goc)}",
+            f"- **Tiêu đề video gốc:** {chu_ngoai(muc.tieu_de_goc)}",
             f"- **Link video gốc:** {hien_thi(muc.link_goc)}",
             f"- **Độ dài đoạn:** {muc.do_dai_giay} giây",
             f"- **Tỷ lệ khớp:** {muc.ty_le}%",
