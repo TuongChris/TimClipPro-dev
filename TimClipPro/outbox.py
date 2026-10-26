@@ -1070,9 +1070,11 @@ _NEN: dict = {}
 _NEN_KHOA = threading.RLock()
 _DA_DANG_KY_THOAT = False
 
-# CLAIMED lâu hơn mức này là bất thường: một lần xử lý tự giới hạn (kết nối 10 s + đọc 60 s mỗi request, vài
-# request, làm mới khoá) — quá thì người gửi có thể đã dừng giữa chừng.
-HAN_GIU_VIEC_LAU_S = 300.0
+# CLAIMED lâu hơn mức này là bất thường: một lần xử lý tự giới hạn — trước SENDING có tới ~5 request (làm mới
+# khoá, metadata, tìm tab, 1–2 lần đọc tiêu đề), mỗi request tối đa ``CongGspread.THOI_GIAN_CHO`` = 10 + 60 s
+# (≈ 350 s khi mạng nghẽn). Ngưỡng CẢNH BÁO, đặt trên tổng đó để không báo nhầm lúc mạng chậm; ai đang cầm việc
+# (tiến trình này hay tiến trình khác) xét theo ``chu_so_huu`` — xem ``_cau_giu_lau``.
+HAN_GIU_VIEC_LAU_S = 420.0
 _CHUA_TRUYEN = object()
 
 
@@ -1084,14 +1086,36 @@ def nguoi_gui_nen(db_path: str) -> Optional["NguoiGuiNen"]:
 
 def anh_chup_cho_gui(db_path: str) -> dict:
     """Ảnh chụp CHỈ ĐỌC (một kết nối) những gì ``ly_do_chua_gui`` cần: cờ tạm dừng toàn bộ, hồ sơ đang tạm dừng
-    (đúng hai điều kiện lệnh claim xét — audit F-15), mốc nhận của việc ``CLAIMED``. Giao diện chụp MỘT lần mỗi
-    lần vẽ bảng thay vì mở DB cho từng dòng."""
+    (đúng hai điều kiện lệnh claim xét — audit F-15), mốc nhận + chủ (``<pid>-<8 hex>``) của việc ``CLAIMED``.
+    Giao diện chụp MỘT lần mỗi lần vẽ bảng thay vì mở DB cho từng dòng."""
     with sd.ket_noi(db_path) as con:
         h = con.execute("SELECT gia_tri FROM cai_dat_may WHERE khoa=?", (_KHOA_TAM_DUNG,)).fetchone()
         ho_so = {r["id"] for r in con.execute("SELECT id FROM dich_gui WHERE trang_thai=?", (sd.TT_TAM_DUNG,))}
-        claim = {r["id"]: float(r["claim_luc"] or 0) for r in con.execute(
-            "SELECT id, claim_luc FROM hang_doi_gui WHERE trang_thai=?", (CLAIMED,))}
-    return {"tam_dung": h is not None and h["gia_tri"] == "1", "ho_so_tam_dung": ho_so, "claim_luc": claim}
+        dang_cam = con.execute("SELECT id, claim_luc, chu_so_huu FROM hang_doi_gui WHERE trang_thai=?",
+                               (CLAIMED,)).fetchall()
+    return {"tam_dung": h is not None and h["gia_tri"] == "1", "ho_so_tam_dung": ho_so,
+            "claim_luc": {r["id"]: float(r["claim_luc"] or 0) for r in dang_cam},
+            "chu_so_huu": {r["id"]: str(r["chu_so_huu"] or "") for r in dang_cam}}
+
+
+def _cau_giu_lau(chu: str, nen) -> str:
+    """Việc CLAIMED quá ``HAN_GIU_VIEC_LAU_S``: lời khuyên theo AI đang cầm. Việc CHƯA tới bước gửi (chưa commit
+    SENDING) nên chưa ghi gì; huỷ luôn an toàn (huỷ xoá ``claim_token`` — fencing, audit B-1)."""
+    huy = "hoặc huỷ việc này (huỷ xoá quyền giữ việc, người gửi không phát được request nào)."
+    pid = chu.split("-", 1)[0]
+    if pid and pid != str(os.getpid()):
+        # ``phuc_hoi`` chỉ chạy khi GIÀNH được khoá người gửi — tiến trình kia còn giữ thì khởi động lại Tool này
+        # không trả việc về được.
+        return (f" Giữ lâu bất thường — tiến trình khác (mã tiến trình {pid}: Watch/CLI hoặc cửa sổ Tool khác) đang "
+                "cầm việc; khởi động lại Tool này không đổi gì. Việc CHƯA tới bước gửi nên chưa ghi gì: đợi tiến "
+                f"trình đó, {huy}")
+    if nen is not None and nen.dang_chay and nen.co_quyen:
+        # Một người gửi mỗi state root: tiến trình này giữ quyền thì việc CLAIMED là của luồng còn sống của nó
+        # (giành quyền đã ``phuc_hoi`` mọi CLAIMED của chủ cũ).
+        return (" Người gửi của Tool này vẫn đang chờ Google trả lời (mỗi request tối đa 70 s, mạng chậm) — việc "
+                f"CHƯA tới bước gửi nên chưa ghi gì; đợi thêm, {huy}")
+    return (" Giữ lâu bất thường — người gửi có thể đã dừng giữa chừng. Việc CHƯA tới bước gửi nên chưa ghi gì; "
+            f"khởi động lại Tool sẽ trả việc về «Chờ gửi» (không gửi trùng), {huy}")
 
 
 def ly_do_chua_gui(db_path: str, v: ViecGui, *, bay_gio: Optional[float] = None, nen=_CHUA_TRUYEN,
@@ -1114,9 +1138,9 @@ def ly_do_chua_gui(db_path: str, v: ViecGui, *, bay_gio: Optional[float] = None,
         luc = anh["claim_luc"].get(v.id, 0.0)
         cau = f"📤 Người gửi đang xử lý (nhận{luc_(luc)})." if luc else "📤 Người gửi đang xử lý."
         if luc and bay_gio - luc > HAN_GIU_VIEC_LAU_S:
-            cau += (" Giữ lâu bất thường — người gửi có thể đã dừng giữa chừng. Việc CHƯA tới bước gửi nên chưa ghi "
-                    "gì; khởi động lại Tool sẽ trả việc về «Chờ gửi» (không gửi trùng), hoặc huỷ việc này (huỷ "
-                    "xoá quyền giữ việc, người gửi không phát được request nào).")
+            if nen is _CHUA_TRUYEN:
+                nen = nguoi_gui_nen(db_path)
+            cau += _cau_giu_lau(anh.get("chu_so_huu", {}).get(v.id, ""), nen)
         return cau
     if anh["tam_dung"]:
         return "⏸ Đang tạm dừng toàn bộ việc gửi — tắt công tắc tạm dừng để gửi."

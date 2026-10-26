@@ -261,7 +261,7 @@ def test_claimed_lau_bat_thuong_bao_cach_xu_ly_khong_gui_trung(mt):
     _sua(mt, vid, trang_thai=ob.CLAIMED, claim_luc=1000.0)
     ngan = _ly_do(mt, vid, bay_gio=1010.0, nen=_nen())
     assert "đang xử lý" in ngan and "lâu bất thường" not in ngan
-    lau =_ly_do(mt, vid, bay_gio=1000.0 + ob.HAN_GIU_VIEC_LAU_S + 1, nen=_nen())
+    lau = _ly_do(mt, vid, bay_gio=1000.0 + ob.HAN_GIU_VIEC_LAU_S + 1, nen=None)   # người gửi đã dừng
     assert "lâu bất thường" in lau and "chưa ghi gì" in lau
     assert "huỷ" in lau                    # CLAIMED huỷ được từ audit B-1 (fencing claim_token)
 
@@ -370,3 +370,44 @@ def test_gianh_quyen_loi_that_cua_nguoi_gui_nen(mt, monkeypatch):
         assert "tiến trình khác" not in ly_do and "OperationalError" in ly_do
     finally:
         nen.stop(cho_s=5)
+
+
+def _claimed_lau(mt, chu):
+    vid = _xep(mt)
+    _sua(mt, vid, trang_thai=ob.CLAIMED, claim_luc=1000.0, chu_so_huu=chu, claim_token="t" * 8)
+    return vid, 1000.0 + ob.HAN_GIU_VIEC_LAU_S + 1
+
+
+def test_claimed_lau_do_tien_trinh_khac_cam_khong_khuyen_khoi_dong_lai(mt):
+    """Watch/CLI (pid KHÁC) cầm việc: khởi động lại Tool này không phục hồi được (``phuc_hoi`` chỉ chạy khi giành
+    được khoá mà tiến trình kia còn giữ) — nói rõ ai cầm, khuyên đợi/huỷ."""
+    import os
+
+    vid, luc = _claimed_lau(mt, f"{os.getpid() + 1}-abcdef12")
+    ly_do = _ly_do(mt, vid, bay_gio=luc, nen=_nen(co_quyen=False))
+    assert "tiến trình khác" in ly_do and str(os.getpid() + 1) in ly_do
+    assert "khởi động lại Tool sẽ" not in ly_do and "huỷ" in ly_do and "chưa ghi gì" in ly_do
+
+
+def test_claimed_lau_do_nguoi_gui_con_song_cua_tien_trinh_nay(mt):
+    """Người gửi nền của CHÍNH tiến trình này còn chạy + giữ quyền: luồng còn sống đang chờ Google (mỗi request tối
+    đa 10 + 60 s) — không bảo «có thể đã dừng giữa chừng / khởi động lại»."""
+    import os
+
+    vid, luc = _claimed_lau(mt, f"{os.getpid()}-abcdef12")
+    ly_do = _ly_do(mt, vid, bay_gio=luc, nen=_nen())
+    assert "đang chờ Google" in ly_do and "dừng giữa chừng" not in ly_do and "khởi động lại" not in ly_do
+
+
+def test_claimed_lau_cua_tien_trinh_nay_ma_nguoi_gui_da_dung(mt):
+    import os
+
+    vid, luc = _claimed_lau(mt, f"{os.getpid()}-abcdef12")
+    ly_do = _ly_do(mt, vid, bay_gio=luc, nen=None)
+    assert "dừng giữa chừng" in ly_do and "khởi động lại Tool" in ly_do and "huỷ" in ly_do
+
+
+def test_nguong_giu_lau_khong_thap_hon_tong_timeout_truoc_sending():
+    """Trước SENDING có tới ~5 request (token, metadata, tìm tab, 1–2 lần đọc tiêu đề), mỗi cái tối đa kết nối +
+    đọc của transport: ngưỡng cảnh báo không được thấp hơn tổng đó (dương tính giả khi mạng nghẽn)."""
+    assert ob.HAN_GIU_VIEC_LAU_S >= 5 * sum(ob.CongGspread.THOI_GIAN_CHO)
