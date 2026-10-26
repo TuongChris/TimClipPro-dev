@@ -450,7 +450,9 @@ def bang_ket_qua(results: list[ScanResult]) -> None:
             st.warning(
                 f"⚠️ {coverage.filename_fallbacks}/{coverage.selected_matches} video gốc "
                 "được phục hồi từ filename. Tiêu đề có thể đã được rút gọn; "
-                "ngày đăng/thời lượng chỉ hiện khi có bằng chứng."
+                "ngày đăng/thời lượng chỉ hiện khi có bằng chứng. Link video gốc của các "
+                "clip này lấy từ mã trong tên file, chưa đối chiếu YouTube: với file bạn tự "
+                "đặt tên hoặc tự chép vào kho, hãy mở link kiểm tra trước khi dùng hồ sơ."
             )
         if coverage.unresolved or coverage.ambiguous:
             st.error(
@@ -1296,7 +1298,10 @@ with tab0:
         if st.button("🛠️ Dựng lại danh sách đã tải", width="stretch",
                      disabled=not st.session_state.kho_dir,
                      help="Dùng khi downloaded.txt bị mất/hỏng, hoặc bạn tự chép file vào kho. "
-                          "Chỉ ghi lại file text, KHÔNG đụng vào file audio."):
+                          "Chỉ ghi lại file text, KHÔNG đụng vào file audio. File tự chép nên "
+                          "đặt tên «YYYYMMDD - Tiêu đề [mã YouTube 11 ký tự].đuôi» hoặc không "
+                          "có ngoặc vuông ở cuối — đừng kết thúc tên bằng một chữ 11 ký tự "
+                          "trong ngoặc (vd. [Compilation]): tool sẽ đọc nó như mã video."):
             try:
                 cs = ChannelSync(st.session_state.kho_dir.strip('" '))
                 job.update({"kind": "sua", "results": cs.sua_archive(),

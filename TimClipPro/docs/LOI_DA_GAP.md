@@ -673,3 +673,16 @@ REPORT_POLICY_V2 §5 chấp nhận «Sheet 34/16 cột không có cột phạm v
   (`_han_che_am_tinh`: «— QUÉT MỘT PHẦN: <mô tả>» / «— chưa xác nhận đã quét trọn video»); tên video vẫn sạch.
 → **Thêm trạng thái mới (vd. `ok` + một phần) thì rà lại các «giới hạn đã chấp nhận»** dựa trên tổ hợp cũ không xảy ra.
   Test: `tests/test_gioi_han_video_dai_sheet_doc.py`.
+
+**28. «Đã xác minh» viết mơ hồ trong chính sách: giới hạn đã chấp nhận bị audit đọc thành vi phạm (26/10/2026, PC2, audit A-6).**
+REPORT_POLICY_V2 §2 viết «link video gốc chỉ từ mã resolver đã xác minh … không bịa», trong khi resolver bước 6
+(`filename_fallback`) lấy mã theo NGỮ PHÁP tên file của bộ tải, không đối chiếu YouTube. Tên tự đặt
+`20240101 - Best of Jeffy [Compilation].mp3` (kho không metadata) cho mã `Compilation` → «Link video gốc» trên Sheets 34
+cột, CSV 16 cột, hồ sơ là `watch?v=Compilation` (link chết). Hành vi này đã được chấp nhận từ TCP-12 (D-4): bỏ link từ tên
+file sẽ xoá link hợp lệ của cả kho legacy (1631/1717 clip), luật «ký tự cuối của mã 64-bit» không có tài liệu chính thức và
+chỉ bắt ~3/4 từ. Phán quyết DOC_ONLY (P3): không đổi resolver; định nghĩa «mã resolver chấp nhận» ngay trong §2, cảnh báo
+giao diện dặn mở link kiểm tra với file tự đặt tên/tự chép, help «Dựng lại danh sách đã tải» dặn cách đặt tên.
+→ **Giới hạn đã chấp nhận phải được ghi ở NƠI người đọc chính sách đọc** (REPORT_POLICY, docstring, cảnh báo giao diện),
+  không chỉ trong ma trận hardening; chữ «đã xác minh» phải có định nghĩa vận hành.
+→ **Đừng «sửa» lặng lẽ theo hướng nào**: bỏ link từ tên file hay bỏ nhánh ambiguous đều là quyết định mới thay D-4/TCP-12.
+  Test: `tests/test_link_goc_tu_ten_file.py`.

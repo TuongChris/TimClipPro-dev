@@ -10,7 +10,7 @@ Ngày: 04/10/2026. Nhánh `feature/report-policy-v2` (gốc `7ee527a`). Bằng c
 | 1 | Tên video bị nối `[QUÉT MỘT PHẦN — …]` (`nhan_pham_vi`) ở bảng ngang 34 cột và bảng dọc 16 cột | Tên đúng như yt-dlp trả (`title`), không hậu tố. Phạm vi quét nằm ở trường riêng |
 | 2 | Link nhảy mốc ở bảng ngang lùi 3 giây (`bang_ngang.dinh_dang_doan`: `int(start) - 3`) | Mốc hiển thị và `t` của link là **cùng một giây**: `00:15:15` ↔ `t=915` |
 | 3 | Ngày đăng đã quy đổi sang `Asia/Ho_Chi_Minh` từ `timestamp` (`publication_date.py`, từ 07/08/2026) | `upload_date` **nguyên bản** của yt-dlp, không đổi múi giờ: `20260315` → `15/03/2026` |
-| 4 | Link video gốc `https://youtu.be/<ID>` | `https://www.youtube.com/watch?v=<ID>`, dựng từ mã đã được resolver xác minh |
+| 4 | Link video gốc `https://youtu.be/<ID>` | `https://www.youtube.com/watch?v=<ID>`, dựng từ mã resolver chấp nhận (định nghĩa: §2 «Link video gốc») |
 
 Không đổi: kết quả matching (clip được chọn, `start_s`/`end_s`/`matched_s`, số hash, ngưỡng,
 `_merge`, `max_matches`, search-depth, Top-N, bù tốc độ), chữ ký chính sách nhận diện
@@ -35,9 +35,18 @@ cũ, tên file/mã lưu trữ/khoá vân tay trong kho.
   vào URL người dùng → không bao giờ có hai `t`, `start`, `#t`). Không có `source_id` hợp lệ thì chỉ đọc mã từ URL YouTube thật (`youtube.com`,
   `m.youtube.com`, `youtube-nocookie.com`, `youtu.be`); host giả kiểu `youtube.com.evil.example`,
   tên file `[ID].mp4`, mã trần → không có link.
-* **Link video gốc** — `url_goc_chuan(video_id)`: chỉ từ mã 11 ký tự resolver đã xác minh;
-  resolver `ambiguous`/thiếu mã → ô trống, không bịa. Link video VI PHẠM giữ nguyên URL người
-  dùng đã quét (không tự đổi link kênh/playlist).
+* **Link video gốc** — `url_goc_chuan(video_id)`: chỉ từ mã 11 ký tự resolver CHẤP NHẬN, tức là
+  (a) mã lấy từ `clips_meta.json`/snapshot của kho, hoặc (b) hậu tố `[ID]` của tên file đúng ngữ
+  pháp bộ tải `YYYYMMDD - Tiêu đề [ID].đuôi` khi kho không có mục metadata dùng được
+  (`filename_fallback`, trạng thái `partial`). Resolver `ambiguous` (metadata nói mã khác hậu tố)
+  hoặc không có mã (`basename_fallback`) → ô trống, không bịa. Mã (b) KHÔNG được đối chiếu với
+  YouTube: link từ tên file chỉ đáng tin bằng chính tên file. File do tool tải luôn mang mã thật;
+  file người dùng tự đặt tên/tự chép vào kho theo đúng ngữ pháp đó mà kết thúc bằng một từ 11 ký
+  tự trong ngoặc (`… [Compilation].mp3`) cho link tới video KHÔNG tồn tại (`watch?v=Compilation`)
+  — giới hạn đã chấp nhận (`HARDENING_FIX_MATRIX.md` TCP-12, audit A-6; test
+  `tests/test_link_goc_tu_ten_file.py`). Sheets 34/16 cột và hồ sơ không có cột nguồn của link,
+  nên giao diện cảnh báo khi có video gốc phục hồi từ tên file; CLI/Watch không có cảnh báo đó.
+  Link video VI PHẠM giữ nguyên URL người dùng đã quét (không tự đổi link kênh/playlist).
 * **Ngày** — `NgayNguon(gia_tri, nguon, ly_do_thieu)`; hiển thị `DD/MM/YYYY` giữ đúng ngày lịch.
   Thiếu thì ô trống và `ly_do_thieu` nói vì sao — không lùi về ngày quy đổi, `release_*`,
   `timestamp` hay ngày trong tên file.

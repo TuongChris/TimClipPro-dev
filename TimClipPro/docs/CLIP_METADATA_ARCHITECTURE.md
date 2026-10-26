@@ -157,7 +157,10 @@ Resolver dựng sẵn index và thử tuần tự:
    tương ứng trong index ID.
 5. `ambiguous`: nếu canonical/ID đưa tới nhiều entry có dữ liệu khác nhau, dừng; không chọn ngẫu
    nhiên và không lấy entry đầu tiên.
-6. `filename_fallback`: chỉ khi tên khớp chặt mẫu `YYYYMMDD - Title [VIDEO_ID].ext`.
+6. `filename_fallback`: chỉ khi tên khớp chặt mẫu `YYYYMMDD - Title [VIDEO_ID].ext`. Mã lấy theo
+   NGỮ PHÁP, không đối chiếu YouTube: tên tự đặt kết thúc bằng một từ 11 ký tự trong ngoặc
+   (`20240101 - Best of Jeffy [Compilation].mp3`) cho mã `Compilation` và link chết — giới hạn đã
+   chấp nhận (`HARDENING_FIX_MATRIX.md` TCP-12, audit A-6, `tests/test_link_goc_tu_ten_file.py`).
 7. `basename_fallback`: nếu không có ID đáng tin cậy, chỉ hiển thị basename; không tạo URL giả.
 
 Snapshot không phải phép so sánh chuỗi riêng sau video ID. Nó là nguồn metadata bền vững của đúng
@@ -173,7 +176,10 @@ gốc đã di chuyển.
 - Root JSON không phải object, entry không phải object hoặc trường sai kiểu bị cô lập và ghi warning;
   trường hợp lệ khác của entry vẫn được giữ khi có thể.
 - Filename fallback phục hồi ID, URL, title đã được lưu trong tên và ngày hợp lệ. Duration không
-  được suy đoán. Warning phải nêu title có thể đã sanitize/cắt ngắn.
+  được suy đoán. Warning phải nêu title có thể đã sanitize/cắt ngắn. ID chỉ đúng khi file do bộ tải
+  đặt tên; file người dùng tự đặt tên/tự chép vào kho có thể cho ID giả (bước 6) — giao diện cảnh
+  báo khi có video gốc phục hồi từ filename. `channel.seed_meta_tu_dia` đọc cùng ngữ pháp nên bước
+  metadata sẽ ghi luôn ID giả đó vào `clips_meta.json` (cùng giới hạn đã chấp nhận).
 - Ambiguous không rơi tiếp xuống một candidate hoặc filename fallback có vẻ hợp lý. Kết quả giữ
   basename để người dùng còn biết clip nào liên quan, còn ID/URL/date/duration để trống nếu không
   thể khẳng định.

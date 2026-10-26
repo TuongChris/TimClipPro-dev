@@ -141,7 +141,10 @@ def link_nhay(source_id: Any, source_ref: Any, giay: Optional[int]) -> str:
 
 
 def url_goc_chuan(video_id: Any) -> str:
-    """Link định danh video gốc: ``https://www.youtube.com/watch?v=<ID>`` hoặc ``""``."""
+    """Link định danh video gốc: ``https://www.youtube.com/watch?v=<ID>`` hoặc ``""``.
+
+    Chỉ kiểm CÚ PHÁP mã; mã nào được dùng do ``goc_tu_metadata`` quyết (REPORT_POLICY_V2 §2).
+    """
     ma = ma_video_hop_le(video_id)
     return f"https://www.youtube.com/watch?v={ma}" if ma else ""
 
@@ -457,7 +460,10 @@ def thong_bao_ket_qua_loi(loi: Iterable) -> str:
 def goc_tu_metadata(clip: str, meta: Any, ngay_bo_sung: Optional[NgayNguon] = None) -> GocV2:
     """Chốt thông tin video gốc từ một ``ResolvedClipMetadata`` (hoặc ``None``).
 
-    * URL chỉ dựng từ ``video_id`` resolver đã xác minh (ambiguous/thiếu → rỗng);
+    * URL chỉ dựng từ ``video_id`` resolver chấp nhận — mã metadata kho, hoặc hậu tố ``[ID]``
+      của tên file đúng ngữ pháp bộ tải (``filename_fallback``/``partial``, KHÔNG đối chiếu
+      YouTube: ``… [Compilation].mp3`` cho link chết — giới hạn đã chấp nhận TCP-12, audit A-6);
+      ambiguous/thiếu → rỗng (REPORT_POLICY_V2 §2);
     * ngày: ngày nguyên bản trong kho (``ngay_raw``, có nguồn rõ ràng) → ngày bổ sung từ
       yt-dlp → thiếu kèm lý do. Ngày kho đã quy đổi chỉ được giữ ở trường chẩn đoán.
     """
