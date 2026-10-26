@@ -2168,7 +2168,9 @@ class Engine:
             stat.st_size,
         )
 
-    def _metadata_source_candidates(self, clips: list[dict]) -> list[tuple[str, str, int]]:
+    def _metadata_source_candidates(
+        self, clips: list[dict], thu_muc_kho: Optional[str] = None,
+    ) -> list[tuple[str, str, int]]:
         """Nguồn chỉ thuộc kho active, theo thứ tự xác định; không dùng set last-wins.
 
         Số ưu tiên NHỎ thắng. ``clips_meta.json`` của thư mục kho là NGUỒN CHUẨN: đồng
@@ -2177,6 +2179,7 @@ class Engine:
         được (ổ mạng/USB). Trước đây snapshot đứng trước nên một lần sửa đã ghi thành
         công không bao giờ tới báo cáo — kể cả khi làm mới snapshot, vì lượt làm mới
         cũng đọc qua resolver ưu tiên snapshot cũ (audit TCP-09). Không dựa vào mtime.
+        ``thu_muc_kho``: thư mục nguồn thay cho ``self.kho_thu_muc`` (xem ``clip_metadata_resolver``).
         """
         candidates: list[tuple[str, str, int]] = []
         seen: set[str] = set()
@@ -2188,8 +2191,9 @@ class Engine:
                 seen.add(key)
                 candidates.append((absolute, kind, priority))
 
-        if self.kho_thu_muc:
-            add(os.path.join(self.kho_thu_muc, "clips_meta.json"), "live", 0)
+        thu_muc = self.kho_thu_muc if thu_muc_kho is None else thu_muc_kho
+        if thu_muc:
+            add(os.path.join(thu_muc, "clips_meta.json"), "live", 0)
         if self.kho_dang_dung:
             add(self._metadata_snapshot_path(), "snapshot", 10)
 
@@ -2230,13 +2234,21 @@ class Engine:
             source_signatures,
         )
 
-    def clip_metadata_resolver(self, bo_cache: bool = False) -> ClipMetadataResolver:
-        """Dựng/cached index exact, canonical và YouTube-ID của đúng kho active."""
+    def clip_metadata_resolver(self, bo_cache: bool = False,
+                               thu_muc_kho: Optional[str] = None) -> ClipMetadataResolver:
+        """Dựng/cached index exact, canonical và YouTube-ID của đúng kho active.
+
+        ``thu_muc_kho`` khác thư mục nguồn Engine đang giữ (chỉ snapshot sau «Tạo lại kho» sang thư mục mới khi ghi
+        sổ kho lỗi — audit WR-3): resolver dùng một lần, không đọc/ghi cache lẫn cảnh báo metadata của Engine."""
         clips = self.db_clips()
-        candidates = self._metadata_source_candidates(clips)
+        rieng = thu_muc_kho is not None and (
+            not self.kho_thu_muc
+            or self._khoa_duong_dan(thu_muc_kho) != self._khoa_duong_dan(self.kho_thu_muc))
+        candidates = self._metadata_source_candidates(clips, thu_muc_kho if rieng else None)
         cache_key = self._metadata_cache_signature(candidates)
         if (
             not bo_cache
+            and not rieng
             and self._metadata_cache_key == cache_key
             and self._metadata_resolver_cache is not None
         ):
@@ -2265,6 +2277,8 @@ class Engine:
                     sources.append(backup)
 
         resolver = ClipMetadataResolver(sources, windows_semantics=os.name == "nt")
+        if rieng:
+            return resolver
         audit = resolver.audit(
             clips,
             warehouse=self.kho_dang_dung,
@@ -2375,14 +2389,15 @@ class Engine:
         *,
         dry_run: bool,
         preserve_existing: bool = True,
+        thu_muc_kho: Optional[str] = None,
     ) -> MetadataRepairResult:
         clips = self.db_clips(bo_cache=True)
-        resolver = self.clip_metadata_resolver(bo_cache=True)
+        resolver = self.clip_metadata_resolver(bo_cache=True, thu_muc_kho=thu_muc_kho)
         audit = resolver.audit(
             clips,
             warehouse=self.kho_dang_dung,
             database_file=self.db_file,
-            warehouse_folder=self.kho_thu_muc,
+            warehouse_folder=self.kho_thu_muc if thu_muc_kho is None else thu_muc_kho,
             sample_limit=20,
         )
         snapshot_path = self._metadata_snapshot_path()
@@ -2515,12 +2530,16 @@ class Engine:
         with self.khoa_tac_vu("khôi phục metadata offline"):
             return self._khoi_phuc_metadata_offline_da_khoa(dry_run=False)
 
-    def _cap_nhat_snapshot_sau_build(self, mode: str) -> list[str]:
-        """Snapshot là hậu xử lý best-effort sau khi DB fingerprint đã an toàn."""
+    def _cap_nhat_snapshot_sau_build(self, mode: str, thu_muc_kho: Optional[str] = None) -> list[str]:
+        """Snapshot là hậu xử lý best-effort sau khi DB fingerprint đã an toàn.
+
+        ``thu_muc_kho`` = thư mục nguồn của vân tay VỪA công bố: snapshot phải mô tả đúng file kho đó, kể cả khi ghi
+        sổ kho lỗi khiến Engine còn giữ thư mục cũ (audit WR-3)."""
         try:
             result = self._khoi_phuc_metadata_offline_da_khoa(
                 dry_run=False,
                 preserve_existing=mode != "new",
+                thu_muc_kho=thu_muc_kho,
             )
         except Exception as exc:  # noqa: BLE001 - DB đã commit, chỉ hạ snapshot thành warning
             LOGGER_METADATA.exception(
@@ -3165,7 +3184,8 @@ class Engine:
             if moi is not None and self._khoa_duong_dan(moi) != self._khoa_duong_dan(self.kho_thu_muc or moi):
                 canh_bao += (
                     f". Sổ kho vẫn ghi thư mục nguồn cũ «{self.kho_thu_muc}» trong khi vân tay nay là của "
-                    f"«{moi}» — chạy lại «Tạo lại kho từ đầu» trước khi «Bổ sung».")
+                    f"«{moi}» — chạy lại «Tạo lại kho từ đầu» trước khi «Bổ sung» (tới lúc đó báo cáo vẫn lấy tên/link "
+                    "video gốc ở thư mục cũ).")
             return [canh_bao]
         if moi is not None:
             self._dat_thu_muc_kho_trong_bo_nho(moi)
@@ -3580,7 +3600,7 @@ class Engine:
             thu_muc=thumuc if mode == "new" else None,
         ))
 
-        canh_bao.extend(self._cap_nhat_snapshot_sau_build(mode))
+        canh_bao.extend(self._cap_nhat_snapshot_sau_build(mode, thumuc.strip('" ') if mode == "new" else None))
         tracker.completed()
         state = tracker.state
         return {

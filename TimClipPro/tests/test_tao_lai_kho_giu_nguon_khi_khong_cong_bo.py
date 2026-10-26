@@ -191,3 +191,40 @@ def test_tao_lai_tu_dau_cong_bo_thanh_cong_thi_so_dang_ky_doi_sang_nguon_moi(tmp
     with pytest.raises(RuntimeError, match="Không bổ sung"):
         e.build_database(str(a), mode="add")
     assert Path(e.db_file).read_bytes() == sau
+
+
+def test_tao_lai_sang_nguon_moi_ghi_so_loi_snapshot_metadata_van_theo_nguon_moi(tmp_path, monkeypatch):
+    """Audit WR-3: công bố vân tay của B xong mà ghi sổ kho lỗi (khoá JSON, đĩa) → sổ + Engine còn trỏ A. Snapshot
+    metadata (dựng lại từ đầu sau «Tạo lại kho») phải mô tả kho VỪA công bố — tên/link video gốc của B — chứ không lấy
+    ``clips_meta.json`` của thư mục cũ A gắn cho vân tay của B.
+
+    Tình huống thật: B là bản chép mới của cùng kênh (cùng tên file), đồng bộ kênh đã cập nhật tiêu đề trong B."""
+    ten = "20260101 - Clip mau [abcdefghijk].opus"
+    a = _thu_muc(tmp_path, "nguon_A", [ten])
+    b = _thu_muc(tmp_path, "nguon_B", [ten])
+    for thu_muc, tieu_de in ((a, "Tiêu đề cũ ở A"), (b, "Tiêu đề mới ở B")):
+        (thu_muc / "clips_meta.json").write_text(json.dumps({ten: {
+            "id": "abcdefghijk", "title": tieu_de, "url": "https://youtu.be/abcdefghijk",
+            "upload_date": "20260101", "duration": 60.0}}, ensure_ascii=False), encoding="utf-8")
+    e = _eng(tmp_path)
+    del e._cap_nhat_snapshot_sau_build  # dùng bước snapshot THẬT
+    e.audfprint = str(Path(engine.__file__).resolve().parent / "audfprint-master" / "audfprint.py")  # để db_clips đọc kho
+    e.add_kho("SML", str(a))
+    e._run_stream = runner_gia({ten: 9})
+    assert e.build_database(str(a), mode="new")["da_ghi_kho"] is True
+    snapshot = Path(e._metadata_snapshot_path())
+    assert json.loads(snapshot.read_text(encoding="utf-8"))["clips"][ten]["title"] == "Tiêu đề cũ ở A"
+
+    def so_loi(ham_sua):
+        raise OSError("khos.json đang bị khoá (giả lập)")
+
+    monkeypatch.setattr(e, "_sua_khos", so_loi)
+    r = e.build_database(str(b), mode="new")
+
+    assert r["da_ghi_kho"] is True
+    assert any("chưa cập nhật được sổ đăng ký kho" in c for c in r["canh_bao"]), r["canh_bao"]
+    assert _cung(_thu_muc_so_dang_ky(e), a)  # sổ không ghi được: vẫn A (đúng tình huống WR-3)
+    assert [os.path.dirname(c["duong_dan"]) for c in e.db_clips(bo_cache=True)] == [str(b)]
+    muc = json.loads(snapshot.read_text(encoding="utf-8"))["clips"][ten]
+    assert muc["title"] == "Tiêu đề mới ở B", (
+        f"snapshot của kho chứa vân tay B lấy metadata từ thư mục cũ A: {muc['title']!r}")
