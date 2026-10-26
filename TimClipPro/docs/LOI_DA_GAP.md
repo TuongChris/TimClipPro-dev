@@ -651,3 +651,13 @@ tin đã xoá.
 → **Tên file suy từ tên hiển thị không được thừa hưởng file có sẵn**: đã tồn tại (hoặc có mục khác trỏ tới) thì nhận tên
   mới có hậu tố uuid; không xoá/ghi đè file mồ côi của người dùng.
   Test: `tests/test_xoa_kho_that_bai.py`.
+
+**27. Giới hạn đã chấp nhận bị tính năng sau biến thành kết luận sai: Sheet dọc 16 cột ghi «không thấy» cho video dài chỉ quét 3 giờ đầu (26/10/2026, PC2, audit A-4).**
+REPORT_POLICY_V2 §5 chấp nhận «Sheet 34/16 cột không có cột phạm vi» khi mọi lượt quét một phần mà 0 khớp đều thành
+`error` — dòng «(không tìm thấy clip nào)» khi đó luôn nghĩa là đã quét trọn. «Giới hạn quét video dài» (13/10) là đường
+đầu tiên giữ `ok` + 0 khớp + chỉ quét phần đầu; lời dặn «KHÔNG phải kết luận cho toàn video» chỉ nằm ở `note`, còn
+`bao_cao_v2.dong_doc` dựng ô âm tính không đọc `pham_vi` → outbox gửi lên Sheet một âm tính TRỌN video 65 giờ.
+→ **Âm tính chỉ «trơn» khi `quet_day_du`**: dòng «không thấy» của mọi exporter không có cột phạm vi phải tự mang phạm vi
+  (`_han_che_am_tinh`: «— QUÉT MỘT PHẦN: <mô tả>» / «— chưa xác nhận đã quét trọn video»); tên video vẫn sạch.
+→ **Thêm trạng thái mới (vd. `ok` + một phần) thì rà lại các «giới hạn đã chấp nhận»** dựa trên tổ hợp cũ không xảy ra.
+  Test: `tests/test_gioi_han_video_dai_sheet_doc.py`.

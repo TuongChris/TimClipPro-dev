@@ -130,7 +130,10 @@ CSV V2 (`Engine.export_csv*`, nút «⬇️ Tải phạm vi quét (CSV)»), mụ
 Markdown, cột «Phạm vi đã quét» của CSV nguồn chung.
 
 **Giới hạn:** bảng Google Sheets 34/16 cột không có cột phạm vi (hợp đồng Apps Script giữ nguyên)
-nên hàng V2 trên Sheet độc lập KHÔNG còn cho biết video chỉ quét một phần. Chưa ghi ghi chú ô
+nên hàng V2 trên Sheet độc lập KHÔNG còn cho biết video chỉ quét một phần. Ngoại lệ (audit A-4):
+dòng «không thấy» của bảng dọc 16 cột / CSV khi CHƯA quét trọn mang phạm vi ngay trong ô kết quả
+(«(không tìm thấy clip nào — QUÉT MỘT PHẦN: …)», `bao_cao_v2._han_che_am_tinh`) — vì «Giới hạn quét
+video dài» cho ra `ok` + 0 khớp + chỉ phần đầu, âm tính trơn sẽ đọc thành kết luận cho cả video. Chưa ghi ghi chú ô
 (note) — muốn làm thì phải định vị đúng hàng vừa ghi từ phản hồi API, việc của vòng sau.
 
 ## 6. Google Sheets

@@ -320,8 +320,14 @@ def test_dong_doc_loi_va_khong_ket_qua_khong_doi_ten():
     loi = _bc(_kq_ca_that(status="error", note="Bị chặn", matches=[]))
     assert v2.dong_doc(loi)[0][1] == loi.tieu_de
     assert v2.dong_doc(loi)[0][3] == "(LỖI: Bị chặn)"
-    rong = _bc(_kq_ca_that(matches=[], matches_loai=[object()]))
+    # Âm tính chỉ «trơn» khi đã quét TRỌN video (audit A-4); quét một phần → mang phạm vi.
+    rong = _bc(_kq_ca_that(matches=[], matches_loai=[object()], vung_da_khop=[(0.0, 14523.4)],
+                           ly_do_pham_vi="", pham_vi_quet_s=14523.4))
     assert v2.dong_doc(rong)[0][3] == "(không có kết quả nào đạt ngưỡng)"
+    assert v2.dong_doc(rong)[0][1] == rong.tieu_de
+    mot_phan = _bc(_kq_ca_that(matches=[], matches_loai=[object()]))
+    assert v2.dong_doc(mot_phan)[0][3].startswith("(không có kết quả nào đạt ngưỡng — QUÉT MỘT PHẦN")
+    assert v2.dong_doc(mot_phan)[0][1] == mot_phan.tieu_de
     # Bảng ngang của lượt lỗi: tên KHÔNG thành "(LỖI: …)"
     assert v2.dong_ngang(loi)[5] == loi.tieu_de
 

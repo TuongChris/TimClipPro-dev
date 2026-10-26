@@ -613,6 +613,21 @@ def dong_ngang(bc: BaoCaoV2) -> list:
     return dong
 
 
+def _han_che_am_tinh(pv: PhamViV2) -> str:
+    """Hậu tố phạm vi cho dòng «không thấy» của bảng dọc khi CHƯA quét trọn video; rỗng nếu trọn.
+
+    Bảng 16 cột không có cột phạm vi và tên video phải sạch (mục 5 REPORT_POLICY_V2), nhưng
+    «không thấy» ở phần đã quét KHÔNG BAO GIỜ được đọc thành kết luận cho cả video (vd. giới hạn
+    video dài: ``ok`` + 0 khớp + chỉ 3 giờ đầu). Dòng có đoạn khớp thì không cần — đó là bằng chứng.
+    """
+    if pv.quet_day_du:
+        return ""
+    if pv.quet_mot_phan:
+        mo_ta = pv.mo_ta or _LY_DO_PHAM_VI.get(pv.ly_do, pv.ly_do) or "phần sau chưa quét"
+        return f" — QUÉT MỘT PHẦN: {mo_ta}"
+    return " — chưa xác nhận đã quét trọn video"
+
+
 def dong_doc(bc: BaoCaoV2) -> list:
     """Các dòng 16 cột theo ``Engine.HEADER`` (một dòng mỗi đoạn)."""
     chan_neu_loi(bc)
@@ -620,9 +635,9 @@ def dong_doc(bc: BaoCaoV2) -> list:
     if bc.trang_thai != "ok":
         return [dau + [f"(LỖI: {bc.ghi_chu})"] + [""] * 12]
     if not bc.doan:
-        nhan = ("(không có kết quả nào đạt ngưỡng)" if bc.co_ket_qua_loai
-                else "(không tìm thấy clip nào)")
-        return [dau + [nhan] + [""] * 12]
+        nhan = ("không có kết quả nào đạt ngưỡng" if bc.co_ket_qua_loai
+                else "không tìm thấy clip nào")
+        return [dau + [f"({nhan}{_han_che_am_tinh(bc.pham_vi)})"] + [""] * 12]
     rows = []
     for d in bc.doan:
         g = d.goc
