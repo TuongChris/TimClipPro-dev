@@ -112,3 +112,41 @@ def test_delivery_key_la_khoa_khong_ton_tai_thi_khong_no():
     khung = build_scan_status_dataframe(videos, SHEETS)
 
     assert list(khung["Sheets"]) == [CHUA_CO]
+
+
+# ---- audit F-11: video CHƯA quét (lỗi/cầu dao) không được hiện «Đoạn 0» -----------------
+
+URL_1 = "https://www.youtube.com/watch?v=vidthu00000"
+URL_2 = "https://www.youtube.com/watch?v=vidthu00001"
+URL_3 = "https://www.youtube.com/watch?v=vidthu00002"
+
+
+def test_video_loi_hoac_cau_dao_khong_hien_doan_0_trong_bang_trang_thai():
+    """Đi đúng đường thật: ``_hoan_tat_video`` (gọi cho mỗi kết quả của ``scan_iter``) rồi
+    ``build_scan_status_dataframe``. Video bị cầu dao bỏ qua (``Engine._ket_qua_bo_qua``, không
+    gửi request nào) là CHƯA quét → «—», không phải «0» như một kết quả âm tính; video quét xong
+    không có đoạn nào vẫn «0»; video lỗi giữa chừng mà đã có đoạn thì giữ đúng số đoạn."""
+    import engine as engine_mod
+    import scan_jobs
+    import truy_cap_youtube
+
+    ctl = scan_jobs.ScanJobController(engine=object())
+    ctl._videos = [VideoState(index=i, nguon=u) for i, u in enumerate((URL_1, URL_2, URL_3), 1)]
+
+    ctl._hoan_tat_video(1, engine_mod.ScanResult(source_name="Video mot", source_ref=URL_1,
+                                                 source_id="vidthu00000", status="ok"))
+    f = truy_cap_youtube.PhienYouTube().bo_qua(truy_cap_youtube.ma_tu_url(URL_2), "scan")
+    assert f.category == truy_cap_youtube.BLOCKED_BY_BREAKER
+    ctl._hoan_tat_video(2, engine_mod.ScanResult(source_name=URL_2, source_ref=URL_2,
+                                                 status="error", note=f.human_message_vi,
+                                                 loi_truy_cap=f))
+    ctl._hoan_tat_video(3, engine_mod.ScanResult(source_name="Video ba", source_ref=URL_3,
+                                                 status="error", note="lỗi giữa chừng",
+                                                 matches=[object(), object()], so_dat_nguong=1))
+
+    videos = ctl.snapshot().videos
+    khung = build_scan_status_dataframe(videos)
+    assert list(khung["Quét"]) == ["✅ Xong", "❌ Lỗi", "❌ Lỗi"]
+    assert list(khung["Đoạn"]) == ["0", CHUA_CO, "2"]
+    assert videos[1].so_dat_nguong is None
+    assert (videos[0].so_dat_nguong, videos[2].so_dat_nguong) == (0, 1)

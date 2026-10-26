@@ -381,6 +381,10 @@ class ScanJobController:
     def _hoan_tat_video(self, index: int, ket_qua) -> None:
         loi = getattr(ket_qua, "status", "ok") != "ok"
         so_match = len(getattr(ket_qua, "matches", []) or [])
+        # Lỗi mà không có đoạn nào = CHƯA quét được (cầu dao, tải hỏng…): giữ None để bảng
+        # hiện «—», không phải «0» như một video quét xong âm tính (audit F-11). Lỗi giữa
+        # chừng mà đã có đoạn thì vẫn báo đúng số đoạn.
+        chua_quet = loi and so_match == 0
         self._sua_video(
             index,
             scan_status=QUET_LOI if loi else QUET_XONG,
@@ -388,8 +392,8 @@ class ScanJobController:
             progress=1.0,
             video_id=str(getattr(ket_qua, "source_id", "") or ""),
             title=str(getattr(ket_qua, "source_name", "") or ""),
-            matches=so_match,
-            so_dat_nguong=int(getattr(ket_qua, "so_dat_nguong", 0) or 0),
+            matches=None if chua_quet else so_match,
+            so_dat_nguong=None if chua_quet else int(getattr(ket_qua, "so_dat_nguong", 0) or 0),
             error=str(getattr(ket_qua, "note", "") or "") if loi else "",
             finished_at=time.time(),
             message="Lỗi" if loi else f"Hoàn tất — {so_match} đoạn",
