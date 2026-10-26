@@ -39,9 +39,9 @@ _TRANG_THAI = {400: "INVALID_ARGUMENT", 403: "PERMISSION_DENIED", 404: "NOT_FOUN
 class LoiHttp(Exception):
     """Máy chủ trả lỗi HTTP (``ma``) — thành ``requests.Response`` lỗi, gspread tự ném ``APIError``."""
 
-    def __init__(self, ma: int, thong_diep: str):
+    def __init__(self, ma: int, thong_diep: str, ly_do_google: str = ""):
         super().__init__(thong_diep)
-        self.ma, self.thong_diep = ma, thong_diep
+        self.ma, self.thong_diep, self.ly_do_google = ma, thong_diep, ly_do_google
 
 
 def phan_hoi(ma: int, du_lieu: dict, url: str = GOC) -> requests.Response:
@@ -55,9 +55,14 @@ def phan_hoi(ma: int, du_lieu: dict, url: str = GOC) -> requests.Response:
     return r
 
 
-def phan_hoi_loi(ma: int, thong_diep: str, url: str = GOC) -> requests.Response:
-    return phan_hoi(ma, {"error": {"code": ma, "message": thong_diep,
-                                   "status": _TRANG_THAI.get(ma, "UNKNOWN")}}, url)
+def phan_hoi_loi(ma: int, thong_diep: str, url: str = GOC, ly_do_google: str = "") -> requests.Response:
+    """Thân lỗi đúng dạng Google API: ``error.code/message/status`` + (tuỳ chọn) ``details[ErrorInfo].reason`` —
+    ví dụ ``SERVICE_DISABLED`` khi Google Sheets API chưa bật trong project của tài khoản dịch vụ."""
+    loi = {"code": ma, "message": thong_diep, "status": _TRANG_THAI.get(ma, "UNKNOWN")}
+    if ly_do_google:
+        loi["details"] = [{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": ly_do_google,
+                           "domain": "googleapis.com"}]
+    return phan_hoi(ma, {"error": loi}, url)
 
 
 def _o_raw(v):
@@ -263,7 +268,7 @@ class MayChuSheetsGia:
                 raise self.loi_mo
             du_lieu = self._xu_ly(yc)
         except LoiHttp as e:
-            return phan_hoi_loi(e.ma, e.thong_diep, url)
+            return phan_hoi_loi(e.ma, e.thong_diep, url, e.ly_do_google)
         if self.moc is not None:
             self.moc("xong", yc)
         return phan_hoi(200, du_lieu, url)
