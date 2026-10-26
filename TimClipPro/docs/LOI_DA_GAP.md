@@ -686,3 +686,14 @@ giao diện dặn mở link kiểm tra với file tự đặt tên/tự chép, h
   không chỉ trong ma trận hardening; chữ «đã xác minh» phải có định nghĩa vận hành.
 → **Đừng «sửa» lặng lẽ theo hướng nào**: bỏ link từ tên file hay bỏ nhánh ambiguous đều là quyết định mới thay D-4/TCP-12.
   Test: `tests/test_link_goc_tu_ten_file.py`.
+**29. Phiên NHẬN LẠI lô của phiên khác quét mãi trên Engine của phiên cũ (26/10/2026, audit F-1).** Tải lại trang
+(F5) hay mở tab thứ hai giữa lúc quét = phiên Streamlit MỚI, Engine MỚI; sổ `_DANG_CHAY` trao cho nó controller của
+phiên cũ để xem tiến độ/bấm Dừng — đúng. Nhưng controller giữ `self.engine` của phiên cũ và app.py không bao giờ gắn
+lại: lô xong, chủ kênh đổi «Kho đang dùng» / ngưỡng / cookie ở thanh bên (chỉ đổi Engine của phiên mới) rồi bấm «Bắt
+đầu quét» → lô chạy trên kho, ngưỡng, cookie CŨ trong khi thanh bên hiện cái mới: kết quả, CSV, hồ sơ, dòng Sheets ghi
+nhầm «video gốc» hoặc 0 khớp (bỏ sót vi phạm). Đã sửa: `ScanJobController.cua_phien` gọi mỗi lần vẽ lại — controller
+mượn chỉ giữ khi lô còn chạy hoặc màn hình còn hiện lô đó; xong → controller của chính phiên. Phiên nhận lại không biết
+tab đã bắt đầu lượt nên banner «lựa chọn … dùng cho lượt tiếp theo» không báo. Test:
+`tests/test_quet_phien_nhan_lai_dung_engine_cua_phien.py`.
+→ **Đối tượng dùng chung giữa các phiên (sổ mức tiến trình) không được mang trạng thái của MỘT phiên sang việc MỚI.**
+  Nhận lại để XEM là đúng; việc mới phải lấy Engine/cấu hình của phiên bấm nút.

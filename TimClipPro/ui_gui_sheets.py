@@ -126,7 +126,10 @@ def mo_ta_lo(eng, dich_nhan: str, lo_id: str) -> str:
 
 def banner_lo_dang_chay(eng, dich_id: str, dich_nhan: str, tab_key: str) -> None:
     """Lượt đang chạy gửi A; lựa chọn B (hồ sơ KHÁC, ở tab đã bắt đầu lượt) chỉ dùng cho lượt tiếp theo.
-    So theo MÃ hồ sơ — hồ sơ đổi tên giữa lô không phải "lựa chọn khác"."""
+    So theo MÃ hồ sơ — hồ sơ đổi tên giữa lô không phải "lựa chọn khác". Không biết tab đã bắt đầu lượt
+    (phiên NHẬN LẠI lô của phiên khác) → không có lựa chọn nào để so, không báo (audit F-1)."""
+    if not tab_key:
+        return
     chon = st.session_state.get(f"{tab_key}_dich_chon", CHI_LUU)
     if chon == (dich_id or CHI_LUU):
         return

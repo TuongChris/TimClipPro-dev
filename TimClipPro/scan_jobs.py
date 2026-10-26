@@ -158,6 +158,18 @@ class ScanJobController:
             ctl = _DANG_CHAY.get(_khoa_lo(engine))
         return ctl if ctl is not None and ctl.running else None
 
+    @staticmethod
+    def cua_phien(engine, hien_tai: Optional["ScanJobController"] = None,
+                  dang_hien_lo: bool = False) -> "ScanJobController":
+        """Controller của phiên trình duyệt sở hữu ``engine`` — gọi MỖI lần vẽ lại (``hien_tai`` = controller
+        phiên đang giữ). Phiên mới: lô của phiên khác (cùng thư mục dữ liệu) còn chạy → NHẬN LẠI nó (tiến độ,
+        Dừng). Controller nhận lại GIỮ Engine của phiên cũ (kho, ngưỡng, cookie đã ghim) nên chỉ mượn khi lô
+        còn chạy hoặc phiên còn đang hiện lô đó (``dang_hien_lo``: chưa chép kết quả); xong rồi → controller
+        MỚI gắn Engine của chính phiên, lô sau dùng đúng kho/cấu hình thanh bên đang hiện (audit F-1)."""
+        if hien_tai is not None and (hien_tai.engine is engine or hien_tai.running or dang_hien_lo):
+            return hien_tai
+        return ScanJobController.dang_chay_cua(engine) or ScanJobController(engine)
+
     def __init__(self, engine, recent_maxlen: int = 60):
         self.engine = engine
         self.so_tien_do = tdq.SoTienDo()

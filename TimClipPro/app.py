@@ -114,11 +114,11 @@ def _dong_bo_job_van_tay() -> None:
 _dong_bo_job_van_tay()
 
 
-if "scan_controller" not in st.session_state:
-    # Tải lại trang = phiên MỚI: lô của phiên trước còn chạy thì NHẬN LẠI nó (xem tiến độ, bấm Dừng),
-    # không tạo controller trống cho phép bấm «Bắt đầu quét» lần nữa.
-    st.session_state.scan_controller = (ScanJobController.dang_chay_cua(eng)
-                                        or ScanJobController(eng))
+# Tải lại trang = phiên MỚI: lô của phiên trước còn chạy thì NHẬN LẠI nó (xem tiến độ, bấm Dừng),
+# không tạo controller trống cho phép bấm «Bắt đầu quét» lần nữa. Lô mượn xong + đã chép kết quả →
+# controller của CHÍNH phiên này (Engine của phiên), không quét mãi trên Engine phiên cũ (audit F-1).
+st.session_state.scan_controller = ScanJobController.cua_phien(
+    eng, st.session_state.get("scan_controller"), dang_hien_lo=bool(job.get("running")))
 scan_controller: ScanJobController = st.session_state.scan_controller
 if scan_controller.running and not job.get("running"):
     job.update({"running": True, "pct": 0.0, "msg": "", "results": [], "error": "",
