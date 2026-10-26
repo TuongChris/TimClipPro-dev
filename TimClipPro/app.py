@@ -93,11 +93,24 @@ if "job" not in st.session_state:
 
 eng: Engine = st.session_state.eng
 job = st.session_state.job
-if "fingerprint_controller" not in st.session_state:
-    st.session_state.fingerprint_controller = FingerprintJobController(eng)
-fingerprint_controller: FingerprintJobController = (
-    st.session_state.fingerprint_controller
-)
+# Dựng kho vân tay / lô «Một video gốc chung» chạy hàng giờ. Tải lại trang, tab thứ hai = phiên MỚI: phiên rảnh NHẬN
+# LẠI việc đang chạy trên cùng thư mục dữ liệu (tiến độ, nút Dừng tới đúng worker, «đang bận», kết quả cuối) qua sổ
+# mức tiến trình như tác vụ nền (``tac_vu_nen.SoViecDai``, audit D-13/F-2); phiên mới chưa làm gì còn nhận việc đã xong
+# mà chưa ai xem. Việc mượn giữ Engine của phiên đã bấm: xong + chép kết quả → controller của chính phiên.
+fingerprint_controller: FingerprintJobController = FingerprintJobController.cua_phien(
+    eng, st.session_state.get("fingerprint_controller"), dang_hien=bool(job.get("running")),
+    phien_moi=not job.get("kind"))
+st.session_state.fingerprint_controller = fingerprint_controller
+if fingerprint_controller.engine is not eng and not job.get("running"):
+    job.update({"running": True, "pct": 0.0, "msg": "", "results": [], "error": "", "kind": "db",
+                "da_day_sheet": False, "fingerprint_job_id": fingerprint_controller.snapshot().job_id})
+common_controller: CommonOriginalJobController = CommonOriginalJobController.cua_phien(
+    eng, st.session_state.get("common_controller"), dang_hien=bool(job.get("running")),
+    phien_moi=not job.get("kind"))
+st.session_state.common_controller = common_controller
+if common_controller.engine is not eng and not job.get("running"):
+    job.update({"running": True, "pct": 0.0, "msg": "", "results": [], "error": "", "kind": "nguon_chung",
+                "da_day_sheet": True, "ma_lo": common_controller.snapshot().ma_lo})
 
 
 def _dong_bo_job_van_tay() -> None:
@@ -109,6 +122,7 @@ def _dong_bo_job_van_tay() -> None:
         job["running"] = False
         job["results"] = fingerprint_controller.result or []
         job["error"] = fingerprint_controller.error
+        FingerprintJobController.da_nhan(eng, fingerprint_controller)   # phiên mở sau không hiện lại
 
 
 _dong_bo_job_van_tay()
@@ -156,9 +170,6 @@ ui_cap_nhat.canh_bao_ban_cu()
 # Gửi Google Sheets: hàng đợi BỀN trong lichsu.db + MỘT người gửi nền mỗi tiến trình (không đọc
 # st.session_state). Còn việc chờ từ lần chạy trước (tắt app, mất điện) thì gửi tiếp ngay.
 ui_gui.dam_bao_nguoi_gui(eng)
-if "common_controller" not in st.session_state:
-    st.session_state.common_controller = CommonOriginalJobController(eng)
-common_controller: CommonOriginalJobController = st.session_state.common_controller
 
 
 def dang_co_tac_vu() -> bool:
@@ -224,7 +235,11 @@ def chay_nguon_chung(nguon: list) -> None:
     if dang_co_tac_vu():
         st.warning("Đang có tác vụ chạy; không tạo job trùng.")
         return
-    ma_lo = common_controller.start(nguon, "youtube")
+    try:
+        ma_lo = common_controller.start(nguon, "youtube")
+    except RuntimeError as e:                  # lô khác (phiên khác) vừa bắt đầu: không tạo lô trùng
+        st.warning(str(e))
+        return
     job.update({
         "running": True, "pct": 0.0, "msg": "Đang chuẩn bị...", "results": [],
         "error": "", "kind": "nguon_chung", "da_day_sheet": True, "ma_lo": ma_lo,
@@ -275,7 +290,11 @@ def chay_van_tay(thumuc: str, mode: str) -> None:
         st.warning("Đang có tác vụ chạy; không tạo thêm job trùng.")
         return
     eng.cancel_event.clear()
-    job_id = fingerprint_controller.start(thumuc, mode)
+    try:
+        job_id = fingerprint_controller.start(thumuc, mode)
+    except RuntimeError as e:                  # phiên khác vừa bắt đầu dựng kho: không tạo job trùng
+        st.warning(str(e))
+        return
     job.update({
         "running": True,
         "pct": 0.0,
@@ -986,6 +1005,7 @@ if job["running"]:
             job["running"] = False
             job["results"] = [common_controller.result] if common_controller.result else []
             job["error"] = common_controller.error
+            CommonOriginalJobController.da_nhan(eng, common_controller)   # phiên mở sau không hiện lại
 
         st.header("🧩 Đang tìm video gốc chung cho cả lô")
         da_quet = sum(1 for v in anh.videos if v.so_luot)

@@ -697,3 +697,15 @@ tab đã bắt đầu lượt nên banner «lựa chọn … dùng cho lượt t
 `tests/test_quet_phien_nhan_lai_dung_engine_cua_phien.py`.
 → **Đối tượng dùng chung giữa các phiên (sổ mức tiến trình) không được mang trạng thái của MỘT phiên sang việc MỚI.**
   Nhận lại để XEM là đúng; việc mới phải lấy Engine/cấu hình của phiên bấm nút.
+
+**30. Sửa «tải lại trang mất việc» cho TỪNG loại việc một (26/10/2026, audit F-2).** Lô quét có sổ mức tiến trình
+(`scan_jobs._DANG_CHAY`), đồng bộ kênh có sau (D-13); dựng kho vân tay và lô «Một video gốc chung» thì không. Tải lại
+trang giữa build/lô nhiều giờ → phiên mới thấy giao diện RẢNH: không tiến độ, Dừng chỉ đặt cờ huỷ của Engine phiên mới
+(worker không đọc), lô vô hình giữ `tool.lock` (bấm tạo kho → lỗi khoá), `KetQuaLo` (không ghi lịch sử — D-5) và danh
+sách file lỗi của build mất theo phiên cũ. Tab mở TRƯỚC khi lô quét bắt đầu cũng không bao giờ nhận lô (controller của
+chính phiên được ưu tiên). Build công bố kho sang file mới (file cũ bị khoá) thì phiên khác quét mãi trên file CŨ.
+Đã sửa: một cơ chế chung `tac_vu_nen.SoViecDai` (đang chạy + vừa xong, `cua_phien` mỗi lần vẽ lại) cho tác vụ nền,
+dựng kho, lô nguồn chung; controller rảnh của phiên nhường cho lô quét đang chạy; Engine gốc theo file kho mà sổ đăng
+ký trỏ cho kho đang chọn (`_theo_file_kho_moi`). Test: `tests/test_tai_lai_trang_nhan_lai_tac_vu_dai.py`.
+→ **Việc dài MỚI của giao diện phải ghi sổ mức tiến trình** (`SoViecDai`) — đừng giữ trạng thái chỉ trong
+  `st.session_state`; thử bằng hai AppTest cùng thư mục dữ liệu (F5, tab mở trước, việc xong khi không ai vẽ).

@@ -21,6 +21,8 @@ from dataclasses import dataclass, replace
 from logging.handlers import RotatingFileHandler
 from typing import Callable, Optional
 
+from tac_vu_nen import SoViecDai
+
 
 PHASES = {
     "discovering",
@@ -450,8 +452,28 @@ class FingerprintProgressTracker:
             handler.flush()
 
 
+# Job dựng kho ĐANG CHẠY / vừa xong của tiến trình, theo thư mục dữ liệu. Controller nằm trong ``st.session_state`` của
+# phiên đã bấm; tải lại trang hay tab thứ hai = phiên MỚI — không có sổ này thì phiên mới thấy giao diện rảnh, không nút
+# Dừng tới được worker, kết quả (file lỗi, cảnh báo) mất theo phiên cũ (audit F-2; cùng cơ chế tác vụ nền D-13).
+_SO_DUNG_KHO = SoViecDai()
+
+
 class FingerprintJobController:
     """Một worker + queue bounded; không gọi API Streamlit từ worker thread."""
+
+    @staticmethod
+    def cua_phien(engine, hien_tai: "FingerprintJobController | None" = None, *, dang_hien: bool = False,
+                  phien_moi: bool = False) -> "FingerprintJobController":
+        """Controller của phiên sở hữu ``engine`` — gọi MỖI lần vẽ lại (``tac_vu_nen.SoViecDai.cua_phien``): phiên
+        rảnh NHẬN LẠI job dựng kho đang chạy trên cùng thư mục dữ liệu (phiên mới chưa làm gì còn nhận job vừa xong
+        chưa ai xem); controller mượn giữ Engine của phiên đã bấm (Dừng tới đúng cờ huỷ worker đọc)."""
+        return _SO_DUNG_KHO.cua_phien(engine, hien_tai, FingerprintJobController, dang_hien=dang_hien,
+                                      phien_moi=phien_moi)
+
+    @staticmethod
+    def da_nhan(engine, ctl: "FingerprintJobController") -> None:
+        """Phiên đã chép kết quả cuối của ``ctl``: phiên mở sau không nhận lại."""
+        _SO_DUNG_KHO.da_nhan(engine, ctl)
 
     def __init__(self, engine, queue_maxsize: int = 256, recent_maxlen: int = 50):
         self.engine = engine
@@ -483,6 +505,15 @@ class FingerprintJobController:
         with self._lock:
             if self._running or (self._thread and self._thread.is_alive()):
                 raise RuntimeError("Job tạo vân tay đang chạy; không thể tạo job trùng.")
+
+        def danh_dau() -> None:
+            with self._lock:
+                self._running = True
+
+        # Ghi sổ NGOÀI khoá riêng (thứ tự khoá của SoViecDai). Phiên khác đang dựng kho → từ chối, chưa đổi gì.
+        _SO_DUNG_KHO.ghi(self.engine, self, "Đang dựng kho vân tay ở một cửa sổ/phiên khác của Tool — tải lại "
+                         "trang để xem tiến độ; không tạo job trùng.", danh_dau=danh_dau)
+        with self._lock:
             job_id = uuid.uuid4().hex
             self._state = progress_ban_dau(job_id)
             self._result = None
@@ -530,6 +561,7 @@ class FingerprintJobController:
                 finally:
                     with self._lock:
                         self._running = False
+                    _SO_DUNG_KHO.xong(self.engine, self)   # tới khi một phiên chép kết quả
 
             self._thread = threading.Thread(
                 target=target,

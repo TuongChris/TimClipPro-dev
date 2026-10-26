@@ -84,7 +84,10 @@ Status của clip phân biệt `success`, `skipped_existing`, `failed`; controll
 
 ## Worker, queue và Streamlit session
 
-- Mỗi session giữ đúng một `FingerprintJobController` trong `st.session_state`.
+- Mỗi session giữ đúng một `FingerprintJobController` trong `st.session_state`. Job đang chạy/vừa xong được ghi vào
+  sổ mức tiến trình theo thư mục dữ liệu (`tac_vu_nen.SoViecDai`, audit F-2): tải lại trang / tab thứ hai = session
+  MỚI → `FingerprintJobController.cua_phien` (gọi mỗi lần vẽ lại) cho session rảnh NHẬN LẠI controller đang chạy
+  (tiến độ, Dừng tới đúng `cancel_event` worker đọc, «đang bận») hoặc kết quả vừa xong chưa ai xem (đúng một lần).
 - `start()` từ chối khi thread/job cũ còn chạy và sinh một `job_id` duy nhất.
 - Worker chỉ gọi Engine và publish dataclass; không gọi API Streamlit.
 - Queue thread-safe có tối đa 256 phần tử. Khi đầy, event cũ nhất bị bỏ để snapshot mới nhất vẫn
@@ -92,8 +95,8 @@ Status của clip phân biệt `success`, `skipped_existing`, `failed`; controll
 - UI chỉ giữ 50 event gần nhất và render 20 dòng; không giữ stdout audfprint/FFmpeg vô hạn.
 - Main Streamlit thread drain queue, dùng các placeholder cố định và rerun 0,75 giây/lần. Không
   tạo hàng nghìn component và không update theo mỗi dòng stderr.
-- Refresh/rerun không tự gọi `start()`. Session mới cũng không tự tạo job; khóa liên tiến trình
-  `data/tool.lock` vẫn chặn hai job thật dùng chung data directory.
+- Refresh/rerun không tự gọi `start()`. Session mới cũng không tự tạo job: `start()` từ chối khi sổ đã có job
+  khác đang chạy trên cùng data directory; khóa liên tiến trình `data/tool.lock` vẫn chặn hai job thật.
 
 ## Theo dõi subprocess và heartbeat
 
@@ -168,8 +171,8 @@ Skip vẫn tăng progress nhưng không làm tốc độ xử lý audio bị ph�
 - Commit vẫn ở cuối batch theo định dạng/CLI audfprint. Cancel giữ kho cũ nhưng không resume phần staged.
 - `probing` không phát trong build hiện tại vì adapter audfprint gọi FFmpeg trực tiếp, không có bước
   FFprobe riêng.
-- Controller là in-process. Khóa file ngăn hai job trên cùng data directory, nhưng chưa có registry
-  bền vững để một browser session mới tiếp quản UI của worker thuộc process Streamlit đã chết.
+- Controller và sổ nhận lại là in-process: session mới của CÙNG process Streamlit nhận lại được job, nhưng
+  chưa có registry bền vững để tiếp quản worker thuộc process Streamlit đã chết.
 - Logging có cấu trúc đầy đủ cho fingerprint flow; các flow scan/channel cũ chưa dùng cùng facade.
 
 

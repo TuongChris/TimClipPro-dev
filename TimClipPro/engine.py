@@ -1407,6 +1407,22 @@ class Engine:
         self._metadata_resolver_cache = None
         self.canh_bao_metadata = []
 
+    def _theo_file_kho_moi(self, d: Optional[dict] = None) -> None:
+        """Engine GỐC (một phiên giao diện) theo file kho mà sổ đăng ký đang trỏ cho ĐÚNG kho nó đang chọn.
+
+        Build ở phiên/tiến trình khác có thể công bố kho sang file MỚI (đường lui khi file cũ bị khoá) và sửa
+        ``khos.json``; ``_lam_moi_sau_build`` chỉ làm mới Engine đã build. Không theo thì phiên kia quét mãi với vân
+        tay CŨ và định danh kho rỗng (audit F-2). Chỉ đổi file của kho đang chọn — không đổi kho; bản ghim cho một
+        job không bao giờ đổi; sổ hỏng/không còn kho đó thì để nguyên (thanh bên tự báo)."""
+        if getattr(self, "_la_ban_ghim", False) or not self.kho_dang_dung:
+            return
+        with contextlib.suppress(Exception):
+            d = d or self._doc_khos()
+            muc = next((k for k in d["danh_sach"] if k.get("ten") == self.kho_dang_dung), None)
+            if muc is not None and os.path.normcase(self._duong_dan_db_kho(muc["db"])) != os.path.normcase(
+                    os.path.abspath(self.db_file)):
+                self._ap_dung_kho(self.kho_dang_dung, d)
+
     def list_khos(self) -> list:
         """Danh sách các kho + trạng thái (đã có vân tay chưa, bao nhiêu clip).
 
@@ -1416,6 +1432,7 @@ class Engine:
             d = self._doc_khos()
         except LoiDuLieu:
             return []
+        self._theo_file_kho_moi(d)
         ds = []
         for k in d["danh_sach"]:
             db = self._duong_dan_db_kho(k["db"])
@@ -1530,6 +1547,7 @@ class Engine:
         """Bản sao Engine ghim cho đúng một job; đã là bản ghim thì trả lại chính nó."""
         if getattr(self, "_la_ban_ghim", False):
             return self
+        self._theo_file_kho_moi()   # build ở phiên khác vừa công bố kho sang file mới (audit F-2)
         job = copy.copy(self)
         job.config = copy.deepcopy(self.config)
         job.canh_bao_gop = []

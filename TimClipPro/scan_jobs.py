@@ -165,10 +165,17 @@ class ScanJobController:
         phiên đang giữ). Phiên mới: lô của phiên khác (cùng thư mục dữ liệu) còn chạy → NHẬN LẠI nó (tiến độ,
         Dừng). Controller nhận lại GIỮ Engine của phiên cũ (kho, ngưỡng, cookie đã ghim) nên chỉ mượn khi lô
         còn chạy hoặc phiên còn đang hiện lô đó (``dang_hien_lo``: chưa chép kết quả); xong rồi → controller
-        MỚI gắn Engine của chính phiên, lô sau dùng đúng kho/cấu hình thanh bên đang hiện (audit F-1)."""
-        if hien_tai is not None and (hien_tai.engine is engine or hien_tai.running or dang_hien_lo):
+        MỚI gắn Engine của chính phiên, lô sau dùng đúng kho/cấu hình thanh bên đang hiện (audit F-1). Controller
+        CỦA phiên mà đang rảnh cũng nhường cho lô đang chạy của phiên khác: tab mở TRƯỚC khi lô bắt đầu phải thấy
+        lô (tiến độ, Dừng, «đang bận»), không phải giao diện rảnh cho dựng kho chồng lên lô (audit F-2)."""
+        if hien_tai is not None and (hien_tai.running or dang_hien_lo):
             return hien_tai
-        return ScanJobController.dang_chay_cua(engine) or ScanJobController(engine)
+        khac = ScanJobController.dang_chay_cua(engine)
+        if khac is not None:
+            return khac
+        if hien_tai is not None and hien_tai.engine is engine:
+            return hien_tai
+        return ScanJobController(engine)
 
     def __init__(self, engine, recent_maxlen: int = 60):
         self.engine = engine

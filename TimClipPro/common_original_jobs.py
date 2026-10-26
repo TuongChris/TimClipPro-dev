@@ -34,6 +34,7 @@ import maintenance_gate
 from clip_metadata import extract_youtube_id
 from engine import _mo_file_text_moi, chu_ky_chinh_sach
 from khoa import DangChayRoi, KhoaTienTrinh
+from tac_vu_nen import SoViecDai
 from truy_cap_youtube import PhienYouTube
 from ytdlp_chung import giai_thich_loi
 
@@ -105,8 +106,28 @@ def _ma_offline(nguon: str, source_type: str) -> str:
     return os.path.normcase(os.path.abspath(nguon))
 
 
+# Lô ĐANG CHẠY / vừa xong của tiến trình, theo thư mục dữ liệu. Tải lại trang = phiên MỚI: không có sổ này thì phiên
+# mới thấy giao diện rảnh trong khi lô vô hình giữ tool.lock hàng giờ, không nút Dừng, và ``KetQuaLo`` (không ghi lịch
+# sử — D-5) mất theo phiên cũ (audit F-2; cùng cơ chế tác vụ nền D-13).
+_SO_NGUON_CHUNG = SoViecDai()
+
+
 class CommonOriginalJobController:
     """Một lô, một worker thread, snapshot bất biến cho UI."""
+
+    @staticmethod
+    def cua_phien(engine, hien_tai: Optional["CommonOriginalJobController"] = None, *, dang_hien: bool = False,
+                  phien_moi: bool = False) -> "CommonOriginalJobController":
+        """Controller của phiên sở hữu ``engine`` — gọi MỖI lần vẽ lại (``tac_vu_nen.SoViecDai.cua_phien``): phiên
+        rảnh NHẬN LẠI lô đang chạy trên cùng thư mục dữ liệu (phiên mới chưa làm gì còn nhận lô vừa xong chưa ai
+        xem); controller mượn giữ Engine của phiên đã bấm (Dừng tới đúng cờ huỷ, CSV đúng kết quả)."""
+        return _SO_NGUON_CHUNG.cua_phien(engine, hien_tai, CommonOriginalJobController, dang_hien=dang_hien,
+                                         phien_moi=phien_moi)
+
+    @staticmethod
+    def da_nhan(engine, ctl: "CommonOriginalJobController") -> None:
+        """Phiên đã chép kết quả cuối của ``ctl``: phiên mở sau không nhận lại."""
+        _SO_NGUON_CHUNG.da_nhan(engine, ctl)
 
     def __init__(self, engine):
         self.engine = engine
@@ -126,15 +147,22 @@ class CommonOriginalJobController:
         with self._lock:
             if self.running:
                 raise RuntimeError("Đang có lô quét nguồn chung chạy; không tạo lô trùng.")
-            ma_lo = uuid.uuid4().hex
-            self._anh = NguonChungSnapshot(ma_lo=ma_lo, running=True,
-                                           message="Đang chuẩn bị...")
-            self._ket_qua = None
-            self._error = ""
-            self._mono_dau = time.monotonic()
-            self._mono_cuoi = None
-            self._ten_cache = {}
-            self._phien = None
+        ma_lo = uuid.uuid4().hex
+
+        def danh_dau() -> None:
+            with self._lock:
+                self._anh = NguonChungSnapshot(ma_lo=ma_lo, running=True,
+                                               message="Đang chuẩn bị...")
+                self._ket_qua = None
+                self._error = ""
+                self._mono_dau = time.monotonic()
+                self._mono_cuoi = None
+                self._ten_cache = {}
+                self._phien = None
+
+        # Ghi sổ NGOÀI khoá riêng (thứ tự khoá của SoViecDai). Phiên khác đang chạy lô → từ chối, chưa đổi gì.
+        _SO_NGUON_CHUNG.ghi(self.engine, self, "Đang có lô «Một video gốc chung» chạy ở một cửa sổ/phiên khác "
+                            "của Tool — tải lại trang để xem tiến độ; không tạo lô trùng.", danh_dau=danh_dau)
         # Cờ huỷ xoá ĐÚNG MỘT LẦN ở đây (TCP-13): cú bấm Dừng rơi vào khoảng giữa start()
         # và lúc thread chạy không bị nuốt.
         self.engine.cancel_event.clear()
@@ -214,6 +242,7 @@ class CommonOriginalJobController:
                     message=(co.TEN_TRANG_THAI_LO.get(kq.trang_thai, "") if kq
                              else (self._error or "Đã dừng.")),
                     error=self._error)
+            _SO_NGUON_CHUNG.xong(self.engine, self)   # tới khi một phiên chép kết quả
             LOGGER.info("event=scan.common.finished batch_id=%s status=%s", ma_lo,
                         kq.trang_thai if kq else "error")
 
