@@ -216,6 +216,35 @@ def test_toan_bo_va_lo_khong_ghim_giu_hanh_vi_cu(tmp_path, monkeypatch, che_do):
     assert lan_tai == [BA_GIO, None]
 
 
+@pytest.mark.parametrize("che_do", [GHVD_TOAN_BO, None])
+@pytest.mark.parametrize("loi,ly_do", [("Không cắt được khúc nào từ file này.", ""),
+                                       ("Đã hủy theo yêu cầu.", "huy")],
+                         ids=["loi_cat_khuc", "da_huy"])
+def test_quet_phan_dau_loi_khong_tai_tron_va_giu_loi_goc(tmp_path, monkeypatch, che_do, loi, ly_do):
+    """Nhánh không ghim: lượt quét 3 giờ đầu kết thúc LỖI (``scan_media`` biến mọi ngoại lệ thành
+    status error) không phải «chưa đủ đoạn» — không tải nốt video 65 giờ rồi quét lại, lỗi gốc giữ
+    nguyên (audit D-16)."""
+    e, lan_tai = _gia_lap(tmp_path, monkeypatch, che_do=che_do)
+    lan_quet = []
+
+    def quet(path, **k):
+        lan_quet.append(path)
+        d = float(lan_tai[-1] or DAI_65H)
+        if len(lan_quet) == 1:
+            return ScanResult(source_name="65 Hours of SML MOVIE Marathon", duration_s=d,
+                              status="error", note=loi, ly_do_pham_vi=ly_do)
+        return ScanResult(source_name="65 Hours of SML MOVIE Marathon", duration_s=d,
+                          pham_vi_quet_s=d, vung_da_khop=[(0.0, d)])
+
+    monkeypatch.setattr(e, "scan_media", quet)
+    kq = e.scan_youtube("https://youtu.be/vid65hxxxxx", luu_lich_su=False)
+    assert lan_tai == [BA_GIO] and len(lan_quet) == 1, (lan_tai, lan_quet)
+    assert kq.status == "error" and kq.note.startswith(loi), kq.note
+    assert kq.duration_s == DAI_65H and kq.ly_do_pham_vi == (ly_do or "gioi_han_tai")
+    if ly_do == "huy":
+        assert kq.note == loi, "đã hủy: không thêm lời khuyên quét lại"
+
+
 def test_scan_iter_ghim_che_do_tren_ban_sao_va_go_sau_lo(tmp_path, monkeypatch):
     e, lan_tai = _gia_lap(tmp_path, monkeypatch, che_do=None)
     ket = list(e.scan_iter(["https://youtu.be/vid65hxxxxx"], "youtube",

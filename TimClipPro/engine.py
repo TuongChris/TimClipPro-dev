@@ -5815,8 +5815,20 @@ class Engine:
                                     source_type="youtube", progress=progress,
                                     luu_lich_su=False, pct_start=0.40, **mt)
                 can_top_n = max(1, self.config.top_n)
-                if gioi_han and (not muc_tieu.da_dat(r.ung_vien_dat) if theo_dich
-                                 else len(r.matches) < can_top_n):
+                # Lượt quét phần đầu LỖI (cắt khúc hỏng, kho đổi giữa chừng, đã hủy...) không phải
+                # «chưa đủ đoạn»: tải nốt (tới ~18 GB) rồi quét lại vừa phí vừa đè mất lỗi gốc
+                # (audit D-16). Giữ nguyên lỗi + ghi chú, ghi rõ chỉ mới tải phần đầu.
+                if gioi_han and r.status != "ok":
+                    r.duration_s = float(info.get("duration") or r.duration_s)
+                    self._dan_lai_nhan_vung(r)
+                    if not r.ly_do_pham_vi:
+                        r.ly_do_pham_vi = "gioi_han_tai"
+                    if r.ly_do_pham_vi != "huy":
+                        tin = (f"Chỉ TẢI {hhmmss(gioi_han)} đầu /{hhmmss(r.duration_s)} và lượt quét "
+                               "phần này bị lỗi nên không tải tiếp — chưa thể kết luận, hãy quét lại.")
+                        r.note = "\n".join([x for x in (r.note, tin) if x])
+                elif gioi_han and (not muc_tieu.da_dat(r.ung_vien_dat) if theo_dich
+                                   else len(r.matches) < can_top_n):
                     # Phần đầu chưa đủ kết luận cho cả video: phải tải nốt.
                     #
                     # So với `top_n` chứ không so với 0. Với `top_n = 5`, tìm được 1 đoạn
