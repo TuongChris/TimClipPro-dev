@@ -195,6 +195,7 @@ def repair(
             continue
 
         nguon_du_lieu = dict(entry)
+        tu_youtube = False      # True khi nguon_du_lieu là info yt-dlp vừa hỏi lại
         # Chỉ bỏ qua khi đã có nguồn ĐỘ TIN CẬY CAO (suy từ epoch). Nếu chỉ dựa
         # trên upload_date thì vẫn phải hỏi lại: chuỗi YYYYMMDD không có giờ nên
         # không thể biết ngày giờ Việt Nam có lệch hay không. Nếu không, một lượt
@@ -226,11 +227,19 @@ def repair(
                 continue
             phien.ghi_thanh_cong("metadata")
             loi_lien_tiep = 0
+            tu_youtube = True
         else:
             da_xu_ly += 1
 
         ket_qua = resolve_publication_date(nguon_du_lieu, mui_gio)
         if ket_qua.date is None:
+            bo_qua += 1
+            continue
+        if not tu_youtube and ket_qua.source_field not in TRUONG_DO_TIN_CAY_CAO:
+            # Dữ liệu ĐÃ LƯU không có epoch: chuỗi YYYYMMDD trong kho không rõ gốc
+            # (va_metadata/seed tên file ghi ngày ĐÃ quy đổi), nên không được đóng dấu
+            # nguồn ``upload_date`` — báo cáo V2 coi dấu đó là upload_date NGUYÊN BẢN
+            # của yt-dlp (audit A-2). Offline không sửa được entry này: cần --repair-network.
             bo_qua += 1
             continue
 

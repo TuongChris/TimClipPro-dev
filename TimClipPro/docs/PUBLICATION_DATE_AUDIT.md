@@ -68,12 +68,16 @@ Entry cũ chỉ có:
 kết quả khác nhau và **không có cách nào phân biệt** từ dữ liệu đã lưu.
 
 `--repair-offline` vì thế chỉ sửa entry đã lưu sẵn `timestamp`/`release_timestamp`.
-Hiện tại cả ba kho đều có 0 entry như vậy, nên repair offline sẽ không đổi ngày nào
-— nó chỉ đánh dấu nguồn gốc `upload_date` (độ tin cậy thấp).
+Hiện tại cả ba kho đều có 0 entry như vậy, nên repair offline sẽ không đổi ngày nào.
+Entry không có epoch được **bỏ qua nguyên trạng** (đếm vào «Bỏ qua»), KHÔNG đóng dấu
+`publication_date_source = "upload_date"`: chuỗi `upload_date` đã lưu không rõ gốc —
+`va_metadata` và seed tên file ghi ngày ĐÃ quy đổi giờ VN — mà báo cáo V2 coi dấu đó là
+`upload_date` NGUYÊN BẢN của yt-dlp (audit A-2, `test_ngay_quy_doi_khong_thanh_ngay_nguyen_ban.py`).
+Chỉ `--repair-network` (info yt-dlp vừa hỏi lại) mới được ghi nguồn `upload_date`.
 
-> Dấu nguồn gốc độ tin cậy thấp **không** chặn `--repair-network` chạy sau. Điều kiện
-> bỏ qua dựa trên *độ tin cậy* (chỉ nguồn suy từ epoch mới đủ chắc), không dựa trên
-> việc có dấu hay chưa. Có regression test cho đúng cái bẫy này:
+> Điều kiện bỏ qua của `--repair-network` dựa trên *độ tin cậy* (chỉ nguồn suy từ epoch
+> mới đủ chắc), không dựa trên việc có dấu hay chưa — dấu độ tin cậy thấp do bản cũ
+> ghi vẫn không chặn được nó. Regression test:
 > `test_dau_provenance_do_tin_cay_thap_khong_chan_repair_network`.
 
 ---

@@ -75,10 +75,13 @@ def test_repair_offline_apply_ghi_va_tao_backup(tmp_path):
     assert meta[TEN_MOI]["publication_date"] == "20240702"
     assert meta[TEN_MOI]["publication_date_source"] == "timestamp"
     assert meta[TEN_MOI]["upload_date"] == "20240702"      # tương thích bản đọc cũ
-    # Entry chỉ có upload_date: ngày giữ nguyên (offline không suy ra được giờ),
-    # nhưng được đánh dấu nguồn là upload_date — độ tin cậy thấp.
+    # Entry chỉ có upload_date: giữ NGUYÊN TRẠNG (offline không suy ra được giờ) và
+    # KHÔNG đóng dấu nguồn upload_date — chuỗi đã lưu không rõ gốc, V2 sẽ coi dấu đó là
+    # ngày nguyên bản của yt-dlp (audit A-2).
     assert meta[TEN_CU]["upload_date"] == "20250620"
-    assert meta[TEN_CU]["publication_date_source"] == "upload_date"
+    assert "publication_date_source" not in meta[TEN_CU]
+    assert "publication_date" not in meta[TEN_CU]
+    assert kq["bo_qua"] == 1
 
     backup = list(tmp_path.glob("clips_meta.json.truoc_ngay_dang_*"))
     assert backup, "Phải sao lưu trước khi ghi"

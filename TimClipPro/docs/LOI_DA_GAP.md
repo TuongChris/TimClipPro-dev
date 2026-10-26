@@ -576,3 +576,16 @@ nhau và `so_dat_nguong` đếm đôi.
   bản mạnh nhất, không cộng bằng chứng hai bản ghi), có cảnh báo cho người dùng.
 → **Đổi định danh ở một bước thì rà mọi bảng tra dùng chung định danh đó** (dict comprehension theo tên im lặng nuốt
   bản trùng). Test: `tests/test_ban_ghi_kho_cung_ten.py`.
+
+**20. Dấu nguồn gốc ghi cho dữ liệu không rõ gốc thành ngày «nguyên bản» lệch 1 ngày (26/10/2026, PC2, audit A-2).**
+`kiem_ngay_dang --repair-offline --apply` đọc lại chính entry trong `clips_meta.json`; entry không có epoch rơi vào
+nhánh chuỗi của resolver và được đóng dấu `publication_date_source="upload_date"` — vô hại lúc viết, vì khi đó chỉ là
+«độ tin cậy thấp». Sau này V2 đọc đúng dấu đó là `upload_date` NGUYÊN BẢN của yt-dlp, trong khi `va_metadata` và seed
+tên file ghi vào `upload_date` ngày ĐÃ quy đổi giờ VN → video đăng sau 17:00 UTC hiện ngày gốc trễ 1 ngày trên Sheets,
+CSV, hồ sơ, không cảnh báo (`Engine._bo_sung_ngay_goc` còn bỏ qua vì tưởng đã có ngày nguyên bản).
+→ **Chỉ ghi dấu nguồn gốc khi dữ liệu THẬT SỰ đến từ nguồn đó** (info yt-dlp vừa hỏi lại); dữ liệu đã lưu không rõ gốc
+  thì để nguyên, không «nâng hạng». Repair offline nay chỉ ghi entry suy được từ epoch; còn lại «Bỏ qua» → cần
+  `--repair-network`.
+→ **Thêm người đọc mới cho một dấu cũ thì rà mọi nơi GHI dấu đó** và hỏi: nơi ghi có chắc như người đọc mới giả định?
+  Entry đã bị bản cũ đóng dấu không phân biệt được với dấu đúng — chỉ `--repair-network` ghi lại được.
+  Test: `tests/test_ngay_quy_doi_khong_thanh_ngay_nguyen_ban.py`.
