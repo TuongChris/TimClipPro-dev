@@ -30,6 +30,28 @@ class DangCoTacVuKhac(RuntimeError):
     """Một phiên khác của Tool vừa khởi động tác vụ nền trên cùng thư mục dữ liệu."""
 
 
+# Loại tác vụ nền chạy ở làn RIÊNG của giao diện, song song với quét / dựng vân tay / lô «Một video gốc chung» (người
+# dùng duyệt 27/10/2026): đồng bộ kênh chỉ TẢI file vào thư mục đích đã ghim lúc bấm, có cờ huỷ riêng. Vẫn chung MỘT
+# sổ với «Lấy lại tên» / «Vá metadata» (cùng hỏi YouTube, cùng ghi metadata kho) — tối đa một tác vụ nền mỗi thư mục
+# dữ liệu, nên hai lượt đồng bộ cùng lúc (dễ bị YouTube chặn cookie) vẫn bị chặn.
+LOAI_SONG_SONG = frozenset({"channel"})
+
+
+def la_song_song(kind: str) -> bool:
+    """Tác vụ nền loại ``kind`` chạy ở làn riêng (không chiếm làn chính của giao diện)."""
+    return kind in LOAI_SONG_SONG
+
+
+def thu_muc_chong_nhau(a: str, b: str) -> bool:
+    """Hai thư mục trùng nhau hoặc thư mục này nằm trong thư mục kia (so theo đường dẫn tuyệt đối, Windows không phân
+    biệt hoa thường). Rỗng → không chồng. Dùng để chặn dựng vân tay trên thư mục đang được đồng bộ tải file vào."""
+    if not a or not b:
+        return False
+    a = os.path.normcase(os.path.abspath(a)).rstrip("\\/")
+    b = os.path.normcase(os.path.abspath(b)).rstrip("\\/")
+    return a == b or a.startswith(b + os.sep) or b.startswith(a + os.sep)
+
+
 def _khoa(engine) -> str:
     thu_muc = getattr(engine, "data_dir", None)
     return os.path.normcase(os.path.abspath(thu_muc)) if thu_muc else f"id:{id(engine)}"
@@ -85,10 +107,15 @@ class SoViecDai:
             if self._dang_chay.get(k) is viec:
                 del self._dang_chay[k]
 
-    def nhan_vua_xong(self, engine):
-        """Lấy (và bỏ khỏi sổ) việc đã XONG mà chưa phiên nào chép kết quả — đúng một phiên nhận được."""
+    def nhan_vua_xong(self, engine, chap_nhan: Optional[Callable[[object], bool]] = None):
+        """Lấy (và bỏ khỏi sổ) việc đã XONG mà chưa phiên nào chép kết quả — đúng một phiên nhận được. ``chap_nhan``:
+        chỉ lấy việc thoả điều kiện (làn đồng bộ chỉ nhận lượt đồng bộ, làn chính chỉ nhận việc của làn chính)."""
         with self._khoa:
-            return self._vua_xong.pop(_khoa(engine), None)
+            k = _khoa(engine)
+            viec = self._vua_xong.get(k)
+            if viec is None or (chap_nhan is not None and not chap_nhan(viec)):
+                return None
+            return self._vua_xong.pop(k)
 
     def da_nhan(self, engine, viec) -> None:
         """Phiên đã chép kết quả cuối của ``viec``: phiên mở sau không nhận lại."""
@@ -122,10 +149,10 @@ def dang_chay_cua(engine) -> Optional["TacVuNen"]:
     return SO_TAC_VU_NEN.dang_chay_cua(engine)
 
 
-def nhan_vua_xong(engine) -> Optional["TacVuNen"]:
+def nhan_vua_xong(engine, chap_nhan: Optional[Callable[["TacVuNen"], bool]] = None) -> Optional["TacVuNen"]:
     """Lấy (và bỏ khỏi sổ) tác vụ đã XONG trên cùng thư mục dữ liệu mà chưa phiên nào chép kết quả — đúng một phiên
-    nhận được."""
-    return SO_TAC_VU_NEN.nhan_vua_xong(engine)
+    nhận được. ``chap_nhan``: chỉ lấy tác vụ thoả điều kiện (xem ``SoViecDai.nhan_vua_xong``)."""
+    return SO_TAC_VU_NEN.nhan_vua_xong(engine, chap_nhan)
 
 
 def da_nhan(engine, tv: "TacVuNen") -> None:
@@ -136,9 +163,10 @@ def da_nhan(engine, tv: "TacVuNen") -> None:
 class TacVuNen:
     """Một tác vụ nền: một thread, trạng thái đọc qua ảnh chụp (``anh``) — không đối tượng nào của Streamlit."""
 
-    def __init__(self, kind: str, huy: Callable[[], None], so_dong_bo=None, phien_youtube=None):
+    def __init__(self, kind: str, huy: Callable[[], None], so_dong_bo=None, phien_youtube=None, thu_muc: str = ""):
         self.id = uuid.uuid4().hex
         self.kind = kind
+        self.thu_muc = thu_muc                # thư mục đích tác vụ ghi vào (đồng bộ kênh) — chặn dựng vân tay chồng lên
         self.so_dong_bo = so_dong_bo          # sổ tiến độ đồng bộ kênh (chỉ đọc ảnh chụp ở giao diện)
         # Phiên YouTube (cầu dao + số đo) của CHÍNH lượt này: phiên nhận kết quả công bố nó làm «lượt gần nhất»
         # của thanh bên khi tác vụ xong (audit D-14).

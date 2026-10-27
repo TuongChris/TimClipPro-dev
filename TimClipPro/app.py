@@ -10,6 +10,7 @@ Dữ liệu KHÔNG đi đâu cả — server chỉ lắng nghe ở localhost tr�
 """
 
 import os
+import threading
 import time
 import uuid
 from datetime import datetime
@@ -95,9 +96,15 @@ for khoa, mac_dinh in GIA_TRI_GIAO_DIEN_MAC_DINH.items():
 if "job" not in st.session_state:
     st.session_state.job = {"running": False, "pct": 0.0, "msg": "", "results": [],
                             "error": "", "kind": ""}
+# Làn RIÊNG của đồng bộ kênh (``tac_vu_nen.LOAI_SONG_SONG``): chạy song song với việc của ``job`` (quét, dựng vân tay,
+# lô «Một video gốc chung», …) — có cờ huỷ riêng, các tab vẫn hiện trong lúc đồng bộ (người dùng duyệt 27/10/2026).
+if "job_dong_bo" not in st.session_state:
+    st.session_state.job_dong_bo = {"running": False, "pct": 0.0, "msg": "", "results": [],
+                                    "error": "", "kind": ""}
 
 eng: Engine = st.session_state.eng
 job = st.session_state.job
+job_dong_bo = st.session_state.job_dong_bo
 # Dựng kho vân tay / lô «Một video gốc chung» chạy hàng giờ. Tải lại trang, tab thứ hai = phiên MỚI: phiên rảnh NHẬN
 # LẠI việc đang chạy trên cùng thư mục dữ liệu (tiến độ, nút Dừng tới đúng worker, «đang bận», kết quả cuối) qua sổ
 # mức tiến trình như tác vụ nền (``tac_vu_nen.SoViecDai``, audit D-13/F-2); phiên mới chưa làm gì còn nhận việc đã xong
@@ -145,30 +152,38 @@ if scan_controller.running and not job.get("running"):
                 "scan_batch_id": scan_controller.snapshot().batch_id})
 
 
-def _dong_bo_tac_vu_nen() -> None:
+def _dong_bo_tac_vu_nen(chi_dong_bo: bool = False) -> None:
     """Tác vụ nền (đồng bộ kênh, lấy lại tên, vá metadata) sống ở mức TIẾN TRÌNH (``tac_vu_nen``). Tải lại trang
     giữa lượt = phiên MỚI: NHẬN LẠI tác vụ đang chạy (tiến độ, nút Dừng, kết quả cuối) thay vì coi như không có gì
     chạy (audit D-13). Chỉ main thread chép ảnh chụp vào ``job`` của phiên; thread nền không đọc session_state.
     Tác vụ đã XONG khi không phiên nào vẽ (tab bị dỡ, chạy qua đêm): phiên MỚI (chưa làm gì — ``job`` chưa có loại)
-    nhận kết quả cuối đúng một lần; phiên đang hiện kết quả việc khác không bị đè (review audit D)."""
-    tv = st.session_state.get("tac_vu_nen")
-    if tv is None and not job.get("running"):
-        tv = tac_vu_nen.dang_chay_cua(eng)
-        if tv is None and not job.get("kind"):
-            tv = tac_vu_nen.nhan_vua_xong(eng)
+    nhận kết quả cuối đúng một lần; phiên đang hiện kết quả việc khác không bị đè (review audit D).
+    Hai làn: đồng bộ kênh (``tac_vu_nen.la_song_song``) vào ``job_dong_bo``; việc khác vào ``job``. ``chi_dong_bo``:
+    chỉ làn đồng bộ (khung tiến độ đồng bộ tự làm mới riêng, không đụng ``job`` của trang)."""
+    lan = ((True, "tac_vu_dong_bo", job_dong_bo),)
+    if not chi_dong_bo:
+        lan = ((False, "tac_vu_nen", job),) + lan
+    for song_song, khoa_tv, j in lan:
+        tv = st.session_state.get(khoa_tv)
+        if tv is None and not j.get("running"):
+            tv = tac_vu_nen.dang_chay_cua(eng)
+            if tv is not None and tac_vu_nen.la_song_song(tv.kind) != song_song:
+                tv = None
+            if tv is None and not j.get("kind"):
+                tv = tac_vu_nen.nhan_vua_xong(eng, lambda v, s=song_song: tac_vu_nen.la_song_song(v.kind) == s)
+            if tv is None:
+                continue
+            st.session_state[khoa_tv] = tv
+            if tv.so_dong_bo is not None:
+                st.session_state.so_dong_bo = tv.so_dong_bo
         if tv is None:
-            return
-        st.session_state.tac_vu_nen = tv
-        if tv.so_dong_bo is not None:
-            st.session_state.so_dong_bo = tv.so_dong_bo
-    if tv is None:
-        return
-    job.update(tv.anh())
-    if not job["running"]:
-        if tv.phien_youtube is not None:             # «Trạng thái YouTube» = lượt vừa xong này (audit D-14)
-            eng.phien_youtube_cuoi = tv.phien_youtube
-        st.session_state.pop("tac_vu_nen", None)     # xong: kết quả đã chép, thôi theo dõi
-        tac_vu_nen.da_nhan(eng, tv)                  # phiên mở sau không nhận lại
+            continue
+        j.update(tv.anh())
+        if not j["running"]:
+            if tv.phien_youtube is not None:         # «Trạng thái YouTube» = lượt vừa xong này (audit D-14)
+                eng.phien_youtube_cuoi = tv.phien_youtube
+            st.session_state.pop(khoa_tv, None)      # xong: kết quả đã chép, thôi theo dõi
+            tac_vu_nen.da_nhan(eng, tv)              # phiên mở sau không nhận lại
 
 
 _dong_bo_tac_vu_nen()
@@ -254,20 +269,99 @@ def chay_nguon_chung(nguon: list) -> None:
     st.rerun()
 
 
-def chay_nen(kind: str, ham, *args, so_dong_bo=None, phien_youtube=None, **kwargs):
+def dang_dong_bo() -> bool:
+    """Làn đồng bộ kênh đang có lượt chạy (của phiên này hoặc nhận lại từ phiên khác)."""
+    return bool(job_dong_bo.get("running"))
+
+
+def _thu_muc_dang_dong_bo() -> str:
+    """Thư mục đích của lượt đồng bộ đang chạy trong tiến trình ("" nếu không có). Hỏi SỔ tác vụ nền (không chỉ lượt
+    phiên này đã nhận): tab khác vừa bắt đầu đồng bộ mà phiên này chưa vẽ lại cũng tính."""
+    tv = tac_vu_nen.dang_chay_cua(eng)
+    return tv.thu_muc if tv is not None and tac_vu_nen.la_song_song(tv.kind) else ""
+
+
+def chay_dong_bo(kenh_url: str, kho_dir: str, gioi_han: int | None, thu_lai_han_che: bool,
+                 giu_thong_bao: bool = False) -> None:
+    """Khởi động đồng bộ kênh ở làn RIÊNG: chạy song song với quét / dựng vân tay. Cờ huỷ RIÊNG của lượt (không phải
+    ``eng.cancel_event``): Dừng hay bắt đầu lô quét không đụng lượt đồng bộ và ngược lại (TCP-13). Truyền cả
+    player_clients lẫn cấu hình mạng (cookie, giãn nhịp) để mọi mẹo trong data\\cau_hinh.json có tác dụng cho cả đồng
+    bộ kênh; cấu hình + thư mục đích GHIM lúc bấm — đổi kho / lưu cấu hình giữa lượt không ảnh hưởng lượt này.
+    ``giu_thong_bao``: gọi từ màn tiến độ (tự vẽ lại 0,75 giây) — lời từ chối giữ trong ``thong_bao_dong_bo`` tới lần
+    bấm kế, không chỉ nháy một khung (review độc lập P2-2)."""
+    def bao(muc: str, chu: str) -> None:
+        if giu_thong_bao:
+            st.session_state.thong_bao_dong_bo = (muc, chu)
+        else:
+            getattr(st, muc)(chu)
+
+    dich = kho_dir.strip('" ')
+    tv_khac = tac_vu_nen.dang_chay_cua(eng)
+    if dang_dong_bo() or (tv_khac is not None and tac_vu_nen.la_song_song(tv_khac.kind)):
+        bao("warning", "Đang có một lượt đồng bộ kênh chạy — chờ lượt đó xong rồi đồng bộ tiếp. Hai lượt cùng lúc "
+                       "dùng chung cookie YouTube nên dễ bị YouTube chặn.")
+        return
+    if tv_khac is not None:
+        bao("warning", "Đang chạy «Lấy lại tên video» / «Vá metadata» (cũng hỏi YouTube và ghi metadata kho) — chờ "
+                       "việc đó xong rồi đồng bộ.")
+        return
+    dung_kho = FingerprintJobController.dang_chay_cua(eng)
+    if dung_kho is not None and tac_vu_nen.thu_muc_chong_nhau(dung_kho.thu_muc, dich):
+        bao("warning", "Thư mục này đang được tạo vân tay — chờ tạo vân tay xong rồi đồng bộ vào đây, để vân tay không "
+                       "nạp file đang tải dở.")
+        return
+    # Dựng mọi thứ có thể ném lỗi (thư mục kho không tạo được, ổ đĩa rút ra, cấu hình mạng sai) TRƯỚC khi nhận lease
+    # cổng bảo trì — lỗi ở đây mà đã giữ lease thì bộ cập nhật thấy «đang có việc» tới khi tắt Tool (review P2-1).
+    # Sổ tiến độ MỚI cho mỗi lượt: worker ghi, khung tiến độ chỉ đọc ảnh chụp (ui_tien_do_dong_bo).
+    so = SoDongBo()
+    try:
+        cs = ChannelSync(dich, player_clients=list(eng.config.ytdlp_player_clients),
+                         cau_hinh_mang=eng.cau_hinh_mang(), theo_doi=so)
+    except Exception as e:  # noqa: BLE001
+        bao("error", f"Chưa đồng bộ được: {e}")
+        return
+    try:
+        lease = maintenance_gate.nhan_viec_cua(eng, "tác vụ nền «channel»")
+    except DangChayRoi as e:
+        bao("error", f"Chưa chạy được: {e}")
+        return
+    huy = threading.Event()
+    tv = tac_vu_nen.TacVuNen("channel", huy=huy.set, so_dong_bo=so, phien_youtube=cs.phien, thu_muc=dich)
+    job_dong_bo.update({"running": True, "pct": 0.0, "msg": "Đang khởi động...",
+                        "results": [], "error": "", "kind": "channel", "da_day_sheet": False})
+    try:
+        tv.bat_dau(eng, cs.sync, (kenh_url.strip(), gioi_han), {"cancel_check": huy.is_set,
+                                                               "thu_lai_han_che": thu_lai_han_che},
+                   job=job_dong_bo, lease=lease)
+    except tac_vu_nen.DangCoTacVuKhac as e:   # phiên khác vừa khởi động trước: chưa chạy gì
+        if lease is not None:
+            lease.tra()
+        job_dong_bo.update({"running": False, "msg": "", "kind": ""})
+        bao("warning", str(e))
+        return
+    st.session_state.pop("thong_bao_dong_bo", None)
+    st.session_state.so_dong_bo = so
+    st.session_state.tac_vu_dong_bo = tv
+    st.rerun()
+
+
+def chay_nen(kind: str, ham, *args, phien_youtube=None, **kwargs):
     """Chạy một tác vụ dài trong luồng nền để giao diện không bị đơ và nút Dừng vẫn bấm được.
     Vào cổng bảo trì TRƯỚC (đang cập nhật → báo, không chạy); lease trả khi tác vụ xong. Tác vụ ghi sổ mức tiến
-    trình (``tac_vu_nen``) để phiên mới (tải lại trang) nhận lại được; ``so_dong_bo``: sổ tiến độ đồng bộ kênh;
-    ``phien_youtube``: phiên YouTube của lượt (``ChannelSync.phien``) — xong thì thanh bên báo theo nó."""
+    trình (``tac_vu_nen``) để phiên mới (tải lại trang) nhận lại được; ``phien_youtube``: phiên YouTube của lượt
+    (``ChannelSync.phien``) — xong thì thanh bên báo theo nó. Đồng bộ kênh KHÔNG đi đường này (``chay_dong_bo``)."""
     if dang_co_tac_vu():
         st.warning("Đang có tác vụ chạy; không tạo job trùng.")
+        return
+    if dang_dong_bo():
+        st.warning("Đang đồng bộ kênh — việc này cũng hỏi YouTube và ghi metadata kho; chờ lượt đồng bộ xong rồi chạy.")
         return
     try:
         lease = maintenance_gate.nhan_viec_cua(eng, f"tác vụ nền «{kind}»")
     except DangChayRoi as e:
         st.error(f"Chưa chạy được: {e}")
         return
-    tv = tac_vu_nen.TacVuNen(kind, huy=eng.cancel, so_dong_bo=so_dong_bo, phien_youtube=phien_youtube)
+    tv = tac_vu_nen.TacVuNen(kind, huy=eng.cancel, phien_youtube=phien_youtube)
     job.update({"running": True, "pct": 0.0, "msg": "Đang khởi động...",
                 "results": [], "error": "", "kind": kind, "da_day_sheet": False})
     eng.cancel_event.clear()
@@ -296,6 +390,10 @@ def chay_van_tay(thumuc: str, mode: str) -> None:
     """Khởi động đúng một controller; worker không gọi API Streamlit."""
     if dang_co_tac_vu():
         st.warning("Đang có tác vụ chạy; không tạo thêm job trùng.")
+        return
+    if tac_vu_nen.thu_muc_chong_nhau(_thu_muc_dang_dong_bo(), thumuc):
+        st.warning("Thư mục này đang đồng bộ kênh (đang tải file vào) — chờ lượt đồng bộ xong rồi tạo/bổ sung vân tay, "
+                   "để không nạp file đang tải dở. Tạo vân tay cho kho KHÁC thì làm ngay được.")
         return
     eng.cancel_event.clear()
     try:
@@ -890,6 +988,112 @@ with st.sidebar:
 
 
 # =====================================================================
+#  Làn đồng bộ kênh: khung riêng ở đầu trang, chạy song song với việc khác
+# =====================================================================
+
+def _huy_dong_bo() -> None:
+    """Nút Dừng của khung đồng bộ: cờ huỷ RIÊNG của lượt đồng bộ (kể cả lượt nhận lại từ phiên khác)."""
+    tv = st.session_state.get("tac_vu_dong_bo")
+    if tv is not None:
+        tv.huy()
+
+
+def _ve_ket_qua_dong_bo(r: dict) -> None:
+    """Kết quả cuối của một lượt đồng bộ kênh."""
+    # Tiêu đề + số đếm theo TRẠNG THÁI THẬT của lượt (scan_ui.tom_tat_dong_bo_kenh): chỉ xanh khi đã tải đủ.
+    for muc_dbk, cau_dbk in tom_tat_dong_bo_kenh(r) + dong_hieu_suat(r.get("hieu_suat")):
+        getattr(st, muc_dbk)(cau_dbk)
+    if r["loi"]:
+        # Mỗi dòng lỗi mở đầu bằng tiêu đề video (channel.py) — chữ ngoài, thoát trước khi vào Markdown (audit D-8).
+        st.warning(f"Video lỗi ({len(r['loi'])}, hiện tối đa 10):\n\n- "
+                   + "\n- ".join(thoat_markdown(d) for d in r["loi"][:10]))
+    if r.get("nghi_hong"):
+        st.warning(
+            f"Phát hiện {len(r['nghi_hong'])} file audio nghi hỏng/nén dở trong kho "
+            "— đã đưa vào danh sách tải lại. Bản cũ chỉ được chuyển vào thư mục "
+            "`_hong` sau khi tải lại thành công, không bị xoá:\n\n- "
+            + "\n- ".join(thoat_markdown(d) for d in r["nghi_hong"][:10]))
+    if r.get("da_doi_soat"):
+        st.info(f"Đã bổ sung metadata tại chỗ cho {r['da_doi_soat']} file có sẵn "
+                "trên đĩa (không gọi lại YouTube).")
+    # Thư mục audio vừa đồng bộ có thể KHÁC kho vân tay đang chọn (vd. audio kênh mới, kho đang chọn là kho «SML»):
+    # không xui người dùng nạp nhầm kho.
+    muc_kho, cau_kho = huong_dan_kho_sau_dong_bo(r.get("thu_muc", ""), eng.kho_dang_dung or "",
+                                                  eng.kho_thu_muc or "")
+    getattr(st, muc_kho)(cau_kho)
+
+
+@st.fragment(run_every=1.0)
+def _khung_dong_bo_dang_chay() -> None:
+    """Khung tiến độ đồng bộ tự làm mới mỗi giây mà KHÔNG vẽ lại cả trang — các tab bên dưới vẫn dùng bình thường.
+    Sổ tiến độ đã gộp nhịp (byte 4 lần/giây, FFmpeg 2 lần/giây) nên 1 lần/giây là đủ. Lượt xong → vẽ lại cả trang để
+    hiện kết quả. Chỉ ĐỌC ảnh chụp của sổ tiến độ (worker ghi) — không đụng thread, cờ huỷ hay khoá."""
+    _dong_bo_tac_vu_nen(chi_dong_bo=True)
+    if not dang_dong_bo():
+        st.rerun(scope="app")
+        return
+    with st.container(border=True):
+        so = st.session_state.get("so_dong_bo")
+        try:
+            ve_tien_do_dong_bo(st, so.anh())
+        except Exception:  # noqa: BLE001 — vẽ lỗi thì lùi về khung chung: nút Dừng không bao giờ mất vì lỗi hiển thị
+            st.header("⏳ Đang đồng bộ kênh")
+            st.progress(job_dong_bo["pct"], text=f"{job_dong_bo['pct']*100:.0f}%")
+            st.info(job_dong_bo["msg"] or "Đang khởi động...")
+        if st.button("⏹️ Dừng đồng bộ", type="secondary", key="dung_dong_bo"):
+            _huy_dong_bo()
+            st.warning("Đã gửi yêu cầu dừng đồng bộ, chờ một chút... Việc quét (nếu có) vẫn chạy tiếp.")
+        st.caption("Lượt đồng bộ chạy riêng: các tab bên dưới vẫn dùng bình thường. Quét file trong máy chạy song song "
+                   "thoải mái; quét link YouTube cùng lúc thì dùng chung cookie và mạng với lượt đồng bộ — nếu YouTube "
+                   "báo chặn, hãy dừng bớt một việc. Đừng đóng cửa sổ đen phía sau.")
+
+
+def _ve_lan_dong_bo() -> None:
+    """Đầu trang: khung tiến độ của lượt đồng bộ đang chạy, hoặc kết quả lượt vừa xong (tới khi người dùng đóng)."""
+    if dang_dong_bo():
+        _khung_dong_bo_dang_chay()
+    elif job_dong_bo.get("kind") == "channel" and (job_dong_bo.get("results") or job_dong_bo.get("error")):
+        with st.container(border=True):
+            if job_dong_bo["error"]:
+                st.error(f"Lỗi: {job_dong_bo['error']}")
+            else:
+                _ve_ket_qua_dong_bo(job_dong_bo["results"])
+            if st.button("Đóng kết quả đồng bộ", key="dong_kq_dong_bo"):
+                job_dong_bo.update({"results": [], "error": "", "kind": ""})
+                st.rerun()
+
+
+def _form_dong_bo_song_song() -> None:
+    """Trên màn tiến độ quét / dựng vân tay: bắt đầu đồng bộ kênh song song, không phải chờ việc đang chạy xong.
+    Form: giá trị gõ dở không bị lượt vẽ lại tự động (0,75 giây) của màn tiến độ làm mất."""
+    thong_bao = st.session_state.get("thong_bao_dong_bo")
+    with st.expander("📥 Đồng bộ kênh gốc song song — không cần chờ việc này xong", expanded=bool(thong_bao)):
+        if thong_bao:
+            getattr(st, thong_bao[0])(thong_bao[1])
+        with st.form("form_dong_bo_song_song"):
+            kenh = st.text_input("Link kênh YouTube của bạn", placeholder="https://www.youtube.com/@TenKenh",
+                                 key="ss_kenh_url")
+            kho = st.text_input("Thư mục kho clip gốc (ổ D, E... tùy bạn)", st.session_state.kho_dir,
+                                placeholder=r"D:\KhoClipGoc", key="ss_kho_dir")
+            gioi = st.number_input("Chỉ lấy N video mới nhất (0 = toàn bộ kênh)", 0, 5000, 0, 10, key="ss_gioi_han")
+            thu_lai = st.checkbox("Thử lại cả video bị hạn chế (giới hạn tuổi / chỉ hội viên) đã gặp ở lượt trước",
+                                  value=False, key="ss_thu_lai_han_che")
+            bam = st.form_submit_button("⬇️ Bắt đầu đồng bộ kênh", type="primary")
+        st.caption("Xem trước danh sách video, kiểm tra còn thiếu: tab «📥 Đồng bộ kênh gốc» (khi việc này xong).")
+    if bam:
+        st.session_state.pop("thong_bao_dong_bo", None)
+        if not (kenh.strip() and kho.strip('" ')):
+            st.session_state.thong_bao_dong_bo = ("warning", "Nhập link kênh và thư mục kho rồi bấm lại.")
+        else:
+            st.session_state.kho_dir = kho
+            chay_dong_bo(kenh, kho, gioi or None, thu_lai, giu_thong_bao=True)
+        st.rerun()                             # vẽ lại ngay: lời từ chối hiện trong ô đồng bộ
+
+
+_ve_lan_dong_bo()
+
+
+# =====================================================================
 #  Khi có tác vụ đang chạy: chỉ hiện màn hình tiến độ
 # =====================================================================
 
@@ -1047,19 +1251,6 @@ if job["running"]:
                      key="dung_nguon_chung"):
             common_controller.cancel()
             st.warning("Đã gửi yêu cầu dừng; bằng chứng đã có vẫn được giữ.")
-    elif job["kind"] == "channel" and st.session_state.get("so_dong_bo") is not None:
-        # Chỉ ĐỌC ảnh chụp của sổ tiến độ (worker ghi) — không đụng job thread, cờ huỷ hay khoá. Vẽ lỗi thì lùi về
-        # màn chung: tự cập nhật + nút Dừng không bao giờ mất vì một lỗi hiển thị.
-        try:
-            ve_tien_do_dong_bo(st, st.session_state.so_dong_bo.anh())
-        except Exception:  # noqa: BLE001
-            st.progress(job["pct"], text=f"{job['pct']*100:.0f}%")
-            st.info(job["msg"] or "Đang khởi động...")
-        if st.button("⏹️ Dừng lại", type="secondary"):
-            _huy_tac_vu_nen()
-            st.warning("Đã gửi yêu cầu dừng, chờ một chút...")
-        st.caption("Cửa sổ này tự cập nhật. Bạn có thể để yên và làm việc khác, "
-                   "nhưng đừng đóng cửa sổ đen phía sau.")
     else:
         st.header("⏳ Đang xử lý...")
         st.progress(job["pct"], text=f"{job['pct']*100:.0f}%")
@@ -1069,8 +1260,9 @@ if job["running"]:
             st.warning("Đã gửi yêu cầu dừng, chờ một chút...")
         st.caption("Cửa sổ này tự cập nhật. Bạn có thể để yên và làm việc khác, "
                    "nhưng đừng đóng cửa sổ đen phía sau.")
-    # Đồng bộ kênh: sổ tiến độ đã gộp nhịp (byte 4 lần/giây, FFmpeg 2 lần/giây) — vẽ lại 1 lần/giây là đủ.
-    time.sleep(1.0 if job["kind"] == "channel" else 0.75)
+    if job.get("kind") in ("scan", "db", "nguon_chung") and not dang_dong_bo():
+        _form_dong_bo_song_song()
+    time.sleep(0.75)
     st.rerun()
 
 # Tác vụ vừa xong → hiện kết quả
@@ -1081,29 +1273,6 @@ if not job["running"] and (job["results"] or job["error"]):
     loi_lo_quet_co_ket_qua = bool(job["error"]) and job["kind"] == "scan" and bool(job["results"])
     if job["error"] and not loi_lo_quet_co_ket_qua:
         st.error(f"Lỗi: {job['error']}")
-    elif job["kind"] == "channel":
-        r = job["results"]
-        # Tiêu đề + số đếm theo TRẠNG THÁI THẬT của lượt (scan_ui.tom_tat_dong_bo_kenh): chỉ xanh khi đã tải đủ.
-        for muc_dbk, cau_dbk in tom_tat_dong_bo_kenh(r) + dong_hieu_suat(r.get("hieu_suat")):
-            getattr(st, muc_dbk)(cau_dbk)
-        if r["loi"]:
-            # Mỗi dòng lỗi mở đầu bằng tiêu đề video (channel.py) — chữ ngoài, thoát trước khi vào Markdown (audit D-8).
-            st.warning(f"Video lỗi ({len(r['loi'])}, hiện tối đa 10):\n\n- "
-                       + "\n- ".join(thoat_markdown(d) for d in r["loi"][:10]))
-        if r.get("nghi_hong"):
-            st.warning(
-                f"Phát hiện {len(r['nghi_hong'])} file audio nghi hỏng/nén dở trong kho "
-                "— đã đưa vào danh sách tải lại. Bản cũ chỉ được chuyển vào thư mục "
-                "`_hong` sau khi tải lại thành công, không bị xoá:\n\n- "
-                + "\n- ".join(thoat_markdown(d) for d in r["nghi_hong"][:10]))
-        if r.get("da_doi_soat"):
-            st.info(f"Đã bổ sung metadata tại chỗ cho {r['da_doi_soat']} file có sẵn "
-                    "trên đĩa (không gọi lại YouTube).")
-        # Thư mục audio vừa đồng bộ có thể KHÁC kho vân tay đang chọn (vd. audio kênh mới, kho đang chọn là kho «SML»):
-        # không xui người dùng nạp nhầm kho.
-        muc_kho, cau_kho = huong_dan_kho_sau_dong_bo(r.get("thu_muc", ""), eng.kho_dang_dung or "",
-                                                      eng.kho_thu_muc or "")
-        getattr(st, muc_kho)(cau_kho)
     elif job["kind"] == "db":
         r = job["results"]
         # Tiêu đề theo KẾT QUẢ THẬT (scan_ui.tom_tat_tao_van_tay, audit F-4): bổ sung mà mọi clip mới đều lỗi → kho
@@ -1290,17 +1459,11 @@ with tab0:
                 st.error(f"Lỗi: {e}")
 
     if st.button("⬇️ Bắt đầu đồng bộ kênh", type="primary",
-                 disabled=not (kenh_url and st.session_state.kho_dir)):
-        # Truyền cả player_clients lẫn cấu hình mạng (cookie, giãn nhịp) để mọi mẹo
-        # trong data\cau_hinh.json có tác dụng cho cả đồng bộ kênh, không chỉ cho quét.
-        # Sổ tiến độ MỚI cho mỗi lượt: worker ghi, màn tiến độ chỉ đọc ảnh chụp (ui_tien_do_dong_bo).
-        st.session_state.so_dong_bo = SoDongBo()
-        cs = ChannelSync(st.session_state.kho_dir.strip('" '),
-                         player_clients=list(eng.config.ytdlp_player_clients),
-                         cau_hinh_mang=eng.cau_hinh_mang(), theo_doi=st.session_state.so_dong_bo)
-        chay_nen("channel", cs.sync, kenh_url.strip(), gioi_han or None, so_dong_bo=st.session_state.so_dong_bo,
-                 phien_youtube=cs.phien, cancel_check=lambda: eng.cancel_event.is_set(),
-                 thu_lai_han_che=thu_lai_han_che)
+                 disabled=not (kenh_url and st.session_state.kho_dir) or dang_dong_bo()):
+        chay_dong_bo(kenh_url, st.session_state.kho_dir, gioi_han or None, thu_lai_han_che)
+    if dang_dong_bo():
+        st.caption("Đang có một lượt đồng bộ chạy (khung ở đầu trang) — chờ lượt đó xong rồi đồng bộ kênh khác. "
+                   "Trong lúc chờ vẫn quét được ở tab «▶️ Quét YouTube» / «📁 Quét file trong máy».")
 
     if st.session_state.kho_dir and os.path.isdir(st.session_state.kho_dir.strip('" ')):
         tk = ChannelSync(st.session_state.kho_dir.strip('" ')).thong_ke()
@@ -1359,13 +1522,17 @@ with tab0:
                           "đặt tên «YYYYMMDD - Tiêu đề [mã YouTube 11 ký tự].đuôi» hoặc không "
                           "có ngoặc vuông ở cuối — đừng kết thúc tên bằng một chữ 11 ký tự "
                           "trong ngoặc (vd. [Compilation]): tool sẽ đọc nó như mã video."):
-            try:
-                cs = ChannelSync(st.session_state.kho_dir.strip('" '))
-                job.update({"kind": "sua", "results": cs.sua_archive(),
-                            "error": "", "running": False, "da_day_sheet": True})
-                st.rerun()
-            except Exception as e:  # noqa: BLE001
-                st.error(f"Lỗi: {e}")
+            if tac_vu_nen.thu_muc_chong_nhau(_thu_muc_dang_dong_bo(), st.session_state.kho_dir.strip('" ')):
+                st.warning("Thư mục này đang đồng bộ kênh (đang ghi danh sách đã tải) — chờ lượt đồng bộ xong rồi "
+                           "dựng lại danh sách.")
+            else:
+                try:
+                    cs = ChannelSync(st.session_state.kho_dir.strip('" '))
+                    job.update({"kind": "sua", "results": cs.sua_archive(),
+                                "error": "", "running": False, "da_day_sheet": True})
+                    st.rerun()
+                except Exception as e:  # noqa: BLE001
+                    st.error(f"Lỗi: {e}")
 
     st.divider()
     st.markdown("#### 🏷️ Tên video hiển thị sai? Lấy lại tên thật ở đây")
@@ -1376,7 +1543,7 @@ with tab0:
         "báo cáo sẽ hiện tên thật. Đây là tác vụ MẠNG: một lượt hỏi mỗi video."
     )
     if st.button("🌐 Lấy lại tên video thật cho kho này", width="stretch",
-                 disabled=not st.session_state.kho_dir or job["running"],
+                 disabled=not st.session_state.kho_dir or job["running"] or dang_dong_bo(),
                  help="Chỉ lấy thông tin, KHÔNG tải lại video. Chạy lại được bất cứ "
                       "lúc nào; video nào đã có tên thật thì bỏ qua."):
         cs_title = ChannelSync(st.session_state.kho_dir.strip('" '),
@@ -1581,6 +1748,7 @@ with tab1:
                 and bool(clips)
                 and eng.kho_thu_muc
                 and not job.get("running")
+                and not dang_dong_bo()
             ),
         ):
             chay_nen("metadata_network", eng.va_metadata_thieu)

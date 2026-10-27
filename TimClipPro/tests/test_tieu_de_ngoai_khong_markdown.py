@@ -110,14 +110,15 @@ def _phan_tu_markdown(at) -> list:
     return ra
 
 
-def _chay_app(tmp_path, monkeypatch, job: dict):
+def _chay_app(tmp_path, monkeypatch, job: dict, lan: str = "job"):
+    """``lan``: ``job`` (làn chính) hoặc ``job_dong_bo`` (làn đồng bộ kênh chạy song song)."""
     from streamlit.testing.v1 import AppTest
 
     monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
     at = AppTest.from_file(str(APP_PY), default_timeout=120).run()
     assert not at.exception
-    at.session_state.job.update(job)
+    at.session_state[lan].update(job)
     at.run()
     assert not at.exception, at.exception
     return at
@@ -142,7 +143,7 @@ def test_app_danh_sach_loi_dong_bo_kenh_khong_dien_giai_tieu_de(tmp_path, monkey
     r = {"trang_thai": "MOT_PHAN", "moi": 0, "bo_qua": 0, "so_loi": 1, "chua_thu": 0,
          "thu_muc": str(tmp_path / "kenh"), "loi": [f"{tieu_de_40}: Video không tải được"]}
     at = _chay_app(tmp_path, monkeypatch, {"running": False, "results": r, "error": "",
-                                           "kind": "channel"})
+                                           "kind": "channel"}, lan="job_dong_bo")
     co = [(t, c) for t, c in _phan_tu_markdown(at) if "Mất" in c and "quà" in c]
     assert co, "danh sách video lỗi phải hiện tên video"
     vi_pham = [(t, c, _loi_dien_giai(c)) for t, c in co if _loi_dien_giai(c)]

@@ -15,6 +15,17 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-29 Đồng bộ kênh chạy SONG SONG với quét trong giao diện (người dùng, 2026-10-27) — nới «một việc mỗi lúc» của TCP-13
+Quyết định (người dùng chọn «hướng B» trong phiên 27/10): một tab đồng bộ kho mới, một tab quét theo kho đã đồng bộ —
+không chờ đồng bộ xong. Đồng bộ kênh thành làn RIÊNG (`tac_vu_nen.LOAI_SONG_SONG`, `job_dong_bo`, cờ huỷ riêng của lượt,
+khung tiến độ tự làm mới ở đầu trang); quét / dựng vân tay / lô «Một video gốc chung» / «Lấy lại tên» / «Vá metadata» giữ
+luật cũ một việc mỗi lúc. Vẫn CẤM: hai lượt đồng bộ cùng lúc (cùng cookie YouTube → dễ bị chặn), đồng bộ cùng «Lấy lại
+tên» / «Vá metadata» (chung sổ tác vụ nền, cùng ghi metadata kho), dựng vân tay trên thư mục đang đồng bộ và ngược lại
+(nạp file đang tải dở). Đang đồng bộ vẫn đổi được «Kho đang dùng» — lượt đồng bộ đã ghim thư mục đích + cấu hình mạng lúc bấm.
+Vì sao: đồng bộ chỉ TẢI file vào thư mục đích, quét đọc kho vân tay đã dựng — không chung dữ liệu; cái thật sự chung là
+cờ huỷ `eng.cancel_event` (TCP-13), nay đồng bộ không dùng nó nữa. Đổi lại: quét link YouTube trong lúc đồng bộ dùng chung
+cookie + mạng (cảnh báo trên khung đồng bộ). Bằng chứng: `tests/test_dong_bo_song_song_quet.py`.
+
 ## D-28 Đợt P3 audit 25/10: duyệt golden `file_tu_khop_chinh_no.json`, GIỮ chữ ký chính sách (người dùng, 2026-10-26)
 Quyết định (người dùng chọn trong phiên 26/10): A-7 (tự khớp không còn làm dừng sớm / chặn bù tốc độ ở nhánh quét
 thường) và A-16 (parser không còn bỏ dòng audfprint «to time -0.0 s») được giữ mà KHÔNG đổi chữ ký chính sách — Watch

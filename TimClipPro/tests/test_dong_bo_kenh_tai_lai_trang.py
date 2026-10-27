@@ -24,7 +24,7 @@ APP_PY = Path(__file__).resolve().parents[1] / "app.py"
 NHAN_KENH = "Link kênh YouTube của bạn"
 NHAN_KHO = "Thư mục kho clip gốc (ổ D, E... tùy bạn)"
 NUT_DONG_BO = "⬇️ Bắt đầu đồng bộ kênh"
-NUT_DUNG = "⏹️ Dừng lại"
+NUT_DUNG = "⏹️ Dừng đồng bộ"
 
 
 def _o(at, nhan):
@@ -90,7 +90,7 @@ def test_tai_lai_trang_khi_dong_bo_kenh_dang_chay_phien_moi_phai_nhan_lai(tmp_pa
     _nut(at1, NUT_DONG_BO).click().run()
     assert not at1.exception
     assert da_bat_dau.wait(15), "thiết lập: lượt đồng bộ giả của phiên #1 không chạy"
-    job1 = at1.session_state.job
+    job1 = at1.session_state.job_dong_bo
     eng1 = at1.session_state.eng
     _, cancel_check1 = luot[0]
     at1.run()
@@ -100,7 +100,7 @@ def test_tai_lai_trang_khi_dong_bo_kenh_dang_chay_phien_moi_phai_nhan_lai(tmp_pa
         # ---- Phiên #2 = người dùng TẢI LẠI TRANG (phiên mới, cùng thư mục dữ liệu, cùng tiến trình)
         at2 = AppTest.from_file(str(APP_PY), default_timeout=120).run()
         assert not at2.exception
-        job2 = at2.session_state.job
+        job2 = at2.session_state.job_dong_bo
         eng2 = at2.session_state.eng
         thay_dang_chay = bool(job2.get("running")) or _nut(at2, NUT_DUNG) is not None
 
@@ -227,7 +227,7 @@ def test_dong_bo_xong_khi_tab_da_bi_do_phien_mo_sau_van_thay_ket_qua_mot_lan(tmp
     at1.run()
     _nut(at1, NUT_DONG_BO).click().run()
     assert da_bat_dau.wait(15), "thiết lập: lượt đồng bộ giả không chạy"
-    job1 = at1.session_state.job
+    job1 = at1.session_state.job_dong_bo
     # Tab bị dỡ: phiên #1 không vẽ lại nữa. Lượt xong khi không phiên nào đang mở.
     tha.set()
     assert _cho(lambda: not job1.get("running"), 20.0), "lượt giả không kết thúc"
@@ -235,14 +235,14 @@ def test_dong_bo_xong_khi_tab_da_bi_do_phien_mo_sau_van_thay_ket_qua_mot_lan(tmp
     at2 = AppTest.from_file(str(APP_PY), default_timeout=120).run()
     assert not at2.exception
     van_ban2 = _van_ban(at2)
-    job2 = at2.session_state.job
+    job2 = at2.session_state.job_dong_bo
     assert job2.get("kind") == "channel" and job2.get("results", {}).get("trang_thai") == "MOT_PHAN", (
         f"phiên mở SAU khi lượt xong không thấy kết quả: job={dict(job2)!r}; văn bản: {van_ban2[:300]!r}")
     assert "lỗi giả đã ghi nhận" in van_ban2 or "Đồng bộ xong" in van_ban2, van_ban2[:400]
 
     at3 = AppTest.from_file(str(APP_PY), default_timeout=120).run()
     assert not at3.exception
-    assert not at3.session_state.job.get("kind"), "kết quả đã có phiên nhận — phiên sau không hiện lại"
+    assert not at3.session_state.job_dong_bo.get("kind"), "kết quả đã có phiên nhận — phiên sau không hiện lại"
 
 
 def test_so_tac_vu_nen_giu_ket_qua_vua_xong_toi_khi_mot_phien_nhan(tmp_path):

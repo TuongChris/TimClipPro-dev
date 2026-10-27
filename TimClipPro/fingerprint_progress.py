@@ -465,6 +465,11 @@ class FingerprintJobController:
     """Một worker + queue bounded; không gọi API Streamlit từ worker thread."""
 
     @staticmethod
+    def dang_chay_cua(engine) -> "FingerprintJobController | None":
+        """Job dựng kho đang chạy trên CÙNG thư mục dữ liệu (phiên nào của tiến trình cũng được), nếu có."""
+        return _SO_DUNG_KHO.dang_chay_cua(engine)
+
+    @staticmethod
     def cua_phien(engine, hien_tai: "FingerprintJobController | None" = None, *, dang_hien: bool = False,
                   phien_moi: bool = False) -> "FingerprintJobController":
         """Controller của phiên sở hữu ``engine`` — gọi MỖI lần vẽ lại (``tac_vu_nen.SoViecDai.cua_phien``): phiên
@@ -489,6 +494,8 @@ class FingerprintJobController:
         self._error = ""
         self._lock = threading.RLock()
         self._started_mono: float | None = None
+        # Thư mục clip gốc của job đang/vừa chạy: giao diện chặn đồng bộ kênh tải file vào đúng thư mục này giữa lúc dựng.
+        self.thu_muc = ""
 
     def publish(self, event: FingerprintProgress) -> None:
         with self._lock:
@@ -512,6 +519,7 @@ class FingerprintJobController:
         def danh_dau() -> None:
             with self._lock:
                 self._running = True
+                self.thu_muc = folder
 
         # Ghi sổ NGOÀI khoá riêng (thứ tự khoá của SoViecDai). Phiên khác đang dựng kho → từ chối, chưa đổi gì.
         _SO_DUNG_KHO.ghi(self.engine, self, "Đang dựng kho vân tay ở một cửa sổ/phiên khác của Tool — tải lại "

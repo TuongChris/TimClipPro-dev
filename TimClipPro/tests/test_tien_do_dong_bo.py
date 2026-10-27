@@ -554,14 +554,30 @@ def test_app_man_dong_bo_dang_chay_ve_tu_anh_chup_va_nut_dung_giu_nghia_cu(tmp_p
     so.video_bat_dau(7, 1189, _ma(7), "Video đang tải")
     so.hook_tai({"status": "downloading", "downloaded_bytes": 30_000_000, "total_bytes": 75_000_000, "speed": 1e7,
                  "eta": 4, "info_dict": {"format_id": "251", "ext": "webm", "vcodec": "none", "acodec": "opus"}})
+    # Đồng bộ kênh = làn RIÊNG (D-29): tác vụ nền thật chặn tới khi bị huỷ, cờ huỷ RIÊNG của lượt.
+    import threading as _threading
+
+    import tac_vu_nen
+
+    huy = _threading.Event()
+    tv = tac_vu_nen.TacVuNen("channel", huy=huy.set, so_dong_bo=so)
+    tv.bat_dau(at.session_state.eng, lambda progress: huy.wait(30) and {}, (), {},
+               job=at.session_state.job_dong_bo)
     at.session_state.so_dong_bo = so
-    at.session_state.job.update({"running": True, "pct": 0.1, "msg": "[7/1189] Video đang tải", "results": [],
-                                 "error": "", "kind": "channel"})
-    t0 = _time.perf_counter()
-    at.run()
-    khung_s = _time.perf_counter() - t0
-    assert nghi == [1.0], "đồng bộ kênh vẽ lại 1 lần/giây (không 0,75 s)"
-    assert not at.exception
+    at.session_state.tac_vu_dong_bo = tv
+    try:
+        t0 = _time.perf_counter()
+        at.run()
+        khung_s = _time.perf_counter() - t0
+        # Khung đồng bộ tự làm mới bằng fragment (run_every 1 giây) — KHÔNG ngủ chặn cả trang như màn tiến độ cũ.
+        assert nghi == [], "khung đồng bộ không được time.sleep chặn cả trang"
+        assert not at.exception
+        _kiem_khung_dong_bo(at, khung_s, huy)
+    finally:
+        huy.set()
+
+
+def _kiem_khung_dong_bo(at, khung_s, huy):
     chu = " ".join(str(getattr(x, "value", "")) for x in [*at.markdown, *at.caption, *at.header, *at.warning,
                                                            *at.text])
     assert "Đang đồng bộ kênh" in chu and "Video 7/1189: Video đang tải" in chu
@@ -571,11 +587,13 @@ def test_app_man_dong_bo_dang_chay_ve_tu_anh_chup_va_nut_dung_giu_nghia_cu(tmp_p
     assert any(m.label == "Đã có (giữ nguyên)" and m.value == "74" for m in at.metric)
     assert len(at.dataframe) >= 1
     assert khung_s < 2.0, f"một khung hình tiến độ mất {khung_s:.2f} s"
-    # Nút Dừng: chỉ gửi yêu cầu huỷ (cờ huỷ của engine) — KHÔNG đánh dấu xong trước khi worker xác nhận.
-    nut = next(b for b in at.button if b.label == "⏹️ Dừng lại")
+    # Nút Dừng: chỉ gửi yêu cầu huỷ (cờ huỷ RIÊNG của lượt đồng bộ, không phải cờ của Engine — D-29) — KHÔNG đánh
+    # dấu xong trước khi worker xác nhận.
+    nut = next(b for b in at.button if b.label == "⏹️ Dừng đồng bộ" and b.key == "dung_dong_bo")
     nut.click().run()
-    assert at.session_state.eng.cancel_event.is_set()
-    assert at.session_state.job["running"] is True and not at.session_state.job["results"]
+    assert huy.is_set()
+    assert not at.session_state.eng.cancel_event.is_set()
+    assert not at.session_state.job_dong_bo["results"]
 
 
 def test_so_tien_do_hong_khong_lam_hong_luot_dong_bo(tmp_path, monkeypatch, may):
