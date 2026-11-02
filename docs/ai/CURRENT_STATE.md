@@ -1,9 +1,10 @@
 # Trạng thái chung — TimClipPro
 
-Cập nhật 2026-10-15 (tối) trên PC2: PC2 chuyển sang DEV-ONLY (D-26). File này KHÔNG ghi HEAD mới nhất — HEAD thật luôn
-hỏi remote: `git fetch private` rồi `git log --oneline -3 private/integration/current`. Mã chạy thật trên PC2 = Development
-8502 tại worktree vận hành (`git -C C:/Dev/TimClipPro_VanHanh log -1`; 15/10 = `e74c923`, nội dung = Stable 1.1.2). Kiểm
-(một dòng) — RỖNG nghĩa là mã chạy thật trên PC2 chưa sau integration:
+Cập nhật 2026-11-02 trên PC2 (máy công ty; chủ dự án chuẩn bị khả năng rời máy này — dựng lại trên máy mới:
+`docs/ai/TIEP_TUC_TREN_MAY_MOI.md`; toàn cảnh: `docs/ai/TONG_HOP_DU_AN.md`). File này KHÔNG ghi HEAD mới nhất — HEAD thật
+luôn hỏi remote: `git fetch private` rồi `git log --oneline -3 private/integration/current`. Mốc 02/11: `integration/current`
+= `dd111e8` (PR #15–#20: audit độc lập 25/10 + đợt P3 + chẩn đoán Sheets + đồng bộ song song D-29); DEV 8502 trên PC2 chạy
+đúng `dd111e8`. Kiểm (một dòng) — RỖNG nghĩa là mã chạy thật trên PC2 chưa sau integration:
 ```bash
 git diff --stat pc2-van-hanh private/integration/current -- TimClipPro ':!TimClipPro/tests' ':!*.md'
 ```
@@ -56,10 +57,12 @@ Lock có băm + wheel docopt + khoá công khai đang tin (`8aa5…` PC1 + `d027
 - CHƯA: ruleset GitHub; tái audit độc lập `e49340d`; pilot Sheets/YouTube thật có kiểm soát trên PC2 (khi người dùng duyệt).
 
 ## Việc đang mở (theo thứ tự)
-1. Phát triển tính năng Tool Quét Video trên PC2; gộp vào `integration/current` rồi cập nhật worktree vận hành Development
-   bằng Git (`docs/ai/GIT_WORKFLOW.md` «Development vận hành PC2»). Phát hành Stable chỉ khi cần cho máy khác (PC1).
-2. Bật ruleset GitHub (một lệnh, chủ repo duyệt).
-3. Bản sau: CookieFix F2, F4–F8; Marathon F1/F2 (ghi trong release notes 1.1.1).
-4. Sao lưu khoá ký mỗi máy (người dùng quyết) — với hai khoá cùng được tin, mất một khoá không còn chặn phát hành.
+1. Người dùng: nghiệm thu đồng bộ + quét song song (D-29) trên DEV 8502; nghiệm thu DEV đợt 2 audit.
+2. Người dùng quyết: P-6, P-7 (`DECISIONS.md`), B-13, F-16, 3 ghép tuỳ chọn của P0; có phát hành Stable 1.1.3 không; có nới
+   giới hạn mốc 25,4 phút (`--maxtimebits 16`, `TimClipPro/docs/FINGERPRINT_RECOVERY_ARCHITECTURE.md` §6.1) trước lần dựng kho
+   tới không.
+3. PC1: review PR #15–#20 (đã vào `integration/current`, chưa có PC1 review); đề xuất E-1 (`.claude/settings.json`).
+4. Bật ruleset GitHub (`release/github/`, một lệnh, chủ repo duyệt).
 5. PC1 production lên bản managed: quyết định riêng (lược đồ `lichsu.db` v2 → v4; sao lưu trước).
-6. Khi tích hợp nhánh P0 «bóng» của PC2 (`fix/pc2/loop-alias-p0`, local): đánh số lại D-21/P-5/P-6 (trùng số với D-21…D-25).
+6. Rời máy công ty: thu hồi Deploy Key «PC2 PC_Office», `gh auth logout`, khoá Google cũ, khoá ký PC2 (mục 5 của
+   `TIEP_TUC_TREN_MAY_MOI.md`).

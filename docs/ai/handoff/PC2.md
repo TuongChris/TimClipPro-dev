@@ -25,11 +25,10 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   tạm; dữ liệu thật chỉ dùng trong app DEV vận hành.
 
 ## Tiếp theo
-1. Đồng bộ + quét song song (D-29, nhánh `feature/pc2/dong-bo-song-song-quet`, worktree `C:\Dev\TimClipPro_SongSong`): người
-   dùng duyệt đẩy + PR + gộp; cập nhật DEV 8502 CHỈ khi lượt đồng bộ đang chạy ở 8502 đã xong (kiểm rảnh, sao lưu trước).
-   Sau cập nhật: người dùng thử thật một tab đồng bộ + một tab quét (khung đồng bộ tự làm mới mỗi giây — AppTest không chạy
-   được nhịp tự làm mới của fragment). P3 còn mở của review: chặn dựng vân tay khi `cli.py kenh` (tiến trình KHÁC) đang
-   đồng bộ cùng thư mục — giao diện chỉ biết lượt đồng bộ trong tiến trình của nó.
+1. Đồng bộ + quét song song (D-29): PR #20 GỘP (`dd111e8`), DEV 8502 cập nhật 27/10 13:04 (sao lưu `data_20261027_130421`).
+   Chờ người dùng thử thật một tab đồng bộ + một tab quét (AppTest không chạy nhịp tự làm mới của fragment). P3 còn mở:
+   giao diện không biết `cli.py kenh` ở tiến trình KHÁC đang đồng bộ cùng thư mục. Kho CoryxKenshin dựng xong 28/10 00:29
+   (CLI `--ncores 2`, 1745/1745) — dựng bằng giao diện với 8 worker từng hết RAM. Máy mới: `docs/ai/TIEP_TUC_TREN_MAY_MOI.md`.
 2. Người dùng: nghiệm thu DEV đợt 2 theo `C:\Dev\pc2_test_runs\2026-10-26_audit_p3\NGHIEM_THU_DEV_DOT2.md` (~15 phút).
 3. Người dùng quyết: P-6 (3 phương án, `…\2026-10-26_audit_p3\P6_PHUONG_AN.md`); P-7 (`P7_THIET_KE.md` cùng thư mục, công
    cụ `C:\Dev\pc2_test_tools\p7_lich_su_bong`, CHƯA chạy dữ liệu thật — chỉ chạy CHỈ ĐỌC khi duyệt); B-13, F-16; 3 ghép

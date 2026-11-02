@@ -54,6 +54,8 @@ Trạng thái chung hiện tại (tự nạp):
 | File | Đọc khi |
 |---|---|
 | `CURRENT_STATE.md` | luôn (đã tự nạp ở trên) |
+| `TIEP_TUC_TREN_MAY_MOI.md` | máy MỚI vừa clone (không có `CLAUDE.local.md`): dựng môi trường, thứ không có trên GitHub |
+| `TONG_HOP_DU_AN.md` | cần toàn cảnh dự án (tính năng, kiến trúc, lịch sử, quyết định) |
 | `handoff/PC1.md`, `handoff/PC2.md` | đầu phiên, của máy mình |
 | `ARCHITECTURE_INDEX.md` | tìm module/tài liệu thiết kế cho task |
 | `TEST_MATRIX.md` | chọn test cần chạy, lệnh chạy |
