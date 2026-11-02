@@ -92,7 +92,7 @@ def test_ban_ngang_v2_ten_sach_link_dung_moc_ngay_nguyen_ban_url_watch(tmp_path,
     assert o["Tên video vi phạm"] == TIEU_DE
     assert o["Đoạn vi phạm 1 trong video vi phạm"] == \
         "00:15:15 – 00:20:15 · https://www.youtube.com/watch?v=vidvipham01&t=915"
-    assert o["Ngày đăng video vi phạm"] == "15/03/2026"
+    assert o["Ngày đăng video vi phạm"] == "March 15, 2026"
     assert o["Link video gốc 1"] == "https://www.youtube.com/watch?v=bbbbbbbbbbb"
     assert o["Ngày đăng video gốc 1"] == ""          # kho chỉ có ngày đã quy đổi
     assert o["Tên video gốc 1"] == "Clip B gốc"
@@ -106,9 +106,9 @@ def test_cu_va_moi_canh_nhau_cung_mot_ban_build(tmp_path, monkeypatch):
     o_cu, o_moi = _o(e.to_rows_ngang([cu])[0]), _o(e.to_rows_ngang([kq])[0])
     assert o_cu["Tên video vi phạm"].startswith(TIEU_DE + " [QUÉT MỘT PHẦN — ")
     assert o_cu["Đoạn vi phạm 1 trong video vi phạm"].endswith("?t=912")
-    assert o_cu["Ngày đăng video vi phạm"] == "16/03/2026"
+    assert o_cu["Ngày đăng video vi phạm"] == "March 16, 2026"
     assert o_cu["Link video gốc 1"] == "https://youtu.be/bbbbbbbbbbb"
-    assert o_cu["Ngày đăng video gốc 1"] == "02/01/2025"
+    assert o_cu["Ngày đăng video gốc 1"] == "January 2, 2025"
     assert o_moi["Tên video vi phạm"] == TIEU_DE
     doc_cu, doc_moi = e.to_rows([cu])[0], e.to_rows([kq])[0]
     assert "QUÉT MỘT PHẦN" in doc_cu[1] and doc_moi[1] == TIEU_DE
@@ -140,7 +140,7 @@ def test_ngay_goc_co_nguon_upload_date_hien_ra(tmp_path, monkeypatch):
                                cau_hinh={"quet_tang_dan": False})
     kq = e.scan_youtube(URL)
     o = _o(e.to_rows_ngang([kq])[0])
-    assert o["Ngày đăng video gốc 1"] == "03/02/2025"
+    assert o["Ngày đăng video gốc 1"] == "February 3, 2025"
     g = kq.bao_cao.doan[0].goc
     assert g.ngay_dang.nguon == "clips_meta.publication_date(nguon=upload_date)"
 
@@ -253,7 +253,7 @@ def test_moi_exporter_cung_ten_link_url_ngay(tmp_path, monkeypatch):
     header, sheets, nghiem_ngat = e.dong_gui_sheets([kq], dang_ngang=True, an_toan_cu=True)
     for dong in (ngang, csv_ngang, sheets[0]):
         assert dong[5] == TIEU_DE and link in dong[8] and dong[13] == goc
-        assert dong[7] == "15/03/2026"
+        assert dong[7] == "March 15, 2026"
     assert doc[1] == TIEU_DE and doc[10] == link and doc[5] == goc
     # Hồ sơ .md là Markdown: cùng tên, ở dạng đã thoát (trình xem .md hiện lại đúng «[thật]») — audit E-3.
     assert f"**Tiêu đề video vi phạm:** {thoat_markdown_ho_so(TIEU_DE)}" in md and link in md and goc in md

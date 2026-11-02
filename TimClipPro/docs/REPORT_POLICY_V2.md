@@ -47,7 +47,7 @@ cũ, tên file/mã lưu trữ/khoá vân tay trong kho.
   `tests/test_link_goc_tu_ten_file.py`). Sheets 34/16 cột và hồ sơ không có cột nguồn của link,
   nên giao diện cảnh báo khi có video gốc phục hồi từ tên file; CLI/Watch không có cảnh báo đó.
   Link video VI PHẠM giữ nguyên URL người dùng đã quét (không tự đổi link kênh/playlist).
-* **Ngày** — `NgayNguon(gia_tri, nguon, ly_do_thieu)`; hiển thị `DD/MM/YYYY` giữ đúng ngày lịch.
+* **Ngày** — `NgayNguon(gia_tri, nguon, ly_do_thieu)`; hiển thị `Month D, YYYY (D-30; trước 02/11/2026: DD/MM/YYYY)` giữ đúng ngày lịch.
   Thiếu thì ô trống và `ly_do_thieu` nói vì sao — không lùi về ngày quy đổi, `release_*`,
   `timestamp` hay ngày trong tên file.
 * **Tên** — video YouTube: `title_raw` của `Engine.youtube_info` (yt-dlp nguyên văn). Wrapper cũ
@@ -149,7 +149,7 @@ video dài» cho ra `ok` + 0 khớp + chỉ phần đầu, âm tính trơn sẽ 
 
 * Giá trị V2 gửi nguyên văn bằng `RAW` (Sheets không hiểu `=…` là công thức, nên không thêm dấu
   `'` — dấu đó sẽ hiện ra trong ô). CSV vẫn chặn công thức (`o_bang_tinh_an_toan`) ở tầng ghi.
-  Ngày gửi bằng chuỗi `DD/MM/YYYY` (không bị diễn giải lại theo locale), số vẫn là số.
+  Ngày gửi bằng chuỗi `Month D, YYYY (D-30; trước 02/11/2026: DD/MM/YYYY)` (không bị diễn giải lại theo locale), số vẫn là số.
 * Gửi V2 ở chế độ **nghiêm ngặt** (`SheetsExporter.append(..., nghiem_ngat=True)`): hàng 1 phải
   đúng tiêu đề của công cụ theo thứ tự (cột người dùng thêm SAU cột cuối thì được). Có dữ liệu mà
   thiếu/sai tiêu đề → `LoiHeaderSheet` (lỗi vĩnh viễn, không thử lại), KHÔNG chèn/sửa hàng 1,

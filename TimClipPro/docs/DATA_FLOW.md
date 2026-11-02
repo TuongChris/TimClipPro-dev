@@ -745,7 +745,7 @@ Hai lưu ý:
 ### 8.6 Định dạng lưu trữ chính tắc
 
 * Trong metadata / `ScanResult`: chuỗi **`YYYYMMDD`** (`publication_date.py:88-90`).
-* Trong báo cáo: **`DD/MM/YYYY`**, chỉ qua `format_publication_date()` (`publication_date.py:251-264`).
+* Trong báo cáo: **`Month D, YYYY (D-30; trước 02/11/2026: DD/MM/YYYY)`**, chỉ qua `format_publication_date()` (`publication_date.py:251-264`).
 * **`"00000000"` KHÔNG phải ngày hợp lệ** (`clip_metadata.py:118-119` từ chối nó);
   `channel._ten_file` dùng nó **có chủ đích** để nghĩa là "không biết" (`channel.py:466-468`).
 
@@ -815,7 +815,7 @@ Rút từ source, mỗi mục kèm nơi nó được thi hành. Đây là danh s
 
 1. **`hhmmss` CẮT, không làm tròn** — `engine.py:430`. Phải song hành với `link_moc` cũng cắt
    (`engine.py:3338`, `:3341`).
-2. **Chỉ `publication_date.format_publication_date` được sinh chuỗi `DD/MM/YYYY`** —
+2. **Chỉ `publication_date.format_publication_date` được sinh chuỗi `Month D, YYYY (D-30; trước 02/11/2026: DD/MM/YYYY)`** —
    `publication_date.py:251-264`, khoá bởi `tests/test_publication_date_exporters.py:90-102`.
 3. **`_cut_chunks` tính lưới mốc từ giây 0 của cả file rồi mới LỌC theo cửa sổ** —
    `engine.py:2260-2265`. Làm nó tương đối với `tu_giay` sẽ khiến quét tăng dần và quét trọn

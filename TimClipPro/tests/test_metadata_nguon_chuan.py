@@ -73,14 +73,14 @@ def test_sua_ngay_dang_bang_cong_cu_that_toi_duoc_bao_cao_du_co_snapshot_cu(
     _ghi(kho / "clips_meta.json", {TEN: _meta(timestamp=ts, duration=125.0)})
     e = _eng(tmp_path, monkeypatch, kho, [{"ten": TEN, "duong_dan": str(kho / TEN)}])
     assert e.khoi_phuc_metadata_offline(dry_run=False).errors == ()
-    assert _hang_ngang(e, TEN)["Ngày đăng video gốc 1"] == "01/01/2026"
+    assert _hang_ngang(e, TEN)["Ngày đăng video gốc 1"] == "January 1, 2026"
 
     sua = kiem_ngay_dang.repair(str(kho), "Asia/Ho_Chi_Minh", dung_mang=False,
                                 apply=True, gioi_han=0)
     assert sua["da_doi"] == 1
 
     hang = _hang_ngang(e, TEN)          # không ép xoá cache: chữ ký file phải đủ
-    assert hang["Ngày đăng video gốc 1"] == "02/01/2026", \
+    assert hang["Ngày đăng video gốc 1"] == "January 2, 2026", \
         "bản sửa đã ghi vào clips_meta.json phải tới được báo cáo"
     assert any("lệch" in cb and "clips_meta.json" in cb for cb in e.canh_bao_metadata), \
         e.canh_bao_metadata

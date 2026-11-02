@@ -51,7 +51,7 @@ def test_dong_bao_cao_v2_url_watch_ngay_nguyen_ban_link_dung_giay():
                              chinh_sach_bao_cao=v2.CHINH_SACH_V2)
     rows = co.dong_bao_cao(kql)
     assert _cot(rows, "Link video gốc") == ["https://www.youtube.com/watch?v=aaaaaaaaaaa"] * 2
-    assert _cot(rows, "Ngày đăng video gốc") == ["12/03/2025"] * 2   # không phải 13/03
+    assert _cot(rows, "Ngày đăng video gốc") == ["March 12, 2025"] * 2   # không phải 13/03
     assert _cot(rows, "Clip bắt đầu từ")[0] == "00:15:15"
     assert _cot(rows, "🔗 Nhảy tới đúng mốc vi phạm")[0] == "https://www.youtube.com/watch?v=vid00000001&t=915"
     assert _cot(rows, "Video vi phạm")[0] == "Video [1] thật"
@@ -75,7 +75,7 @@ def test_lo_khong_ghim_chinh_sach_giu_luat_cu():
     assert kql.chinh_sach_bao_cao == ""
     rows = co.dong_bao_cao(kql)
     assert _cot(rows, "Link video gốc")[0] == "https://youtu.be/aaaaaaaaaaa"
-    assert _cot(rows, "Ngày đăng video gốc")[0] == "13/03/2025"
+    assert _cot(rows, "Ngày đăng video gốc")[0] == "March 13, 2025"
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +114,7 @@ def test_lo_v2_chi_hoi_video_goc_duoc_bao_cao_mot_lan(eng_v2):
     assert kq.thong_tin_goc["ngay_dang"] == "20250312"
     assert "upload_date" not in kq.thong_tin_goc        # không mang ngày quy đổi dưới tên cũ
     rows = co.dong_bao_cao(kq)
-    assert _cot(rows, "Ngày đăng video gốc") == ["12/03/2025"] * 2
+    assert _cot(rows, "Ngày đăng video gốc") == ["March 12, 2025"] * 2
     assert all(x is False for x in eng.luu_lich_su), "lô vẫn KHÔNG ghi lịch sử"
 
 

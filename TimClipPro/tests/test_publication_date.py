@@ -60,7 +60,7 @@ def test_regression_asv1kjfux4_ra_dung_01_08_2026():
     kq = resolve_publication_date(META_ASV, VN)
 
     assert kq.date == date(2026, 8, 1)
-    assert format_publication_date(kq) == "01/08/2026"
+    assert format_publication_date(kq) == "August 1, 2026"
     assert kq.source_field == "timestamp"
     assert kq.confidence == "high"
     assert "khac_upload_date" in kq.warnings, "Phải ghi nhận lệch so với upload_date"
@@ -72,7 +72,7 @@ def test_regression_t_mkh8iupww_ra_dung_21_06_2025():
     kq = resolve_publication_date(META_TMK, VN)
 
     assert kq.date == date(2025, 6, 21)
-    assert format_publication_date(kq) == "21/06/2025"
+    assert format_publication_date(kq) == "June 21, 2025"
     assert kq.source_field == "timestamp"
     assert kq.confidence == "high"
     assert "khac_upload_date" in kq.warnings
@@ -258,9 +258,9 @@ def test_case12_ket_qua_khong_phu_thuoc_mui_gio_cua_may(monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_format_nhan_moi_kieu_dau_vao():
-    assert format_publication_date(date(2025, 6, 21)) == "21/06/2025"
-    assert format_publication_date("20250621") == "21/06/2025"
-    assert format_publication_date(resolve_publication_date(META_TMK, VN)) == "21/06/2025"
+    assert format_publication_date(date(2025, 6, 21)) == "June 21, 2025"
+    assert format_publication_date("20250621") == "June 21, 2025"
+    assert format_publication_date(resolve_publication_date(META_TMK, VN)) == "June 21, 2025"
     assert format_publication_date("00000000") == ""
     assert format_publication_date(None) == ""
     assert format_publication_date("linh tinh") == ""

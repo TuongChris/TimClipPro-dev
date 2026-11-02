@@ -57,7 +57,7 @@ def test_bat_thi_hoi_dung_video_goc_da_chon_mot_lan(tmp_path, monkeypatch):
     g = kq.bao_cao.doan[0].goc
     assert _hoi_goc(hop) == [URL_GOC_B]
     assert (g.ngay_dang.gia_tri, g.ngay_dang.nguon) == ("20250101", v2.NGUON_UPLOAD_DATE)
-    assert g.ngay_dang.hien_thi() == "01/01/2025"             # ngày nguyên bản, không phải 02/01
+    assert g.ngay_dang.hien_thi() == "January 1, 2025"             # ngày nguyên bản, không phải 02/01
     assert kq.bao_cao.bo_sung_ngay == (("bbbbbbbbbbb", "co_ngay"),)
     assert kq.status == "ok" and kq.loi_truy_cap is None
 

@@ -49,15 +49,22 @@ def _chuan_hoa_ngay(text):
     return f"{ngay:02d}/{thang:02d}/{nam:04d}"
 
 
+def _dinh_dang_ngay(text):
+    """Bản Python của `dinhDangNgay_` (File01) với ô chuỗi (RAW): chuẩn hoá được thì dd/MM/yyyy, không thì GIỮ chữ."""
+    return _chuan_hoa_ngay(text) or str(text or "").strip()
+
+
 def test_gia_tri_v2_doc_qua_apps_script_khong_them_hau_to_hay_lui_giay():
     o = dict(zip(bang_ngang.HEADER_NGANG, v2.dong_ngang(_bc())))
     # File03 in «Tên video vi phạm : <ô hiển thị>» — ô V2 không còn hậu tố phạm vi.
     assert "QUÉT MỘT PHẦN" not in o["Tên video vi phạm"]
     doan = o["Đoạn vi phạm 1 trong video vi phạm"]
     assert doan.startswith("00:15:15 ") and doan.endswith("&t=915")
-    # Ngày gửi bằng chuỗi (RAW) → Apps Script chuẩn hoá dd/MM/yyyy giữ đúng ngày lịch.
-    assert _chuan_hoa_ngay(o["Ngày đăng video vi phạm"]) == "15/03/2026"
-    assert _chuan_hoa_ngay(o["Ngày đăng video gốc 1"]) == "12/03/2025"
+    # Ngày gửi bằng chuỗi (RAW) dạng «March 15, 2026» (02/11/2026): File03 không nhận ra dạng số → GIỮ nguyên chữ,
+    # đúng ngày lịch; ô cũ «15/03/2026» vẫn chuẩn hoá như trước.
+    assert _dinh_dang_ngay(o["Ngày đăng video vi phạm"]) == "March 15, 2026"
+    assert _dinh_dang_ngay(o["Ngày đăng video gốc 1"]) == "March 12, 2025"
+    assert _dinh_dang_ngay("15/03/2026") == "15/03/2026"
     # Link gốc dạng watch?v= vẫn được File04 nhận ra mã video (đánh dấu «đã quét»).
     assert _lay_youtube_video_id(o["Link video gốc 1"]) == "goc00000001"
     assert _lay_youtube_video_id(doan.split(" · ")[1]) == "vidvipham01"

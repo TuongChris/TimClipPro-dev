@@ -144,7 +144,7 @@ Video vi phạm:
   yt-dlp extract_info
     -> engine.youtube_info()  [resolve NGAY TAI DAY]
     -> ScanResult.upload_date (đã chính tắc) + publication_date_source
-    -> bang_ngang.dung_dong_ngang -> format_publication_date -> "DD/MM/YYYY"
+    -> bang_ngang.dung_dong_ngang -> format_publication_date -> "Month D, YYYY (D-30; trước 02/11/2026: DD/MM/YYYY)"
 
 Video gốc:
   yt-dlp (lúc tải hoặc lúc vameta)
@@ -159,7 +159,7 @@ Hai luồng dùng **cùng một** resolver và **cùng một** hàm định dạ
 
 ## 9. Exporter
 
-Chỉ `publication_date.format_publication_date()` được phép sinh chuỗi `DD/MM/YYYY`.
+Chỉ `publication_date.format_publication_date()` được phép sinh chuỗi `Month D, YYYY (D-30; trước 02/11/2026: DD/MM/YYYY)`.
 Ba test cấu trúc canh giữ điều này:
 
 - `test_khong_module_nao_tu_dinh_dang_ngay_rieng`

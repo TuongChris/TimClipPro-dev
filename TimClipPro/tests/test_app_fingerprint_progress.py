@@ -202,7 +202,7 @@ def test_bao_cao_hien_video_goc_cho_tung_doan_va_khong_nham_tong(tmp_path, kho_g
     # «Clip một» là clip duy nhất có metadata chính thức và nằm ở đoạn thứ 3.
     o_clip_mot = 3
     assert dong[header.index(f"Tên video gốc {o_clip_mot}")] == "Clip một chính thức"
-    assert dong[header.index(f"Ngày đăng video gốc {o_clip_mot}")] == "02/01/2024"
+    assert dong[header.index(f"Ngày đăng video gốc {o_clip_mot}")] == "January 2, 2024"
     assert dong[header.index(f"Thời lượng video gốc {o_clip_mot}")] == "00:10:10"
     # Hai đoạn còn lại phục hồi từ tên file: có link/tên, không bịa ngày đăng.
     for so in (1, 2):

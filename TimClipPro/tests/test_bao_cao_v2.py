@@ -117,7 +117,7 @@ def test_ngay_nguyen_ban_giu_ngay_lich_o_moi_mui_gio(monkeypatch, tz):
     ngay = v2.ngay_tu_info({"upload_date_raw": "20260315", "upload_date": "20260316"})
     assert ngay.gia_tri == "20260315"
     assert ngay.nguon == v2.NGUON_UPLOAD_DATE
-    assert ngay.hien_thi() == "15/03/2026"
+    assert ngay.hien_thi() == "March 15, 2026"
 
 
 def test_ngay_khong_doc_khoa_upload_date_da_quy_doi_cua_wrapper():
@@ -275,9 +275,9 @@ def test_dong_ngang_ca_that_dung_hop_dong_34_cot():
     assert "QUÉT MỘT PHẦN" not in o["Tên video vi phạm"]
     assert o["Đoạn vi phạm 1 trong video vi phạm"] == \
         "00:15:15 – 00:39:10 · https://www.youtube.com/watch?v=vidvipham01&t=915"
-    assert o["Ngày đăng video vi phạm"] == "15/03/2026"
+    assert o["Ngày đăng video vi phạm"] == "March 15, 2026"
     assert o["Link video gốc 1"] == "https://www.youtube.com/watch?v=goc00000001"
-    assert o["Ngày đăng video gốc 1"] == "12/03/2025"
+    assert o["Ngày đăng video gốc 1"] == "March 12, 2025"
     assert o["Thời lượng video gốc 1"] == "00:25:00"
     assert o["Thời lượng video vi phạm"] == "04:02:03"
     assert o["Thời gian quét"] == "2026-01-02 03:04:05"

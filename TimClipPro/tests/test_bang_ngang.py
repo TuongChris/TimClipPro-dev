@@ -80,7 +80,7 @@ def test_luon_du_34_cot():
 def test_dinh_dang_ngay():
     _dong_34()
 
-    assert dinh_dang_ngay("20250115") == "15/01/2025"
+    assert dinh_dang_ngay("20250115") == "January 15, 2025"
     assert dinh_dang_ngay("00000000") == ""
     assert dinh_dang_ngay("") == ""
     assert dinh_dang_ngay("20251340") == ""
@@ -129,12 +129,12 @@ def test_dung_day_du_thong_tin_nguon_va_clip_goc():
         "https://youtu.be/abc123",
         "Video vi phạm",
         "01:00:00",
-        "15/01/2025",
+        "January 15, 2025",
     ]
     assert dong[13:17] == [
         "https://youtu.be/goc12345678",
         "Video gốc",
-        "02/01/2024",
+        "January 2, 2024",
         "00:02:05",
     ]
     assert dong[33] == 7

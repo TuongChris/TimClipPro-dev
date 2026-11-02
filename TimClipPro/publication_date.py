@@ -248,8 +248,14 @@ def resolve_publication_date(
     return PublicationDateResolver(display_timezone).resolve(metadata)
 
 
+# Cố định tiếng Anh: strftime("%B") đổi theo locale của máy Windows.
+THANG_TIENG_ANH = ("January", "February", "March", "April", "May", "June", "July", "August", "September",
+                   "October", "November", "December")
+
+
 def format_publication_date(gia_tri: Any) -> str:
-    """Định dạng DUY NHẤT cho báo cáo: ``DD/MM/YYYY``. Không hợp lệ -> "".
+    """Định dạng DUY NHẤT cho báo cáo: ``October 31, 2026`` (người dùng chọn 02/11/2026; trước đó ``31/10/2026``).
+    Không hợp lệ -> "".
 
     Nhận ``date``, ``PublicationDateResult`` hoặc chuỗi ``YYYYMMDD`` để mọi
     exporter dùng chung một hàm thay vì mỗi chỗ tự parse.
@@ -258,10 +264,8 @@ def format_publication_date(gia_tri: Any) -> str:
         gia_tri = gia_tri.date
     if isinstance(gia_tri, datetime):
         gia_tri = gia_tri.date()
-    if isinstance(gia_tri, date):
-        return gia_tri.strftime("%d/%m/%Y")
-    ngay = ngay_tu_chuoi(gia_tri)
-    return ngay.strftime("%d/%m/%Y") if ngay else ""
+    ngay = gia_tri if isinstance(gia_tri, date) else ngay_tu_chuoi(gia_tri)
+    return f"{THANG_TIENG_ANH[ngay.month - 1]} {ngay.day}, {ngay.year}" if ngay else ""
 
 
 def ghi_log_chan_doan(video_id: str, ket_qua: PublicationDateResult, metadata: Mapping) -> None:

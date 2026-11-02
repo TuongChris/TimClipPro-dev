@@ -72,8 +72,8 @@ def test_publication_date_is_identical_across_exporters(engine, tmp_path, monkey
     dong = bang_ngang.dung_dong_ngang(kq, resolver=resolver)
     dong_sheets = engine.to_rows_ngang([kq])[0]          # Google Sheets dùng đúng hàm này
 
-    ngay_vi_pham_mong_doi = "21/06/2025"
-    ngay_goc_mong_doi = "01/08/2026"
+    ngay_vi_pham_mong_doi = "June 21, 2025"
+    ngay_goc_mong_doi = "August 1, 2026"
 
     assert dong[header.index("Ngày đăng video vi phạm")] == ngay_vi_pham_mong_doi
     assert dong[header.index("Ngày đăng video gốc 1")] == ngay_goc_mong_doi
@@ -168,4 +168,4 @@ def test_exporter_khong_goi_mang_khi_dinh_dang(monkeypatch):
         upload_date="20250621", so_dat_nguong=0,
     )
     dong = bang_ngang.dung_dong_ngang(kq)
-    assert dong[bang_ngang.HEADER_NGANG.index("Ngày đăng video vi phạm")] == "21/06/2025"
+    assert dong[bang_ngang.HEADER_NGANG.index("Ngày đăng video vi phạm")] == "June 21, 2025"

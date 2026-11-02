@@ -41,6 +41,7 @@ from dataclasses import asdict, dataclass, field, fields
 from typing import Any, Iterable, Mapping, Optional
 
 from clip_metadata import YOUTUBE_ID_PATTERN, valid_upload_date, youtube_ids_from_url
+from publication_date import format_publication_date
 
 CHINH_SACH_V2 = "v2"
 # Chính sách mà job MỚI được ghim. Chỉ ``Engine._ban_sao_cho_job`` đọc hằng này; exporter
@@ -162,9 +163,9 @@ class NgayNguon:
     ly_do_thieu: str = ""
 
     def hien_thi(self) -> str:
-        """``DD/MM/YYYY`` giữ NGUYÊN ngày lịch của nguồn; chưa có → ``""``."""
+        """``October 31, 2026`` giữ NGUYÊN ngày lịch của nguồn (cùng hàm với luật cũ); chưa có → ``""``."""
         g = ngay_hop_le(self.gia_tri)
-        return f"{g[6:8]}/{g[4:6]}/{g[0:4]}" if g else ""
+        return format_publication_date(g) if g else ""
 
 
 def ngay_tu_info(info: Optional[Mapping]) -> NgayNguon:

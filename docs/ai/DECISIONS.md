@@ -15,6 +15,13 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-30 Ngày đăng trong báo cáo dạng «October 31, 2026» (người dùng, 2026-11-02) — thay `DD/MM/YYYY`
+Quyết định: mọi ngày đăng trong báo cáo (Google Sheets bảng Ngang 34 cột / Dọc 16 cột, CSV, hồ sơ, giao diện) hiển thị
+`Month D, YYYY` tiếng Anh cố định (không theo locale máy). Một hàm duy nhất `publication_date.format_publication_date`;
+báo cáo V2 (`NgayNguon.hien_thi`) gọi lại nó. Không đổi ngày lịch, nguồn ngày, chữ ký chính sách (Watch không quét lại),
+cách gửi RAW. Dòng ĐÃ gửi lên Sheet không bị sửa (vẫn `31/10/2026`); dòng mới dạng mới. Apps Script File03 giữ nguyên
+chữ khi không nhận ra ngày dạng số. Bằng chứng: `tests/test_ngay_dang_thang_chu.py`.
+
 ## D-29 Đồng bộ kênh chạy SONG SONG với quét trong giao diện (người dùng, 2026-10-27) — nới «một việc mỗi lúc» của TCP-13
 Quyết định (người dùng chọn «hướng B» trong phiên 27/10): một tab đồng bộ kho mới, một tab quét theo kho đã đồng bộ —
 không chờ đồng bộ xong. Đồng bộ kênh thành làn RIÊNG (`tac_vu_nen.LOAI_SONG_SONG`, `job_dong_bo`, cờ huỷ riêng của lượt,
