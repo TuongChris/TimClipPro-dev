@@ -180,6 +180,8 @@ mạng, không chạy updater trong tiến trình app. Nút «⏸ Hoãn cập nh
 
 ## 8. Giới hạn đã biết
 
+* `launcher.py` và bản `managed_update.py` trong `launcher\` của máy đã cài là ảnh chụp lúc bootstrap: sửa ở repo (vd. audit
+  06/11: `[KHONG_CO]` khi không có gì để áp dụng, mã thoát khác 0 khi chờ duyệt migration) chỉ có hiệu lực sau bootstrap lại.
 * Windows không fsync được thư mục: cam kết dựa trên `FlushFileBuffers` của file (file giải nén, manifest,
   JSON trạng thái) + thay thế nguyên tử NTFS. File do `pip` ghi vào runtime không được fsync/kiểm lại sau khi
   cài (health check ở staging là lần kiểm runtime).

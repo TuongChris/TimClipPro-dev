@@ -834,3 +834,9 @@ thấy merge commit, kết quả lô mất sau F5, một lần đọc kho lỗi 
 trên PC2 còn là bản 15/10 không có khối quét nội dung: bản trong repo được vá nhiều lần mà không ai cài lại.
 → Sau khi sửa `release/git-hooks/pre-push` phải cài lại trên từng máy và kiểm `cmp`. `grep` của Git Bash bỏ qua CR nên báo sai
 xuống dòng: đo bằng Python. Lỗi đọc không được ghi vào cache như kết quả thật.
+
+**40. Audit 06/11, đợt 2: nhiều tab, lỗi tạm và lời hướng dẫn (PC2).** Lưu cấu hình ở tab cũ xoá cookie của tab khác; tab cũ giữ thư
+mục nguồn cũ nên lọt chốt chống trộn kho; `Thread.start` lỗi để lại việc ma ở ba bộ điều phối dù `tac_vu_nen` đã sửa cùng lỗi (DR-6);
+lỗi đọc tạm bị coi là file hỏng; làm đúng sổ tay lại tin khoá đã thu hồi; `CapNhat.bat` in `[ACTIVE]` khi không làm gì.
+→ Sửa một lỗi ở một bộ điều phối thì grep cả các bộ cùng khuôn. Lỗi đọc khác file hỏng: chỉ `ValueError` mới được phục hồi từ `.bak`.
+Tài liệu vận hành cũng là code: lần theo từng bước sổ tay trên dữ liệu giả. Hoàn tác xong bản `truoc_hoan_tac` chỉ để điều tra.
