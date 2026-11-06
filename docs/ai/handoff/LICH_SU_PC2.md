@@ -3,6 +3,14 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-11-06 — dựng kho theo RAM, bỏ clip dài hơn 2 giờ (D-31, nhánh feature/pc2/dung-kho-theo-ram)
+- Làm: cha phát từng clip theo RAM (`LichTheoRam`), clip lỗi thử lại cuối lượt, clip quá RAM bỏ qua có báo rõ, Below Normal, nhánh
+  một nhân đi cùng đường. Người dùng chốt thêm: video > 2 giờ không tải, clip > 2 giờ không tạo vân tay (`channel.GIAY_CLIP_TOI_DA`).
+- Test (chặn mạng, cp1252, venv CookieFix): nhanh 3394 = 3390/4/0 (373 s), chậm 22/22 (379 s), ruff sạch. Nghiệm thu `do_dung_kho_ram.py d`
+  qua Engine thật: 34/34 clip, đúng 2 clip > 2 giờ bị bỏ, tìm lại 4/4, RAM trống thấp nhất 9,56 GB. Dựng trọn Kho_Joe chưa chạy lại.
+- Bằng chứng: `C:\Dev\pc2_test_runs\2026-11-06_dung_kho_ram`, số đo ở tài liệu phân tích. Review độc lập: 0 P1, 1 P2 (RAM tụt 60
+  giây bỏ cả hàng), 5 P3, đều test đỏ rồi sửa. `/ponytail-review`: 1 test đỏ, video đúng 2:00:00 lệch giữa hai bước, bản chép đo
+  độ dài, 2 câu báo sai, đều đã sửa. Bẫy: `audio_read.read_data` ghép stderr bytes nên FFmpeg treo lộ thành TypeError.
 ### 2026-11-06 — phân tích tải dựng kho (nhánh feature/pc2/phan-tich-tai-dung-kho)
 - Đo thật 10 bài (`TimClipPro/docs/PHAN_TICH_TAI_DUNG_KHO_2026-11.md`, công cụ `tools/do_tai/`): quá tải là DỰNG VÂN TAY, nguyên
   nhân RAM (~1,5 GB/giờ âm thanh mỗi worker; clip #291 của Kho_Joe_Games dài 18,2 giờ làm cả lượt sụp), không có điểm lưu giữa

@@ -32,9 +32,8 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 2. Dựng kho theo RAM + bỏ clip > 2 giờ (D-31): PR #23 GỘP (`73c5734`), DEV 8502 cập nhật 06/11 20:16 (sao lưu `data_20261106_201648`).
    Chờ người dùng dựng Kho_Joe_Games (CHƯA có vân tay, thư mục `E:\Kho_Tool_Quet\Kho_Joe_Games`) và đồng bộ thật một kênh để kiểm
    quy tắc 2 giờ (chưa thử YouTube thật).
-3. Audit toàn repo 06/11: số 1–6 GỘP (PR #24, `256e848`), DEV 8502 cập nhật 06/11 22:09 (sao lưu `data_20261106_220855`). PC1 phải cài lại
-   hook. Số 7–13 GỘP (PR #25, `3d28ece`), DEV 8502 cập nhật 06/11 23:04 (sao lưu `data_20261106_230441`). Còn 14–20 + 8 mục nhỏ: báo cáo trong phiên
-   06/11 (lịch sử chat), số 14 có 21 ca đột biến updater sống.
+3. Audit toàn repo 06/11: số 1–13 GỘP (PR #24, #25), PC1 phải cài lại hook. Còn 14–20 + 8 mục nhỏ: báo cáo trong phiên 06/11 (lịch sử
+   chat), số 14 có 21 ca đột biến updater sống. Dựng kho nhường ổ cứng (D-33) xem nhật ký; tạm dừng + lưu giữa chừng CHƯA làm.
 4. Người dùng: nghiệm thu DEV đợt 2 theo `C:\Dev\pc2_test_runs\2026-10-26_audit_p3\NGHIEM_THU_DEV_DOT2.md` (~15 phút).
 5. Người dùng quyết: P-6 (3 phương án, `…\2026-10-26_audit_p3\P6_PHUONG_AN.md`); P-7 (`P7_THIET_KE.md` cùng thư mục, công
    cụ `C:\Dev\pc2_test_tools\p7_lich_su_bong`, CHƯA chạy dữ liệu thật — chỉ chạy CHỈ ĐỌC khi duyệt); B-13, F-16; 3 ghép
@@ -47,6 +46,12 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 8. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-11-07 — dựng kho nhường ổ cứng (D-33, nhánh fix/pc2/dung-kho-uu-tien-o-dia)
+- Làm: runner `IOPRIO_LOW` thêm vào Below Normal (Below Normal không hạ ưu tiên ổ cứng); FFmpeg im 300 giây mới là treo; `CHO_WORKER_S` hết hạn
+  mà CPU/I-O còn tăng thì gia hạn. Một dòng `ionice` là không đủ: HDD bận làm FFmpeg im 15 giây, clip 1 giờ mất ~1 giờ, chốt cũ huỷ cả lượt.
+- Đo HDD thật (`tools/do_tai/do_uu_tien_o_cung.py`, `C:\Dev\pc2_test_runs\2026-11-06_uu_tien_o_cung`): việc khác 252 → 166 lần đọc/giây ở mức thường, 249
+  ở mức thấp. Runner thật 24 clip + đọc dồn 180 giây: 24/24, 0 thử lại, hash trùng lượt không tải. Máy rảnh gần như không đổi.
+- Test (chặn mạng, cp1252, venv CookieFix) @ `34eb277`: nhanh 3460 = 3456/4/0, chậm 22/22, ruff sạch, đột biến 7/7 chết. `/ponytail-review`: không lỗi.
 ### 2026-11-06 — sửa số 7–13 của audit toàn repo (nhánh fix/pc2/audit-0611-dot2)
 - Làm: hồ sơ không cộng đôi vùng chồng nhau; lưu cấu hình chỉ ghi khoá phiên này đổi; tab cũ theo thư mục nguồn mới; `Thread.start` lỗi không để
   lại việc ma; lỗi đọc tạm không bị coi là file hỏng; hoàn tác ghi bản `sau_hoan_tac`; updater không báo ACTIVE khi không áp dụng gì. Mỗi lỗi có
@@ -66,12 +71,4 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 - Người dùng duyệt gộp + cập nhật DEV. Test lại đúng `73c5734`: nhanh 3394 = 3390/4/0, chậm 22/22, ruff sạch (`…\2026-11-06_dung_kho_ram\gop_73c5734`).
 - Trước khi tắt DEV: không tiến trình con, không ghi mới, `tool.lock` rảnh, ghi 0 B trong 15 s, hàng đợi Sheets 584 SENT. Smoke: health ok,
   CLI `dich` đạt, đủ 7 tab, console 0 lỗi. Dữ liệu không đổi. Đề xuất `CURRENT_STATE.md` (PC1 sửa): integration = `73c5734`, PC1 chưa review.
-### 2026-11-06 — dựng kho theo RAM, bỏ clip dài hơn 2 giờ (D-31, nhánh feature/pc2/dung-kho-theo-ram)
-- Làm: cha phát từng clip theo RAM (`LichTheoRam`), clip lỗi thử lại cuối lượt, clip quá RAM bỏ qua có báo rõ, Below Normal, nhánh
-  một nhân đi cùng đường. Người dùng chốt thêm: video > 2 giờ không tải, clip > 2 giờ không tạo vân tay (`channel.GIAY_CLIP_TOI_DA`).
-- Test (chặn mạng, cp1252, venv CookieFix): nhanh 3394 = 3390/4/0 (373 s), chậm 22/22 (379 s), ruff sạch. Nghiệm thu `do_dung_kho_ram.py d`
-  qua Engine thật: 34/34 clip, đúng 2 clip > 2 giờ bị bỏ, tìm lại 4/4, RAM trống thấp nhất 9,56 GB. Dựng trọn Kho_Joe chưa chạy lại.
-- Bằng chứng: `C:\Dev\pc2_test_runs\2026-11-06_dung_kho_ram`, số đo ở tài liệu phân tích. Review độc lập: 0 P1, 1 P2 (RAM tụt 60
-  giây bỏ cả hàng), 5 P3, đều test đỏ rồi sửa. `/ponytail-review`: 1 test đỏ, video đúng 2:00:00 lệch giữa hai bước, bản chép đo
-  độ dài, 2 câu báo sai, đều đã sửa. Bẫy: `audio_read.read_data` ghép stderr bytes nên FFmpeg treo lộ thành TypeError.
-- Mục cũ hơn (2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
+- Mục cũ hơn (2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
