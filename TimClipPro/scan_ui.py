@@ -36,6 +36,7 @@ import pandas as pd
 import bao_cao_v2
 import outbox
 import truy_cap_youtube as _tc
+from channel import GIO_CLIP_TOI_DA
 from common_original import (
     COT_SO_NGUON_CHUNG,
     HEADER_NGUON_CHUNG,
@@ -155,6 +156,9 @@ CAU_TRONG_SO_KHONG_FILE = (
     "đừng dựng lại (sẽ tải trùng).")
 
 
+CAU_QUA_DAI = f"{{n}} video dài hơn {GIO_CLIP_TOI_DA} giờ được bỏ qua, không tải về (quy tắc của tool, không phải lỗi)."
+
+
 def tom_tat_dong_bo_kenh(r: Mapping[str, Any]) -> list:
     """Các dòng ``(mức, câu)`` cho kết quả một lượt đồng bộ kênh (``ChannelSync.sync``). Dòng đầu là tiêu đề:
     CHỈ «✅ Đồng bộ xong» màu xanh khi mọi video cần tải đã tải xong (sự cố 15/10/2026: cầu dao đã mở, 1.189 video
@@ -191,6 +195,8 @@ def tom_tat_dong_bo_kenh(r: Mapping[str, Any]) -> list:
                               "video bị hạn chế»."))
     if trong_so:
         ra.append(("warning", CAU_TRONG_SO_KHONG_FILE.format(n=trong_so)))
+    if r.get("qua_dai"):
+        ra.append(("info", CAU_QUA_DAI.format(n=r["qua_dai"])))
     xt = r.get("xac_thuc") or {}
     if xt.get("cau"):
         ra.append((_MUC_DANG_NHAP.get(xt.get("trang_thai", ""), "info"), f"Đăng nhập YouTube: {xt['cau']}"))

@@ -44,7 +44,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 ## Nhật ký
 ### 2026-11-06 — phân tích tải dựng kho (nhánh feature/pc2/phan-tich-tai-dung-kho)
 - Đo thật 10 bài (`TimClipPro/docs/PHAN_TICH_TAI_DUNG_KHO_2026-11.md`, công cụ `tools/do_tai/`): quá tải là DỰNG VÂN TAY, nguyên
-  nhân RAM (~1,5 GB/giờ âm thanh mỗi worker; clip #291 của Kho_Joe_Games dài 18,8 giờ làm cả lượt sụp), không có điểm lưu giữa
+  nhân RAM (~1,5 GB/giờ âm thanh mỗi worker; clip #291 của Kho_Joe_Games dài 18,2 giờ làm cả lượt sụp), không có điểm lưu giữa
   chừng. Đường đồng bộ chỉ làm HDD bận tối đa 5%. CHƯA tái hiện «HDD 100% + hàng đợi ~30». Chưa sửa mã, chờ người dùng chọn.
 ### 2026-11-02 — ngày đăng dạng «October 31, 2026» (D-30, PR #22) + tiếp tục trên máy mới (PR #21)
 - PR #21 `bd0c4ee`: `docs/ai/TIEP_TUC_TREN_MAY_MOI.md`, `TONG_HOP_DU_AN.md`, `CURRENT_STATE.md` 02/11, `tools/test/` — chủ dự án

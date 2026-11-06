@@ -25,9 +25,10 @@ import shutil
 import time
 import urllib.parse
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from dataclasses import dataclass, replace
-from typing import Callable, Mapping, Optional
+from typing import Callable, Iterable, Mapping, Optional
 
 from clip_metadata import (basename_compatible, extract_youtube_id, filename_fallback_parts,
                            valid_upload_date)
@@ -172,6 +173,15 @@ __all__ = [
 ]
 
 
+# D-31: video dài hơn mức này không tải về và không tạo vân tay. Tool tìm clip gốc ngắn; clip nhiều giờ tốn RAM và thời
+# gian dựng kho vượt xa giá trị của nó (người dùng chốt 06/11/2026). Không phải lỗi: không vào sổ đã tải, nới ngưỡng là
+# lượt sau tải được.
+GIAY_CLIP_TOI_DA = 2 * 3600
+GIO_CLIP_TOI_DA = GIAY_CLIP_TOI_DA // 3600
+# File nhỏ hơn chừng này chắc chắn ngắn hơn ngưỡng (2 giờ thì dưới 17 kbps): khỏi chạy ffprobe hàng trăm lần.
+BYTE_CHAC_CHAN_NGAN = 15 * 10**6
+
+
 @dataclass
 class VideoInfo:
     id: str
@@ -258,6 +268,20 @@ def doc_moc_het_tieng(json_ffprobe: str) -> Optional[float]:
         return None
     bat_dau = max(0.0, _giay(s.get("start_time")) or 0.0)
     return bat_dau + dai
+
+
+def loc_file_qua_dai(paths: Iterable[str]) -> set:
+    """Các file dài hơn ``GIAY_CLIP_TOI_DA``. Không đo được thời lượng thì coi là không quá dài."""
+    def du_lon(path: str) -> bool:
+        try:
+            return os.path.getsize(path) >= BYTE_CHAC_CHAN_NGAN
+        except OSError:
+            return False
+
+    lon = [p for p in paths if du_lon(p)]
+    with ThreadPoolExecutor(max_workers=8) as nhom:
+        do_dai = list(nhom.map(do_dai_media, lon))
+    return {p for p, giay in zip(lon, do_dai) if giay and giay > GIAY_CLIP_TOI_DA}
 
 
 def do_dai_luong_tieng(path: str) -> Optional[float]:
@@ -1339,6 +1363,8 @@ class ChannelSync:
               # can_tai = video chưa có trong kho; so_loi = đã thử mà hỏng; chua_thu = chưa được thử (cầu dao / Dừng).
               "trang_thai": DONG_BO_DAY_DU, "can_tai": 0, "so_loi": 0, "chua_thu": 0,
               "gioi_han_tuoi": 0, "chi_hoi_vien": 0, "xac_thuc": {},
+              # Video dài hơn GIAY_CLIP_TOI_DA: cố ý không tải, không phải lỗi (D-31).
+              "qua_dai": 0,
               # Video đã biết bị hạn chế (sổ TEP_HAN_CHE, cùng cách đăng nhập) lượt này không thử lại — vẫn CHƯA tải.
               "han_che_bo_qua": 0,
               # Mã có trong sổ đã tải (archive) mà KHÔNG có file ở gốc kho: không tải lại, KHÔNG đếm vào «có sẵn».
@@ -1390,6 +1416,11 @@ class ChannelSync:
             kq["trong_so_khong_file"] = sum(1 for v in ds if v.id in chi_trong_so)
             # «Có sẵn (giữ nguyên)» chỉ đếm video THẬT có file trong kho (audit D-7).
             kq["bo_qua"] = len(ds) - len(can_tai) - kq["trong_so_khong_file"]
+            # shortcut: danh sách kênh thiếu thời lượng (0) thì vẫn tải, chặn lại ở bước tạo vân tay; muốn chặn hẳn
+            # phải hỏi YouTube từng video.
+            trong_nguong = [v for v in can_tai if v.duration <= GIAY_CLIP_TOI_DA]
+            kq["qua_dai"] = len(can_tai) - len(trong_nguong)
+            can_tai = trong_nguong
             kq["can_tai"] = len(can_tai)
             # Video đã biết bị hạn chế với CÙNG cách đăng nhập: không gửi lại request vô ích (vẫn báo CHƯA tải, không
             # vào archive). Video còn lại: video CHƯA biết bị hạn chế thử TRƯỚC, để trần hàng loạt của cầu dao không
@@ -1403,7 +1434,8 @@ class ChannelSync:
             bao(0.02, f"Kênh có {len(ds)} video — {len(can_tai)} video mới cần tải"
                 + (f" (bỏ qua {kq['han_che_bo_qua']} video đã biết bị hạn chế)." if kq["han_che_bo_qua"] else ".")
                 + (f" {kq['trong_so_khong_file']} video có trong sổ đã tải nhưng không có file — không tải lại."
-                   if kq["trong_so_khong_file"] else ""))
+                   if kq["trong_so_khong_file"] else "")
+                + (f" Bỏ qua {kq['qua_dai']} video dài hơn {GIO_CLIP_TOI_DA} giờ." if kq["qua_dai"] else ""))
             td.ke_hoach(da_co=kq["bo_qua"], can_tai=kq["can_tai"], han_che_bo_qua=kq["han_che_bo_qua"],
                         se_thu=len(can_tai))
 
@@ -1770,9 +1802,11 @@ class ChannelSync:
         # tải nó — mà được báo riêng (audit D-7).
         chi_trong_so = self._ma_chi_trong_so(tep)
         trong_so = [v for v in ds if v.id in chi_trong_so]
-        thieu = [v for v in ds if v.id not in tep["hop_le"] and v.id not in chi_trong_so]
-        return {"tong_kenh": len(ds), "co_roi": len(ds) - len(thieu) - len(trong_so),
+        chua_co = [v for v in ds if v.id not in tep["hop_le"] and v.id not in chi_trong_so]
+        thieu = [v for v in chua_co if v.duration <= GIAY_CLIP_TOI_DA]
+        return {"tong_kenh": len(ds), "co_roi": len(ds) - len(chua_co) - len(trong_so),
                 "thieu": thieu, "trong_so_khong_file": trong_so,
+                "qua_dai": [v for v in chua_co if v.duration > GIAY_CLIP_TOI_DA],
                 "thua": [f for i, f in tren_dia.items()
                          if i not in {v.id for v in ds}],
                 "nghi_hong": [f"{ten}: {ly_do}" for ds_tep in tep["nghi_hong"].values()

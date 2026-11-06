@@ -8,7 +8,7 @@ trên mã `5ce1e4d`, audio thật chỉ đọc, dữ liệu ghi thử nằm ở 
 1. **Việc làm quá tải là DỰNG VÂN TAY, không phải tải kênh.** Sáng 06/11 ba lượt dựng Kho_Joe_Games (761 clip, ~815 giờ âm
    thanh) đều không về đích; người dùng báo lỗi ngay sau khi Dừng lượt cuối (09:56).
 2. **Nguyên nhân chính: RAM.** audfprint nạp TRỌN clip vào RAM rồi tính phổ 4 lần (`--shifts 4`). RAM tăng tuyến tính ~1,5 GB/giờ
-   âm thanh mỗi worker. Clip #291 dài 18,8 giờ (ngoại suy ~27 GB RSS, ~30 GB commit) cộng 7 worker khác vượt 32 GB RAM.
+   âm thanh mỗi worker. Clip #291 dài 18,2 giờ (ngoại suy ~27 GB RSS, ~30 GB commit) cộng 7 worker khác vượt 32 GB RAM.
 3. **CPU 100%** là 8 worker + 8 ffmpeg trên 16 luồng (đo 78–100%).
 4. **Không có điểm lưu giữa chừng:** Dừng hoặc lỗi là mất hết; lượt 09:18 đã xong 353/761 clip vẫn mất.
 5. **Chưa tái hiện được «HDD 100% + hàng đợi ~30».** Hàng đợi HDD lớn nhất đo được là 8; hàng đợi 89 và bận 100% xuất hiện ở SSD
@@ -58,4 +58,4 @@ hay gom ghi metadata: tốn công và mất an toàn dữ liệu mà không gi�
 | 4 | Tiến trình dựng kho chạy ưu tiên thấp (Below Normal) | Máy vẫn dùng được khi CPU 100% | Rất nhỏ |
 | 5 | Mặc định số worker theo RAM thay vì luôn 8 | Giảm rủi ro | Rất nhỏ |
 | 6 | Thử lại clip «Error reading» cuối lượt + ghi rõ lý do | Không sót clip vì quá tải | Nhỏ |
-| 7 | Chia clip rất dài thành đoạn khi tính vân tay | RAM cố định, dựng được clip 18,8 giờ | Lớn, đổi vân tay clip dài, cần test khớp |
+| 7 | Chia clip rất dài thành đoạn khi tính vân tay | RAM cố định, dựng được clip 18,2 giờ | Lớn, đổi vân tay clip dài, cần test khớp |

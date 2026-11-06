@@ -2997,7 +2997,7 @@ class Engine:
 
     def _kiem_kho_tam(self, db_tam: str, sub: str, cu_huu_ich: set,
                       can_xu_ly: list, *, lam_moi: frozenset = frozenset(),
-                      da_go: frozenset = frozenset()) -> tuple:
+                      da_go: frozenset = frozenset(), loi_dau: str = "") -> tuple:
         """Kho tạm có được phép thay kho đang dùng không? Trả ``(cong_bo, canh_bao)``.
 
         Tiến trình audfprint thoát mã 0 và file tạm tồn tại KHÔNG chứng minh kho dùng
@@ -3026,6 +3026,7 @@ class Engine:
                 raise RuntimeError(
                     f"Kho mới không có clip nào có vân tay dùng được ({len(can_xu_ly)} "
                     "clip đều lỗi hoặc 0 hash). Giữ nguyên kho cũ."
+                    + (f" Lỗi đầu tiên: {loi_dau}" if loi_dau else "")
                 )
             mat = cu_huu_ich - tam_huu_ich
             mat_do_loi = mat & da_xu_ly
@@ -3035,11 +3036,12 @@ class Engine:
                     f"tạo lại này thất bại: {vi_du(mat_do_loi)}. Giữ nguyên kho cũ — kiểm "
                     "tra file nguồn rồi chạy lại, hoặc dùng «Bổ sung» để thêm clip mới mà "
                     "không tạo lại toàn bộ."
+                    + (f" Lỗi đầu tiên: {loi_dau}" if loi_dau else "")
                 )
             if mat - da_xu_ly:
                 canh_bao.append(
                     f"{len(mat - da_xu_ly)} clip của kho cũ không còn trong thư mục nguồn "
-                    "nên không có trong kho mới."
+                    "hoặc dài quá giới hạn nên không có trong kho mới."
                 )
             loi_moi = da_xu_ly - tam_huu_ich
             if loi_moi:
@@ -3312,6 +3314,18 @@ class Engine:
                 tracker.skipped(path)
             else:
                 can_xu_ly.append(path)
+        # Clip quá dài không tạo vân tay (D-31). Clip đang được LÀM MỚI vẫn xử lý: vân tay cũ của nó sắp bị gỡ, bỏ qua
+        # ở đây là mất luôn clip khỏi kho.
+        qua_dai = channel.loc_file_qua_dai(p for p in can_xu_ly if self._khoa_duong_dan(p) not in lam_moi)
+        if qua_dai:
+            can_xu_ly = [p for p in can_xu_ly if p not in qua_dai]
+            files = [p for p in files if p not in qua_dai]
+            tong = len(files)
+            tracker.set_files(files)
+            ten_dai = sorted(os.path.basename(p) for p in qua_dai)
+            canh_bao.append(
+                f"Bỏ qua {len(qua_dai)} clip dài hơn {channel.GIO_CLIP_TOI_DA} giờ, không tạo vân tay (file vẫn giữ "
+                f"nguyên): {', '.join(ten_dai[:10])}" + (f" … (+{len(ten_dai) - 10})" if len(ten_dai) > 10 else "") + ".")
         # Clip có vân tay mà file đã VẮNG khỏi thư mục nguồn (phản biện vòng 2 + 3):
         # * có bản cách ly trong `_hong/` của ĐÚNG thư mục chứa nó → ứng viên gỡ, nhưng chỉ
         #   gỡ khi bản THAY THẾ cùng mã video có vân tay trong kho tạm (kiểm sau bước
@@ -3373,7 +3387,9 @@ class Engine:
                 canh_bao.append(self._canh_bao_giu_hong(giu_hong, ke_ten))
             tracker.saving()
             canh_bao.extend(self._cap_nhat_snapshot_sau_build(mode))
-            tracker.completed("Mọi clip đều đã có vân tay; không cần ghi lại kho.", db_written=False)
+            tracker.completed(
+                "Không còn clip nào cần tạo vân tay; không cần ghi lại kho." if qua_dai
+                else "Mọi clip đều đã có vân tay; không cần ghi lại kho.", db_written=False)
             state = tracker.state
             return {
                 "so_clip": tong,
@@ -3450,6 +3466,10 @@ class Engine:
                                 path,
                                 int(event.get("process_pid") or 0) or None,
                             )
+                    elif event.get("event") == "clip_cho_thu_lai" and path:
+                        tracker.clip_cho_thu_lai(path, str(event.get("message") or ""))
+                    elif event.get("event") == "thong_bao_ram":
+                        tracker.thong_bao_ram(str(event.get("message") or ""))
                     elif event.get("event") == "clip_finished" and path:
                         tracker.clip_finished(
                             path,
@@ -3469,7 +3489,9 @@ class Engine:
                 tracker.clip_started(ten)
             if "Saved fprints for" in dong:
                 tracker.saving(tracker.state.active_subprocess_pid)
-            if any(k in dong for k in ("Error", "error", "Traceback", "Failed", "Cannot")):
+            # «Error reading» là lần đọc đầu; kết luận cuối (kèm lý do thật) đi bằng event `clip_finished`.
+            if (any(k in dong for k in ("Error", "error", "Traceback", "Failed", "Cannot"))
+                    and not dong.startswith("wavfile2peaks: Error reading")):
                 loi_file.append(dong)
 
         def on_heartbeat(snapshot: ProcessSnapshot) -> None:
@@ -3546,7 +3568,8 @@ class Engine:
             # Mã thoát 0 + file tạm tồn tại chưa chứng minh kho DÙNG ĐƯỢC (TCP-02).
             cong_bo, canh_bao_kiem = self._kiem_kho_tam(db_tam, sub, cu_huu_ich, can_xu_ly,
                                                         lam_moi=lam_moi,
-                                                        da_go=frozenset(go_hong))
+                                                        da_go=frozenset(go_hong),
+                                                        loi_dau=next((x["message"] for x in tracker.errors), ""))
             canh_bao.extend(canh_bao_kiem)
             if cong_bo:
                 # Sổ đăng ký vẫn trỏ kho đã ghim tới đúng file này? (TCP-01)

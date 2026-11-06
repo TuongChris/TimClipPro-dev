@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Adapter quan sát audfprint mà không sửa source vendored.
 
-Wrapper chỉ thêm JSON event trước/sau ``wavfile2hashes``. Thuật toán Analyzer,
+Wrapper thêm JSON event cho từng clip và phát clip cho worker theo RAM (D-31). Thuật toán Analyzer,
 HashTable, tham số CLI và format ``.pklz`` vẫn do audfprint vendored thực hiện.
 """
 
@@ -15,25 +15,32 @@ import shutil
 import sys
 import tempfile
 import time
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 
 
 PREFIX = "TIMCLIP_FINGERPRINT_EVENT "
 
-# Thời gian tối đa một worker được phép IM LẶNG — tức là không hoàn tất thêm file nào.
-# ĐÂY KHÔNG PHẢI ngân sách cho tổng phần việc của worker.
+# Thời gian tối đa một worker được phép IM LẶNG — tức là chưa trả lời việc đang giữ (một clip,
+# hoặc lệnh ghi bảng hash cuối lượt). ĐÂY KHÔNG PHẢI ngân sách cho tổng phần việc của worker.
 #
-# Bản trước hiểu sai chính chỗ này: nó gọi `rx[core].poll(CHO_WORKER_S)` một lần, mà
-# pipe chỉ mang ĐÚNG MỘT message phát ra sau khi worker đã fingerprint xong TOÀN BỘ
-# danh sách của nó. Nên hằng số này trên thực tế là "worker phải làm xong hết trong
-# 1800 giây", tỷ lệ thuận với số_clip/ncores. Kho 1178 clip trên 8 nhân cần ~2017 giây
-# cho worker chậm nhất ⇒ job bị giết ở mức 94,8% trong lúc CẢ 8 worker đều đang chạy
-# khoẻ (đã xảy ra 2 lần ngày 2026-09-07, mất ~7 giờ CPU).
-#
-# Nay mỗi worker đếm số file đã xong vào một `multiprocessing.Value` dùng chung; cha
-# chỉ báo lỗi khi con số đó ĐỨNG YÊN suốt CHO_WORKER_S giây. Worker chạy 3 tiếng vẫn
-# an toàn miễn là nó còn hoàn tất file; worker kẹt thật vẫn bị bắt trong thời gian có
-# giới hạn. Clip lâu nhất đo được là 68,4 giây ⇒ biên an toàn ~26 lần.
+# Sự cố 2026-09-07: bản đầu dùng hằng số này làm hạn cho TOÀN BỘ danh sách của worker, kho 1178
+# clip bị giết ở 94,8% trong lúc cả 8 worker đều khoẻ (mất ~7 giờ CPU). Nay cha phát từng clip nên
+# hạn tính lại từ mỗi lần giao: worker chạy 3 tiếng vẫn an toàn miễn là nó còn trả lời, worker kẹt
+# thật vẫn bị bắt trong thời gian có giới hạn. Clip 1 giờ mất ~25 giây ⇒ clip 18,2 giờ ~8 phút.
 CHO_WORKER_S = 1800.0
+
+# RAM đỉnh một worker cần (đo 06/11/2026, `--shifts 4`, docs/PHAN_TICH_TAI_DUNG_KHO_2026-11.md): clip
+# 1 giờ 1,35 GB, 3 giờ 4,27 GB — audfprint nạp trọn audio rồi tính phổ nên tăng tuyến tính.
+CAN_RAM_GB_MOI_GIO = 1.5
+CAN_RAM_TOI_THIEU_GB = 0.7      # tiến trình Python + bảng hash ~419 MB
+BYTE_MOI_GIAY_OPUS = 8000       # opus 64 kbps của kho do tool tải về
+# Dưới ngưỡng này clip chỉ cỡ 30 phút: tính theo dung lượng là đủ, khỏi chạy ffprobe hàng trăm lần.
+NGUONG_DO_THAT_BYTE = 15 * 10**6
+# Không còn clip nào chạy mà RAM vẫn thiếu: clip dài chờ chừng này giây rồi bị bỏ qua; clip ngắn
+# chờ tới CHO_WORKER_S, vì RAM tụt giữa lượt không đáng để bỏ mấy trăm clip còn lại.
+CHO_RAM_S = 60.0
 
 # Nhịp poll ngắn của cha. Đừng hạ xuống dưới ~0,1 s: mỗi `wait()` trên Windows mở rồi
 # huỷ một overlapped ReadFile. Không ảnh hưởng tốc độ phát hiện worker chết — pipe gãy
@@ -81,71 +88,149 @@ def _emit(event: str, **payload) -> None:
         pass
 
 
-def instrumented_make_ht_from_list(
-    analyzer,
-    filelist,
-    hashbits,
-    depth,
-    maxtime,
-    pipe=None,
-    *,
-    nhip=None,
-):
-    """Bản bọc tương đương ``make_ht_from_list`` với event per-file.
+@dataclass(frozen=True)
+class Clip:
+    file: str
+    can_gb: float
 
-    ``nhip`` là ``multiprocessing.Value`` dùng chung với cha (tuỳ chọn, chỉ có khi
-    chạy đa tiến trình). Mỗi file HOÀN TẤT tăng nó lên 1 — đó là tín hiệu còn sống
-    duy nhất mà cha nhìn thấy. Tham số này KHÔNG được gộp vào ``pipe``: ``pipe`` ở
-    đây vẫn mang nghĩa cũ là gửi nguyên HashTable (~419 MB) và không được dùng lại.
 
-    Bắt buộc là keyword-only: hàm này được cài đè lên ``audfprint.make_ht_from_list``
-    và bản vendored gọi nó bằng tham số vị trí.
+def _ram_trong_gb() -> float:
+    import psutil
+
+    return psutil.virtual_memory().available / 2**30
+
+
+def _du_phong_ram_gb() -> float:
+    """Phần RAM luôn chừa cho Windows và ứng dụng khác."""
+    import psutil
+
+    return max(2.0, 0.1 * psutil.virtual_memory().total / 2**30)
+
+
+def _do_dai_giay(path: str) -> float | None:
+    """Thời lượng đo bằng ffprobe; không đo được thì ``None`` để lùi về dung lượng."""
+    from process_runner import chay_lenh_media
+
+    try:
+        kq = chay_lenh_media(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                              "-of", "csv=p=0", path], tran_tong_s=30.0)
+        return float(kq.stdout.strip().splitlines()[-1])
+    except Exception:  # noqa: BLE001 - thiếu thời lượng chính xác không được làm hỏng build
+        return None
+
+
+def uoc_luong_ram_gb(path: str) -> float:
+    """RAM đỉnh một worker cần cho clip này, theo thời lượng (mp4 lớn có thể chỉ dài vài phút)."""
+    try:
+        byte = os.path.getsize(path)
+    except OSError:
+        return CAN_RAM_TOI_THIEU_GB
+    giay = _do_dai_giay(path) if byte >= NGUONG_DO_THAT_BYTE else None
+    giay = giay or byte / BYTE_MOI_GIAY_OPUS
+    return max(CAN_RAM_TOI_THIEU_GB, CAN_RAM_GB_MOI_GIO * giay / 3600)
+
+
+def xep_thu_tu(clips: list, phan_moi_worker_gb: float) -> list:
+    """Clip vừa phần RAM của một worker giữ nguyên thứ tự; clip lớn hơn xếp sau, nhỏ trước lớn."""
+    return ([c for c in clips if c.can_gb <= phan_moi_worker_gb]
+            + sorted((c for c in clips if c.can_gb > phan_moi_worker_gb), key=lambda c: c.can_gb))
+
+
+class LichTheoRam:
+    """Chính sách phát clip cho worker. Thuần logic: RAM và đồng hồ do nơi gọi đưa vào để mô phỏng được.
+
+    Bất biến: một clip chỉ được phát khi RAM trống đủ cho nó CỘNG phần các clip đang chạy còn sẽ chiếm,
+    sau khi đã chừa dự phòng. Hàng là FIFO: clip đầu hàng chưa vừa thì chờ, vì phía sau chỉ có
+    clip bằng hoặc lớn hơn nó (đoạn clip dài) hoặc clip ngắn sẽ vừa ngay khi RAM trống lại.
     """
-    import hash_table
 
-    ht = hash_table.HashTable(hashbits=hashbits, depth=depth, maxtime=maxtime)
-    for filename in filelist:
-        started = time.monotonic()
-        _emit(
-            "clip_started",
-            file=filename,
-            phase="fingerprinting",
-            process_pid=os.getpid(),
-        )
-        try:
-            hashes = analyzer.wavfile2hashes(filename)
-            ht.store(filename, hashes)
-        except BaseException as exc:
-            _emit(
-                "clip_finished",
-                file=filename,
-                status="failed",
-                category=type(exc).__name__,
-                message=str(exc)[:500],
-                elapsed_seconds=time.monotonic() - started,
-                process_pid=os.getpid(),
-            )
-            raise
-        _emit(
-            "clip_finished",
-            file=filename,
-            status="success" if len(hashes) else "failed",
-            category="" if len(hashes) else "zero_hashes",
-            message="" if len(hashes) else "Không tạo được hash từ audio.",
-            hash_count=len(hashes),
-            elapsed_seconds=time.monotonic() - started,
-            process_pid=os.getpid(),
-        )
-        # Nhịp sống báo về cha. Đặt SAU clip_finished để một nhịp chứng minh công
-        # việc ĐÃ XONG, không phải chỉ mới bắt đầu. Tuyệt đối không phát nhịp này
-        # từ một thread hẹn giờ: thread vẫn tick khi luồng chính kẹt cứng, và
-        # watchdog sẽ thành đồ trang trí.
-        if nhip is not None:
-            nhip.value = nhip.value + 1
-    if pipe:
-        pipe.send(ht)
-    else:
-        return ht
+    def __init__(self, clips: list, ram_trong_gb: float, du_phong_gb: float, ncores: int):
+        self.du_phong_gb = du_phong_gb
+        ngan_sach = max(0.0, ram_trong_gb - du_phong_gb)
+        self.phan_moi_worker = max(CAN_RAM_TOI_THIEU_GB, ngan_sach / max(1, ncores))
+        self.hang = deque(xep_thu_tu(clips, self.phan_moi_worker))
+        self.thu_lai: list = []
+        self.dang_thu_lai = False
+        self.cho_ram_tu: float | None = None
+        self.thua_worker = False        # worker rảnh nên nghỉ để nhả RAM
+
+    @property
+    def xong(self) -> bool:
+        return not self.hang and not self.thu_lai
+
+    def buoc(self, ram_trong_gb: float, con_phai_chua_gb: float, so_dang_chay: int, bay_gio: float):
+        """Việc tiếp theo: ``("giao"|"bo"|"cho", clip)``, hoặc ``None`` = chờ kết quả clip đang chạy."""
+        if not self.hang and self.thu_lai and not so_dang_chay:
+            self.hang, self.thu_lai, self.dang_thu_lai = deque(self.thu_lai), [], True
+        if not self.hang or (self.dang_thu_lai and so_dang_chay):
+            self.thua_worker = True
+            return None
+        clip = self.hang[0]
+        # Chạy một mình chỉ giữ nửa dự phòng: máy ít RAM thì dựng chậm từng clip, không bỏ cả kho.
+        giu_lai = self.du_phong_gb if so_dang_chay else self.du_phong_gb / 2
+        if ram_trong_gb - con_phai_chua_gb - clip.can_gb >= giu_lai:
+            self.cho_ram_tu, self.thua_worker = None, False
+            return "giao", self.hang.popleft()
+        clip_dai = clip.can_gb > self.phan_moi_worker
+        self.thua_worker = clip_dai or not so_dang_chay
+        if so_dang_chay:
+            return None
+        if self.cho_ram_tu is None:
+            self.cho_ram_tu = bay_gio
+            return "cho", clip
+        # Không đặt lại mốc khi bỏ: máy hết RAM thì không chờ lại 60 giây cho từng clip.
+        han_cho = CHO_RAM_S if clip_dai else CHO_WORKER_S
+        return ("bo", self.hang.popleft()) if bay_gio - self.cho_ram_tu >= han_cho else None
+
+    def ghi_loi(self, clip: Clip) -> bool:
+        """Clip lỗi đọc/thiếu RAM: ``True`` = thử lại một mình cuối lượt, ``False`` = đã thử đủ."""
+        if self.dang_thu_lai:
+            return False
+        self.thu_lai.append(clip)
+        return True
+
+
+# Lý do thật của lỗi giải mã: ``wavfile2peaks`` nuốt exception và chỉ in «Error reading», nên
+# MemoryError và FFmpeg im quá 10 giây trông như nhau. Mỗi tiến trình một bản, xoá trước mỗi clip.
+_LOI_GIAI_MA: dict = {}
+
+
+def _mo_ta_loi(exc: BaseException) -> str:
+    # ``audio_read.read_data`` ghép stderr dạng bytes bằng ``''.join`` nên FFmpeg treo lộ ra thành TypeError.
+    if isinstance(exc, TypeError) and "expected str instance, bytes found" in str(exc):
+        return "FFmpegTreo: FFmpeg không trả dữ liệu quá 10 giây (máy quá tải hoặc file đọc không được)"
+    return f"{type(exc).__name__}: {str(exc)[:300]}"
+
+
+def _xu_ly_clip(analyzer, ht, filename: str) -> dict:
+    """Tạo vân tay một clip trong worker. ``{}`` = đã chốt kết quả, ``{"loi": ...}`` = chưa ghi gì.
+
+    Clip lỗi không vào ``ht``: lần thử lại có thể rơi vào worker khác, ghi tên ở đây sẽ sinh hai bản
+    ghi cho một clip (audit C-3). Clip lỗi hẳn vắng khỏi kho nên «Bổ sung» sau vẫn tự thử lại.
+    """
+    started = time.monotonic()
+    _emit("clip_started", file=filename, phase="fingerprinting", process_pid=os.getpid())
+    _LOI_GIAI_MA.clear()
+    try:
+        hashes = analyzer.wavfile2hashes(filename)
+        loi = _LOI_GIAI_MA.get(filename)
+    except Exception as exc:  # noqa: BLE001 - một clip hỏng không được kéo chết cả worker
+        loi = _mo_ta_loi(exc)
+    if loi:
+        return {"loi": loi.replace(filename, os.path.basename(filename)),
+                "giay": time.monotonic() - started}
+    ht.store(filename, hashes)
+    _emit(
+        "clip_finished",
+        file=filename,
+        status="success" if len(hashes) else "failed",
+        category="" if len(hashes) else "zero_hashes",
+        message="" if len(hashes) else "Không tạo được hash từ audio.",
+        hash_count=len(hashes),
+        elapsed_seconds=time.monotonic() - started,
+        process_pid=os.getpid(),
+    )
+    return {}
 
 
 _DA_CAI_THEO_DOI_GIAI_MA = False
@@ -178,6 +263,9 @@ def cai_dat_theo_doi_giai_ma() -> None:
         _emit("clip_phase", file=ten, phase="decoding", process_pid=os.getpid())
         try:
             return goc(*args, **kwargs)
+        except Exception as exc:
+            _LOI_GIAI_MA[ten] = _mo_ta_loi(exc)
+            raise
         finally:
             _emit("clip_phase", file=ten, phase="fingerprinting", process_pid=os.getpid())
 
@@ -185,32 +273,25 @@ def cai_dat_theo_doi_giai_ma() -> None:
     _DA_CAI_THEO_DOI_GIAI_MA = True
 
 
-def _worker_ghi_hash_table(
-    analyzer,
-    filelist,
-    hashbits,
-    depth,
-    maxtime,
-    pipe,
-    duong_dan,
-    nhip=None,
-) -> None:
-    """Chạy trong tiến trình con: tính hash table rồi GHI RA FILE, không gửi qua pipe.
+def _worker_ghi_hash_table(analyzer, ket_noi, hashbits, depth, maxtime, duong_dan) -> None:
+    """Chạy trong tiến trình con: nhận từng clip từ cha, khi được cho nghỉ thì GHI bảng hash RA FILE.
 
-    Pipe chỉ mang một dict trạng thái vài chục byte. ``nhip`` là bộ đếm file đã xong,
-    dùng chung với cha để cha phân biệt "chậm mà khoẻ" với "kẹt thật".
+    Pipe chỉ mang tên clip và dict trạng thái nhỏ: bảng ~419 MB qua pipe chính là nguyên nhân treo cứng
+    của bản vendored.
     """
+    import hash_table
+
     cai_dat_theo_doi_giai_ma()      # spawn: bản vá của cha không đi theo sang con
     try:
-        ht = instrumented_make_ht_from_list(
-            analyzer, filelist, hashbits, depth, maxtime, nhip=nhip
-        )
+        ht = hash_table.HashTable(hashbits=hashbits, depth=depth, maxtime=maxtime)
+        while (filename := ket_noi.recv()) is not None:
+            ket_noi.send(_xu_ly_clip(analyzer, ht, filename))
         with gzip.open(duong_dan, "wb", compresslevel=1) as fh:
             pickle.dump(ht, fh, protocol=pickle.HIGHEST_PROTOCOL)
-        pipe.send({"ok": True, "so_file": len(filelist)})
+        ket_noi.send({"ok": True})
     except BaseException as exc:  # noqa: BLE001 - phải báo về cha rồi mới chết
         try:
-            pipe.send({
+            ket_noi.send({
                 "ok": False,
                 "loi": f"{type(exc).__name__}: {str(exc)[:500]}",
             })
@@ -219,7 +300,7 @@ def _worker_ghi_hash_table(
         raise
     finally:
         try:
-            pipe.close()
+            ket_noi.close()
         except OSError:
             pass
 
@@ -250,8 +331,158 @@ def giai_phong_ban_ghi_rong(hash_tab, ten_moi) -> int:
     return da_nha
 
 
+@dataclass
+class _Worker:
+    so: int
+    process: object
+    ket_noi: object
+    duong_dan: str
+    so_xong: int = 0
+    viec: Clip | None = None
+    luc_giao: float = 0.0       # lần gửi gần nhất; watchdog tính từ mốc này
+    rss_luc_giao: int = 0
+    dang_nghi: bool = False
+
+
+def _rss(w: _Worker) -> int:
+    import psutil
+
+    try:
+        return psutil.Process(w.process.pid).memory_info().rss
+    except psutil.Error:
+        return w.rss_luc_giao
+
+
+def _con_phai_chua_gb(ban: list) -> float:
+    """Phần clip đang chạy CÒN sẽ chiếm; phần đã chiếm thì RAM trống đã phản ánh rồi."""
+    return sum(max(0.0, w.viec.can_gb - max(0, _rss(w) - w.rss_luc_giao) / 2**30) for w in ban)
+
+
+def _worker_chet(w: _Worker) -> RuntimeError:
+    w.process.join(timeout=30)
+    return RuntimeError(
+        f"Worker vân tay {w.so} kết thúc bất thường "
+        f"(exit code {w.process.exitcode}) mà không trả kết quả."
+    )
+
+
+def _gui(w: _Worker, thong_diep) -> None:
+    w.luc_giao = time.monotonic()
+    try:
+        w.ket_noi.send(thong_diep)
+    except OSError as exc:
+        raise _worker_chet(w) from exc
+
+
+def _phat_viec(lich: LichTheoRam, ranh: list, ban: list) -> None:
+    """Phát clip cho worker rảnh tới khi RAM hoặc worker không còn đủ. Sửa ``ranh``/``ban`` tại chỗ."""
+    while ranh:
+        trong = _ram_trong_gb()
+        buoc = lich.buoc(trong, _con_phai_chua_gb(ban), len(ban), time.monotonic())
+        if buoc is None:
+            return
+        hanh_dong, clip = buoc
+        ten = os.path.basename(clip.file)
+        if hanh_dong == "giao":
+            w = ranh.pop(0)
+            w.viec, w.rss_luc_giao = clip, _rss(w)
+            _gui(w, clip.file)
+            ban.append(w)
+        elif hanh_dong == "cho":
+            _emit("thong_bao_ram", message=(
+                f"{ten} cần khoảng {clip.can_gb:.0f} GB RAM, máy còn {trong:.1f} GB trống. "
+                f"Chờ tối đa {CHO_RAM_S:.0f} giây, bạn đóng bớt ứng dụng để clip này được chạy."))
+        else:
+            _emit(
+                "clip_finished",
+                file=clip.file,
+                status="failed",
+                category="thieu_ram",
+                message=(f"{ten}: cần khoảng {clip.can_gb:.0f} GB RAM nhưng máy chỉ còn {trong:.1f} GB "
+                         "trống nên đã bỏ qua để không làm treo máy. Đóng bớt ứng dụng rồi bấm "
+                         "«Bổ sung» để thử lại."),
+                elapsed_seconds=0.0,
+            )
+
+
+def _nhan_ket_qua(w: _Worker, lich: LichTheoRam) -> bool:
+    """Đọc một thông điệp của worker; ``True`` = worker đã ghi xong bảng hash."""
+    try:
+        kq = w.ket_noi.recv()
+    except (EOFError, OSError) as exc:
+        raise _worker_chet(w) from exc
+    if "ok" in kq:
+        if not kq["ok"]:
+            raise RuntimeError(f"Worker vân tay {w.so} lỗi: {kq.get('loi') or 'không rõ'}")
+        return True
+    clip, w.viec = w.viec, None
+    w.so_xong += 1
+    loi = kq.get("loi")
+    if not loi:
+        return False
+    if lich.ghi_loi(clip):
+        _emit("clip_cho_thu_lai", file=clip.file, message=loi)
+    else:
+        _emit(
+            "clip_finished",
+            file=clip.file,
+            status="failed",
+            category=loi.split(":", 1)[0],
+            message=f"{os.path.basename(clip.file)}: không tạo được vân tay sau 2 lần thử. {loi}",
+            elapsed_seconds=kq.get("giay", 0.0),
+        )
+    return False
+
+
+def _chet_khong_loi_nhan(w: _Worker) -> bool:
+    """Windows: con chết trước khi nhận handle pipe thì cha không thấy EOF, phải hỏi trực tiếp tiến trình."""
+    if w.process.is_alive():
+        return False
+    try:
+        return not w.ket_noi.poll()     # còn thông điệp trong pipe: đọc nó ở vòng sau
+    except OSError:
+        return True
+
+
+def _kiem_nhip(song: list) -> None:
+    bay_gio = time.monotonic()
+    for w in song:
+        if _chet_khong_loi_nhan(w):
+            raise _worker_chet(w)
+        if (w.viec or w.dang_nghi) and bay_gio - w.luc_giao > CHO_WORKER_S:
+            raise RuntimeError(
+                f"Worker vân tay {w.so} không phản hồi sau {CHO_WORKER_S:.0f} giây "
+                f"(đã xong {w.so_xong} file, không tiến thêm)."
+            )
+
+
+def _dieu_phoi(lich: LichTheoRam, workers: list) -> None:
+    """Vòng phát việc của cha, chạy tới khi mọi worker đã ghi xong bảng hash."""
+    from multiprocessing.connection import wait
+
+    song = list(workers)
+    while song:
+        ban = [w for w in song if w.viec]
+        ranh = [w for w in song if not w.viec and not w.dang_nghi]
+        _phat_viec(lich, ranh, ban)
+        if lich.xong and not ban:
+            du = ranh
+        elif lich.thua_worker:
+            du = ranh[0 if ban else 1:]     # giữ một worker tới cuối lượt để còn thử lại
+        else:
+            du = []
+        for w in du:
+            w.dang_nghi = True
+            _gui(w, None)
+        doi = {w.ket_noi: w for w in song}
+        for ket_noi in wait(list(doi), NHIP_KIEM_S):
+            if _nhan_ket_qua(doi[ket_noi], lich):
+                song.remove(doi[ket_noi])
+        _kiem_nhip(song)
+
+
 def instrumented_multiproc_add(analyzer, hash_tab, filename_iter, report, ncores):
-    """Bản thay thế ``multiproc_add`` — cùng thuật toán, không kẹt vĩnh viễn.
+    """Bản thay thế ``multiproc_add``: cùng ``HashTable`` và ``merge()``, không kẹt, không cạn RAM.
 
     Bản vendored (``audfprint.py:199``) có ba khiếm khuyết cộng lại thành treo cứng:
 
@@ -265,99 +496,50 @@ def instrumented_multiproc_add(analyzer, hash_tab, filename_iter, report, ncores
 
     Đã tái hiện treo trên chính audfprint gốc (không qua wrapper), 3/6 lần chạy.
 
-    Bản này giữ nguyên cách chia file, tham số HashTable và ``merge()``; chỉ đổi
-    đường vận chuyển: worker ghi bảng ra file tạm (gzip — bảng gần như toàn số 0 nên
-    nén cực tốt), pipe chỉ mang dict trạng thái nhỏ.
+    Bản này cho worker ghi bảng ra file tạm (gzip — bảng gần như toàn số 0 nên nén cực tốt) và thay
+    cách chia cứng ``filelists[ix % ncores]`` bằng phát từng clip theo RAM (D-31): chia cứng để clip
+    18,2 giờ chạy cùng 7 worker khác, cạn RAM, sụp cả lượt (06/11/2026).
     """
     import multiprocessing
 
-    filelists = [[] for _ in range(ncores)]
-    for ix, filename in enumerate(filename_iter):
-        filelists[ix % ncores].append(filename)
+    files = list(filename_iter)
+    with ThreadPoolExecutor(max_workers=8) as nhom:
+        clips = [Clip(f, can) for f, can in zip(files, nhom.map(uoc_luong_ram_gb, files))]
+    trong, du_phong = _ram_trong_gb(), _du_phong_ram_gb()
+    lich = LichTheoRam(clips, trong, du_phong, ncores)
+    so_dai = sum(1 for c in clips if c.can_gb > lich.phan_moi_worker)
+    _emit("thong_bao_ram", message=(f"RAM trống {trong:.1f} GB, giữ lại {du_phong:.1f} GB cho máy; "
+                                    f"{so_dai} clip dài được xếp cuối."))
 
     thu_muc = tempfile.mkdtemp(prefix="timclip_ht_", dir=_thu_muc_bang_tam())
-    rx: list = []
-    pr: list = []
-    duong_dan: list = []
-    nhip: list = []
+    workers: list = []
     try:
-        for ix in range(ncores):
-            doc, ghi = multiprocessing.Pipe(False)
+        for ix in range(min(ncores, len(clips))):
+            cha, con = multiprocessing.Pipe()
             path = os.path.join(thu_muc, f"hash_table_{ix}.pklz")
-            # lock=False là cố ý: một người ghi, một người đọc, int32 căn thẳng. Khoá
-            # tốn chi phí mỗi file và về lý thuyết có thể bị worker đã chết giữ lại.
-            # Cha chỉ so sánh THAY ĐỔI nên không phụ thuộc giá trị tuyệt đối.
-            dem = multiprocessing.Value("i", 0, lock=False)
             process = multiprocessing.Process(
                 target=_worker_ghi_hash_table,
-                args=(
-                    analyzer,
-                    filelists[ix],
-                    hash_tab.hashbits,
-                    hash_tab.depth,
-                    (1 << hash_tab.maxtimebits),
-                    ghi,
-                    path,
-                    dem,
-                ),
+                args=(analyzer, con, hash_tab.hashbits, hash_tab.depth,
+                      (1 << hash_tab.maxtimebits), path),
             )
             process.start()
-            # Cha không được giữ đầu ghi: worker chết phải thành EOF, không phải treo.
-            ghi.close()
-            rx.append(doc)
-            pr.append(process)
-            duong_dan.append(path)
-            nhip.append(dem)
+            # Cha không được giữ đầu của worker: worker chết phải thành EOF, không phải treo.
+            con.close()
+            workers.append(_Worker(ix, process, cha, path))
 
-        for core in range(ncores):
-            try:
-                # Chờ theo NHỊP SỐNG, không theo tổng thời gian làm việc. Chỉ báo lỗi
-                # khi bộ đếm file-đã-xong của worker này đứng yên suốt CHO_WORKER_S.
-                #
-                # Quét theo TỪNG core chứ không quét tất cả mỗi vòng: chia file là
-                # round-robin (`filelists[ix % ncores]`), nên khi ncores > số file sẽ
-                # có worker nhận danh sách RỖNG và không bao giờ tick. Quét tất cả sẽ
-                # giết oan đúng những worker đó. Theo từng core thì chúng an toàn tự
-                # nhiên — kết quả của chúng đã nằm sẵn trong pipe nên poll trả True
-                # ngay vòng đầu và hạn chót không bao giờ được xét tới.
-                moc = time.monotonic()
-                da_thay = nhip[core].value
-                while not rx[core].poll(NHIP_KIEM_S):
-                    hien = nhip[core].value
-                    if hien != da_thay:
-                        da_thay = hien
-                        moc = time.monotonic()
-                    elif time.monotonic() - moc > CHO_WORKER_S:
-                        raise RuntimeError(
-                            f"Worker vân tay {core} không phản hồi sau "
-                            f"{CHO_WORKER_S:.0f} giây "
-                            f"(đã xong {hien} file, không tiến thêm)."
-                        )
-                ket_qua = rx[core].recv()
-            except EOFError as exc:
-                pr[core].join(timeout=30)
-                raise RuntimeError(
-                    f"Worker vân tay {core} kết thúc bất thường "
-                    f"(exit code {pr[core].exitcode}) mà không trả kết quả."
-                ) from exc
-            finally:
-                rx[core].close()
+        _dieu_phoi(lich, workers)
 
-            if not ket_qua.get("ok"):
-                raise RuntimeError(
-                    f"Worker vân tay {core} lỗi: {ket_qua.get('loi') or 'không rõ'}"
-                )
-
-            with gzip.open(duong_dan[core], "rb") as fh:
+        for w in workers:
+            with gzip.open(w.duong_dan, "rb") as fh:
                 hash_tabx = pickle.load(fh)
             # Giải phóng sớm để đỉnh dung lượng đĩa không cộng dồn cả 8 worker.
             try:
-                os.remove(duong_dan[core])
+                os.remove(w.duong_dan)
             except OSError:
                 pass
 
             report([
-                "hash_table " + str(core) + " has "
+                "hash_table " + str(w.so) + " has "
                 + str(len(hash_tabx.names))
                 + " files " + str(sum(hash_tabx.counts)) + " hashes"
             ])
@@ -366,10 +548,11 @@ def instrumented_multiproc_add(analyzer, hash_tab, filename_iter, report, ncores
             giai_phong_ban_ghi_rong(hash_tab, hash_tabx.names)
             hash_tab.merge(hash_tabx)
             del hash_tabx
-            pr[core].join(timeout=60)
+            w.process.join(timeout=60)
     finally:
-        for process in pr:
-            dung_worker_va_cay_con(process)
+        for w in workers:
+            dung_worker_va_cay_con(w.process)
+            w.ket_noi.close()
         shutil.rmtree(thu_muc, ignore_errors=True)
 
 
@@ -413,58 +596,33 @@ def dung_worker_va_cay_con(process, cho_s: float = 5.0) -> None:
                 pass
 
 
-def _install_single_core_instrumentation(audfprint_analyze) -> None:
-    original = audfprint_analyze.Analyzer.ingest
+def cai_dat_instrumentation(audfprint) -> None:
+    """Gắn bản vá vào audfprint vendored. Tách riêng để test được.
 
-    def ingest(self, hashtable, filename):
-        started = time.monotonic()
-        _emit(
-            "clip_started",
-            file=filename,
-            phase="fingerprinting",
-            process_pid=os.getpid(),
-        )
-        try:
-            duration, hash_count = original(self, hashtable, filename)
-        except BaseException as exc:
-            _emit(
-                "clip_finished",
-                file=filename,
-                status="failed",
-                category=type(exc).__name__,
-                message=str(exc)[:500],
-                elapsed_seconds=time.monotonic() - started,
-                process_pid=os.getpid(),
-            )
-            raise
-        _emit(
-            "clip_finished",
-            file=filename,
-            status="success" if hash_count else "failed",
-            category="" if hash_count else "zero_hashes",
-            message="" if hash_count else "Không tạo được hash từ audio.",
-            hash_count=hash_count,
-            duration_seconds=duration,
-            elapsed_seconds=time.monotonic() - started,
-            process_pid=os.getpid(),
-        )
-        return duration, hash_count
-
-    audfprint_analyze.Analyzer.ingest = ingest
-
-
-def cai_dat_instrumentation(audfprint, audfprint_analyze) -> None:
-    """Gắn toàn bộ bản vá vào audfprint vendored. Tách riêng để test được.
-
-    Quên bất kỳ dòng nào ở đây đều làm mất một tính chất đã có regression test:
-    thiếu ``make_ht_from_list`` là mất event khi ``ncores > 1``; thiếu
-    ``multiproc_add`` là quay lại nguy cơ treo cứng; thiếu ``Analyzer.ingest``
-    là mất event ở nhánh một nhân.
+    Thiếu ``multiproc_add`` là quay lại nguy cơ treo cứng và cạn RAM; thiếu ``do_cmd`` thì nhánh một
+    nhân (mặc định của CLI) không có event, không qua lịch RAM, một clip quá dài làm sập cả lượt.
     """
-    audfprint.make_ht_from_list = instrumented_make_ht_from_list
     audfprint.multiproc_add = instrumented_multiproc_add
-    _install_single_core_instrumentation(audfprint_analyze)
+    do_cmd_goc = audfprint.do_cmd
+
+    def do_cmd(cmd, analyzer, hash_tab, filename_iter, matcher, outdir, type_, report, **kwargs):
+        if cmd in ("new", "add"):
+            return instrumented_multiproc_add(analyzer, hash_tab, filename_iter, report, 1)
+        return do_cmd_goc(cmd, analyzer, hash_tab, filename_iter, matcher, outdir, type_, report,
+                          **kwargs)
+
+    audfprint.do_cmd = do_cmd
     cai_dat_theo_doi_giai_ma()
+
+
+def _ha_uu_tien_tien_trinh() -> None:
+    """Dựng kho chạy Below Normal; worker và FFmpeg thừa hưởng theo quy tắc CreateProcess của Windows."""
+    try:
+        import psutil
+
+        psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
+    except Exception:  # noqa: BLE001 - lớp phụ, không được làm hỏng build
+        pass
 
 
 _NHOM_CUA_RUNNER = None
@@ -491,15 +649,16 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:  # noqa: BLE001 - lớp bảo vệ thêm, không được làm hỏng build
         _NHOM_CUA_RUNNER = None
 
+    _ha_uu_tien_tien_trinh()
+
     # Bảng hash tạm nằm cạnh database đang dựng (bản làm việc của job), không ở %TEMP%.
     dbase = _dbase_trong_lenh(argv[2:])
     if dbase:
         os.environ.setdefault(BIEN_THU_MUC_BANG_TAM, os.path.dirname(os.path.abspath(dbase)))
 
     import audfprint
-    import audfprint_analyze
 
-    cai_dat_instrumentation(audfprint, audfprint_analyze)
+    cai_dat_instrumentation(audfprint)
     audfprint.main([vendor_script, *argv[2:]])
     return 0
 

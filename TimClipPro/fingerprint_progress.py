@@ -167,6 +167,7 @@ class FingerprintProgressTracker:
         self._finished: set[str] = set()
         self._work_finished_at: deque[float] = deque(maxlen=20)
         self._last_heartbeat_mono = 0.0
+        self._loi_nhac_ram = ""
         self._lock = threading.RLock()
         self.errors: list[dict] = []
 
@@ -295,6 +296,7 @@ class FingerprintProgressTracker:
         index = self._index(path)
         with self._lock:
             self._active[key] = (time.time(), index)
+            self._loi_nhac_ram = ""
         name = ten_file_an_toan(path)
         self._log(
             "INFO",
@@ -368,7 +370,8 @@ class FingerprintProgressTracker:
         self._log(
             "INFO" if success else "ERROR",
             "clip",
-            f"{outcome} index={index} total={self.state.total} file={name!r} elapsed={elapsed:.3f}s",
+            f"{outcome} index={index} total={self.state.total} file={name!r} elapsed={elapsed:.3f}s"
+            + ("" if success else f" category={error_category or '-'} message={message!r}"),
         )
         self._emit(
             phase="fingerprinting",
@@ -382,6 +385,18 @@ class FingerprintProgressTracker:
             current=index,
             error_category=error_category,
         )
+
+    def clip_cho_thu_lai(self, path: str, message: str) -> None:
+        """Lỗi đọc/thiếu RAM lần đầu: chưa tính là hỏng, clip sẽ được thử lại một mình cuối lượt."""
+        with self._lock:
+            self._active.pop(self._key(path), None)
+        self._log("WARNING", "clip", f"retry_later file={ten_file_an_toan(path)!r} message={message!r}")
+
+    def thong_bao_ram(self, message: str) -> None:
+        """Lời nhắc RAM giữ tới clip tiếp theo: heartbeat 10 giây một lần không được che mất nó."""
+        self._loi_nhac_ram = message
+        self._log("INFO", "ram", f"message={message!r}")
+        self._emit(phase="fingerprinting", status="running", message=message)
 
     def heartbeat(
         self,
@@ -397,7 +412,7 @@ class FingerprintProgressTracker:
         self._emit(
             phase=phase or self.state.phase,
             status="heartbeat",
-            message=message,
+            message=self._loi_nhac_ram or message,
             active_pid=process_pid,
         )
 

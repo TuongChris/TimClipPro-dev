@@ -463,6 +463,9 @@ def _main():
               f"chưa thử {r.get('chua_thu', 0)}, bị hạn chế (chưa tải, không thử lại) {r.get('han_che_bo_qua', 0)}.")
         if r.get("han_che_bo_qua"):
             print("  Thử lại video bị hạn chế: thêm --thu-lai-han-che (tool tự thử lại khi đổi nguồn cookie).")
+        if r.get("qua_dai"):
+            from scan_ui import CAU_QUA_DAI
+            print(" ", CAU_QUA_DAI.format(n=r["qua_dai"]))
         if r.get("trong_so_khong_file"):
             from scan_ui import CAU_TRONG_SO_KHONG_FILE
             print(" ", CAU_TRONG_SO_KHONG_FILE.format(n=r["trong_so_khong_file"]))
@@ -504,6 +507,8 @@ def _main():
         )
         for canh_bao in r.get("canh_bao") or []:
             print(f"⚠️ {canh_bao}")
+        for loi in (r.get("loi_file") or [])[:20]:
+            print(f"   {loi}")
         return
 
     y_dinh = None

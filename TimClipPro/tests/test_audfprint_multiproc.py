@@ -3,7 +3,7 @@
 
 Ba tính chất phải giữ:
 
-1. Cả ba điểm vá đều được gắn — quên một cái là mất event hoặc quay lại nguy cơ treo.
+1. Mọi điểm vá đều được gắn — quên một cái là mất event hoặc quay lại nguy cơ treo.
 2. Tiến trình cha KHÔNG giữ đầu ghi pipe: worker chết phải thành lỗi rõ ràng,
    không phải treo vĩnh viễn (bản vendored treo mãi mãi trong tình huống này).
 3. Nhiều tiến trình con cùng ghi stdout không được làm mất/ghép dòng event.
@@ -12,7 +12,6 @@ Ba tính chất phải giữ:
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 import time
@@ -25,26 +24,15 @@ import audfprint_progress_runner as runner
 REPO = Path(__file__).resolve().parents[1]
 
 
-def test_cai_dat_day_du_ba_diem_va():
-    class Analyzer:
-        def ingest(self, hashtable, filename):
-            return 1.0, 1
-
+def test_cai_dat_du_cac_diem_va():
     class AudfprintGia:
-        make_ht_from_list = "goc"
         multiproc_add = "goc"
+        do_cmd = "goc"
 
-    class AnalyzeGia:
-        pass
+    runner.cai_dat_instrumentation(AudfprintGia)
 
-    AnalyzeGia.Analyzer = Analyzer
-    goc_ingest = Analyzer.ingest
-
-    runner.cai_dat_instrumentation(AudfprintGia, AnalyzeGia)
-
-    assert AudfprintGia.make_ht_from_list is runner.instrumented_make_ht_from_list
     assert AudfprintGia.multiproc_add is runner.instrumented_multiproc_add
-    assert AnalyzeGia.Analyzer.ingest is not goc_ingest
+    assert AudfprintGia.do_cmd != "goc", "nhánh một nhân cũng phải đi qua lịch RAM"
 
 
 class _HashTabGia:
@@ -83,6 +71,32 @@ def test_worker_chet_khong_gui_gi_thi_bao_loi_chu_khong_treo(monkeypatch):
     assert time.monotonic() - bat_dau < 20.0, "Phải phát hiện worker chết ngay, không chờ hết timeout."
 
 
+def _khong_nap_duoc():
+    raise RuntimeError("không nạp được analyzer trong tiến trình con")
+
+
+class _AnalyzerHong:
+    """Chết NGAY khi tiến trình con mở gói tham số, trước khi worker kịp nhận đầu pipe."""
+
+    def __reduce__(self):
+        return (_khong_nap_duoc, ())
+
+
+def test_worker_chet_luc_khoi_dong_thi_bao_ngay_khong_doi_het_han(monkeypatch):
+    """Windows: con chết trước khi nhận handle thì cha KHÔNG thấy EOF, chỉ còn watchdog 30 phút."""
+    monkeypatch.setattr(runner, "CHO_WORKER_S", 120.0)
+    bat_dau = time.monotonic()
+    with pytest.raises(RuntimeError, match="không trả kết quả"):
+        runner.instrumented_multiproc_add(
+            analyzer=_AnalyzerHong(),
+            hash_tab=_HashTabGia(),
+            filename_iter=["a.wav"],
+            report=lambda msgs: None,
+            ncores=1,
+        )
+    assert time.monotonic() - bat_dau < 60.0, "Phải thấy worker chết, không chờ hết hạn."
+
+
 def test_khong_con_file_tam_sau_khi_that_bai(monkeypatch, tmp_path):
     truoc = set(Path(runner.tempfile.gettempdir()).glob("timclip_ht_*"))
     monkeypatch.setattr(runner, "_worker_ghi_hash_table", worker_chet_ngay)
@@ -107,62 +121,52 @@ class _HTGia:
         self.counts = [1] * so_file
 
 
-def _ghi_ket_qua(duong_dan, pipe, so_file):
-    """Bắt chước ĐÚNG runner:151-153 — gzip trước, rồi mới báo qua pipe."""
+def _phuc_vu(ket_noi, duong_dan, moi_clip=lambda: None):
+    """Bắt chước ĐÚNG vòng worker thật: nhận clip, trả lời, được cho nghỉ thì gzip rồi mới báo."""
     import gzip
     import pickle
 
+    so_file = 0
+    while ket_noi.recv() is not None:
+        moi_clip()
+        so_file += 1
+        ket_noi.send({})
     with gzip.open(duong_dan, "wb", compresslevel=1) as fh:
         pickle.dump(_HTGia(so_file), fh, protocol=pickle.HIGHEST_PROTOCOL)
-    pipe.send({"ok": True, "so_file": so_file})
-    pipe.close()
+    ket_noi.send({"ok": True})
+    ket_noi.close()
 
 
-def _tick(nhip):
-    if nhip is not None:
-        nhip.value = nhip.value + 1
+def _ngu_mot_giay():
+    time.sleep(1.0)
 
 
-def worker_cham_ma_khoe(analyzer, filelist, hashbits, depth, maxtime,
-                        pipe, duong_dan, nhip=None):
-    """Chạy LÂU HƠN HẲN hạn chót nhưng vẫn hoàn tất file đều đặn.
+def worker_cham_ma_khoe(analyzer, ket_noi, hashbits, depth, maxtime, duong_dan):
+    """Tổng thời gian LÂU HƠN HẲN hạn chót nhưng vẫn trả lời đều đặn từng clip.
 
     Phải ở cấp module vì Windows dùng spawn.
     """
-    _tick(nhip)                      # nhịp đầu ngay khi vào, để bớt phụ thuộc lúc spawn
-    for _ in range(24):
-        time.sleep(0.45)
-        _tick(nhip)
-    _ghi_ket_qua(duong_dan, pipe, len(filelist))
+    _phuc_vu(ket_noi, duong_dan, _ngu_mot_giay)
 
 
-def worker_nhanh_va_khoe(analyzer, filelist, hashbits, depth, maxtime,
-                         pipe, duong_dan, nhip=None):
-    """Xong ngay. Dùng cho trường hợp ncores > số file (có worker nhận danh sách rỗng)."""
-    for _ in filelist:
-        _tick(nhip)
-    _ghi_ket_qua(duong_dan, pipe, len(filelist))
+def worker_nhanh_va_khoe(analyzer, ket_noi, hashbits, depth, maxtime, duong_dan):
+    _phuc_vu(ket_noi, duong_dan)
 
 
-def worker_ket_cung(analyzer, filelist, hashbits, depth, maxtime,
-                    pipe, duong_dan, nhip=None):
-    """Tick 3 lần rồi treo VĨNH VIỄN mà KHÔNG đóng pipe.
+def worker_ket_cung(analyzer, ket_noi, hashbits, depth, maxtime, duong_dan):
+    """Trả lời 3 clip rồi treo VĨNH VIỄN mà KHÔNG đóng pipe.
 
     Không có EOF, nên im lặng là tín hiệu duy nhất — đúng tình huống mà bản cũ
     không tài nào phân biệt được với "chậm mà khoẻ".
     """
-    if duong_dan:
-        Path(duong_dan).with_name("pid_ket_cung.txt").write_text(
-            str(os.getpid()), encoding="utf-8"
-        )
     for _ in range(3):
-        _tick(nhip)
-        time.sleep(0.05)
+        ket_noi.recv()
+        ket_noi.send({})
     time.sleep(120)
 
 
 # Hạn chót trong các test dưới đây phải LỚN HƠN HẲN chi phí spawn+import của tiến
-# trình con, vì nhịp ĐẦU TIÊN chỉ tới sau khi con đã nạp xong module. Đo được: ~0,4 s
+# trình con, vì lời đáp ĐẦU TIÊN chỉ tới sau khi con đã nạp xong module. Đo được: ~0,4 s
 # khi máy rảnh, nhưng đã thấy vượt 2 s khi chạy cả bộ test. Đừng "tối ưu" các con số
 # này xuống nữa — bản đầu dùng 1,5–2,0 s và đã flaky đúng theo kiểu đó.
 # Bản chạy thật đặt CHO_WORKER_S = 1800 s nên chuyện này không bao giờ là vấn đề.
@@ -171,12 +175,12 @@ def worker_ket_cung(analyzer, filelist, hashbits, depth, maxtime,
 def test_worker_cham_hon_han_chot_nhung_van_tien_thi_khong_bi_giet(monkeypatch):
     """Regression trực tiếp cho sự cố 2026-09-07.
 
-    Bản cũ coi `poll(CHO_WORKER_S)` là watchdog, nhưng pipe chỉ có MỘT message phát ra
+    Bản đầu coi `poll(CHO_WORKER_S)` là watchdog, nhưng pipe chỉ có MỘT message phát ra
     lúc worker đã xong hết việc — nên hằng số thành hạn chót cho TỔNG phần việc và
     giết một job 94,8% hoàn thành trong lúc cả 8 worker đều khoẻ.
     """
     monkeypatch.setattr(runner, "_worker_ghi_hash_table", worker_cham_ma_khoe)
-    monkeypatch.setattr(runner, "CHO_WORKER_S", 5.0)
+    monkeypatch.setattr(runner, "CHO_WORKER_S", 8.0)
     monkeypatch.setattr(runner, "NHIP_KIEM_S", 0.1)
 
     hash_tab = _HashTabGia()
@@ -184,16 +188,16 @@ def test_worker_cham_hon_han_chot_nhung_van_tien_thi_khong_bi_giet(monkeypatch):
     runner.instrumented_multiproc_add(
         analyzer=None,
         hash_tab=hash_tab,
-        filename_iter=["a.wav", "b.wav"],
+        filename_iter=[f"c{i}.wav" for i in range(20)],
         report=lambda msgs: None,
         ncores=2,
     )
     troi_qua = time.monotonic() - bat_dau
 
     # Bắt buộc: nếu worker giả chạy nhanh hơn hạn chót thì test xanh một cách vô nghĩa.
-    assert troi_qua > 5.0, (
+    assert troi_qua > 8.0, (
         f"Worker phải chạy LÂU HƠN hạn chót mới chứng minh được điều gì "
-        f"(chạy {troi_qua:.1f}s, hạn chót 5.0s)."
+        f"(chạy {troi_qua:.1f}s, hạn chót 8.0s)."
     )
     assert len(hash_tab.da_merge) == 2, "Phải merge đủ hash table của mọi worker."
 
@@ -210,7 +214,7 @@ def test_worker_con_song_nhung_ngung_tien_thi_bi_phat_hien_va_bao_ro_so_file(mon
         runner.instrumented_multiproc_add(
             analyzer=None,
             hash_tab=_HashTabGia(),
-            filename_iter=["a.wav"],
+            filename_iter=["a.wav", "b.wav", "c.wav", "d.wav"],
             report=lambda msgs: None,
             ncores=1,
         )
@@ -228,13 +232,8 @@ def test_worker_con_song_nhung_ngung_tien_thi_bi_phat_hien_va_bao_ro_so_file(mon
     assert sau <= truoc, "Thư mục tạm phải được dọn kể cả khi worker bị treo."
 
 
-def test_worker_khong_co_file_nao_thi_khong_bi_giet_oan(monkeypatch):
-    """ncores > số file: chia round-robin để lại worker có danh sách RỖNG.
-
-    Worker rỗng không bao giờ tick. Nếu cha quét hạn chót cho TẤT CẢ core mỗi vòng
-    thay vì theo từng core, chính những worker khoẻ mạnh này sẽ bị giết oan.
-    Bố cục này giống tests/test_audfprint_progress_integration.py (ncores=8, 6 clip).
-    """
+def test_ncores_lon_hon_so_file_khong_sinh_worker_thua(monkeypatch):
+    """Worker thừa chỉ tốn RAM cho bảng hash; bố cục giống test tích hợp (ncores=8, 6 clip)."""
     monkeypatch.setattr(runner, "_worker_ghi_hash_table", worker_nhanh_va_khoe)
     monkeypatch.setattr(runner, "CHO_WORKER_S", 30.0)
     monkeypatch.setattr(runner, "NHIP_KIEM_S", 0.1)
@@ -247,7 +246,7 @@ def test_worker_khong_co_file_nao_thi_khong_bi_giet_oan(monkeypatch):
         report=lambda msgs: None,
         ncores=8,
     )
-    assert len(hash_tab.da_merge) == 8, "Cả worker nhận danh sách rỗng cũng phải về đích."
+    assert len(hash_tab.da_merge) == 6
 
 
 KICH_BAN_GHI_CHUNG = """

@@ -251,6 +251,7 @@ def test_runner_dat_bang_tam_canh_database_dang_dung(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "audfprint", AudfprintGia)
     monkeypatch.setitem(sys.modules, "audfprint_analyze", object())
     monkeypatch.setattr(runner, "cai_dat_instrumentation", lambda *a: None)
+    monkeypatch.setattr(runner, "_ha_uu_tien_tien_trinh", lambda: None)  # giữ ưu tiên của pytest
     monkeypatch.setattr(runner, "_NHOM_CUA_RUNNER", None)
     import process_runner
 

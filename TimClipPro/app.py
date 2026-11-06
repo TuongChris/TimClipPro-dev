@@ -44,6 +44,7 @@ from publication_date import format_publication_date
 from scan_jobs import ScanJobController
 import ui_tien_do_quet
 from scan_ui import (
+    CAU_QUA_DAI,
     CAU_TRONG_SO_KHONG_FILE,
     build_nguon_chung_status_dataframe,
     build_scan_status_dataframe,
@@ -1500,6 +1501,8 @@ with tab0:
                         st.warning(CAU_TRONG_SO_KHONG_FILE.format(n=len(trong_so)) + "\n\n- "
                                    + "\n- ".join(f"{thoat_markdown(v.title[:60])} ({v.id})"
                                                        for v in trong_so[:10]))
+                    if r.get("qua_dai"):
+                        st.info(CAU_QUA_DAI.format(n=len(r["qua_dai"])))
                     if r.get("nghi_hong"):
                         st.warning(
                             f"{len(r['nghi_hong'])} file nghi hỏng/nén dở được tính là còn "

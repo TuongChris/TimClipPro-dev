@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Bài đo J (06/11/2026): tái hiện lúc dựng vân tay chạm clip #291 (18,8 giờ) — ghi từng giây HDD, SSD, RAM, tiến trình.
+"""Bài đo J (06/11/2026): tái hiện lúc dựng vân tay chạm clip #291 (18,2 giờ) — ghi từng giây HDD, SSD, RAM, tiến trình.
 
 Đúng lệnh dựng thật (runner + 8 worker + --shifts 4), audio chỉ đọc, bảng hash ở thư mục tạm cạnh script. Không đụng kho thật
 hay dữ liệu DEV. Chốt an toàn: dừng ở 5 phút hoặc khi commit chạm 88% trần. Dừng ngay nếu DEV đang chạy.

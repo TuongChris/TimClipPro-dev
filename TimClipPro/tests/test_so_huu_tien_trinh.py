@@ -220,16 +220,19 @@ def test_lenh_media_tra_stdout_va_duoi_stderr_co_gioi_han():
 #  Worker audfprint lỗi: không để lại process con
 # ---------------------------------------------------------------------------
 
-def _worker_hong_de_lai_con(analyzer, files, hashbits, depth, maxtime, pipe, path, nhip):
+def _worker_hong_de_lai_con(analyzer, ket_noi, hashbits, depth, maxtime, path):
     import pathlib
     import subprocess as sp
     import sys as s
     import time as t
 
-    con = sp.Popen([s.executable, "-c", "import time; time.sleep(120)", files[1]],
+    file_pid = ket_noi.recv()
+    ket_noi.send({})
+    dau = ket_noi.recv()
+    con = sp.Popen([s.executable, "-c", "import time; time.sleep(120)", dau],
                    stdin=sp.DEVNULL, stdout=sp.DEVNULL, stderr=sp.DEVNULL)
-    pathlib.Path(files[0]).write_text(str(con.pid))
-    pipe.send({"ok": False, "loi": "lỗi giả lập sau khi đã đẻ process con"})
+    pathlib.Path(file_pid).write_text(str(con.pid))
+    ket_noi.send({"ok": False, "loi": "lỗi giả lập sau khi đã đẻ process con"})
     t.sleep(60)
 
 
