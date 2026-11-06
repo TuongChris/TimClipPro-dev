@@ -33,7 +33,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
    Chờ người dùng dựng Kho_Joe_Games (CHƯA có vân tay, thư mục `E:\Kho_Tool_Quet\Kho_Joe_Games`) và đồng bộ thật một kênh để kiểm
    quy tắc 2 giờ (chưa thử YouTube thật).
 3. Audit toàn repo 06/11: số 1–6 GỘP (PR #24, `256e848`), DEV 8502 cập nhật 06/11 22:09 (sao lưu `data_20261106_220855`). PC1 phải cài lại
-   hook. Số 7–13 đã sửa trên `fix/pc2/audit-0611-dot2`, chờ duyệt gộp + cập nhật DEV. Còn 14–20 + 8 mục nhỏ: báo cáo trong phiên
+   hook. Số 7–13 GỘP (PR #25, `3d28ece`), DEV 8502 cập nhật 06/11 23:04 (sao lưu `data_20261106_230441`). Còn 14–20 + 8 mục nhỏ: báo cáo trong phiên
    06/11 (lịch sử chat), số 14 có 21 ca đột biến updater sống.
 4. Người dùng: nghiệm thu DEV đợt 2 theo `C:\Dev\pc2_test_runs\2026-10-26_audit_p3\NGHIEM_THU_DEV_DOT2.md` (~15 phút).
 5. Người dùng quyết: P-6 (3 phương án, `…\2026-10-26_audit_p3\P6_PHUONG_AN.md`); P-7 (`P7_THIET_KE.md` cùng thư mục, công
@@ -50,9 +50,11 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 ### 2026-11-06 — sửa số 7–13 của audit toàn repo (nhánh fix/pc2/audit-0611-dot2)
 - Làm: hồ sơ không cộng đôi vùng chồng nhau; lưu cấu hình chỉ ghi khoá phiên này đổi; tab cũ theo thư mục nguồn mới; `Thread.start` lỗi không để
   lại việc ma; lỗi đọc tạm không bị coi là file hỏng; hoàn tác ghi bản `sau_hoan_tac`; updater không báo ACTIVE khi không áp dụng gì. Mỗi lỗi có
-  test đỏ trước. `launcher.py` + `managed_update.py` chỉ có hiệu lực trên máy đã cài sau bootstrap lại. Chưa gộp, DEV chưa cập nhật.
+  test đỏ trước. `launcher.py` + `managed_update.py` chỉ có hiệu lực trên máy đã cài sau bootstrap lại.
 - Test (chặn mạng, cp1252, venv CookieFix) @ `79ded22`: nhanh 3455 = 3451/4/0, chậm 22/22, ruff sạch (`C:\Dev\pc2_test_runs\2026-11-06_audit_0611_dot2`).
   Review độc lập: 2 P2 + 4 P3 trong chính bản sửa (lỗi đọc tạm lúc mở phiên chọn nhầm kho, xoá cấu hình), đã sửa kèm test đỏ.
+- Gộp PR #25 + cập nhật DEV: trước khi tắt, không tiến trình con, ghi 0 B trong 30 s, 26 khoá không bị giữ, Sheets 584 SENT. Sau cập nhật: health ok,
+  đủ 7 tab, console 0 lỗi, CLI `dich` đạt, dữ liệu không đổi. Đề xuất `CURRENT_STATE.md` (PC1 sửa): integration = `3d28ece`, PC1 chưa review.
 ### 2026-11-06 — sửa số 1–6 của audit toàn repo (nhánh fix/pc2/audit-0611)
 - Làm: nút Dừng đồng bộ sau bấm đúp; lô nguồn chung tự lưu CSV; đọc kho lỗi không bị nhớ thành kho rỗng; hook quét merge commit, tên có
   dấu cách, đổi tên y nguyên (hook mới ĐÃ CÀI trên PC2, bản cũ không có khối quét nội dung); «Quét toàn bộ» quét hết (D-32); bản đệm cụt bị bỏ.
