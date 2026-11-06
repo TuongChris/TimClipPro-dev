@@ -473,7 +473,7 @@ def _in(kq: mu.KetQua) -> int:
     print(f"[{kq.trang_thai}] {kq.thong_diep}")
     for x in kq.chi_tiet:
         print(f"  - {x}")
-    if kq.trang_thai in (mu.LOI, mu.TU_CHOI, mu.BLOCKED, mu.QUARANTINED):
+    if kq.trang_thai in (mu.LOI, mu.TU_CHOI, mu.BLOCKED, mu.QUARANTINED, mu.WAITING_APPROVAL):
         return 1
     if kq.trang_thai in (mu.BAN,) or (kq.trang_thai == mu.STAGED and "hoãn" in kq.thong_diep):
         return 2

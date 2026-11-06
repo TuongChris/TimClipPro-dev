@@ -86,7 +86,7 @@ là một duyệt riêng (thường cùng lúc với duyệt PR).
    --title "TimClipPro X.Y.Z (Stable)" --notes-file <RELEASE_NOTES.md> --draft` → `gh release download` lại vào thư mục
    MỚI, so băm từng byte → `gh release edit stable-X.Y.Z --draft=false --latest` → tải ẩn danh (HTTP 200, cùng băm).
    Tag chỉ sinh lúc công bố; KHÔNG bao giờ xoá/gắn lại tag (ruleset chặn).
-10. **Cập nhật 8501** — NGƯỜI DÙNG: khối PowerShell → `SAN SANG` → `C:\TimClipPro\CapNhat.bat` → `[ACTIVE] …` →
+10. **Cập nhật 8501** — NGƯỜI DÙNG: khối PowerShell → `SAN SANG` → `C:\TimClipPro\CapNhat.bat` → `[ACTIVE] Đã chuyển sang bản X.Y.Z` →
     `launcher.py doctor` không ❌ → so số đếm (hồ sơ đích, Outbox, lịch sử, kho) với trước khi cập nhật.
 
 ## 3. Khôi phục

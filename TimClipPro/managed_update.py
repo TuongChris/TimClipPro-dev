@@ -949,7 +949,8 @@ class CapNhat:
                 try:
                     m, raw_m, raw_s = self._manifest_ung_vien(ban, tam)
                 except TuChoiGoi as e:
-                    if e.ma not in ("chu_ky", "thieu_goi", "nguon", "qua_lon"):
+                    # ``tag``: manifest đúng nằm nhầm thư mục tag không nói gì về bản THẬT mang số đó.
+                    if e.ma not in ("chu_ky", "thieu_goi", "nguon", "qua_lon", "tag"):
                         self._cach_ly(ban.tag[len(TIEN_TO_TAG):], str(e))
                     bo.append(f"{ban.tag}: {e}")
                     continue
@@ -1198,7 +1199,9 @@ class CapNhat:
     def _ap_dung(self) -> KetQua:
         nk = self.nk.doc()
         if not nk or nk.get("trang_thai") != STAGED:
-            return KetQua(nk.get("trang_thai") if nk else KHONG_CO, "", "Không có bản nào đang chờ áp dụng.")
+            # ACTIVE ở đây là của lượt TRƯỚC: in ra sẽ giống vừa cập nhật xong.
+            tt = nk.get("trang_thai") if nk else KHONG_CO
+            return KetQua(KHONG_CO if tt == ACTIVE else tt, "", "Không có bản nào đang chờ áp dụng.")
         den = doc_hoan(self.cd.goc)
         if den is not None:
             return self._ket_qua_hoan(nk.get("ung_vien", ""), den)

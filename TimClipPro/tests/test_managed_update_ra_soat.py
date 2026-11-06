@@ -11,6 +11,7 @@ mã trước khi sửa:
        được người đọc đồng thời (Windows); không bao giờ xoá runtime đang dùng.
 """
 import os
+import shutil
 import subprocess
 
 import pytest
@@ -570,3 +571,31 @@ def test_last_good_chi_tro_ban_moi_khi_nhat_ky_da_ghi_ben_active(mt, monkeypatch
     assert cn2.phuc_hoi() == mu.ACTIVE
     assert _so(mt, "kiem_suc_khoe") == truoc, "khôi phục kiểm lại health của bản đã chốt"
     assert _hien(mt) == "1.1.0" and cn2.last_good()["phien_ban"] == "1.1.0" and not cn2.cach_ly()
+
+
+# ---------------------------------------------------------------- audit 06/11
+
+def test_manifest_nam_sai_tag_khong_cach_ly_so_phien_ban_tuong_lai(mt):
+    """Chép thư mục feed để chuẩn bị bản sau: «update check» (chỉ kiểm) từng cách ly 1.2.0, bản 1.2.0 thật bị bỏ qua."""
+    _cai(mt, "1.0.0")
+    phat_hanh(mt["nguon"], "1.1.0", mt["khoa"])
+    shutil.copytree(os.path.join(mt["nguon"], "stable-1.1.0"), os.path.join(mt["nguon"], "stable-1.2.0"))
+    kq = mt["tao"]().kiem_tra()
+    assert any("không khớp tag" in x for x in kq.chi_tiet), kq
+    assert mt["tao"]().cach_ly() == {}
+    shutil.rmtree(os.path.join(mt["nguon"], "stable-1.2.0"))
+    phat_hanh(mt["nguon"], "1.2.0", mt["khoa"])
+    assert mt["tao"]().chuan_bi().phien_ban == "1.2.0"
+
+
+def test_khong_co_gi_de_ap_dung_khong_bao_active(mt):
+    """Tài liệu lấy «[ACTIVE] …» làm dấu hiệu cập nhật thành công: feed rỗng mà in ACTIVE là báo sai."""
+    _cai(mt, "1.0.0")
+    assert mt["tao"]().ap_dung().trang_thai == mu.KHONG_CO
+
+
+def test_cho_duyet_migration_tra_ma_khac_0_de_cua_so_khong_tu_dong():
+    import launcher
+
+    kq = mu.KetQua(mu.WAITING_APPROVAL, "1.1.0", "Cần duyệt migration trước khi cập nhật.")
+    assert launcher._in(kq) != 0
