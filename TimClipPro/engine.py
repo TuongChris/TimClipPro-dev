@@ -4988,6 +4988,7 @@ class Engine:
         if muc_tieu is None:
             du_dieu_kien = (
                 cfg.top1_tim_nhanh
+                and not self._quet_tron_theo_lo()
                 and cfg.top_n == 1
                 and len(chunks) >= max(2, cfg.top1_khuc_toi_thieu)
             )
@@ -5080,6 +5081,10 @@ class Engine:
     #  3c) BÙ VIDEO BỊ ĐỔI TỐC ĐỘ ĐỂ NÉ VÂN TAY
     # =================================================================
 
+    def _quet_tron_theo_lo(self) -> bool:
+        """Lô ghim «Quét toàn bộ video»: người dùng chủ động chọn, không tải một phần và không dừng sớm (D-32)."""
+        return getattr(self, "_gioi_han_video_dai", None) == GHVD_TOAN_BO
+
     def _gioi_han_tai(self, tong: float) -> Optional[float]:
         """Chỉ tải bao nhiêu giây đầu? ``None`` = tải trọn như cũ.
 
@@ -5097,7 +5102,7 @@ class Engine:
         ``tai_mot_phan`` tắt = tải trọn nhưng xử lý tăng dần.
         """
         cfg = self.config
-        if not getattr(cfg, "quet_tang_dan", False):
+        if self._quet_tron_theo_lo() or not getattr(cfg, "quet_tang_dan", False):
             return None
         if not getattr(cfg, "tai_mot_phan", False):
             return None
@@ -5246,7 +5251,8 @@ class Engine:
         cfg = self.config
         buoc = float(getattr(cfg, "quet_tang_dan_buoc_gio", 0) or 0) * 3600
         nguong = float(getattr(cfg, "quet_tang_dan_tu_gio", 0) or 0) * 3600
-        if not getattr(cfg, "quet_tang_dan", False) or buoc <= 0 or tong <= nguong:
+        if (self._quet_tron_theo_lo() or not getattr(cfg, "quet_tang_dan", False)
+                or buoc <= 0 or tong <= nguong):
             return [(0.0, tong)]
         doan = []
         tu = 0.0
@@ -5823,7 +5829,7 @@ class Engine:
                       f"{kq.source_name} ({hhmmss(info['duration'])}) — chuẩn bị tải audio...")
             # Giới hạn VIDEO DÀI chọn theo lô (trang «Quét YouTube»): video quá ngưỡng chỉ tải và quét
             # phần đầu, KHÔNG BAO GIỜ tự tải trọn. Không ghim (Watch, CLI, «một video gốc chung»)
-            # hoặc «toàn bộ» hoặc video không quá ngưỡng → nhánh cũ bên dưới, y nguyên.
+            # hoặc video không quá ngưỡng → nhánh cũ bên dưới. «Toàn bộ» cũng đi nhánh đó nhưng tải trọn ngay.
             che_do = getattr(self, "_gioi_han_video_dai", None) if muc_tieu is None else None
             gioi_han_cung = self._gioi_han_video_dai_s(che_do, info.get("duration") or 0)
             if gioi_han_cung:
@@ -5889,6 +5895,7 @@ class Engine:
                         with contextlib.suppress(OSError):
                             self._bo_file_dem(f)
                     f = self.download_audio(url, info["id"], progress)
+                    gioi_han = None              # từ đây ``f`` là bản đầy đủ
                     r = self.scan_media(f, label=kq.source_name, ref=url,
                                         source_type="youtube", progress=progress,
                                         luu_lich_su=False, pct_start=0.40, **mt)
@@ -5920,6 +5927,13 @@ class Engine:
                 if (r.ly_do_pham_vi != "gioi_han_tai" and r.vung_da_khop is not None
                         and self._thieu_duoi(info.get("duration"), r.duration_s)):
                     r, f = self._xu_ly_tai_thieu(url, info, r, f, progress, **mt)
+                elif r.vung_loi and not gioi_han and r.ly_do_pham_vi != "huy":
+                    # Metadata đầu file báo đủ nên nhánh trên không thấy bản cụt: lượt sau sẽ dùng lại đúng file này
+                    # và lỗi y hệt. Đọc được đủ âm thanh thì lỗi không do file: giữ, khỏi tải lại hàng GB.
+                    dai_am_thanh = float(self.do_dai_audio_that(f) or 0)
+                    if dai_am_thanh <= 0 or self._thieu_duoi(info.get("duration"), dai_am_thanh):
+                        with contextlib.suppress(OSError):
+                            self._bo_file_dem(f)
             r.source_ref = url
             r.source_id = info["id"]
             r.channel_name = info["channel"]

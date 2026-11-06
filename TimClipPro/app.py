@@ -1972,8 +1972,8 @@ with tab3:
                  "không tải trọn rồi cắt; phần đầu không thấy gì cũng KHÔNG tự tải tiếp. Video không "
                  "quá 6 giờ quét như bình thường. Kết quả ghi rõ phần đã quét và phần chưa quét.")
         if ghvd == GHVD_TOAN_BO:
-            st.warning("«Quét toàn bộ video» dùng cách cũ: video rất dài có thể phải tải hàng chục GB "
-                       "(video 66 giờ ≈ 18 GB) và chạy nhiều giờ.")
+            st.warning("«Quét toàn bộ video» tải trọn rồi quét hết, không dừng sớm: video rất dài có thể "
+                       "phải tải hàng chục GB (video 66 giờ ≈ 18 GB) và chạy nhiều giờ.")
             chua_xac_nhan_toan_bo = not st.checkbox(
                 "Tôi chủ động chọn quét toàn bộ video dài", key="xac_nhan_quet_toan_bo")
     dich_yt, tu_dong_yt = ui_gui.chon_dich(eng, key="quet_yt", nguon_chung=nguon_chung_bat)

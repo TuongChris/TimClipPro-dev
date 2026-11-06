@@ -3,7 +3,8 @@
 
 Ràng buộc nghiệm thu:
 * video > 6 giờ, chế độ «Tự động» → chỉ TẢI 3 giờ đầu (giới hạn truyền xuống ĐƯỜNG TẢI);
-  «6 giờ đầu» → 6 giờ; không quá 6 giờ → như cũ; «toàn bộ» và lô KHÔNG ghim (Watch/CLI) → như cũ;
+  «6 giờ đầu» → 6 giờ; không quá 6 giờ → như cũ; lô KHÔNG ghim (Watch/CLI) → như cũ;
+  «toàn bộ» (người dùng chủ động) → tải trọn, không tải một phần, không dừng sớm;
 * phần đầu không thấy gì thì KHÔNG BAO GIỜ tự tải trọn;
 * file tải về thiếu (ffmpeg thoát 0 với file cụt) → vùng chưa kiểm; không bằng chứng = LỖI;
 * mốc thời gian giữ nguyên (file bắt đầu từ giây 0 của video);
@@ -207,16 +208,41 @@ def test_video_khong_qua_6_gio_quet_nhu_cu(tmp_path, monkeypatch):
     assert kq.ly_do_pham_vi != "gioi_han_video_dai"
 
 
-@pytest.mark.parametrize("che_do", [GHVD_TOAN_BO, None])
-def test_toan_bo_va_lo_khong_ghim_giu_hanh_vi_cu(tmp_path, monkeypatch, che_do):
-    """«Quét toàn bộ» (người dùng chủ động) và Watch/CLI (không ghim): 3 giờ đầu rồi tải trọn
-    khi chưa đủ bằng chứng — đúng hành vi cũ, kể cả cho video 65 giờ."""
-    e, lan_tai = _gia_lap(tmp_path, monkeypatch, che_do=che_do)
+def test_lo_khong_ghim_giu_hanh_vi_cu(tmp_path, monkeypatch):
+    """Watch/CLI (không ghim): 3 giờ đầu rồi tải trọn khi chưa đủ bằng chứng, kể cả cho video 65 giờ."""
+    e, lan_tai = _gia_lap(tmp_path, monkeypatch, che_do=None)
     e.scan_youtube("https://youtu.be/vid65hxxxxx", luu_lich_su=False)
     assert lan_tai == [BA_GIO, None]
 
 
-@pytest.mark.parametrize("che_do", [GHVD_TOAN_BO, None])
+@pytest.mark.parametrize("so_doan", [0, 5])
+def test_toan_bo_tai_tron_ngay_du_phan_dau_du_ket_qua(tmp_path, monkeypatch, so_doan):
+    """Audit 06/11: 3 giờ đầu đã đủ Top-N thì «Quét toàn bộ» từng dừng ở đó, phần sau không bao giờ được quét."""
+    e, lan_tai = _gia_lap(tmp_path, monkeypatch, che_do=GHVD_TOAN_BO,
+                          matches=[_m(600 * i) for i in range(so_doan)])
+    e.config.top_n = 5
+    kq = e.scan_youtube("https://youtu.be/vid65hxxxxx", luu_lich_su=False)
+    assert lan_tai == [None]
+    assert kq.ly_do_pham_vi != "gioi_han_tai" and not kq.quet_mot_phan
+
+
+def test_toan_bo_khong_chia_doan_khong_dung_som(tmp_path):
+    e = _eng(tmp_path, quet_tang_dan=True, quet_tang_dan_tu_gio=10.0, quet_tang_dan_buoc_gio=3.0)
+    assert len(e._doan_quet_tang_dan(DAI_65H)) > 1, "thiết lập: mặc định phải chia đoạn"
+    e._gioi_han_video_dai = GHVD_TOAN_BO
+    assert e._doan_quet_tang_dan(DAI_65H) == [(0.0, DAI_65H)]
+
+
+def test_toan_bo_khong_di_duong_top1_nhanh(tmp_path, monkeypatch):
+    e = _eng(tmp_path, top_n=1, top1_tim_nhanh=True, top1_khuc_toi_thieu=2)
+    e._gioi_han_video_dai = GHVD_TOAN_BO
+    goi = []
+    monkeypatch.setattr(e, "_match_chunks", lambda chunks, *a, **kw: goi.append(list(chunks)) or [])
+    e._quet_tho(["c1", "c2", "c3"], 7200.0, None, 0.0, 1.0, "ws")
+    assert goi == [["c1", "c2", "c3"]] and e.chan_doan_quet.duong_di == "quet_toan_bo"
+
+
+@pytest.mark.parametrize("che_do", [None])
 @pytest.mark.parametrize("loi,ly_do", [("Không cắt được khúc nào từ file này.", ""),
                                        ("Đã hủy theo yêu cầu.", "huy")],
                          ids=["loi_cat_khuc", "da_huy"])
@@ -260,3 +286,43 @@ def test_scan_iter_tu_choi_che_do_la(tmp_path):
     e = _eng(tmp_path)
     with pytest.raises(ValueError):
         list(e.scan_iter(["u"], "youtube", gioi_han_video_dai="10h"))
+
+
+# ---------------------------------------------------------------- bản đệm đầy đủ bị cụt (audit 06/11)
+
+def _luot_co_vung_loi(tmp_path, monkeypatch, dai_am_thanh, *, dai=600.0, ly_do="loi_khuc", che_do=None):
+    """Lượt quét lỗi một vùng trên bản đệm: metadata đầu file vẫn báo đủ, ``dai_am_thanh`` là số đọc được thật."""
+    e, lan_tai = _gia_lap(tmp_path, monkeypatch, dai=dai, che_do=che_do,
+                          cfg={"tai_mot_phan": True, "quet_tang_dan_tu_gio": 10.0, "quet_tang_dan_buoc_gio": 3.0,
+                               "keep_downloads": True})
+    monkeypatch.setattr(e, "do_dai_audio_that", lambda p: dai_am_thanh)
+    monkeypatch.setattr(e, "scan_media", lambda path, **k: ScanResult(
+        source_name="v", duration_s=dai, status="error", note="Không xử lý được một phần video",
+        ly_do_pham_vi=ly_do, vung_loi=[(175.0, dai)]))
+    bo = []
+    monkeypatch.setattr(e, "_bo_file_dem", lambda p: bo.append(os.path.basename(p)) or True)
+    e.scan_youtube("https://youtu.be/vid65hxxxxx", luu_lich_su=False)
+    return bo
+
+
+def test_ban_dem_day_du_bi_cut_duoc_bo_de_luot_sau_tai_lai(tmp_path, monkeypatch):
+    """File cụt mà đầu file báo đủ: trước đây lỗi lặp lại ở mọi lượt cho tới khi đệm được dọn sau 7 ngày."""
+    assert _luot_co_vung_loi(tmp_path, monkeypatch, 175.7) == ["vid65hxxxxx.webm"]
+
+
+def test_khong_doc_duoc_am_thanh_cung_coi_la_chua_xac_minh_va_bo(tmp_path, monkeypatch):
+    assert _luot_co_vung_loi(tmp_path, monkeypatch, None) == ["vid65hxxxxx.webm"]
+
+
+def test_ban_dem_du_am_thanh_khong_bi_bo_vi_loi_tam(tmp_path, monkeypatch):
+    """Lỗi không do file (thiếu RAM, kho đổi): tải lại vừa tốn hàng GB vừa không giải quyết được gì."""
+    assert _luot_co_vung_loi(tmp_path, monkeypatch, 600.0) == []
+
+
+def test_luot_bi_huy_khong_bo_ban_dem(tmp_path, monkeypatch):
+    assert _luot_co_vung_loi(tmp_path, monkeypatch, 175.7, ly_do="huy") == []
+
+
+def test_ban_tai_mot_phan_khong_bi_coi_la_cut(tmp_path, monkeypatch):
+    """Lô không ghim, video rất dài: bản ``__p`` chỉ có phần đầu là đúng thiết kế, không phải bản cụt."""
+    assert _luot_co_vung_loi(tmp_path, monkeypatch, float(BA_GIO), dai=float(DAI_65H)) == []
