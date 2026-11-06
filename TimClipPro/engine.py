@@ -2069,7 +2069,9 @@ class Engine:
         try:
             ds = self._doc_danh_sach_clip(self.db_file)
         except Exception:
-            ds = []
+            # Không nhớ: lỗi tạm (file bị khoá, thiếu RAM) không được thành «kho rỗng» tới khi kho đổi.
+            # shortcut: kho hỏng hẳn thì mỗi lần gọi đọc lại, chậm nếu kho lớn; cần nhớ lỗi có hạn giờ nếu người dùng thấy giật.
+            return []
         self._cache_khoa, self._cache_clips = khoa, ds
         return ds
 
@@ -4687,7 +4689,10 @@ class Engine:
         theo_dd: dict = {}
         theo_ten: dict = {}
         dem_ten: dict = {}
-        for c in self.db_clips():
+        clips = self.db_clips()
+        if not clips and self.audfprint and os.path.exists(self.db_file):
+            clips = self._doc_danh_sach_clip(self.db_file)   # ném lỗi: kho đọc hỏng không phải kho rỗng
+        for c in clips:
             so = int(c.get("so_hash") or 0)
             if not c.get("ten") or so <= 0:
                 continue
