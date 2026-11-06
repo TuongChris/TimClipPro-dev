@@ -49,7 +49,8 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 ### 2026-11-06 — sửa số 1–6 của audit toàn repo (nhánh fix/pc2/audit-0611)
 - Làm: nút Dừng đồng bộ sau bấm đúp; lô nguồn chung tự lưu CSV; đọc kho lỗi không bị nhớ thành kho rỗng; hook quét merge commit, tên có
   dấu cách, đổi tên y nguyên (hook mới ĐÃ CÀI trên PC2, bản cũ không có khối quét nội dung); «Quét toàn bộ» quét hết (D-32); bản đệm cụt bị bỏ.
-- Mỗi lỗi có test đỏ trước khi sửa. Số test ghi ở mô tả PR và tin báo cuối phiên. Chưa gộp, DEV chưa cập nhật.
+- Mỗi lỗi có test đỏ trước khi sửa. Test (chặn mạng, cp1252, venv CookieFix) @ `ee414ed`: nhanh 3429 = 3425/4/0, chậm 22/22, ruff sạch
+  (`C:\Dev\pc2_test_runs6-11-06_audit_0611`). Review độc lập: 0 P1, 2 P2 và 5 P3 ở hook/đệm/test, đã sửa hết. Chưa gộp, DEV chưa cập nhật.
 ### 2026-11-06 — gộp D-31 (PR #23) và cập nhật DEV 8502
 - Người dùng duyệt gộp + cập nhật DEV. Test lại đúng `73c5734`: nhanh 3394 = 3390/4/0, chậm 22/22, ruff sạch (`…\2026-11-06_dung_kho_ram\gop_73c5734`).
 - Trước khi tắt DEV: không tiến trình con, không ghi mới, `tool.lock` rảnh, ghi 0 B trong 15 s, hàng đợi Sheets 584 SENT. Smoke: health ok,
