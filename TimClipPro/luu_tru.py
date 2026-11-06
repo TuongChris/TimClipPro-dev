@@ -269,8 +269,18 @@ def cap_nhat_json(
 
 
 def _doc_json(path: str) -> Any:
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+    for lan in range(SO_LAN_DOC):
+        try:
+            with open(path, encoding="utf-8") as f:
+                return json.load(f)
+        except PermissionError:           # phần mềm diệt virus / sao lưu giữ file trong tích tắc
+            if lan == SO_LAN_DOC - 1:
+                raise
+            time.sleep(0.2)
+    raise AssertionError("không tới được")
+
+
+SO_LAN_DOC = 3
 
 
 def _duong_dan_file_hong(path: str) -> str:
@@ -307,6 +317,10 @@ def doc_json_an_toan(
 
         try:
             return _doc_json(duong_dan)
+        except (OSError, MemoryError) as loi_tam:
+            # File còn nguyên, chỉ chưa đọc được: coi là hỏng thì đổi tên nó rồi lùi về .bak cũ hơn một lần ghi.
+            raise LoiDuLieu(f"Tạm thời không đọc được {duong_dan} ({type(loi_tam).__name__}); "
+                            "file giữ nguyên, hãy thử lại.") from loi_tam
         except Exception as loi_file_chinh:
             if tu_phuc_hoi and os.path.isfile(file_bak):
                 try:

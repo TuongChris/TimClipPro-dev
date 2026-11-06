@@ -186,3 +186,52 @@ def test_ghi_json_voi_ten_da_lam_sach_thi_glob_TIM_RA(tmp_path):
     assert json.load(open(ra[0], encoding="utf-8")) == {"a": 1}
     assert not [f for f in os.listdir(tmp_path)
                 if os.path.getsize(tmp_path / f) == 0], "không được để lại file rác"
+
+
+def _hong_tam_thoi(monkeypatch, so_lan, loi=PermissionError):
+    """``open`` lỗi ``so_lan`` lần đầu trên file chính, như khi phần mềm khác giữ file."""
+    dem = {"n": 0}
+
+    def mo(path, *a, **k):
+        if str(path).endswith("clips_meta.json") and dem["n"] < so_lan:
+            dem["n"] += 1
+            raise loi("file đang bị giữ")
+        return open(path, *a, **k)
+
+    monkeypatch.setattr(luu_tru, "open", mo, raising=False)
+    return dem
+
+
+def _hai_lan_ghi(path):
+    ghi_json_an_toan(str(path), {"a": 1})
+    ghi_json_an_toan(str(path), {"a": 1, "b": 2})
+
+
+def test_loi_doc_tam_thoi_khong_quay_ve_ban_cu(tmp_path, monkeypatch):
+    """Audit 06/11: lỗi một lần từng bị coi là file hỏng: đổi tên thành .hong, lấy .bak cũ hơn một lần ghi."""
+    path = tmp_path / "clips_meta.json"
+    _hai_lan_ghi(path)
+    monkeypatch.setattr(luu_tru.time, "sleep", lambda s: None)
+    _hong_tam_thoi(monkeypatch, 1)
+    assert doc_json_an_toan(str(path)) == {"a": 1, "b": 2}
+    assert not list(tmp_path.glob("*.hong.*"))
+
+
+def test_loi_doc_keo_dai_bao_loi_va_giu_nguyen_file(tmp_path, monkeypatch):
+    path = tmp_path / "clips_meta.json"
+    _hai_lan_ghi(path)
+    monkeypatch.setattr(luu_tru.time, "sleep", lambda s: None)
+    _hong_tam_thoi(monkeypatch, 99)
+    with pytest.raises(LoiDuLieu, match="file giữ nguyên"):
+        doc_json_an_toan(str(path))
+    assert json.loads(path.read_text(encoding="utf-8")) == {"a": 1, "b": 2}
+    assert not list(tmp_path.glob("*.hong.*"))
+
+
+def test_thieu_ram_khi_doc_khong_bi_coi_la_file_hong(tmp_path, monkeypatch):
+    path = tmp_path / "clips_meta.json"
+    _hai_lan_ghi(path)
+    _hong_tam_thoi(monkeypatch, 99, MemoryError)
+    with pytest.raises(LoiDuLieu, match="file giữ nguyên"):
+        doc_json_an_toan(str(path))
+    assert not list(tmp_path.glob("*.hong.*"))
