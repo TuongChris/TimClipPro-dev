@@ -89,6 +89,7 @@ báo «khoá đã được tin». File tạm sót (`trusted_keys.json.tmp-*`) đ
 không nhận liên kết cứng; chỉ GỠ khoá đã ghi danh (có bản ghi «ghi_danh») — không bao giờ gỡ khoá gốc của bộ kit; khoá gỡ vào danh sách
 «thu_hoi» (trường lạ, launcher bỏ qua) → uỷ quyền cũ và MỌI uỷ quyền mới cho khoá đó bị từ chối (cần khoá mới); từ
 chối nếu bản đang chạy hoặc bản đã chốt (`last_good`) do khoá sắp gỡ ký — cập nhật lên bản do khoá còn lại ký trước.
+Xong ghi thêm bản `sau_hoan_tac` (mang «thu_hoi»): bản `truoc_hoan_tac` chỉ để điều tra, chép nó về là tin lại khoá đã gỡ.
 
 **Giới hạn đã biết:** khoá riêng PKCS8 mã hoá bằng PBKDF2-HMAC-SHA256 2048 vòng (`cryptography` không cho đổi số vòng
 với PKCS8; OpenSSH/bcrypt cần thư viện không có trong môi trường launcher) → mật khẩu DÀI (≥ 16 ký tự, nên là 4–6 từ

@@ -581,11 +581,14 @@ def _ghi_file_moi(path: str, du_lieu: bytes) -> None:
         os.fsync(f.fileno())
 
 
-def _sao_luu(tt: CaiDatDich, luc: datetime, loai: str, kem: Optional[tuple] = None) -> str:
+def _sao_luu(tt: CaiDatDich, luc: datetime, loai: str, kem: Optional[tuple] = None,
+             byte: Optional[bytes] = None) -> str:
+    """Sao lưu byte trust store (mặc định bản đang đọc ``tt``; ``byte``: bản vừa ghi)."""
+    du_lieu = tt.byte_tin_cay if byte is None else byte
     thu_muc = os.path.join(tt.goc, "launcher", THU_MUC_SAO_LUU)
-    p = os.path.join(thu_muc, f"trusted_keys_{luc:%Y%m%d_%H%M%S}_{loai}_{tt.sha_tin_cay[:12]}_"
+    p = os.path.join(thu_muc, f"trusted_keys_{luc:%Y%m%d_%H%M%S}_{loai}_{hashlib.sha256(du_lieu).hexdigest()[:12]}_"
                               f"{uuid.uuid4().hex[:6]}.json")
-    _ghi_file_moi(p, tt.byte_tin_cay)
+    _ghi_file_moi(p, du_lieu)
     if kem:
         ten, du = kem
         p_kem = os.path.join(thu_muc, ten)
@@ -811,8 +814,15 @@ def hoan_tac(goc: str, duong_dan_sao_luu: str, *, xac_nhan: Callable[[dict], boo
                     raise LoiUyQuyen("kiem_sau_ghi", "Danh sách thu hồi đọc lại thiếu khoá vừa gỡ.")
         except Exception as e:  # noqa: BLE001
             raise LoiUyQuyen("kiem_sau_ghi", f"Hoàn tác KHÔNG thành: {e} — {_tra_lai(tt, truoc)}") from None
+        # Sổ tay dặn chép bản sao lưu MỚI NHẤT khi trust store hỏng: bản đó phải là bản đã thu hồi, không phải
+        # ``truoc_hoan_tac`` còn khoá vừa gỡ. Tên sắp theo giờ nên cộng 1 giây. Trust store đã đúng: lỗi đĩa ở đây chỉ bỏ qua.
+        try:
+            with open(tt.duong_dan_tin_cay, "rb") as f:
+                sau = _sao_luu(tt, now + timedelta(seconds=1), "sau_hoan_tac", byte=f.read())
+        except OSError:
+            sau = ""
     return {"trang_thai": "DA_HOAN_TAC", "khoa": sorted(raw_sl), "sao_luu_truoc_hoan_tac": truoc,
-            "thu_hoi": [x["key_id"] for x in thu_hoi], **tom_tat}
+            "sao_luu_sau_hoan_tac": sau, "thu_hoi": [x["key_id"] for x in thu_hoi], **tom_tat}
 
 
 def xem(goc: str) -> dict:
@@ -972,6 +982,8 @@ def main(argv=None) -> int:
             kq = hoan_tac(ns.goc, ns.sao_luu, xac_nhan=xac_nhan)
             print(f"ĐÃ HOÀN TÁC: trust store tin {', '.join(kq['khoa'])}; bản trước hoàn tác lưu ở "
                   f"{kq['sao_luu_truoc_hoan_tac']}")
+            print(f"  Bản sau hoàn tác: {kq['sao_luu_sau_hoan_tac'] or 'KHÔNG ghi được'}. Bản «truoc_hoan_tac» còn khoá "
+                  "vừa gỡ: không chép nó về làm trust store.")
             return 0
     except LoiUyQuyen as e:
         print(f"[LỖI] {e}", file=sys.stderr)

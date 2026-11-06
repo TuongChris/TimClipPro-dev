@@ -471,6 +471,39 @@ def test_hoan_tac_tu_choi_file_khong_phai_ban_truoc(may):
     assert _byte(may["pc2"]["tc"]) == sau
 
 
+def _sao_luu_moi_nhat(may):
+    thu_muc = os.path.join(may["pc2"]["goc"], "launcher", uq.THU_MUC_SAO_LUU)
+    return os.path.join(thu_muc, max(t for t in os.listdir(thu_muc) if t.startswith("trusted_keys_")))
+
+
+def test_lam_dung_so_tay_sau_hoan_tac_khong_tin_lai_khoa_da_thu_hoi(may):
+    """Audit 06/11: sổ tay dặn chép bản sao lưu mới nhất khi trust store hỏng. Bản mới nhất từng là ``truoc_hoan_tac``,
+    còn khoá vừa gỡ và chưa có «thu_hoi»: khoá đã lộ được tin lại mà không có cảnh báo nào."""
+    kq, _ = _ghi_danh(may, _uy_quyen(may))
+    kq2 = uq.hoan_tac(may["pc2"]["goc"], kq["sao_luu"], xac_nhan=lambda t: True)
+    moi_nhat = _sao_luu_moi_nhat(may)
+    assert "sau_hoan_tac" in moi_nhat and moi_nhat == kq2["sao_luu_sau_hoan_tac"]
+    assert _byte(moi_nhat) == _byte(may["pc2"]["tc"])
+    assert may["id2"] not in mu.doc_khoa_tin_cay(moi_nhat)
+    assert [x["key_id"] for x in json.loads(_byte(moi_nhat))["thu_hoi"]] == [may["id2"]]
+
+
+def test_khong_ghi_duoc_ban_sau_hoan_tac_van_hoan_tac_xong(may, monkeypatch):
+    """Trust store đã đúng thì lỗi đĩa ở bước phụ không được báo là hoàn tác hỏng."""
+    kq, _ = _ghi_danh(may, _uy_quyen(may))
+    goc = uq._sao_luu
+
+    def hong(tt, luc, loai, *a, **k):
+        if loai == "sau_hoan_tac":
+            raise OSError("đĩa đầy")
+        return goc(tt, luc, loai, *a, **k)
+
+    monkeypatch.setattr(uq, "_sao_luu", hong)
+    kq2 = uq.hoan_tac(may["pc2"]["goc"], kq["sao_luu"], xac_nhan=lambda t: True)
+    assert kq2["trang_thai"] == "DA_HOAN_TAC" and kq2["sao_luu_sau_hoan_tac"] == ""
+    assert may["id2"] not in mu.doc_khoa_tin_cay(may["pc2"]["tc"])
+
+
 # ---------------------------------------------------------------------------
 #  Nạp đúng launcher ĐÃ CÀI; không __pycache__; cây release không đổi
 # ---------------------------------------------------------------------------
