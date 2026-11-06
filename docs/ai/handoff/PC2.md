@@ -74,8 +74,4 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 - Bằng chứng: `C:\Dev\pc2_test_runs\2026-11-06_dung_kho_ram`, số đo ở tài liệu phân tích. Review độc lập: 0 P1, 1 P2 (RAM tụt 60
   giây bỏ cả hàng), 5 P3, đều test đỏ rồi sửa. `/ponytail-review`: 1 test đỏ, video đúng 2:00:00 lệch giữa hai bước, bản chép đo
   độ dài, 2 câu báo sai, đều đã sửa. Bẫy: `audio_read.read_data` ghép stderr bytes nên FFmpeg treo lộ thành TypeError.
-### 2026-11-06 — phân tích tải dựng kho (nhánh feature/pc2/phan-tich-tai-dung-kho)
-- Đo thật 10 bài (`TimClipPro/docs/PHAN_TICH_TAI_DUNG_KHO_2026-11.md`, công cụ `tools/do_tai/`): quá tải là DỰNG VÂN TAY, nguyên
-  nhân RAM (~1,5 GB/giờ âm thanh mỗi worker; clip #291 của Kho_Joe_Games dài 18,2 giờ làm cả lượt sụp), không có điểm lưu giữa
-  chừng. Đường đồng bộ chỉ làm HDD bận tối đa 5%. CHƯA tái hiện «HDD 100% + hàng đợi ~30». Chưa sửa mã, chờ người dùng chọn.
-- Mục cũ hơn (2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
+- Mục cũ hơn (2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
