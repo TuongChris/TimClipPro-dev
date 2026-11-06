@@ -54,7 +54,7 @@ def _quet_theo_tai_lieu(clone):
     """Trả (dòng grep bắt được, file vi phạm luật tên) cho các commit sắp đẩy."""
     lenh = _lenh_quet_trong_tai_lieu()
     mau = re.compile(_mau_grep(lenh), re.I)
-    log = _git(clone, "log", "-p", "--text", "--format=%B", PHAM_VI).stdout
+    log = _git(clone, "log", "-p", "--text", "--cc", "--no-renames", "--format=%B", PHAM_VI).stdout
     bat_py = [d for d in log.splitlines() if mau.search(d)]
     if shutil.which("sh"):                             # chạy NGUYÊN lệnh tài liệu bằng sh thật, đối chiếu
         r = subprocess.run(["sh", "-c", lenh], cwd=clone, capture_output=True, text=True, encoding="utf-8",
@@ -423,3 +423,76 @@ def test_thong_diep_commit_khong_lam_lech_quet_diff_phia_sau(may):
     rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
     assert rc != 0 and f"  {sha} docs/x.md: khoá API / token" in out, out
     assert "a" * 40 not in out and "docs/khac.md" not in out, out
+
+
+# --- Audit 06/11: merge commit, tên file có dấu cách, đổi tên 100 % (dữ liệu GIẢ) ---
+
+def _hai_nhanh(may, tep="chung.txt"):
+    """Nhánh việc và nhánh ``ben_kia`` cùng sửa ``tep``: merge sẽ xung đột."""
+    _nhanh(may)
+    _commit_file(may, tep, "ben nay\n")
+    _git(may, "switch", "-q", "--no-track", "-c", "ben_kia", "private/integration/current")
+    _commit_file(may, tep, "ben kia\n")
+    _git(may, "switch", "-q", "fix/pc2/thu")
+
+
+def _gop_kem(may, duong_dan, noi_dung):
+    """Merge mà file ``duong_dan`` chỉ xuất hiện trong CHÍNH merge commit (không ở nhánh nào)."""
+    _git(may, "merge", "-q", "--no-commit", "--no-ff", "ben_kia", ok=False)
+    p = os.path.join(may, *duong_dan.split("/"))
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "w", encoding="utf-8", newline="\n") as f:
+        f.write(noi_dung)
+    _git(may, "add", "-A")
+    _git(may, "commit", "-q", "-m", "gop nhanh")
+
+
+@pytest.mark.parametrize("duong_dan, noi_dung, loai", [
+    ("docs/x.md", f"khoa = {_KHOA_API}\n", "khoá API / token"),
+    ("docs/bang.md", f"ID bảng: {_SHEET_ID}\n", "link / ID bảng tính 44 ký tự"),
+    ("docs/phien.txt", _COOKIE, "cookie Netscape"),               # luật neo đầu dòng: phải bỏ đủ hai cột «+»
+    ("TimClipPro/google_key_x.json", "{}\n", "file khoá Google"),
+])
+def test_noi_dung_chi_co_trong_merge_commit_bi_chan(may, duong_dan, noi_dung, loai):
+    _hai_nhanh(may)
+    _gop_kem(may, duong_dan, noi_dung)
+    rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
+    assert rc != 0 and f"{duong_dan}: {loai}" in out, out
+
+
+def test_giai_xung_dot_dua_khoa_vao_bi_chan_ca_hook_lan_lenh_quet_tay(may):
+    _hai_nhanh(may)
+    _gop_kem(may, "chung.txt", f"khoa = {_KHOA_API}\n")
+    rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
+    assert rc != 0 and "chung.txt: khoá API / token" in out, out
+    assert _quet_theo_tai_lieu(may)[0], "lệnh quét tay của GIT_WORKFLOW.md cũng phải thấy merge commit"
+
+
+def test_merge_binh_thuong_khong_bi_chan_nham(may):
+    _nhanh(may)
+    _commit_file(may, "a.txt", "a\n")
+    _git(may, "switch", "-q", "--no-track", "-c", "ben_kia", "private/integration/current")
+    _commit_file(may, "b.txt", "b\n")
+    _git(may, "switch", "-q", "fix/pc2/thu")
+    _git(may, "merge", "-q", "--no-ff", "-m", "gop nhanh", "ben_kia")
+    rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
+    assert rc == 0, out
+
+
+@pytest.mark.parametrize("duong_dan", ["doc/ban sao.pem", "doc/ban sao.p12", "doc/cookies (1).txt"])
+def test_ten_file_nhay_cam_co_dau_cach_bi_chan(may, duong_dan):
+    """Git thêm một ký tự tab sau tên có dấu cách ở dòng «+++», làm các luật kết thúc bằng ``$`` trượt."""
+    _nhanh(may)
+    _commit_file(may, duong_dan, "vo hai\n")
+    rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
+    assert rc != 0 and duong_dan in out, out
+
+
+def test_doi_ten_y_nguyen_thanh_ten_khoa_bi_chan(may):
+    """Đổi tên 100 % không có dòng «+++» nếu git tự dò đổi tên."""
+    _nhanh(may)
+    _commit_file(may, "docs/ghi_chu.json", "{}\n")
+    _git(may, "mv", "docs/ghi_chu.json", "docs/google_key.json")
+    _git(may, "commit", "-q", "-m", "doi ten")
+    rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
+    assert rc != 0 and "docs/google_key.json: file khoá Google" in out, out
