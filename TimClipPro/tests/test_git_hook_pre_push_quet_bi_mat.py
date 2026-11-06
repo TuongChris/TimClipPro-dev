@@ -246,7 +246,7 @@ def _quet_cay_lam_viec(tmp_path, cac_file) -> str:
     patch = tmp_path / "patch.txt"
     with open(patch, "w", encoding="utf-8", newline="\n") as f:
         for rel, noi_dung in cac_file:
-            f.write("commit " + "0" * 40 + "\n+++ b/" + rel + "\n")
+            f.write("commit " + "0" * 40 + "\n+++ b/" + rel + "\n@@ -0,0 +1 @@\n")
             f.writelines("+" + d + "\n" for d in noi_dung.splitlines())
     kich_ban = tmp_path / "quet.sh"
     with open(kich_ban, "w", encoding="utf-8", newline="\n") as f:
