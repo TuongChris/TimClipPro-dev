@@ -166,7 +166,9 @@ def _dong_bo_tac_vu_nen(chi_dong_bo: bool = False) -> None:
         lan = ((False, "tac_vu_nen", job),) + lan
     for song_song, khoa_tv, j in lan:
         tv = st.session_state.get(khoa_tv)
-        if tv is None and not j.get("running"):
+        # Làn đồng bộ: cú bấm thứ hai có thể cắt ``chay_dong_bo`` trước khi ghi ``tac_vu_dong_bo``. Khi đó ``running`` đã
+        # True mà phiên chưa giữ lượt: vẫn phải nhận lại, nếu không nút Dừng không còn gì để huỷ.
+        if tv is None and (song_song or not j.get("running")):
             tv = tac_vu_nen.dang_chay_cua(eng)
             if tv is not None and tac_vu_nen.la_song_song(tv.kind) != song_song:
                 tv = None

@@ -461,3 +461,45 @@ def test_dong_bo_tu_tab_mo_truoc_khi_tab_kia_bat_dau_bi_chan_dung_ly_do(gia, tmp
     assert len(gia.luot_dong_bo) == 1, "hai lượt đồng bộ cùng lúc từ hai tab"
     canh_bao = "\n".join(str(w.value) for w in at_b.warning)
     assert "Lấy lại tên" not in canh_bao, f"lời từ chối nêu sai lý do: {canh_bao!r}"
+
+
+def _cu_bam_thu_hai_luc_khoi_dong(monkeypatch):
+    """Cú bấm thứ hai rơi vào lúc ``chay_dong_bo`` đang chạy: thread đã chạy, ``tac_vu_dong_bo`` chưa kịp ghi vào phiên.
+    Streamlit cắt lượt vẽ ở lần đọc ``session_state`` kế tiếp (yêu cầu vẽ lại THẬT, không giả lập ngoại lệ)."""
+    from streamlit.runtime.scriptrunner import RerunData, get_script_run_ctx
+
+    import tac_vu_nen
+
+    goc, da = tac_vu_nen.TacVuNen.bat_dau, []
+
+    def bat_dau(self, *a, **k):
+        goc(self, *a, **k)
+        if not da:
+            da.append(1)
+            get_script_run_ctx().script_requests.request_rerun(RerunData())
+
+    monkeypatch.setattr(tac_vu_nen.TacVuNen, "bat_dau", bat_dau)
+
+
+def test_bam_dup_luc_khoi_dong_nut_dung_dong_bo_van_dung_duoc(gia, tmp_path, monkeypatch):
+    """Audit 06/11: trước đây phiên mất liên kết với lượt đang chạy, nút Dừng báo «đã gửi» mà không đặt cờ huỷ."""
+    _cu_bam_thu_hai_luc_khoi_dong(monkeypatch)
+    at = _phien_moi()
+    _bat_dau_dong_bo(at, gia, tmp_path / "Kho")
+    _nut(at, NUT_DUNG_DONG_BO, KHOA_DUNG_DONG_BO).click().run()
+    _, cancel_check = gia.luot_dong_bo[0]
+    assert _cho(cancel_check, 5.0), "bấm Dừng không tới được lượt đồng bộ đang chạy"
+
+
+def test_bam_dup_luc_khoi_dong_luot_xong_ngay_van_nhan_ket_qua(gia, tmp_path, monkeypatch):
+    """Lượt xong trước lần vẽ kế: khung đồng bộ không được kẹt mãi ở «đang chạy»."""
+    import tac_vu_nen
+
+    _cu_bam_thu_hai_luc_khoi_dong(monkeypatch)
+    at = _phien_moi()
+    gia.tha_dong_bo.set()
+    _bat_dau_dong_bo(at, gia, tmp_path / "Kho")
+    assert _cho(lambda: tac_vu_nen.dang_chay_cua(at.session_state.eng) is None)
+    at.run()
+    assert not at.exception, at.exception
+    assert not at.session_state.job_dong_bo["running"]
