@@ -595,8 +595,18 @@ class FingerprintJobController:
                 name=f"fingerprint-{job_id[:8]}",
                 daemon=True,
             )
-            self._thread.start()
-            return job_id
+            try:
+                self._thread.start()
+                return job_id
+            except BaseException as e:
+                # Thread chưa từng chạy nên ``target`` không dọn (như ``tac_vu_nen``, DR-6). Gỡ sổ NGOÀI khoá riêng.
+                loi_khoi_dong = e
+                self._running, self._error = False, str(e)
+                self.publish(replace(self._state, phase="failed", status="failed",
+                                     message=f"Job tạo vân tay thất bại: {e}", error_category=type(e).__name__,
+                                     updated_at=time.time()))
+        _SO_DUNG_KHO.bo(self.engine, self)
+        raise loi_khoi_dong
 
     def cancel(self) -> None:
         self.engine.cancel()

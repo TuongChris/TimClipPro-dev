@@ -171,7 +171,15 @@ class CommonOriginalJobController:
         self._thread = threading.Thread(
             target=self._chay, args=(ma_lo, [str(x) for x in nguon], source_type),
             name=f"nguon-chung-{ma_lo[:8]}", daemon=True)
-        self._thread.start()
+        try:
+            self._thread.start()
+        except BaseException as e:
+            # Thread chưa từng chạy nên ``_chay`` không dọn (như ``tac_vu_nen``, DR-6): lô «ma» sẽ giữ chỗ mãi.
+            with self._lock:
+                self._error = str(e)
+                self._anh = replace(self._anh, running=False, pha=PHA_XONG, error=str(e), message=str(e))
+            _SO_NGUON_CHUNG.bo(self.engine, self)
+            raise
         return ma_lo
 
     def cancel(self) -> None:

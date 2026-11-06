@@ -271,7 +271,15 @@ class ScanJobController:
             name=f"scan-{batch_id[:8]}",
             daemon=True,
         )
-        self._thread.start()
+        try:
+            self._thread.start()
+        except BaseException as e:
+            # Thread chưa từng chạy nên ``_chay`` không dọn (như ``tac_vu_nen``, DR-6): lô «ma» sẽ giữ chỗ và lease mãi.
+            with self._lock:
+                self._running, self._error = False, str(e)
+            if lease is not None:
+                lease.tra()
+            raise
         return batch_id
 
     def cancel(self) -> None:
