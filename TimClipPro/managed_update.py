@@ -1199,9 +1199,11 @@ class CapNhat:
     def _ap_dung(self) -> KetQua:
         nk = self.nk.doc()
         if not nk or nk.get("trang_thai") != STAGED:
-            # ACTIVE ở đây là của lượt TRƯỚC: in ra sẽ giống vừa cập nhật xong.
+            # ACTIVE ở đây là của lượt TRƯỚC: in ra sẽ giống vừa cập nhật xong. WAITING_APPROVAL đã báo lúc chuẩn bị;
+            # bản có thể đã rút khỏi feed, lặp lại thì «apply» thành lỗi dù không có gì để làm.
             tt = nk.get("trang_thai") if nk else KHONG_CO
-            return KetQua(KHONG_CO if tt == ACTIVE else tt, "", "Không có bản nào đang chờ áp dụng.")
+            return KetQua(KHONG_CO if tt in (ACTIVE, WAITING_APPROVAL) else tt, "",
+                          "Không có bản nào đang chờ áp dụng.")
         den = doc_hoan(self.cd.goc)
         if den is not None:
             return self._ket_qua_hoan(nk.get("ung_vien", ""), den)

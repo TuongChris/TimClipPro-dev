@@ -1195,6 +1195,8 @@ class Engine:
         except Exception as e:  # noqa: BLE001
             self.config = Config()
             self.cau_hinh_da_luu = {}
+            # Mốc = mặc định: file có thể còn nguyên (chỉ bị giữ lúc mở), «Lưu» chỉ được ghi thứ người dùng vừa đổi.
+            self._moc_cau_hinh = {**cau_hinh.GIA_TRI_GIAO_DIEN_MAC_DINH, **cau_hinh.lay_tu_config(self.config)}
             self.canh_bao_khoi_dong.append(
                 f"Không nạp được cấu hình người dùng; đang dùng mặc định: {e}"
             )
@@ -1473,7 +1475,16 @@ class Engine:
         nguyên file thì chốt chống trộn nguồn của «Bổ sung» không được so với thư mục cũ. Chỉ đổi file của kho đang
         chọn — không đổi kho; bản ghim cho một job không bao giờ đổi; sổ hỏng/không còn kho đó thì để nguyên (thanh bên
         tự báo)."""
-        if getattr(self, "_la_ban_ghim", False) or not self.kho_dang_dung:
+        if getattr(self, "_la_ban_ghim", False):
+            return
+        if not self.kho_dang_dung:
+            if getattr(self, "_so_kho_loi_khi_mo", False):
+                # Sổ bị giữ lúc mở phiên, nay đọc được: về đúng kho của sổ, không để giao diện chọn nhầm kho đầu rồi ghi đè.
+                # Sổ hỏng thật thì đọc vẫn lỗi, phiên giữ nguyên trạng thái chặn.
+                with contextlib.suppress(Exception):
+                    d = d or self._doc_khos()
+                    self._ap_dung_kho(d.get("dang_dung", ""), d)
+                    self._so_kho_loi_khi_mo = False
             return
         with contextlib.suppress(Exception):
             d = d or self._doc_khos()
@@ -2961,7 +2972,15 @@ class Engine:
         """Ngay trước khi thay file: sổ đăng ký vẫn trỏ kho đã ghim tới đúng file đích."""
         if not self.kho_dang_dung:
             return
-        d = self._doc_khos()
+        so_lan = 6
+        for lan in range(so_lan):      # sổ bị giữ tích tắc không được bỏ cả lượt dựng kho nhiều giờ
+            try:
+                d = self._doc_khos()
+                break
+            except LoiDuLieu:
+                if lan == so_lan - 1:
+                    raise
+                time.sleep(0.5)
         kho = next((k for k in d["danh_sach"] if k["ten"] == self.kho_dang_dung), None)
         if kho is None:
             raise RuntimeError(

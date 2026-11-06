@@ -52,6 +52,7 @@ def _thoi_luong_hien_thi(giay) -> str:
 def _tong_giay_vi_pham(doan) -> int:
     """Tổng thời gian vi phạm trên trục VIDEO. Clip gốc và bản đăng lại của nó có thể khớp cùng một vùng: cộng thẳng từng
     đoạn cho 19 phút trên video 10 phút (190%) trong hồ sơ gửi nền tảng."""
+    # shortcut: dồn ``matched_s`` về cuối đoạn, lệch tối đa khoảng ``dedup_s`` mỗi lỗ; cần số chính xác thì mang danh sách mảnh vào Match.
     khoang = []
     for d in doan:
         cuoi = d.matched_s if d.end_s is None else d.end_s

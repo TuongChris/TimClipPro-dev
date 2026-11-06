@@ -12,7 +12,7 @@ Nằm NGOÀI mọi release: ``<installation_root>/launcher/`` (bootstrap chép v
     launcher.py update bo-cach-ly X.Y.Z  — bỏ cách ly một phiên bản sau khi đã khắc phục nguyên nhân
     launcher.py doctor                 — chẩn đoán cài đặt này (không mạng; không đổi dữ liệu/cấu hình/bản cài)
 
-Mã thoát: của tiến trình con (app/watch/cli); ``update``: 0 xong/không có gì, 1 lỗi, 2 bận/hoãn.
+Mã thoát: của tiến trình con (app/watch/cli); ``update``: 0 xong/không có gì, 1 lỗi hoặc chờ duyệt migration, 2 bận/hoãn.
 Không mạng khi mở app/Watch: kiểm bản mới chỉ qua ``update check|prepare`` (lịch riêng, opt-in).
 """
 

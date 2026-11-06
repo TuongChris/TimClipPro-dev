@@ -326,7 +326,7 @@ def test_migration_chua_tu_dong_an_toan_cho_duyet(mt):
     cn = mt["tao"]()
     # Rà soát M3+M4 (P3-1): cần duyệt thì báo NGAY lúc chuẩn bị — không tải gói, không rút cổng, không sao lưu.
     assert cn.chuan_bi().trang_thai == mu.WAITING_APPROVAL
-    assert cn.ap_dung().trang_thai == mu.WAITING_APPROVAL
+    assert cn.ap_dung().trang_thai == mu.KHONG_CO      # không áp dụng gì; «prepare» đã báo chờ duyệt
     assert _hien(mt) == "1.0.0" and mt["gia"].phien_ban_db() == 3
     assert not [g for g in mt["gia"].goi if g[0] == "di_chuyen"]
 

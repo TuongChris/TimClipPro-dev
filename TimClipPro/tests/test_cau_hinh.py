@@ -176,3 +176,38 @@ def test_doi_lai_ve_gia_tri_cu_van_duoc_ghi(tmp_path):
     sau.config.ytdlp_cookiefile = ""
     sau.luu_cau_hinh()
     assert _doc_file(tmp_path)["ytdlp_cookiefile"] == ""
+
+
+def test_file_bi_giu_luc_mo_phien_bam_luu_khong_xoa_cau_hinh(tmp_path, monkeypatch):
+    """Review 06/11: phiên chạy mặc định vì file bị giữ lúc mở; mốc rỗng từng khiến mọi khoá bị coi là đã đổi."""
+    import luu_tru
+
+    dau = Engine(root=str(tmp_path))
+    dau.config.ytdlp_cookiefile = "E:/that.txt"
+    dau.config.top_n = 8
+    dau.luu_cau_hinh({"sheet_link": "link-that"})
+
+    def mo(path, *a, **k):
+        if str(path).endswith("cau_hinh.json"):
+            raise PermissionError("file đang bị giữ")
+        return open(path, *a, **k)
+
+    with monkeypatch.context() as m:
+        m.setattr(luu_tru, "open", mo, raising=False)
+        m.setattr(luu_tru.time, "sleep", lambda s: None)
+        phien = Engine(root=str(tmp_path))
+    assert phien.config.ytdlp_cookiefile == "", "thiết lập: phiên chạy mặc định"
+    phien.config.top_n = 7
+    phien.luu_cau_hinh({"sheet_link": ""})
+    du_lieu = _doc_file(tmp_path)
+    assert du_lieu["ytdlp_cookiefile"] == "E:/that.txt" and du_lieu["sheet_link"] == "link-that"
+    assert du_lieu["top_n"] == 7
+
+
+def test_file_hong_giua_phien_khong_co_ban_sao_van_luu_duoc(tmp_path):
+    engine = Engine(root=str(tmp_path))
+    file_cau_hinh = tmp_path / "data" / TEN_FILE
+    file_cau_hinh.write_text("{hong", encoding="utf-8")
+    engine.config.top_n = 7
+    engine.luu_cau_hinh()
+    assert _doc_file(tmp_path)["top_n"] == 7

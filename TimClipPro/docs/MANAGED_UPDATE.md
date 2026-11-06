@@ -148,8 +148,8 @@ và "kích hoạt"; chờ CÓ HẠN; quá hạn thì hoãn, không giết việc
   state root. Thứ tự chốt: nhật ký ACTIVE rồi mới `last_good` (khôi phục ở ACTIVE ghi bù last_good).
 * Cách ly: chỉ khi nội dung ĐÃ KÝ sai (chính sách manifest, zip độc hại, danh sách file, lock chưa băm/không
   khớp), health/migration báo lỗi, hoặc lỗi có thể tạm thời (tải/dựng runtime, health/migration không chạy
-  được) lặp `SO_LAN_LOI_TOI_DA` lần. Chữ ký sai / thiếu gói / lỗi vận chuyển (host, kích thước) khi tải manifest
-  chỉ bỏ qua lần đó. Bỏ cách ly: `launcher.py update bo-cach-ly X.Y.Z`.
+  được) lặp `SO_LAN_LOI_TOI_DA` lần. Chữ ký sai / thiếu gói / manifest nằm sai thư mục tag / lỗi vận chuyển (host,
+  kích thước) khi tải manifest chỉ bỏ qua lần đó. Bỏ cách ly: `launcher.py update bo-cach-ly X.Y.Z`.
 * Khôi phục lỗi khi nhật ký đang giữa lúc kích hoạt (kể cả một updater khác đang kiểm bản mới) → launcher KHÔNG
   mở app (con trỏ có thể là bản chưa qua health) — đợi rồi mở lại. Cài lần đầu bị cắt ở HEALTHCHECK → lần mở sau
   kiểm health ngay, không chờ rảnh (không có bản nào khác để bảo vệ).

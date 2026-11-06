@@ -51,3 +51,39 @@ def test_bang_tong_hash_bao_loi_khi_kho_khong_doc_duoc(e, monkeypatch):
 def test_kho_rong_that_khong_bao_loi(e, monkeypatch):
     monkeypatch.setattr(e, "_doc_danh_sach_clip", lambda _p: [])
     assert e._bang_tong_hash() == ({}, {}, {})
+
+
+def test_so_kho_bi_giu_luc_cong_bo_khong_bo_ca_luot_dung_kho(e, monkeypatch):
+    """Dựng kho nhiều giờ không được đổ vì ``khos.json`` bị giữ đúng lúc kiểm trước khi thay file."""
+    import engine as eng_mod
+    from luu_tru import LoiDuLieu
+
+    e.kho_dang_dung = "K"
+    lan = []
+
+    def doc_so():
+        lan.append(1)
+        if len(lan) < 3:
+            raise LoiDuLieu("Tạm thời không đọc được")
+        return {"dang_dung": "K", "danh_sach": [{"ten": "K", "db": "db.pklz"}]}
+
+    monkeypatch.setattr(e, "_doc_khos", doc_so)
+    monkeypatch.setattr(e, "_duong_dan_db_kho", lambda db: e.db_file)
+    monkeypatch.setattr(eng_mod.time, "sleep", lambda s: None)
+    e._kiem_dich_cong_bo()
+    assert len(lan) == 3
+
+
+def test_so_kho_loi_keo_dai_luc_cong_bo_van_bao_loi(e, monkeypatch):
+    import engine as eng_mod
+    from luu_tru import LoiDuLieu
+
+    e.kho_dang_dung = "K"
+
+    def hong():
+        raise LoiDuLieu("sổ sai cấu trúc")
+
+    monkeypatch.setattr(e, "_doc_khos", hong)
+    monkeypatch.setattr(eng_mod.time, "sleep", lambda s: None)
+    with pytest.raises(LoiDuLieu):
+        e._kiem_dich_cong_bo()

@@ -599,3 +599,14 @@ def test_cho_duyet_migration_tra_ma_khac_0_de_cua_so_khong_tu_dong():
 
     kq = mu.KetQua(mu.WAITING_APPROVAL, "1.1.0", "Cần duyệt migration trước khi cập nhật.")
     assert launcher._in(kq) != 0
+
+
+def test_ban_cho_duyet_bi_rut_khoi_feed_khong_lam_capnhat_dung_loi(mt):
+    """Nhật ký còn WAITING_APPROVAL của bản đã rút: «apply» không có gì để làm, không được báo lỗi."""
+    _cai(mt, "1.0.0")
+    phat_hanh(mt["nguon"], "1.1.0", mt["khoa"],
+              sua_manifest=dict(du_lieu={"lich_su": 4}, migration={"tu_dong_an_toan": False}))
+    assert mt["tao"]().chuan_bi().trang_thai == mu.WAITING_APPROVAL
+    shutil.rmtree(os.path.join(mt["nguon"], "stable-1.1.0"))
+    assert mt["tao"]().chuan_bi().trang_thai == mu.KHONG_CO
+    assert mt["tao"]().ap_dung().trang_thai == mu.KHONG_CO

@@ -49,7 +49,12 @@ def gop_va_ghi(data_dir: str, du_lieu: dict, moc: dict) -> dict:
     """Ghi ``du_lieu``, nhưng khoá phiên này KHÔNG đổi so với ``moc`` thì giữ bản trên đĩa: nhiều tab cùng lưu một file,
     tab mở trước không được xoá thay đổi của tab khác. Khoá ngoài ``du_lieu`` vẫn bị bỏ như một lần ghi đủ. Trả bản đã ghi."""
     with khoa_json(_duong_dan(data_dir)):
-        hien_tai = doc_json_an_toan(_duong_dan(data_dir), {})
+        try:
+            hien_tai = doc_json_an_toan(_duong_dan(data_dir), {})
+        except LoiDuLieu:
+            if os.path.exists(_duong_dan(data_dir)):   # chưa đọc được nhưng file còn đó: không ghi đè mù
+                raise
+            hien_tai = {}                              # file hỏng đã đổi tên thành .hong
         if not isinstance(hien_tai, dict):
             hien_tai = {}
         moi = {khoa: hien_tai[khoa] if khoa in hien_tai and khoa in moc and moc[khoa] == gia_tri else gia_tri
