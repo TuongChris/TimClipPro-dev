@@ -222,6 +222,7 @@ class CommonOriginalJobController:
                                   "quét nguồn chung cả lô"):
                 with self.engine.phien_job() as job:
                     ket = self._chay_da_khoa(job, ma_lo, nguon, source_type)
+            ket = self._tu_luu_csv(ket)
             with self._lock:
                 self._ket_qua = ket
         except DangChayRoi as e:
@@ -245,6 +246,14 @@ class CommonOriginalJobController:
             _SO_NGUON_CHUNG.xong(self.engine, self)   # tới khi một phiên chép kết quả
             LOGGER.info("event=scan.common.finished batch_id=%s status=%s", ma_lo,
                         kq.trang_thai if kq else "error")
+
+    def _tu_luu_csv(self, ket):
+        """``KetQuaLo`` không ghi lịch sử (D-5): F5 hay tab khác bắt đầu việc là mất kết quả của lô chạy hàng giờ."""
+        try:
+            return replace(ket, csv_tu_luu=xuat_csv(ket, self.engine.out_dir))
+        except Exception:  # noqa: BLE001 — không lưu được thì kết quả trên màn hình vẫn phải còn
+            LOGGER.exception("event=scan.common.csv_failed")
+            return ket
 
     def _chay_da_khoa(self, job, ma_lo: str, nguon: list, source_type: str):
         job.require(can_ytdlp=source_type == "youtube", can_db=True)

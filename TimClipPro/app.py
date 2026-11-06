@@ -733,7 +733,9 @@ def hien_ket_qua_nguon_chung(kql: nguon_chung.KetQuaLo) -> None:
     st.caption(
         "Khớp vân tay âm thanh là bằng chứng kỹ thuật, không phải xác nhận quyền sở hữu — "
         "hãy xem lại từng mốc trước khi gửi khiếu nại. Chế độ này không ghi vào «Lịch sử "
-        "quét» và chưa đẩy Google Sheets; hãy tải CSV để lưu.")
+        "quét» và chưa đẩy Google Sheets. "
+        + (f"Kết quả đã tự lưu: {thoat_markdown(kql.csv_tu_luu)}" if kql.csv_tu_luu
+           else "Chưa tự lưu được, hãy tải CSV để lưu."))
     c1, c2 = st.columns(2)
     with c1:
         st.download_button("⬇️ Tải báo cáo CSV", csv_nguon_chung(kql),

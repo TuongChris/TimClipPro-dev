@@ -628,6 +628,7 @@ class KetQuaLo:
     # Chính sách báo cáo GHIM lúc bắt đầu lô ("" = luật cũ). V2: `thong_tin_goc` mang link
     # ``watch?v=`` + ngày nguyên bản (``ngay_dang``) và KHÔNG có khoá ``upload_date`` cũ.
     chinh_sach_bao_cao: str = ""
+    csv_tu_luu: str = ""                 # đường dẫn CSV tự lưu khi lô xong ("" = không lưu được)
 
 
 def dung_ket_qua_lo(tt: TrangThaiLo, kl: KetLuan, *, ma_lo: str, kho_ten: str,

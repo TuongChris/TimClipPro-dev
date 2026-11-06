@@ -15,6 +15,7 @@ from types import SimpleNamespace
 import pytest
 
 import common_original as co
+import common_original_jobs
 from common_original_jobs import CommonOriginalJobController
 from engine import Config, Match, ScanResult, chu_ky_chinh_sach
 from khoa import KhoaTienTrinh
@@ -125,6 +126,7 @@ class JobGia:
 class EngineGia:
     def __init__(self, tmp_path, the_gioi, ma_that=None, kho_id="kho1"):
         self.data_dir = str(tmp_path / "data")
+        self.out_dir = str(tmp_path / "ketqua")
         os.makedirs(self.data_dir, exist_ok=True)
         self.cancel_event = threading.Event()
         self.config = Config()
@@ -404,3 +406,25 @@ def test_khong_doc_duoc_danh_sach_clip_cua_kho_thi_khong_chay(tmp_path):
     ctl, kq = _chay(eng, [_url(v) for v in tg])
     assert kq is None and "danh sách clip" in ctl.error
     assert _quet(eng) == []
+
+
+def test_ket_qua_lo_tu_luu_csv_khong_cho_nguoi_dung_bam(tmp_path):
+    """Audit 06/11: lô không ghi lịch sử (D-5), F5 hay tab khác bắt đầu việc là mất kết quả của hàng giờ quét."""
+    tg = {f"v{i}aaaaaaaaa": {"dai": 1000 * i, "clips": {A: 0.1}} for i in range(1, 4)}
+    eng = EngineGia(tmp_path, tg)
+    _, kq = _chay(eng, [_url(v) for v in tg])
+    assert kq.csv_tu_luu and os.path.dirname(kq.csv_tu_luu) == eng.out_dir
+    with open(kq.csv_tu_luu, encoding="utf-8-sig") as f:
+        assert co.HEADER_NGUON_CHUNG[0] in f.readline()
+
+
+def test_khong_tu_luu_duoc_csv_van_giu_ket_qua_tren_man_hinh(tmp_path, monkeypatch):
+    tg = {f"v{i}aaaaaaaaa": {"dai": 1000 * i, "clips": {A: 0.1}} for i in range(1, 4)}
+    eng = EngineGia(tmp_path, tg)
+
+    def hong(*a):
+        raise OSError("ổ đầy")
+
+    monkeypatch.setattr(common_original_jobs, "xuat_csv", hong)
+    ctl, kq = _chay(eng, [_url(v) for v in tg])
+    assert kq.trang_thai == co.TIM_THAY and kq.csv_tu_luu == "" and not ctl.error
