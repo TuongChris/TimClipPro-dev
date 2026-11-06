@@ -201,6 +201,8 @@ máy này. Với `ncores > 1`, `audfprint.py:474` chuyển sang `do_cmd_multipro
 Vì vậy `audfprint_progress_runner.py` bắt buộc phải bọc **cả hai** đường:
 `make_ht_from_list` cho nhánh đa nhân và `Analyzer.ingest` cho nhánh một nhân. Chỉ sửa
 `_run_stream` thành non-blocking là **chưa đủ** — sẽ vẫn không có event nào để phát.
+(Từ D-31, 06/11/2026: cả hai đường gộp vào `instrumented_multiproc_add`, cha phát từng clip theo RAM;
+event phát trong `_xu_ly_clip`. Hai hàm nêu trên đã bỏ.)
 
 Regression test giữ tính chất này: `tests/test_fingerprint_progress_streaming.py` dùng
 audfprint giả **không in `ingesting #`** và khẳng định bằng

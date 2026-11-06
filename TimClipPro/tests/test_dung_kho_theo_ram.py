@@ -23,6 +23,7 @@ from pathlib import Path
 import pytest
 
 import audfprint_progress_runner as runner
+import channel
 from engine import Engine
 from fingerprint_progress import FingerprintProgressTracker, tao_fingerprint_logger, dong_fingerprint_logger
 
@@ -250,19 +251,19 @@ def test_uoc_luong_clip_nho_theo_dung_luong_khong_goi_ffprobe(tmp_path, monkeypa
     def khong_duoc_goi(path):
         raise AssertionError("clip nhỏ không cần ffprobe")
 
-    monkeypatch.setattr(runner, "_do_dai_giay", khong_duoc_goi)
+    monkeypatch.setattr(channel, "do_dai_media", khong_duoc_goi)
     assert runner.uoc_luong_ram_gb(_file_gia(tmp_path / "n.opus", 1000)) == runner.CAN_RAM_TOI_THIEU_GB
 
 
 def test_uoc_luong_clip_lon_dung_thoi_luong_that(tmp_path, monkeypatch):
     """File mp4 2 GB dài 1 giờ không được tính theo dung lượng như opus (sẽ thành 70 giờ)."""
-    monkeypatch.setattr(runner, "_do_dai_giay", lambda path: 3600.0)
+    monkeypatch.setattr(channel, "do_dai_media", lambda path: 3600.0)
     can = runner.uoc_luong_ram_gb(_file_gia(tmp_path / "video.mp4", 2 * 10**9))
     assert can == pytest.approx(runner.CAN_RAM_GB_MOI_GIO)
 
 
 def test_uoc_luong_ffprobe_hong_thi_lui_ve_dung_luong(tmp_path, monkeypatch):
-    monkeypatch.setattr(runner, "_do_dai_giay", lambda path: None)
+    monkeypatch.setattr(channel, "do_dai_media", lambda path: None)
     byte_1_gio = runner.BYTE_MOI_GIAY_OPUS * 3600
     can = runner.uoc_luong_ram_gb(_file_gia(tmp_path / "a.opus", byte_1_gio))
     assert can == pytest.approx(runner.CAN_RAM_GB_MOI_GIO)
@@ -375,7 +376,7 @@ def test_clip_im_lang_khong_co_loi_thi_khong_thu_lai(tmp_path):
 
 
 THIEU_RAM = ("runner._ram_trong_gb = lambda: 9.0; runner._du_phong_ram_gb = lambda: 2.0; "
-             "runner.CHO_RAM_S = 0.3; runner._do_dai_giay = lambda p: 30 * 3600.0")
+             "runner.CHO_RAM_S = 0.3; import channel; channel.do_dai_media = lambda p: 30 * 3600.0")
 
 
 def test_clip_qua_ram_bi_bo_qua_bao_ro_va_clip_khac_van_xong(tmp_path):
@@ -404,12 +405,25 @@ def test_worker_nghi_som_van_du_bang_va_clip_loi_o_doan_dai_van_duoc_thu_lai(tmp
     lon = [_file_gia(tmp_path / t, 20 * 10**6) for t in ("dai_a.opus", "het_ram_1lan_dai.opus")]
     nho = [str(tmp_path / f"c{i}.opus") for i in range(4)]
     thiet_lap = ("runner._ram_trong_gb = lambda: 9.0; runner._du_phong_ram_gb = lambda: 2.0; "
-                 "runner._do_dai_giay = lambda p: 3 * 3600.0")
+                 "import channel; channel.do_dai_media = lambda p: 3 * 3600.0")
     su_kien, kq = _chay(tmp_path, [*lon, *nho], ncores=4, thiet_lap=thiet_lap)
 
     assert (tmp_path / "het_ram_1lan_dai.opus.lan").read_text() == "2"
     assert [e["status"] for e in su_kien if e["event"] == "clip_finished"] == ["success"] * 6
     assert sorted(os.path.basename(n) for n in kq["names"]) == sorted(os.path.basename(f) for f in [*lon, *nho])
+
+
+@pytest.mark.parametrize("can_gb, cau", [(1, "tối đa 30 phút"), (15, "tối đa 1 phút")])
+def test_loi_nhac_cho_ram_ghi_dung_thoi_gian_cho(monkeypatch, can_gb, cau):
+    """Clip ngắn chờ tới CHO_WORKER_S, chỉ clip dài mới chờ CHO_RAM_S."""
+    loi_nhan = []
+    monkeypatch.setattr(runner, "_emit", lambda su_kien, **kw: loi_nhan.append(kw["message"]))
+    monkeypatch.setattr(runner, "_ram_trong_gb", lambda: 1.0)
+    lich = runner.LichTheoRam([_clip("a", can_gb)], 20.0, 2.0, 2)
+
+    runner._phat_viec(lich, [object()], [])
+
+    assert len(loi_nhan) == 1 and cau in loi_nhan[0], loi_nhan
 
 
 def test_phan_con_phai_chua_chi_tinh_phan_clip_chua_chiem(monkeypatch):
@@ -623,6 +637,17 @@ def test_heartbeat_khong_che_mat_loi_nhac_ram_cho_toi_clip_tiep_theo(tmp_path):
     assert t.state.message == "Đang chờ RAM"
     t.clip_started("a.opus")
     t.heartbeat(1, "Job vẫn hoạt động", phase="decoding")  # khác phase hiện tại: không bị giới hạn 0,25 giây
+    assert t.state.message == "Job vẫn hoạt động"
+    dong_fingerprint_logger(t.logger)
+
+
+def test_loi_nhac_ram_het_hieu_luc_khi_clip_cuoi_bi_bo(tmp_path):
+    """Clip cuối bị bỏ thì không còn `clip_started`: lúc gộp bảng không được nhắc chờ RAM nữa."""
+    t = _tracker(tmp_path)
+    t.set_files(["a.opus"])
+    t.thong_bao_ram("Đang chờ RAM")
+    t.clip_finished("a.opus", success=False, elapsed=0.0, error_category="thieu_ram", message="Bỏ qua")
+    t.heartbeat(1, "Job vẫn hoạt động", phase="decoding")
     assert t.state.message == "Job vẫn hoạt động"
     dong_fingerprint_logger(t.logger)
 

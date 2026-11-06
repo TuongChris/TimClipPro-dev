@@ -348,6 +348,7 @@ class FingerprintProgressTracker:
                 return
             self._finished.add(key)
             self._active.pop(key, None)
+            self._loi_nhac_ram = ""
             if success:
                 self._state = replace(
                     self._state,

@@ -36,8 +36,6 @@ CHO_WORKER_S = 1800.0
 CAN_RAM_GB_MOI_GIO = 1.5
 CAN_RAM_TOI_THIEU_GB = 0.7      # tiến trình Python + bảng hash ~419 MB
 BYTE_MOI_GIAY_OPUS = 8000       # opus 64 kbps của kho do tool tải về
-# Dưới ngưỡng này clip chỉ cỡ 30 phút: tính theo dung lượng là đủ, khỏi chạy ffprobe hàng trăm lần.
-NGUONG_DO_THAT_BYTE = 15 * 10**6
 # Không còn clip nào chạy mà RAM vẫn thiếu: clip dài chờ chừng này giây rồi bị bỏ qua; clip ngắn
 # chờ tới CHO_WORKER_S, vì RAM tụt giữa lượt không đáng để bỏ mấy trăm clip còn lại.
 CHO_RAM_S = 60.0
@@ -107,25 +105,15 @@ def _du_phong_ram_gb() -> float:
     return max(2.0, 0.1 * psutil.virtual_memory().total / 2**30)
 
 
-def _do_dai_giay(path: str) -> float | None:
-    """Thời lượng đo bằng ffprobe; không đo được thì ``None`` để lùi về dung lượng."""
-    from process_runner import chay_lenh_media
-
-    try:
-        kq = chay_lenh_media(["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                              "-of", "csv=p=0", path], tran_tong_s=30.0)
-        return float(kq.stdout.strip().splitlines()[-1])
-    except Exception:  # noqa: BLE001 - thiếu thời lượng chính xác không được làm hỏng build
-        return None
-
-
 def uoc_luong_ram_gb(path: str) -> float:
     """RAM đỉnh một worker cần cho clip này, theo thời lượng (mp4 lớn có thể chỉ dài vài phút)."""
+    from channel import BYTE_CHAC_CHAN_NGAN, do_dai_media
+
     try:
         byte = os.path.getsize(path)
     except OSError:
         return CAN_RAM_TOI_THIEU_GB
-    giay = _do_dai_giay(path) if byte >= NGUONG_DO_THAT_BYTE else None
+    giay = do_dai_media(path) if byte >= BYTE_CHAC_CHAN_NGAN else None
     giay = giay or byte / BYTE_MOI_GIAY_OPUS
     return max(CAN_RAM_TOI_THIEU_GB, CAN_RAM_GB_MOI_GIO * giay / 3600)
 
@@ -179,8 +167,10 @@ class LichTheoRam:
             self.cho_ram_tu = bay_gio
             return "cho", clip
         # Không đặt lại mốc khi bỏ: máy hết RAM thì không chờ lại 60 giây cho từng clip.
-        han_cho = CHO_RAM_S if clip_dai else CHO_WORKER_S
-        return ("bo", self.hang.popleft()) if bay_gio - self.cho_ram_tu >= han_cho else None
+        return ("bo", self.hang.popleft()) if bay_gio - self.cho_ram_tu >= self.han_cho(clip) else None
+
+    def han_cho(self, clip: Clip) -> float:
+        return CHO_RAM_S if clip.can_gb > self.phan_moi_worker else CHO_WORKER_S
 
     def ghi_loi(self, clip: Clip) -> bool:
         """Clip lỗi đọc/thiếu RAM: ``True`` = thử lại một mình cuối lượt, ``False`` = đã thử đủ."""
@@ -391,7 +381,7 @@ def _phat_viec(lich: LichTheoRam, ranh: list, ban: list) -> None:
         elif hanh_dong == "cho":
             _emit("thong_bao_ram", message=(
                 f"{ten} cần khoảng {clip.can_gb:.0f} GB RAM, máy còn {trong:.1f} GB trống. "
-                f"Chờ tối đa {CHO_RAM_S:.0f} giây, bạn đóng bớt ứng dụng để clip này được chạy."))
+                f"Chờ tối đa {lich.han_cho(clip) / 60:.0f} phút, bạn đóng bớt ứng dụng để clip này được chạy."))
         else:
             _emit(
                 "clip_finished",

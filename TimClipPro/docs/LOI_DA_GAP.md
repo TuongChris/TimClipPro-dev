@@ -817,3 +817,13 @@ nguyên»; ghi nhưng còn lỗi → vàng «Hoàn tất MỘT PHẦN»; không 
 - Chưa sửa: B-13, F-16 (cần người dùng quyết); WR-2 không tái hiện được.
 → **Mỗi lỗi đều nằm ở chỗ GIAO giữa hai phần** (lượt ↔ việc nền, sổ ↔ tiến trình, dọn đệm ↔ quét, cookie ↔ client): sửa
   một phía thì viết test cho đúng chỗ giao, đừng chỉ test riêng từng phía.
+
+**38. Một clip rất dài + chia cứng cho 8 worker = cạn RAM, mất cả lượt dựng kho (06/11/2026, PC2, D-31).** Ba lượt dựng
+Kho_Joe_Games (761 clip) không về đích. audfprint nạp trọn audio rồi tính phổ nên RAM tăng ~1,5 GB/giờ âm thanh mỗi worker;
+clip 18,2 giờ (~27 GB) chạy cùng 7 worker khác, cả RAM lẫn pagefile bão hoà, tốc độ sụp, người dùng phải Dừng và mất 353 clip
+đã tính. Năm clip lỗi «Error reading» không để lại lý do vì `wavfile2peaks` nuốt exception; `MemoryError` ở `find_peaks` thì
+giết cả lượt. Triệu chứng người dùng thấy là «HDD bận» nhưng đo thật HDD chỉ 6–7%: đừng đoán từ triệu chứng, nhiều giả thuyết
+hợp lý đã bị số đo bác (`docs/PHAN_TICH_TAI_DUNG_KHO_2026-11.md`).
+Đã sửa: cha phát từng clip theo RAM (`LichTheoRam`), clip lỗi thử lại cuối lượt và KHÔNG vào bảng của worker, lý do thật giữ ở
+`_LOI_GIAI_MA`, clip dài hơn 2 giờ không tải và không tạo vân tay.
+→ Mọi clip đi qua `LichTheoRam`, đừng thêm đường dựng kho thứ hai. Hằng số RAM là số đo, đổi tham số phân tích thì đo lại.

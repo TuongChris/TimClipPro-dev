@@ -281,7 +281,8 @@ def loc_file_qua_dai(paths: Iterable[str]) -> set:
     lon = [p for p in paths if du_lon(p)]
     with ThreadPoolExecutor(max_workers=8) as nhom:
         do_dai = list(nhom.map(do_dai_media, lon))
-    return {p for p, giay in zip(lon, do_dai) if giay and giay > GIAY_CLIP_TOI_DA}
+    # `round`: thời lượng YouTube ở bước đồng bộ đã làm tròn, file đúng 2 giờ đo được 7200,4 giây vẫn phải qua.
+    return {p for p, giay in zip(lon, do_dai) if giay and round(giay) > GIAY_CLIP_TOI_DA}
 
 
 def do_dai_luong_tieng(path: str) -> Optional[float]:

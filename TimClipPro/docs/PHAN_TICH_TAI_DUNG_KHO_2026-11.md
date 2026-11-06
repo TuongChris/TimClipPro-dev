@@ -49,7 +49,31 @@ Giả thuyết bị số đo bác: 8 ffmpeg tranh đầu đọc HDD; «đọc tr
 đệm đĩa gây bão HDD; ghi `clips_meta.json` + fsync; đường đồng bộ; Defender; phân mảnh. Vì vậy KHÔNG nên chuyển `_tam` sang SSD
 hay gom ghi metadata: tốn công và mất an toàn dữ liệu mà không giải quyết gì.
 
-## Đề xuất (chưa làm, chờ chủ dự án chọn)
+## Đã làm (D-31, 06/11/2026)
+Người dùng chọn đề xuất 1, 2, 4, 6 và thêm quy tắc: video dài hơn 2 giờ không tải, không tạo vân tay. Clip #291 đo bằng ffprobe
+dài 18,15 giờ (số 18,8 ở bản đầu tài liệu suy từ dung lượng), ước lượng cần 27 GB RAM.
+
+Lượt dựng thật Kho_Joe_Games bằng lịch RAM, 8 worker, trước khi có quy tắc 2 giờ (dừng chủ động ở 744/761 clip vì người dùng
+không cần 17 clip dài nhất; trong lúc đó máy còn chạy test và có League Client):
+| Chỉ số | Sáng 06/11 | Lịch RAM |
+|---|---|---|
+| Kết quả | 3 lượt không về đích, xa nhất 353/761 | 744/744 clip thành công, 0 lỗi, 0 lượt thử lại, 78 phút |
+| RAM trống thấp nhất | 0 | 6,68 GB |
+| Commit đỉnh | 68,5/75 GB (chốt an toàn dừng) | 44,5/75 GB |
+| SSD | bận 100% 33 giây liền, hàng đợi 89, 78.000 trang ghi/giây | trung bình 2,7%, 12 giây trên 90%, hàng đợi 55, 8.531 trang/giây |
+| HDD | 6,6%, hàng đợi 3 | trung bình 3,5%, 8 giây trên 90%, hàng đợi 7 |
+| CPU | 78–100% | trung bình 63%, tiến trình chạy Below Normal |
+
+So vân tay: cùng 32 clip, mã cũ và mã mới ra số hash giống hệt từng clip (0 clip lệch, 4,39 triệu hash). Thời gian 169 và 221 giây
+không phải phép so tốc độ sạch: lượt mã mới chạy cùng lúc với test của phiên làm việc, ở ưu tiên thấp và có giới hạn RAM.
+«HDD 100% + hàng đợi ~30» vẫn CHƯA tái hiện được.
+
+Nghiệm thu mã cuối qua `Engine` thật (`do_dung_kho_ram.py d`, bản sao 36 clip trên SSD, kể cả clip 18,15 giờ và 5,99 giờ): 34/34
+clip thành công, 200 giây, 0 lỗi; đúng 2 clip dài hơn 2 giờ bị bỏ có cảnh báo, 4 clip 1,79–1,92 giờ vẫn vào kho; RAM trống thấp
+nhất 9,56 GB; cắt 60 giây từ 4 clip rồi tìm lại trong kho vừa gộp: 4/4 đúng clip (hạng 0). Mọi FFmpeg và tiến trình Python làm
+việc đều Below Normal. Một `python.exe` ở ưu tiên thường là file khởi chạy 274 KB của venv, chỉ đứng chờ tiến trình con.
+
+## Đề xuất (đã làm 1, 2, 4, 6; còn lại chưa làm)
 | # | Việc | Tác dụng | Công |
 |---|---|---|---|
 | 1 | Lập lịch theo RAM: ước lượng 1,5 GB/giờ từ dung lượng file; clip dài chạy riêng sau cùng | Hết sụp tại clip dài | Vừa, trong `audfprint_progress_runner.py` |

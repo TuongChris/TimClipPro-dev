@@ -15,6 +15,24 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-31 Dựng kho theo RAM; bỏ clip dài hơn 2 giờ (người dùng, 2026-11-06) — thay cách chia cứng `filelists[ix % ncores]`
+Quyết định (phân tích: `docs/PHAN_TICH_TAI_DUNG_KHO_2026-11.md`, người dùng chọn đề xuất 1, 2, 4, 6 và ngưỡng 2 giờ):
+- Tiến trình cha phát TỪNG clip (`audfprint_progress_runner.LichTheoRam`, thuần logic): clip chỉ được phát khi RAM trống đủ
+  cho nó cộng phần các clip đang chạy còn sẽ chiếm, sau khi chừa `max(2 GB, 10% RAM)`; chạy một mình chỉ giữ nửa mức đó (máy
+  ít RAM thì chậm, không bỏ cả kho). Ước lượng 1,5 GB/giờ âm thanh (đo 06/11). Clip vừa phần RAM một worker giữ nguyên thứ tự,
+  clip lớn hơn xếp cuối, nhỏ trước lớn; worker rảnh nghỉ sớm để nhả RAM. Nhánh một nhân đi qua cùng đường.
+- Clip không vừa RAM khi không còn clip nào chạy: clip dài chờ 60 giây, clip ngắn chờ tới 30 phút, rồi bỏ qua có báo rõ
+  (`thieu_ram`). Clip lỗi đọc/`MemoryError` thử lại một mình cuối lượt; KHÔNG ghi vào bảng của worker (bản ghi trùng, audit C-3).
+  Một clip lỗi không còn giết cả lượt. Lý do thật lấy trước khi `wavfile2peaks` nuốt lỗi.
+- Runner chạy Below Normal, worker và FFmpeg thừa hưởng.
+- `channel.GIAY_CLIP_TOI_DA` = 2 giờ: video dài hơn không tải khi đồng bộ, clip dài hơn không tạo vân tay (so sau khi làm tròn
+  giây, như thời lượng YouTube, nên file đúng 2 giờ qua được cả hai bước). Không phải lỗi: không
+  đổi trạng thái lượt, không vào sổ đã tải, file trên đĩa giữ nguyên. Clip ĐÃ có vân tay vẫn ở lại khi «Bổ sung», clip đang
+  được làm mới vẫn xử lý; «Tạo lại từ đầu» thì bỏ chúng và cảnh báo. Danh sách kênh thiếu thời lượng thì vẫn tải, chặn ở
+  bước tạo vân tay. Đổi ngưỡng: sửa một hằng số.
+Chưa làm: lưu theo lô (Dừng giữa chừng vẫn mất phần đã tính), chia clip rất dài thành đoạn. Bằng chứng:
+`tests/test_dung_kho_theo_ram.py`, `tests/test_bo_clip_dai.py`, `tools/do_tai/do_dung_kho_ram.py`, báo cáo ở tài liệu phân tích.
+
 ## D-30 Ngày đăng trong báo cáo dạng «October 31, 2026» (người dùng, 2026-11-02) — thay `DD/MM/YYYY`
 Quyết định: mọi ngày đăng trong báo cáo (Google Sheets bảng Ngang 34 cột / Dọc 16 cột, CSV, hồ sơ, giao diện) hiển thị
 `Month D, YYYY` tiếng Anh cố định (không theo locale máy). Một hàm duy nhất `publication_date.format_publication_date`;

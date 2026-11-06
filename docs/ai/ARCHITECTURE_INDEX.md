@@ -64,7 +64,7 @@ chạm file) — không phải audit lại mã. Thêm/xoá/đổi vai trò modul
 
 | File | Vai trò (docstring) | Dòng | Commit cuối |
 |---|---|---|---|
-| `audfprint_progress_runner.py` | Adapter quan sát audfprint mà không sửa source vendored. | 452 | `8f0558f 2026-10-02` |
+| `audfprint_progress_runner.py` | Adapter quan sát audfprint mà không sửa source vendored; phát clip cho worker theo RAM (D-31). | 452 | `8f0558f 2026-10-02` |
 | `bang_ngang.py` | Dựng một dòng báo cáo ngang cho mỗi video vi phạm. | 131 | `35c7fc1 2026-10-04` |
 | `cau_hinh.py` | Lưu tùy chọn người dùng; không lưu khóa API, mật khẩu hay nội dung google_key.json. | 72 | `354da23 2026-08-19` |
 | `chan_doan_quet.py` | Chẩn đoán phễu phát hiện của một lượt quét. | 287 | `7f85c8d 2026-08-21` |

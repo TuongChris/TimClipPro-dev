@@ -243,6 +243,13 @@ def test_kho_chi_co_clip_dai_ket_thuc_gon_khong_noi_sai(tmp_path, monkeypatch):
     assert "đã có vân tay;" not in su_kien[-1].message
 
 
+def test_clip_dung_2_gio_lam_tron_van_tao_van_tay(tmp_path, monkeypatch):
+    """YouTube báo 7200 (đã làm tròn) nên đồng bộ tải; file đo được 7200,4 giây không được bị loại ở bước vân tay."""
+    dung_nguong, dai = _file(tmp_path / "dung.opus"), _file(tmp_path / "dai.opus")
+    monkeypatch.setattr(channel, "do_dai_media", {dung_nguong: 7200.4, dai: 7201.0}.get)
+    assert channel.loc_file_qua_dai([dung_nguong, dai]) == {dai}
+
+
 def test_ffprobe_khong_doc_duoc_thi_khong_bo_clip(tmp_path, monkeypatch):
     nguon = _nguon(tmp_path, "la.opus")
     monkeypatch.setattr(channel, "do_dai_media", lambda path: None)

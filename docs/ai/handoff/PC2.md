@@ -29,7 +29,8 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
    Chờ người dùng thử thật một tab đồng bộ + một tab quét (AppTest không chạy nhịp tự làm mới của fragment). P3 còn mở:
    giao diện không biết `cli.py kenh` ở tiến trình KHÁC đang đồng bộ cùng thư mục. Kho CoryxKenshin dựng xong 28/10 00:29
    (CLI `--ncores 2`, 1745/1745) — dựng bằng giao diện với 8 worker từng hết RAM. Máy mới: `docs/ai/TIEP_TUC_TREN_MAY_MOI.md`.
-2. Người dùng chọn đề xuất ở `TimClipPro/docs/PHAN_TICH_TAI_DUNG_KHO_2026-11.md`; Kho_Joe_Games CHƯA có vân tay (3 lượt dựng hỏng).
+2. Dựng kho theo RAM + bỏ clip > 2 giờ (D-31): nhánh `feature/pc2/dung-kho-theo-ram`, chờ người dùng duyệt gộp + cập nhật DEV; sau
+   đó người dùng dựng Kho_Joe_Games (CHƯA có vân tay) và đồng bộ thật một kênh để kiểm quy tắc 2 giờ (chưa thử YouTube thật).
 3. Người dùng: nghiệm thu DEV đợt 2 theo `C:\Dev\pc2_test_runs\2026-10-26_audit_p3\NGHIEM_THU_DEV_DOT2.md` (~15 phút).
 4. Người dùng quyết: P-6 (3 phương án, `…\2026-10-26_audit_p3\P6_PHUONG_AN.md`); P-7 (`P7_THIET_KE.md` cùng thư mục, công
    cụ `C:\Dev\pc2_test_tools\p7_lich_su_bong`, CHƯA chạy dữ liệu thật — chỉ chạy CHỈ ĐỌC khi duyệt); B-13, F-16; 3 ghép
@@ -42,6 +43,14 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 7. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-11-06 — dựng kho theo RAM, bỏ clip dài hơn 2 giờ (D-31, nhánh feature/pc2/dung-kho-theo-ram)
+- Làm: cha phát từng clip theo RAM (`LichTheoRam`), clip lỗi thử lại cuối lượt, clip quá RAM bỏ qua có báo rõ, Below Normal, nhánh
+  một nhân đi cùng đường. Người dùng chốt thêm: video > 2 giờ không tải, clip > 2 giờ không tạo vân tay (`channel.GIAY_CLIP_TOI_DA`).
+- Test (chặn mạng, cp1252, venv CookieFix): nhanh 3394 = 3390/4/0 (373 s), chậm 22/22 (379 s), ruff sạch. Nghiệm thu `do_dung_kho_ram.py d`
+  qua Engine thật: 34/34 clip, đúng 2 clip > 2 giờ bị bỏ, tìm lại 4/4, RAM trống thấp nhất 9,56 GB. Dựng trọn Kho_Joe chưa chạy lại.
+- Bằng chứng: `C:\Dev\pc2_test_runs\2026-11-06_dung_kho_ram`, số đo ở tài liệu phân tích. Review độc lập: 0 P1, 1 P2 (RAM tụt 60
+  giây bỏ cả hàng), 5 P3, đều test đỏ rồi sửa. `/ponytail-review`: 1 test đỏ, video đúng 2:00:00 lệch giữa hai bước, bản chép đo
+  độ dài, 2 câu báo sai, đều đã sửa. Bẫy: `audio_read.read_data` ghép stderr bytes nên FFmpeg treo lộ thành TypeError.
 ### 2026-11-06 — phân tích tải dựng kho (nhánh feature/pc2/phan-tich-tai-dung-kho)
 - Đo thật 10 bài (`TimClipPro/docs/PHAN_TICH_TAI_DUNG_KHO_2026-11.md`, công cụ `tools/do_tai/`): quá tải là DỰNG VÂN TAY, nguyên
   nhân RAM (~1,5 GB/giờ âm thanh mỗi worker; clip #291 của Kho_Joe_Games dài 18,2 giờ làm cả lượt sụp), không có điểm lưu giữa
@@ -61,18 +70,4 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   cũ đổi theo làn mới (cùng bất biến D-13/F-2). Review độc lập: 0 P1, 2 P2 thật (lease bảo trì rò khi đường dẫn kho hỏng;
   lời từ chối ở ô đồng bộ trên màn tiến độ biến mất sau 0,75 s) — test đỏ rồi sửa; P3 lý do từ chối sai khi tab khác vừa
   đồng bộ, nút Dừng trùng nhãn — đã sửa. Bằng chứng ngoài Git: `C:\Dev\pc2_test_runs\2026-10-27_dong_bo_song_song`.
-### 2026-10-26 — audit độc lập 25/10: P0 bóng, YouTube, đợt 2, đợt P3 (nhánh fix/pc2/audit-p3)
-- Làm: ba PR vào `integration/current` bằng fast-forward, chủ dự án duyệt từng PR: #15 P0 «bóng» D-27 + P0-1 (`d04dab9`),
-  #16 YouTube D-1..D-13 (`9476387`), #17 đợt 2 vùng A, B, C, E, F (6 P1 + 17 P2 + tranh cãi A-3, C-4, C-5, F-4; `a11dac4`);
-  DEV 8502 lên `a11dac4`. Đợt P3 trên nhánh này: mỗi lỗi một test đỏ → sửa; tổng kết `LOI_DA_GAP` mục 37; WR-2 không tái hiện.
-- Commit: `a11dac4..HEAD` (56 commit, `daa6b31` … `7bdab54`), CHƯA đẩy; tra commit chứa mục này:
-  git log --format=%h -S "audit độc lập 25/10: P0 bóng" -- docs/ai/handoff/PC2.md | tail -1
-- Test (chặn mạng, cp1252, venv CookieFix) @ `3456b4e`: nhanh 3251 = 3247/4/0 (368 s; 4 bỏ qua dự kiến: symlink WinError 1314,
-  file đang mở, 2 xfail strict E-1); chậm 22/22 (440 s); 52 file test mới/sửa 577/577; ruff sạch; fuzz `_merge` 10.000 trùng
-  mốc `a11dac4` (dương tính mới 0, dòng mất 0, clip mất 0, crash 0). Bằng chứng ngoài Git: `2026-10-25_audit` (báo cáo tổng,
-  A–F, p0), `2026-10-26_audit_dot2` (PR đợt 2, test đỏ P3), `2026-10-26_audit_p3` (junit, log, `fuzz_p3.txt`).
-- Review độc lập đợt P3: 7 điểm, 2 nghiêm trọng (P2) đều thật, test đỏ trước rồi sửa — thu hẹp WR-1 làm lọt link
-  `/spreadsheets/u/<n>/d/<ID>` qua hook (`7e63d9c`, hook 47/0); E-7 chỉ bắt đường dẫn gạch ngược (`7bdab54`, bắt cả
-  `C:/Users/<tên>`, 4 dòng tài liệu; 86/0). Không đụng `_merge` sau review → không fuzz lại.
-- Còn mở / rủi ro: «Tiếp theo» 1–4. Đề xuất `CURRENT_STATE.md` (PC1 sửa): integration = `a11dac4` (#15–#17), PC1 chưa review.
-- Mục cũ hơn (2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
+- Mục cũ hơn (2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.

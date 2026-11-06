@@ -181,6 +181,8 @@ trên `data/` mặc định — `conftest._tra_lai_main_module` trả lại `__m
 - (15d) `ten_file_an_toan` là hàm HIỂN THỊ, `ten_file_hop_le` là hàm ĐƯỜNG DẪN; không bọc
   `contextlib.suppress(Exception)` quanh thao tác ghi.
 - (17) Một lượt chạy = một `PhienYouTube`; bị chặn thì dừng; lỗi truy cập không bao giờ là âm tính.
+- (38) Dựng kho: RAM tăng theo thời lượng clip; mọi clip đi qua `LichTheoRam`. Clip lỗi không ghi vào bảng của worker.
+  Video dài hơn `channel.GIAY_CLIP_TOI_DA` không tải, không tạo vân tay (D-31) — đây là quy tắc, không phải lỗi.
 
 ## Quy trình Spec-Driven (Claude lập kế hoạch → Codex viết code)
 

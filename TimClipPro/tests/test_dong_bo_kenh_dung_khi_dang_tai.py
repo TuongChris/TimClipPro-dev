@@ -24,7 +24,7 @@ from process_runner import KetQuaLenh
 
 VID = "abcdefghijk"
 N_NHIP = 40                 # số nhịp tiến độ của một lượt tải «dài» (mỗi nhịp ~ một khúc vài chục MB ngoài đời)
-DAI_S = 6 * 3600.0          # video 6 giờ
+DAI_S = 1.5 * 3600.0        # video 1,5 giờ: dài nhất mà đồng bộ còn tải (D-31)
 
 
 class _YdlTaiDai:
