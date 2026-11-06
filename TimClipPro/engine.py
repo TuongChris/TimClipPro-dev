@@ -1072,6 +1072,7 @@ class Engine:
         self._bo_nho_ngay_goc: Optional[_BoNhoNgayGoc] = None
         self.chan_doan_quet = ChanDoanQuet()
         self.cau_hinh_da_luu: dict = {}
+        self._moc_cau_hinh: dict = {}   # giá trị phiên này thấy lúc nạp / lưu gần nhất: mốc để biết phiên đã đổi gì
 
         self.bin_dir = os.path.join(self.root, "bin")
         self.data_dir = os.path.abspath(data_dir or self.runtime.data_dir)
@@ -1186,6 +1187,11 @@ class Engine:
                     + ". Các thiết lập khác (cookie, Sheet, kho...) vẫn giữ nguyên — sửa "
                     "khóa trên trong cau_hinh.json hoặc bấm «Lưu cấu hình» để ghi mặc định."
                 )
+            # Khoá sai trong file không vào mốc: «Lưu cấu hình» phải ghi đè chúng bằng giá trị đúng.
+            self._moc_cau_hinh = {**cau_hinh.GIA_TRI_GIAO_DIEN_MAC_DINH, **self.cau_hinh_da_luu,
+                                  **cau_hinh.lay_tu_config(self.config)}
+            for khoa in {*bi_bo_qua, *khoa_tu_choi}:
+                self._moc_cau_hinh.pop(khoa, None)
         except Exception as e:  # noqa: BLE001
             self.config = Config()
             self.cau_hinh_da_luu = {}
@@ -1200,11 +1206,12 @@ class Engine:
         for khoa, mac_dinh in cau_hinh.GIA_TRI_GIAO_DIEN_MAC_DINH.items():
             if them and khoa in them and type(them[khoa]) is type(mac_dinh):
                 du_lieu[khoa] = them[khoa]
-        cau_hinh.ghi_cau_hinh(self.data_dir, du_lieu)
-        self.cau_hinh_da_luu = dict(du_lieu)
+        self.cau_hinh_da_luu = cau_hinh.gop_va_ghi(self.data_dir, du_lieu, self._moc_cau_hinh)
+        self._moc_cau_hinh = du_lieu
 
     def khoi_phuc_cau_hinh_mac_dinh(self) -> None:
         """Xóa cấu hình đã lưu và áp Config mặc định ngay trong phiên hiện tại."""
+        self._moc_cau_hinh = {}
         duong_dan = os.path.join(self.data_dir, cau_hinh.TEN_FILE)
         for hau_to in ("", ".bak", ".tmp"):
             with contextlib.suppress(FileNotFoundError):

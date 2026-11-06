@@ -134,3 +134,45 @@ def test_cau_hinh_khong_hop_le_chi_tra_khoa_xung_dot_ve_mac_dinh(tmp_path):
     assert any("chunk_s" in msg and "giữ nguyên" in msg
                for msg in engine.canh_bao_khoi_dong)
     assert not any("đang dùng mặc định" in msg for msg in engine.canh_bao_khoi_dong)
+
+
+def _doc_file(tmp_path):
+    return doc_cau_hinh(str(tmp_path / "data"))
+
+
+def test_tab_cu_luu_khong_xoa_thay_doi_cua_tab_khac(tmp_path):
+    """Audit 06/11: tab B đặt cookie rồi lưu, tab A mở từ trước chỉ đổi Top-N rồi lưu: cookie từng trở về rỗng."""
+    tab_a = Engine(root=str(tmp_path))
+    tab_b = Engine(root=str(tmp_path))
+    tab_b.config.ytdlp_cookiefile = "E:/cookies_moi.txt"
+    tab_b.luu_cau_hinh({"sheet_link": "link-cua-tab-b"})
+    tab_a.config.top_n = 3
+    tab_a.luu_cau_hinh({"sheet_link": ""})
+    du_lieu = _doc_file(tmp_path)
+    assert du_lieu["ytdlp_cookiefile"] == "E:/cookies_moi.txt" and du_lieu["sheet_link"] == "link-cua-tab-b"
+    assert du_lieu["top_n"] == 3
+
+
+def test_tab_cu_luu_lan_hai_van_khong_xoa_cua_tab_khac(tmp_path):
+    """Sau lần lưu đầu, ô giao diện của tab cũ vẫn giữ giá trị cũ: lần lưu sau không được coi đó là thay đổi."""
+    tab_a = Engine(root=str(tmp_path))
+    tab_b = Engine(root=str(tmp_path))
+    tab_b.config.ytdlp_cookiefile = "E:/cookies_moi.txt"
+    tab_b.luu_cau_hinh()
+    tab_a.config.top_n = 3
+    tab_a.luu_cau_hinh()
+    tab_a.config.top_n = 4
+    tab_a.luu_cau_hinh()
+    du_lieu = _doc_file(tmp_path)
+    assert du_lieu["ytdlp_cookiefile"] == "E:/cookies_moi.txt" and du_lieu["top_n"] == 4
+
+
+def test_doi_lai_ve_gia_tri_cu_van_duoc_ghi(tmp_path):
+    """Thay đổi THẬT của phiên phải thắng bản trên đĩa, kể cả khi đưa về đúng giá trị mặc định."""
+    dau = Engine(root=str(tmp_path))
+    dau.config.ytdlp_cookiefile = "E:/a.txt"
+    dau.luu_cau_hinh()
+    sau = Engine(root=str(tmp_path))
+    sau.config.ytdlp_cookiefile = ""
+    sau.luu_cau_hinh()
+    assert _doc_file(tmp_path)["ytdlp_cookiefile"] == ""
