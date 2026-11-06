@@ -3,6 +3,12 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-10-26 — sửa 13 lỗi vùng YouTube theo audit (nhánh fix/pc2/youtube-audit-d)
+- D-1/2/3 (P1) + D-4..D-13 (P2) + D-5: mỗi lỗi một commit test đỏ → sửa; review độc lập (Fable) → 1 P1 + 2 P2 do chính bản
+  sửa gây ra, đã sửa (403 → thử client bị gỡ KHÔNG cookie, báo rõ; ghi lại cookie so-rồi-đặt; kết quả đồng bộ khi tab bị dỡ).
+  9 P3 review để đợt P3 (file khoá cạnh cookie người dùng, `data/khoa_tai/*.lock` không dọn, …).
+- Đặt lại nền lên `d04dab9` (P0). Test: nhanh 2931 = 2929/2/0; chậm 22/22; ruff sạch. Bằng chứng `2026-10-25_audit\D`
+  (`ket_qua_sua.json`, junit). Lưu ý vận hành: ghi lại cookie tạo `.timclip.lock` cạnh `cookies.txt`.
 ### 2026-10-25 — P0 «bóng» (D-27) lên mã chạy + sửa P0-1 theo review độc lập (nhánh fix/pc2/chong-bong-lap)
 - Cherry-pick 4128adb/200ddcf/409f609 (10/10) lên `fe461bd` (`50dcbd2`, `6ee8f43`, `6953e97`; D-21 → D-27, P-6/P-7). Review độc
   lập (Fable tìm, Opus tái hiện + phản biện): P0-1 P1 CHỨNG MINH — phủ theo khoảng [min,max] bỏ mất lần dùng thật thứ hai,

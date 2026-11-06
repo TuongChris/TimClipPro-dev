@@ -29,18 +29,23 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
    Chờ người dùng thử thật một tab đồng bộ + một tab quét (AppTest không chạy nhịp tự làm mới của fragment). P3 còn mở:
    giao diện không biết `cli.py kenh` ở tiến trình KHÁC đang đồng bộ cùng thư mục. Kho CoryxKenshin dựng xong 28/10 00:29
    (CLI `--ncores 2`, 1745/1745) — dựng bằng giao diện với 8 worker từng hết RAM. Máy mới: `docs/ai/TIEP_TUC_TREN_MAY_MOI.md`.
-2. Người dùng: nghiệm thu DEV đợt 2 theo `C:\Dev\pc2_test_runs\2026-10-26_audit_p3\NGHIEM_THU_DEV_DOT2.md` (~15 phút).
-3. Người dùng quyết: P-6 (3 phương án, `…\2026-10-26_audit_p3\P6_PHUONG_AN.md`); P-7 (`P7_THIET_KE.md` cùng thư mục, công
+2. Người dùng chọn đề xuất ở `TimClipPro/docs/PHAN_TICH_TAI_DUNG_KHO_2026-11.md`; Kho_Joe_Games CHƯA có vân tay (3 lượt dựng hỏng).
+3. Người dùng: nghiệm thu DEV đợt 2 theo `C:\Dev\pc2_test_runs\2026-10-26_audit_p3\NGHIEM_THU_DEV_DOT2.md` (~15 phút).
+4. Người dùng quyết: P-6 (3 phương án, `…\2026-10-26_audit_p3\P6_PHUONG_AN.md`); P-7 (`P7_THIET_KE.md` cùng thư mục, công
    cụ `C:\Dev\pc2_test_tools\p7_lich_su_bong`, CHƯA chạy dữ liệu thật — chỉ chạy CHỈ ĐỌC khi duyệt); B-13, F-16; 3 ghép
    tuỳ chọn của P0 (`ket_qua_panel.json`, mục 25/10 «P0 bóng»); Stable 1.1.3 có phát hành sau P3 hay không.
-4. PC1: review `…\2026-10-26_audit_p3\GOI_REVIEW_PC1.md` (PR #15–#17 đã vào `integration/current` chưa có PC1 review, mã đang
+5. PC1: review `…\2026-10-26_audit_p3\GOI_REVIEW_PC1.md` (PR #15–#17 đã vào `integration/current` chưa có PC1 review, mã đang
    chạy dữ liệu THẬT trên DEV); chạy bộ đột biến outbox; quyết đề xuất E-1 (`.claude/settings.json` chặn đọc khoá Google, 2
    test xfail strict); cập nhật `CURRENT_STATE.md` theo mục 26/10.
-5. Còn mở từ trước: đồng bộ tiếp kênh Joe → vân tay «Kho Joe» (tab «Kho clip gốc», không tạo kho mới); hồ sơ đích Sheets +
+6. Còn mở từ trước: đồng bộ tiếp kênh Joe → vân tay «Kho Joe» (tab «Kho clip gốc», không tạo kho mới); hồ sơ đích Sheets +
    binding khoá NGOÀI State Stable cho DEV; ruleset GitHub (`release/github/`, chưa bật); C7; nghiệm thu preview 8502.
-6. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
+7. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-11-06 — phân tích tải dựng kho (nhánh feature/pc2/phan-tich-tai-dung-kho)
+- Đo thật 10 bài (`TimClipPro/docs/PHAN_TICH_TAI_DUNG_KHO_2026-11.md`, công cụ `tools/do_tai/`): quá tải là DỰNG VÂN TAY, nguyên
+  nhân RAM (~1,5 GB/giờ âm thanh mỗi worker; clip #291 của Kho_Joe_Games dài 18,8 giờ làm cả lượt sụp), không có điểm lưu giữa
+  chừng. Đường đồng bộ chỉ làm HDD bận tối đa 5%. CHƯA tái hiện «HDD 100% + hàng đợi ~30». Chưa sửa mã, chờ người dùng chọn.
 ### 2026-11-02 — ngày đăng dạng «October 31, 2026» (D-30, PR #22) + tiếp tục trên máy mới (PR #21)
 - PR #21 `bd0c4ee`: `docs/ai/TIEP_TUC_TREN_MAY_MOI.md`, `TONG_HOP_DU_AN.md`, `CURRENT_STATE.md` 02/11, `tools/test/` — chủ dự án
   có thể phải xoá máy công ty; dặn từ nay mỗi việc xong là commit + đẩy.
@@ -70,10 +75,4 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   `/spreadsheets/u/<n>/d/<ID>` qua hook (`7e63d9c`, hook 47/0); E-7 chỉ bắt đường dẫn gạch ngược (`7bdab54`, bắt cả
   `C:/Users/<tên>`, 4 dòng tài liệu; 86/0). Không đụng `_merge` sau review → không fuzz lại.
 - Còn mở / rủi ro: «Tiếp theo» 1–4. Đề xuất `CURRENT_STATE.md` (PC1 sửa): integration = `a11dac4` (#15–#17), PC1 chưa review.
-### 2026-10-26 — sửa 13 lỗi vùng YouTube theo audit (nhánh fix/pc2/youtube-audit-d)
-- D-1/2/3 (P1) + D-4..D-13 (P2) + D-5: mỗi lỗi một commit test đỏ → sửa; review độc lập (Fable) → 1 P1 + 2 P2 do chính bản
-  sửa gây ra, đã sửa (403 → thử client bị gỡ KHÔNG cookie, báo rõ; ghi lại cookie so-rồi-đặt; kết quả đồng bộ khi tab bị dỡ).
-  9 P3 review để đợt P3 (file khoá cạnh cookie người dùng, `data/khoa_tai/*.lock` không dọn, …).
-- Đặt lại nền lên `d04dab9` (P0). Test: nhanh 2931 = 2929/2/0; chậm 22/22; ruff sạch. Bằng chứng `2026-10-25_audit\D`
-  (`ket_qua_sua.json`, junit). Lưu ý vận hành: ghi lại cookie tạo `.timclip.lock` cạnh `cookies.txt`.
-- Mục cũ hơn (2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
+- Mục cũ hơn (2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
