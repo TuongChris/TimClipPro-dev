@@ -827,3 +827,10 @@ hợp lý đã bị số đo bác (`docs/PHAN_TICH_TAI_DUNG_KHO_2026-11.md`).
 Đã sửa: cha phát từng clip theo RAM (`LichTheoRam`), clip lỗi thử lại cuối lượt và KHÔNG vào bảng của worker, lý do thật giữ ở
 `_LOI_GIAI_MA`, clip dài hơn 2 giờ không tải và không tạo vân tay.
 → Mọi clip đi qua `LichTheoRam`, đừng thêm đường dựng kho thứ hai. Hằng số RAM là số đo, đổi tham số phân tích thì đo lại.
+
+**39. Audit toàn repo 06/11/2026: lời hứa trên màn hình lệch việc thật làm (PC2).** Sáu lỗi cùng một kiểu: nút báo «đã gửi yêu cầu
+dừng» khi không còn lượt để dừng (bấm đúp cắt ngang `chay_dong_bo`), «Quét toàn bộ» dừng ở 3 giờ, hook «quét mọi dòng thêm» không
+thấy merge commit, kết quả lô mất sau F5, một lần đọc kho lỗi bị nhớ thành kho rỗng, bản đệm cụt được dùng lại mãi. Hook ĐANG CÀI
+trên PC2 còn là bản 15/10 không có khối quét nội dung: bản trong repo được vá nhiều lần mà không ai cài lại.
+→ Sau khi sửa `release/git-hooks/pre-push` phải cài lại trên từng máy và kiểm `cmp`. `grep` của Git Bash bỏ qua CR nên báo sai
+xuống dòng: đo bằng Python. Lỗi đọc không được ghi vào cache như kết quả thật.

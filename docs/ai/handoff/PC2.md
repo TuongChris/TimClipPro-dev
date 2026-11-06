@@ -32,18 +32,24 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 2. Dựng kho theo RAM + bỏ clip > 2 giờ (D-31): PR #23 GỘP (`73c5734`), DEV 8502 cập nhật 06/11 20:16 (sao lưu `data_20261106_201648`).
    Chờ người dùng dựng Kho_Joe_Games (CHƯA có vân tay, thư mục `E:\Kho_Tool_Quet\Kho_Joe_Games`) và đồng bộ thật một kênh để kiểm
    quy tắc 2 giờ (chưa thử YouTube thật).
-3. Người dùng: nghiệm thu DEV đợt 2 theo `C:\Dev\pc2_test_runs\2026-10-26_audit_p3\NGHIEM_THU_DEV_DOT2.md` (~15 phút).
-4. Người dùng quyết: P-6 (3 phương án, `…\2026-10-26_audit_p3\P6_PHUONG_AN.md`); P-7 (`P7_THIET_KE.md` cùng thư mục, công
+3. Audit toàn repo 06/11: số 1–6 đã sửa trên `fix/pc2/audit-0611`, chờ người dùng duyệt gộp + cập nhật DEV. Còn 7–20 + 8 mục nhỏ:
+   báo cáo trong phiên 06/11 (lịch sử chat), số 14 có 21 ca đột biến updater sống.
+4. Người dùng: nghiệm thu DEV đợt 2 theo `C:\Dev\pc2_test_runs\2026-10-26_audit_p3\NGHIEM_THU_DEV_DOT2.md` (~15 phút).
+5. Người dùng quyết: P-6 (3 phương án, `…\2026-10-26_audit_p3\P6_PHUONG_AN.md`); P-7 (`P7_THIET_KE.md` cùng thư mục, công
    cụ `C:\Dev\pc2_test_tools\p7_lich_su_bong`, CHƯA chạy dữ liệu thật — chỉ chạy CHỈ ĐỌC khi duyệt); B-13, F-16; 3 ghép
    tuỳ chọn của P0 (`ket_qua_panel.json`, mục 25/10 «P0 bóng»); Stable 1.1.3 có phát hành sau P3 hay không.
-5. PC1: review `…\2026-10-26_audit_p3\GOI_REVIEW_PC1.md` (PR #15–#17 đã vào `integration/current` chưa có PC1 review, mã đang
+6. PC1: review `…\2026-10-26_audit_p3\GOI_REVIEW_PC1.md` (PR #15–#17 đã vào `integration/current` chưa có PC1 review, mã đang
    chạy dữ liệu THẬT trên DEV); chạy bộ đột biến outbox; quyết đề xuất E-1 (`.claude/settings.json` chặn đọc khoá Google, 2
    test xfail strict); cập nhật `CURRENT_STATE.md` theo mục 26/10.
-6. Còn mở từ trước: đồng bộ tiếp kênh Joe → vân tay «Kho Joe» (tab «Kho clip gốc», không tạo kho mới); hồ sơ đích Sheets +
+7. Còn mở từ trước: đồng bộ tiếp kênh Joe → vân tay «Kho Joe» (tab «Kho clip gốc», không tạo kho mới); hồ sơ đích Sheets +
    binding khoá NGOÀI State Stable cho DEV; ruleset GitHub (`release/github/`, chưa bật); C7; nghiệm thu preview 8502.
-7. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
+8. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-11-06 — sửa số 1–6 của audit toàn repo (nhánh fix/pc2/audit-0611)
+- Làm: nút Dừng đồng bộ sau bấm đúp; lô nguồn chung tự lưu CSV; đọc kho lỗi không bị nhớ thành kho rỗng; hook quét merge commit, tên có
+  dấu cách, đổi tên y nguyên (hook mới ĐÃ CÀI trên PC2, bản cũ không có khối quét nội dung); «Quét toàn bộ» quét hết (D-32); bản đệm cụt bị bỏ.
+- Mỗi lỗi có test đỏ trước khi sửa. Số test ghi ở mô tả PR và tin báo cuối phiên. Chưa gộp, DEV chưa cập nhật.
 ### 2026-11-06 — gộp D-31 (PR #23) và cập nhật DEV 8502
 - Người dùng duyệt gộp + cập nhật DEV. Test lại đúng `73c5734`: nhanh 3394 = 3390/4/0, chậm 22/22, ruff sạch (`…\2026-11-06_dung_kho_ram\gop_73c5734`).
 - Trước khi tắt DEV: không tiến trình con, không ghi mới, `tool.lock` rảnh, ghi 0 B trong 15 s, hàng đợi Sheets 584 SENT. Smoke: health ok,
@@ -67,12 +73,4 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   Sheet giữ dạng cũ. Test mới đỏ trước khi sửa; nhanh 3337 = 3333/4/0; ruff sạch. DEV 8502 cập nhật 02/11 11:25 (sao lưu
   `data_20261102_112503`; hàng đợi Sheets 505 SENT trước khi tắt). Bẫy: socket «LISTENING» PID 0 còn ~70 s sau khi tắt DEV →
   script CapNhat báo «DEV đang chạy»; chờ `netstat` hết LISTENING rồi chạy lại.
-### 2026-10-27 — đồng bộ kênh chạy song song với quét (D-29, nhánh feature/pc2/dong-bo-song-song-quet)
-- Làm: đồng bộ kênh thành làn riêng của giao diện (`job_dong_bo`, cờ huỷ riêng, khung tiến độ fragment ở đầu trang, nút
-  «⏹️ Dừng đồng bộ»); các tab vẫn dùng khi đồng bộ; màn tiến độ quét/dựng vân tay có ô «Đồng bộ kênh gốc song song». Vẫn
-  chặn: 2 lượt đồng bộ, đồng bộ cùng «Lấy lại tên»/«Vá metadata», dựng vân tay trùng thư mục đang đồng bộ (hai chiều).
-- Test (chặn mạng, cp1252, venv CookieFix): file mới `test_dong_bo_song_song_quet.py` 14/14 (đỏ trước khi sửa); 4 file test
-  cũ đổi theo làn mới (cùng bất biến D-13/F-2). Review độc lập: 0 P1, 2 P2 thật (lease bảo trì rò khi đường dẫn kho hỏng;
-  lời từ chối ở ô đồng bộ trên màn tiến độ biến mất sau 0,75 s) — test đỏ rồi sửa; P3 lý do từ chối sai khi tab khác vừa
-  đồng bộ, nút Dừng trùng nhãn — đã sửa. Bằng chứng ngoài Git: `C:\Dev\pc2_test_runs\2026-10-27_dong_bo_song_song`.
 - Mục cũ hơn (2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.

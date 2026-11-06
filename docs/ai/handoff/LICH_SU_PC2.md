@@ -3,6 +3,14 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-10-27 — đồng bộ kênh chạy song song với quét (D-29, nhánh feature/pc2/dong-bo-song-song-quet)
+- Làm: đồng bộ kênh thành làn riêng của giao diện (`job_dong_bo`, cờ huỷ riêng, khung tiến độ fragment ở đầu trang, nút
+  «⏹️ Dừng đồng bộ»); các tab vẫn dùng khi đồng bộ; màn tiến độ quét/dựng vân tay có ô «Đồng bộ kênh gốc song song». Vẫn
+  chặn: 2 lượt đồng bộ, đồng bộ cùng «Lấy lại tên»/«Vá metadata», dựng vân tay trùng thư mục đang đồng bộ (hai chiều).
+- Test (chặn mạng, cp1252, venv CookieFix): file mới `test_dong_bo_song_song_quet.py` 14/14 (đỏ trước khi sửa); 4 file test
+  cũ đổi theo làn mới (cùng bất biến D-13/F-2). Review độc lập: 0 P1, 2 P2 thật (lease bảo trì rò khi đường dẫn kho hỏng;
+  lời từ chối ở ô đồng bộ trên màn tiến độ biến mất sau 0,75 s) — test đỏ rồi sửa; P3 lý do từ chối sai khi tab khác vừa
+  đồng bộ, nút Dừng trùng nhãn — đã sửa. Bằng chứng ngoài Git: `C:\Dev\pc2_test_runs\2026-10-27_dong_bo_song_song`.
 ### 2026-10-26 — audit độc lập 25/10: P0 bóng, YouTube, đợt 2, đợt P3 (nhánh fix/pc2/audit-p3)
 - Làm: ba PR vào `integration/current` bằng fast-forward, chủ dự án duyệt từng PR: #15 P0 «bóng» D-27 + P0-1 (`d04dab9`),
   #16 YouTube D-1..D-13 (`9476387`), #17 đợt 2 vùng A, B, C, E, F (6 P1 + 17 P2 + tranh cãi A-3, C-4, C-5, F-4; `a11dac4`);

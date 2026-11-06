@@ -15,6 +15,11 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-32 «Quét toàn bộ video» quét hết thật (người dùng duyệt audit 06/11, 2026-11-06)
+Lô ghim «Quét toàn bộ video» (`Engine._quet_tron_theo_lo`) tải trọn ngay, không chia đoạn tăng dần, không đi đường Top-1 nhanh:
+đây là lựa chọn chủ động, có ô xác nhận. Trước đây phần đầu đủ Top-N thì vẫn dừng ở 3 giờ. Watch, CLI và lô không ghim giữ nguyên
+(3 giờ đầu rồi tải nốt khi chưa đủ, đếm số ĐOẠN; golden `yt_top5_nam_doan_ba_clip_trong_phan_tai_dau` khoá hành vi đó).
+
 ## D-31 Dựng kho theo RAM; bỏ clip dài hơn 2 giờ (người dùng, 2026-11-06) — thay cách chia cứng `filelists[ix % ncores]`
 Quyết định (phân tích: `docs/PHAN_TICH_TAI_DUNG_KHO_2026-11.md`, người dùng chọn đề xuất 1, 2, 4, 6 và ngưỡng 2 giờ):
 - Tiến trình cha phát TỪNG clip (`audfprint_progress_runner.LichTheoRam`, thuần logic): clip chỉ được phát khi RAM trống đủ
