@@ -53,6 +53,9 @@ từ *"ngân sách cho tổng phần việc"* thành *"thời gian im lặng t�
 Giữ nguyên tên là có chủ đích: hai test hiện có dùng
 `monkeypatch.setattr(runner, "CHO_WORKER_S", 20.0)` vẫn chạy và vẫn có tác dụng chặn.
 
+Cập nhật D-33 (06/11/2026): cha phát từng clip và dựng kho nhường ổ cứng, nên clip dài có thể chậm hợp lệ. Hết `CHO_WORKER_S` mà CPU/I-O
+của worker và FFmpeg vẫn tăng thì gia hạn; chỉ đứng yên trọn một hạn mới là treo.
+
 ### 2.1 Bốn yêu cầu, và cách từng cái được thoả
 
 | Yêu cầu | Cách thoả |

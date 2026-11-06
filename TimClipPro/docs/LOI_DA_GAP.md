@@ -840,3 +840,9 @@ mục nguồn cũ nên lọt chốt chống trộn kho; `Thread.start` lỗi đ�
 lỗi đọc tạm bị coi là file hỏng; làm đúng sổ tay lại tin khoá đã thu hồi; `CapNhat.bat` in `[ACTIVE]` khi không làm gì.
 → Sửa một lỗi ở một bộ điều phối thì grep cả các bộ cùng khuôn. Lỗi đọc khác file hỏng: chỉ `ValueError` mới được phục hồi từ `.bak`.
 Tài liệu vận hành cũng là code: lần theo từng bước sổ tay trên dữ liệu giả. Hoàn tác xong bản `truoc_hoan_tac` chỉ để điều tra.
+
+**41. Hạ ưu tiên ổ cứng biến chốt thời gian thành lỗi giả (PC2, 06/11/2026).** Thay đổi tưởng một dòng: `ionice` thấp giúp việc khác
+trở lại tốc độ cũ, nhưng khi HDD bận liên tục FFmpeg im tới 15 giây (thư viện coi 10 giây là treo) và clip 1 giờ mất ~1 giờ
+(watchdog 30 phút huỷ cả lượt). Đọc mã không thấy, phép đo tải thật mới lộ.
+→ Đổi ưu tiên hay thêm giới hạn tài nguyên thì rà mọi hạn giờ trên đường đó và đo khi tài nguyên bận thật. Hạn giờ nên dựa vào
+tiến triển thật (CPU, I/O), không dựa vào thời gian trôi. `Below Normal` không hạ ưu tiên ổ cứng trên Windows.

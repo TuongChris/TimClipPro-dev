@@ -18,6 +18,7 @@ import random
 import subprocess
 import sys
 import textwrap
+import time
 from pathlib import Path
 
 import pytest
@@ -482,8 +483,13 @@ def test_runner_va_moi_tien_trinh_con_chay_uu_tien_thap(tmp_path):
         import audfprint_progress_runner as runner
 
 
+        def hien_tai():
+            p = psutil.Process()
+            return int(p.nice()), int(p.ionice())
+
+
         def bao(q):
-            q.put(psutil.Process().nice())
+            q.put(hien_tai())
 
 
         if __name__ == "__main__":
@@ -492,16 +498,18 @@ def test_runner_va_moi_tien_trinh_con_chay_uu_tien_thap(tmp_path):
             p = multiprocessing.Process(target=bao, args=(q,))
             p.start()
             con = subprocess.run([sys.executable, "-c",
-                                  "import psutil; print(psutil.Process().nice())"],
+                                  "import psutil; p = psutil.Process(); print((int(p.nice()), int(p.ionice())))"],
                                  capture_output=True, text=True)
-            print(psutil.Process().nice(), q.get(timeout=60), con.stdout.strip())
+            print(hien_tai(), q.get(timeout=60), con.stdout.strip(), sep="|")
             p.join()
         """), encoding="utf-8")
     kq = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=120)
     assert kq.returncode == 0, kq.stderr[-500:]
     import psutil
 
-    assert kq.stdout.split() == [str(int(psutil.BELOW_NORMAL_PRIORITY_CLASS))] * 3
+    # CPU và ổ cứng là hai mức riêng: Below Normal không làm Windows hạ ưu tiên ổ cứng (đo 06/11).
+    mong_doi = str((int(psutil.BELOW_NORMAL_PRIORITY_CLASS), int(psutil.IOPRIO_LOW)))
+    assert kq.stdout.strip().split("|") == [mong_doi] * 3
 
 
 def test_khong_ha_duoc_uu_tien_cung_khong_lam_hong_build(monkeypatch):
@@ -511,7 +519,89 @@ def test_khong_ha_duoc_uu_tien_cung_khong_lam_hong_build(monkeypatch):
         raise psutil.AccessDenied()
 
     monkeypatch.setattr(psutil.Process, "nice", hong)
+    monkeypatch.setattr(psutil.Process, "ionice", hong)
     runner._ha_uu_tien_tien_trinh()
+
+
+def test_khong_ha_duoc_uu_tien_cpu_van_ha_uu_tien_o_cung(monkeypatch):
+    import psutil
+
+    goi = []
+
+    def hong(self, *a):
+        raise psutil.AccessDenied()
+
+    monkeypatch.setattr(psutil.Process, "nice", hong)
+    monkeypatch.setattr(psutil.Process, "ionice", lambda self, *a: goi.append(a))
+    runner._ha_uu_tien_tien_trinh()
+    assert goi == [(psutil.IOPRIO_LOW,)]
+
+
+def test_ffmpeg_im_lau_vi_nhuong_o_cung_chua_phai_treo(monkeypatch):
+    """Thư viện mặc định 10 giây; HDD bận làm FFmpeg ưu tiên thấp im tới 15 giây (đo 06/11, D-33)."""
+    import queue
+    from types import SimpleNamespace
+
+    import audio_read
+
+    doc = audio_read.FFmpegAudioFile.read_data
+    monkeypatch.setattr(doc, "__defaults__", doc.__defaults__)
+    monkeypatch.setattr(audio_read, "audio_read", audio_read.audio_read)
+    monkeypatch.setattr(runner, "_DA_CAI_THEO_DOI_GIAI_MA", False)
+    runner.cai_dat_theo_doi_giai_ma()
+
+    cho = []
+
+    class HangRong:
+        def get(self, timeout):
+            cho.append(timeout)
+            raise queue.Empty
+
+    tep = object.__new__(audio_read.FFmpegAudioFile)
+    tep.stdout_reader = SimpleNamespace(queue=HangRong())
+    tep.stderr_reader = SimpleNamespace(queue=SimpleNamespace(queue=[]))
+    monkeypatch.setattr(audio_read, "time", SimpleNamespace(time=iter([0.0, runner.CHO_FFMPEG_S]).__next__))
+    with pytest.raises(ValueError):
+        list(tep.read_data())
+    assert cho == [runner.CHO_FFMPEG_S]
+
+
+def _worker_gia(luc_giao: float, dau_hieu: float):
+    from types import SimpleNamespace
+
+    return runner._Worker(
+        0, SimpleNamespace(is_alive=lambda: True, pid=0), SimpleNamespace(poll=lambda: True), "",
+        viec=runner.Clip("a.opus", 1.0), luc_giao=luc_giao, dau_hieu_song=dau_hieu)
+
+
+def test_worker_cham_ma_van_chay_duoc_gia_han(monkeypatch):
+    """Clip dài lúc HDD bận có thể quá 30 phút: huỷ cả lượt là mất toàn bộ phần đã tính."""
+    monkeypatch.setattr(runner, "_dau_hieu_song", lambda w: 12.0)
+    w = _worker_gia(time.monotonic() - runner.CHO_WORKER_S - 1, 11.0)
+    runner._kiem_nhip([w])
+    assert w.dau_hieu_song == 12.0
+    assert time.monotonic() - w.luc_giao < 5
+
+
+def test_worker_dung_han_khong_tien_trien_van_bi_bat(monkeypatch):
+    monkeypatch.setattr(runner, "_dau_hieu_song", lambda w: 11.0)
+    w = _worker_gia(time.monotonic() - runner.CHO_WORKER_S - 1, 11.0)
+    with pytest.raises(RuntimeError, match="không phản hồi"):
+        runner._kiem_nhip([w])
+
+
+def test_dau_hieu_song_tang_khi_tien_trinh_con_lam_viec():
+    from types import SimpleNamespace
+
+    con = subprocess.Popen([sys.executable, "-c", "while True: pass"])
+    try:
+        w = SimpleNamespace(process=SimpleNamespace(pid=os.getpid()))
+        truoc = runner._dau_hieu_song(w)
+        time.sleep(0.5)
+        assert runner._dau_hieu_song(w) > truoc
+    finally:
+        con.kill()
+        con.wait()
 
 
 # ---------------------------------------------------------------------------

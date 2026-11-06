@@ -7,6 +7,7 @@ HashTable, tham số CLI và format ``.pklz`` vẫn do audfprint vendored thực
 
 from __future__ import annotations
 
+import contextlib
 import gzip
 import json
 import os
@@ -29,6 +30,8 @@ PREFIX = "TIMCLIP_FINGERPRINT_EVENT "
 # clip bị giết ở 94,8% trong lúc cả 8 worker đều khoẻ (mất ~7 giờ CPU). Nay cha phát từng clip nên
 # hạn tính lại từ mỗi lần giao: worker chạy 3 tiếng vẫn an toàn miễn là nó còn trả lời, worker kẹt
 # thật vẫn bị bắt trong thời gian có giới hạn. Clip 1 giờ mất ~25 giây ⇒ clip 18,2 giờ ~8 phút.
+# Hết hạn mà CPU/I-O của worker và FFmpeg vẫn tăng thì chỉ là chậm, gia hạn: dựng kho nhường ổ cứng nên HDD bận
+# liên tục có thể kéo clip 1 giờ từ ~25 giây thành ~1 giờ (đo 06/11, D-33). Một clip treo vẫn không được kéo chết cả lượt quá lâu.
 CHO_WORKER_S = 1800.0
 
 # RAM đỉnh một worker cần (đo 06/11/2026, `--shifts 4`, docs/PHAN_TICH_TAI_DUNG_KHO_2026-11.md): clip
@@ -39,6 +42,9 @@ BYTE_MOI_GIAY_OPUS = 8000       # opus 64 kbps của kho do tool tải về
 # Không còn clip nào chạy mà RAM vẫn thiếu: clip dài chờ chừng này giây rồi bị bỏ qua; clip ngắn
 # chờ tới CHO_WORKER_S, vì RAM tụt giữa lượt không đáng để bỏ mấy trăm clip còn lại.
 CHO_RAM_S = 60.0
+
+# FFmpeg im chừng này giây mới là treo (thư viện mặc định 10 giây). Ổ cứng bị nhường cho việc khác: đo 06/11 im tới 15 giây.
+CHO_FFMPEG_S = 300.0
 
 # Nhịp poll ngắn của cha. Đừng hạ xuống dưới ~0,1 s: mỗi `wait()` trên Windows mở rồi
 # huỷ một overlapped ReadFile. Không ảnh hưởng tốc độ phát hiện worker chết — pipe gãy
@@ -181,14 +187,15 @@ class LichTheoRam:
 
 
 # Lý do thật của lỗi giải mã: ``wavfile2peaks`` nuốt exception và chỉ in «Error reading», nên
-# MemoryError và FFmpeg im quá 10 giây trông như nhau. Mỗi tiến trình một bản, xoá trước mỗi clip.
+# MemoryError và FFmpeg treo trông như nhau. Mỗi tiến trình một bản, xoá trước mỗi clip.
 _LOI_GIAI_MA: dict = {}
 
 
 def _mo_ta_loi(exc: BaseException) -> str:
     # ``audio_read.read_data`` ghép stderr dạng bytes bằng ``''.join`` nên FFmpeg treo lộ ra thành TypeError.
     if isinstance(exc, TypeError) and "expected str instance, bytes found" in str(exc):
-        return "FFmpegTreo: FFmpeg không trả dữ liệu quá 10 giây (máy quá tải hoặc file đọc không được)"
+        return (f"FFmpegTreo: FFmpeg không trả dữ liệu quá {CHO_FFMPEG_S:.0f} giây "
+                "(máy quá tải hoặc file đọc không được)")
     return f"{type(exc).__name__}: {str(exc)[:300]}"
 
 
@@ -247,6 +254,7 @@ def cai_dat_theo_doi_giai_ma() -> None:
     except ImportError:
         return          # không có module thì giữ nguyên hành vi cũ, không làm chết job
     goc = audio_read.audio_read
+    audio_read.FFmpegAudioFile.read_data.__defaults__ = (CHO_FFMPEG_S,)
 
     def audio_read_co_su_kien(*args, **kwargs):
         ten = str(args[0] if args else kwargs.get("filename") or "")
@@ -332,6 +340,22 @@ class _Worker:
     luc_giao: float = 0.0       # lần gửi gần nhất; watchdog tính từ mốc này
     rss_luc_giao: int = 0
     dang_nghi: bool = False
+    dau_hieu_song: float | None = None
+
+
+def _dau_hieu_song(w: _Worker) -> float | None:
+    """Tổng CPU + I/O của worker và FFmpeg của nó; tăng = vẫn chạy. ``None`` = không đọc được lúc này."""
+    import psutil
+
+    try:
+        goc = psutil.Process(w.process.pid)
+        tong = 0.0
+        for p in (goc, *goc.children(recursive=True)):
+            cpu, io = p.cpu_times(), p.io_counters()
+            tong += cpu.user + cpu.system + io.read_count + io.write_count
+        return tong
+    except psutil.Error:
+        return None
 
 
 def _rss(w: _Worker) -> int:
@@ -357,7 +381,7 @@ def _worker_chet(w: _Worker) -> RuntimeError:
 
 
 def _gui(w: _Worker, thong_diep) -> None:
-    w.luc_giao = time.monotonic()
+    w.luc_giao, w.dau_hieu_song = time.monotonic(), _dau_hieu_song(w)
     try:
         w.ket_noi.send(thong_diep)
     except OSError as exc:
@@ -440,6 +464,10 @@ def _kiem_nhip(song: list) -> None:
         if _chet_khong_loi_nhan(w):
             raise _worker_chet(w)
         if (w.viec or w.dang_nghi) and bay_gio - w.luc_giao > CHO_WORKER_S:
+            dau_hieu = _dau_hieu_song(w)
+            if dau_hieu is None or dau_hieu != w.dau_hieu_song:
+                w.luc_giao, w.dau_hieu_song = bay_gio, dau_hieu
+                continue
             raise RuntimeError(
                 f"Worker vân tay {w.so} không phản hồi sau {CHO_WORKER_S:.0f} giây "
                 f"(đã xong {w.so_xong} file, không tiến thêm)."
@@ -606,13 +634,20 @@ def cai_dat_instrumentation(audfprint) -> None:
 
 
 def _ha_uu_tien_tien_trinh() -> None:
-    """Dựng kho chạy Below Normal; worker và FFmpeg thừa hưởng theo quy tắc CreateProcess của Windows."""
+    """Dựng kho nhường CPU và ổ cứng cho việc khác; worker và FFmpeg thừa hưởng theo quy tắc CreateProcess.
+
+    Hai mức độc lập: Below Normal không hạ ưu tiên ổ cứng (đo 06/11, D-33). Lớp phụ, không được làm hỏng build.
+    """
     try:
         import psutil
 
-        psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
-    except Exception:  # noqa: BLE001 - lớp phụ, không được làm hỏng build
-        pass
+        p = psutil.Process()
+    except Exception:  # noqa: BLE001
+        return
+    with contextlib.suppress(Exception):
+        p.nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
+    with contextlib.suppress(Exception):
+        p.ionice(psutil.IOPRIO_LOW)
 
 
 _NHOM_CUA_RUNNER = None

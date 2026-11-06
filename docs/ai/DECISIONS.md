@@ -15,6 +15,15 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-33 Dựng kho nhường ổ cứng cho việc khác (người dùng, 2026-11-06) — thêm vào D-31
+Quyết định: runner dựng kho đặt `IOPRIO_LOW` cùng Below Normal, worker và FFmpeg thừa hưởng; lượt quét không đổi. Hai chốt thời
+gian đổi theo: FFmpeg im 300 giây mới là treo (`CHO_FFMPEG_S`, thư viện 10 giây, không sửa vendored), `CHO_WORKER_S` hết hạn mà CPU/I-O
+của worker và FFmpeg vẫn tăng thì gia hạn. Vì sao: Below Normal không hạ ưu tiên ổ cứng; đo trên HDD thật, 8 luồng đọc lung tung
+làm việc khác tụt từ 252 xuống 166 lần đọc/giây khi dựng kho, ưu tiên thấp giữ 249/giây. Đổi lại, HDD bận liên tục thì giải mã chỉ
+còn ~0,9 lần tốc độ phát, FFmpeg im tới 15 giây: giữ chốt cũ thì clip hỏng oan, clip 1 giờ làm hỏng cả lượt.
+Máy rảnh gần như không đổi. Bằng chứng: `tools/do_tai/do_uu_tien_o_cung.py`, `tests/test_dung_kho_theo_ram.py`,
+runner thật 24 clip (đọc dồn 180 giây): 24/24, không thử lại, hash trùng lượt không tải. Chưa làm: tạm dừng và lưu giữa chừng.
+
 ## D-32 «Quét toàn bộ video» quét hết thật (người dùng duyệt audit 06/11, 2026-11-06)
 Lô ghim «Quét toàn bộ video» (`Engine._quet_tron_theo_lo`) tải trọn ngay, không chia đoạn tăng dần, không đi đường Top-1 nhanh:
 đây là lựa chọn chủ động, có ô xác nhận. Trước đây phần đầu đủ Top-N thì vẫn dừng ở 3 giờ. Watch, CLI và lô không ghim giữ nguyên
