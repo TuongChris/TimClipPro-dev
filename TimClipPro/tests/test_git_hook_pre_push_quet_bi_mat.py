@@ -54,7 +54,7 @@ def _quet_theo_tai_lieu(clone):
     """Trả (dòng grep bắt được, file vi phạm luật tên) cho các commit sắp đẩy."""
     lenh = _lenh_quet_trong_tai_lieu()
     mau = re.compile(_mau_grep(lenh), re.I)
-    log = _git(clone, "log", "-p", "--text", "--cc", "--no-renames", "--format=%B", PHAM_VI).stdout
+    log = _git(clone, "log", "-p", "--text", "--cc", "--format=%B", PHAM_VI).stdout
     bat_py = [d for d in log.splitlines() if mau.search(d)]
     if shutil.which("sh"):                             # chạy NGUYÊN lệnh tài liệu bằng sh thật, đối chiếu
         r = subprocess.run(["sh", "-c", lenh], cwd=clone, capture_output=True, text=True, encoding="utf-8",
@@ -496,3 +496,126 @@ def test_doi_ten_y_nguyen_thanh_ten_khoa_bi_chan(may):
     _git(may, "commit", "-q", "-m", "doi ten")
     rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
     assert rc != 0 and "docs/google_key.json: file khoá Google" in out, out
+
+
+# --- Review 06/11 của bản sửa trên: nhị phân trong merge, dòng «++», merge nhiều cha, chặn nhầm ---
+
+def _ghi_nhi_phan(may, duong_dan):
+    p = os.path.join(may, *duong_dan.split("/"))
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "wb") as f:
+        f.write(b"\x00\x01khong-doc-duoc\x00" * 40)
+
+
+@pytest.mark.parametrize("duong_dan, loai", [("docs/ban.p12", "file khoá"),
+                                             ("docs/anh.bin", "file nhị phân trong merge commit")])
+def test_file_nhi_phan_chi_co_trong_merge_commit_bi_chan(may, duong_dan, loai):
+    """Diff gộp bỏ qua ``--text``: chỉ có dòng «Binary files differ», không có «+++» lẫn nội dung để quét."""
+    _hai_nhanh(may)
+    _git(may, "merge", "-q", "--no-commit", "--no-ff", "ben_kia", ok=False)
+    with open(os.path.join(may, "chung.txt"), "w", encoding="utf-8", newline="\n") as f:
+        f.write("da giai\n")
+    _ghi_nhi_phan(may, duong_dan)
+    _git(may, "add", "-A")
+    _git(may, "commit", "-q", "-m", "gop nhanh")
+    rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
+    assert rc != 0 and f"{duong_dan}: {loai}" in out, out
+
+
+def test_file_nhi_phan_tu_mot_nhanh_khong_lam_merge_bi_chan(may):
+    """Merge sạch không có diff gộp cho file đó; bản thân commit thêm file đã được quét như thường."""
+    _nhanh(may)
+    _commit_file(may, "a.txt", "a\n")
+    _git(may, "switch", "-q", "--no-track", "-c", "ben_kia", "private/integration/current")
+    _ghi_nhi_phan(may, "docs/anh.bin")
+    _git(may, "add", "-A")
+    _git(may, "commit", "-q", "-m", "them anh")
+    _git(may, "switch", "-q", "fix/pc2/thu")
+    _git(may, "merge", "-q", "--no-ff", "-m", "gop nhanh", "ben_kia")
+    rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
+    assert rc == 0, out
+
+
+def test_dong_noi_dung_bat_dau_bang_hai_dau_cong_van_duoc_quet(may):
+    """Dòng thêm ``++ x`` in ra thành ``+++ x``: trước đây bị hiểu là tiêu đề file nên nội dung không được quét."""
+    _nhanh(may)
+    _commit_file(may, "docs/x.md", f"++ k = {_KHOA_API}\n")
+    rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
+    assert rc != 0 and "docs/x.md: khoá API / token" in out, out
+
+
+def test_dong_hai_dau_cong_khong_lam_lo_noi_dung_khong_chan_nham(may):
+    _nhanh(may)
+    _commit_file(may, "docs/x.md", f"++ NOI-DUNG-DONG-RIENG\nk = {_KHOA_API}\n")
+    rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
+    assert rc != 0 and "docs/x.md: khoá API / token" in out and "NOI-DUNG-DONG-RIENG" not in out, out
+    _git(may, "switch", "-q", "--no-track", "-c", "fix/pc2/khac", "private/integration/current")
+    _commit_file(may, "docs/y.md", "++ huong dan/khoa.pem\n")
+    rc, out = _day(may, "fix/pc2/khac:fix/pc2/khac")
+    assert rc == 0, out
+
+
+def test_dong_mot_dau_cong_trong_merge_khong_thanh_tieu_de(may):
+    _hai_nhanh(may)
+    _gop_kem(may, "chung.txt", f"+ k = {_KHOA_API}\n")
+    rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
+    assert rc != 0 and "chung.txt: khoá API / token" in out, out
+
+
+def test_tieu_de_cookie_chi_co_trong_merge_commit_bi_chan(may):
+    """Luật neo đầu dòng: phải bỏ đúng số cột dấu của diff gộp, thừa thiếu một ký tự là trượt."""
+    _hai_nhanh(may)
+    _gop_kem(may, "docs/phien.txt", "# Netscape HTTP Cookie File\n")
+    rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
+    assert rc != 0 and "docs/phien.txt: cookie Netscape" in out, out
+
+
+def test_merge_ba_cha_quet_dung_so_cot(may):
+    _hai_nhanh(may)
+    _git(may, "switch", "-q", "--no-track", "-c", "ben_ba", "private/integration/current")
+    _commit_file(may, "chung.txt", "ben ba\n")
+    _git(may, "switch", "-q", "fix/pc2/thu")
+    # Bạch tuộc không tự giải xung đột: dựng merge ba cha bằng commit-tree.
+    with open(os.path.join(may, "chung.txt"), "w", encoding="utf-8", newline="\n") as f:
+        f.write("# Netscape HTTP Cookie File\n")
+    _git(may, "add", "-A")
+    cay = _git(may, "write-tree").stdout.strip()
+    sha = _git(may, "commit-tree", cay, "-p", "HEAD", "-p", "ben_kia", "-p", "ben_ba", "-m", "gop ba").stdout.strip()
+    _git(may, "reset", "-q", "--hard", sha)
+    rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
+    assert rc != 0 and "chung.txt: cookie Netscape" in out, out
+
+
+def _day_mau_da_duyet(may, monkeypatch, ten):
+    monkeypatch.setenv("TIMCLIP_MAU_GIA_DA_DUYET", _sha(may))
+    rc, out = _day(may, f"{ten}:{ten}")
+    monkeypatch.delenv("TIMCLIP_MAU_GIA_DA_DUYET")
+    assert rc == 0, out
+
+
+def test_doi_ten_file_da_co_tren_remote_khong_chan_nham(may, monkeypatch):
+    """Đổi tên không đưa nội dung mới lên repo; 11 file của repo mang mẫu GIẢ không dấu sẽ bị chặn oan nếu quét lại."""
+    _nhanh(may)
+    _commit_file(may, "docs/mau.md", f"k = {_KHOA_API}\n")
+    _day_mau_da_duyet(may, monkeypatch, "fix/pc2/thu")
+    _git(may, "mv", "docs/mau.md", "docs/mau_moi.md")
+    _git(may, "commit", "-q", "-m", "doi ten")
+    rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
+    assert rc == 0, out
+
+
+def test_merge_giu_dong_cu_cua_mot_nhanh_khong_chan_nham(may, monkeypatch):
+    """Dòng đã có ở một cha thì đã quét ở commit của cha đó, hoặc đã nằm trên remote: chỉ quét dòng mới ở MỌI cột."""
+    _nhanh(may, "fix/pc2/ben_kia")
+    _commit_file(may, "chung.txt", f"k = {_KHOA_API}\n")
+    _day_mau_da_duyet(may, monkeypatch, "fix/pc2/ben_kia")
+    _nhanh(may)
+    _commit_file(may, "chung.txt", "ben nay\n")
+    _gop = _git(may, "merge", "-q", "--no-commit", "--no-ff", "fix/pc2/ben_kia", ok=False)
+    assert _gop.returncode != 0, "thiết lập: phải xung đột"
+    with open(os.path.join(may, "chung.txt"), "w", encoding="utf-8", newline="\n") as f:
+        f.write(f"k = {_KHOA_API}\nben nay\n")
+    _git(may, "add", "-A")
+    _git(may, "commit", "-q", "-m", "gop nhanh")
+    rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
+    assert rc == 0, out

@@ -9,7 +9,8 @@
 # trên remote) được quét mẫu bí mật chắc chắn (khoá PEM/JSON, metadata service account, token, link/ID bảng tính,
 # định danh cài đặt, dòng cookie Netscape) và tên file nhạy cảm (như .gitignore gốc). Mẫu GIẢ có chủ đích trong test: ghi «gia-khong-bi-mat» trên CÙNG
 # dòng. Hook chỉ in commit + file + loại, KHÔNG in nội dung dòng. Lệnh quét tay của GIT_WORKFLOW.md vẫn bắt buộc.
-# Quét cả dòng chỉ có trong merge commit (--cc) và file đổi tên y nguyên (--no-renames: không có dòng «+++» nếu git dò đổi tên).
+# Merge commit (--cc): quét dòng mới ở MỌI cha; file nhị phân chỉ có trong merge bị chặn vì không đọc được nội dung.
+# Đổi tên: chỉ xét tên mới, nội dung không mới nên không quét lại.
 # Commit chưa đẩy đã mang mẫu GIẢ mà thiếu dấu (vd. tạo trước bản hook này): NGƯỜI DÙNG xem danh sách, duyệt, rồi đẩy
 # MỘT lần với TIMCLIP_MAU_GIA_DA_DUYET="<SHA đủ 40 ký tự> ..." — chỉ bỏ qua đúng các commit đó (vẫn in ra stderr);
 # không phải --no-verify (CẤM): ref, tag, xoá, force-push và mọi commit khác vẫn bị kiểm.
@@ -20,7 +21,7 @@ z=0000000000000000000000000000000000000000
 quet_noi_dung() {
   # Thông điệp commit (WR-8 — cũng lên repo công khai) in sau «commit <SHA>», mỗi dòng thụt 1 khoảng trắng (%w(0,1,1):
   # không ngắt dòng) nên không dòng nào của nó giống «commit <SHA>», «+++ » hay «+» của diff.
-  git -c core.quotePath=false log -p --cc --no-renames --text --no-color --no-ext-diff \
+  git -c core.quotePath=false log -p --cc --text --no-color --no-ext-diff \
       --format='commit %H%n%w(0,1,1)%B' "$2" --not \
       --remotes="$1" -- </dev/null | awk -v duyet=" ${TIMCLIP_MAU_GIA_DA_DUYET:-} " '
     function bao(loai,   k) {
@@ -54,17 +55,9 @@ quet_noi_dung() {
       if (d ~ /^#[ \t]*(netscape[ \t]+)?http[ \t]+cookie[ \t]+file/ ||
           d ~ /^(#httponly_)?[^\t#]+\t(true|false)\t[^\t]*\t(true|false)\t[0-9]+\t[^\t]+\t/) bao("cookie Netscape")
     }
-    BEGIN { gsub(/[ \t,;]+/, " ", duyet); duyet = tolower(duyet) }
-    # SHA ĐỦ 40 ký tự: dán thẳng vào TIMCLIP_MAU_GIA_DA_DUYET. Sau nó là thông điệp, tới dòng KHÔNG thụt đầu tiên.
-    /^commit [0-9a-f]+$/ { ct = $2; c = $2; f = "(thông điệp commit)"; tdiep = 1; next }
-    tdiep && /^ / { kiem(substr($0, 2)); next }
-    { tdiep = 0 }
-    /^diff --cc / { cc = 1; next }
-    /^diff --git / { cc = 0; next }
-    /^\+\+\+ / {
-      # Git thêm tab sau tên có dấu cách: bỏ trước khi so các luật kết thúc bằng $.
-      f = substr($0, 5); sub(/\t$/, "", f); sub(/^"?b\//, "", f); sub(/"$/, "", f)
-      if (f == "/dev/null") next
+    # Git thêm tab sau tên có dấu cách: bỏ trước khi so các luật kết thúc bằng $.
+    function dat_ten(ten) { f = ten; sub(/\t$/, "", f); sub(/^"/, "", f); sub(/"$/, "", f) }
+    function kiem_ten(   t) {
       t = tolower(f)
       if (t ~ /\.(pem|key|p12|pfx)$/ || t ~ /(^|\/)khoa_rieng[^\/]*$/) bao("file khoá")
       else if (t ~ /(^|\/)(google_key|khoa_google)[^\/]*$/ || t ~ /service[^\/]*account[^\/]*\.json$/ ||
@@ -73,11 +66,30 @@ quet_noi_dung() {
       else if (t ~ /cookie[^\/]*\.txt$/) bao("file cookie")
       else if (t ~ /(^|\/)installation\.json$/) bao("file định danh cài đặt")
       else if (t ~ /(^|\/)(secrets|credentials)\//) bao("thư mục bí mật")
+    }
+    BEGIN { gsub(/[ \t,;]+/, " ", duyet); duyet = tolower(duyet) }
+    # SHA ĐỦ 40 ký tự: dán thẳng vào TIMCLIP_MAU_GIA_DA_DUYET. Sau nó là thông điệp, tới dòng KHÔNG thụt đầu tiên.
+    /^commit [0-9a-f]+$/ { ct = $2; c = $2; f = "(thông điệp commit)"; tdiep = 1; dau = 1; next }
+    tdiep && /^ / { kiem(substr($0, 2)); next }
+    { tdiep = 0 }
+    /^diff --cc / { cc = 1; dau = 1; dat_ten(substr($0, 11)); next }
+    /^diff --git / { cc = 0; dau = 1; next }
+    # Số cột dấu = số «@» trừ một: diff thường 1, merge hai cha 2, ba cha 3...
+    /^@@/ { dau = 0; match($0, /^@+/); cot = RLENGTH - 1; next }
+    # Trước «@@» đầu tiên mới là tiêu đề file; sau đó dòng «+++ x» chỉ là nội dung «++ x».
+    dau {
+      if ($0 ~ /^\+\+\+ /) {
+        dat_ten(substr($0, 5)); sub(/^b\//, "", f)
+        if (f != "/dev/null") kiem_ten()
+      } else if ($0 ~ /^rename to /) {
+        dat_ten(substr($0, 11)); kiem_ten()
+      } else if (cc && $0 ~ /^Binary files /) {
+        kiem_ten(); bao("file nhị phân trong merge commit")
+      }
       next
     }
-    # Diff gộp của merge có HAI cột dấu: bỏ đủ hai cột, các luật neo đầu dòng mới khớp.
-    cc && /^(\+\+|\+ | \+)/ { kiem(substr($0, 3)); next }
-    /^\+/ { kiem(substr($0, 2)) }
+    # Dòng có ở một cha đã quét ở commit của cha đó (hoặc đã trên remote): chỉ quét dòng mới ở MỌI cột.
+    cot > 0 && substr($0, 1, cot) ~ /^\++$/ { kiem(substr($0, cot + 1)) }
     END { if (n > 30) print "  … và " (n - 30) " chỗ khác" }'
 }
 

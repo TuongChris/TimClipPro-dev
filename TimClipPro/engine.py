@@ -5927,9 +5927,10 @@ class Engine:
                 if (r.ly_do_pham_vi != "gioi_han_tai" and r.vung_da_khop is not None
                         and self._thieu_duoi(info.get("duration"), r.duration_s)):
                     r, f = self._xu_ly_tai_thieu(url, info, r, f, progress, **mt)
-                elif r.vung_loi and not gioi_han and r.ly_do_pham_vi != "huy":
-                    # Metadata đầu file báo đủ nên nhánh trên không thấy bản cụt: lượt sau sẽ dùng lại đúng file này
-                    # và lỗi y hệt. Đọc được đủ âm thanh thì lỗi không do file: giữ, khỏi tải lại hàng GB.
+                elif ((r.vung_loi or (r.status == "error" and r.vung_da_khop is None))
+                      and not gioi_han and r.ly_do_pham_vi != "huy"):
+                    # Metadata đầu file báo đủ (hoặc hỏng tới mức 0 khúc) nên nhánh trên không thấy bản cụt: lượt sau sẽ
+                    # dùng lại đúng file này và lỗi y hệt. Đọc được đủ âm thanh thì lỗi không do file: giữ, khỏi tải lại.
                     dai_am_thanh = float(self.do_dai_audio_that(f) or 0)
                     if dai_am_thanh <= 0 or self._thieu_duoi(info.get("duration"), dai_am_thanh):
                         with contextlib.suppress(OSError):

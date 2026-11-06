@@ -326,3 +326,35 @@ def test_luot_bi_huy_khong_bo_ban_dem(tmp_path, monkeypatch):
 def test_ban_tai_mot_phan_khong_bi_coi_la_cut(tmp_path, monkeypatch):
     """Lô không ghim, video rất dài: bản ``__p`` chỉ có phần đầu là đúng thiết kế, không phải bản cụt."""
     assert _luot_co_vung_loi(tmp_path, monkeypatch, float(BA_GIO), dai=float(DAI_65H)) == []
+
+
+def test_khong_cat_duoc_khuc_nao_tren_ban_dem_hong_cung_bo(tmp_path, monkeypatch):
+    """File hỏng từ đầu: ``scan_media`` lỗi trước khi có vùng nào, ``vung_loi`` rỗng, lỗi vẫn lặp lại nếu giữ file."""
+    e, _ = _gia_lap(tmp_path, monkeypatch, dai=600.0, che_do=None, cfg={"keep_downloads": True})
+    monkeypatch.setattr(e, "do_dai_audio_that", lambda p: None)
+    monkeypatch.setattr(e, "scan_media", lambda path, **k: ScanResult(
+        source_name="v", duration_s=0.0, status="error", note="Không cắt được khúc nào từ file này."))
+    bo = []
+    monkeypatch.setattr(e, "_bo_file_dem", lambda p: bo.append(os.path.basename(p)) or True)
+    e.scan_youtube("https://youtu.be/vid65hxxxxx", luu_lich_su=False)
+    assert bo == ["vid65hxxxxx.webm"]
+
+
+def test_tai_not_ban_day_du_bi_cut_cung_duoc_bo(tmp_path, monkeypatch):
+    """Lô không ghim: phần đầu không thấy gì, tải nốt, bản ĐẦY ĐỦ mới cụt. Bản ``__p`` đã xong việc không còn che ca này."""
+    e, lan_tai = _gia_lap(tmp_path, monkeypatch, che_do=None, cfg={"tai_mot_phan": True, "quet_tang_dan_tu_gio": 10.0,
+                                                                   "quet_tang_dan_buoc_gio": 3.0, "keep_downloads": True})
+    monkeypatch.setattr(e, "do_dai_audio_that", lambda p: 100.0)
+
+    def quet(path, **k):
+        if len(lan_tai) == 1:
+            return ScanResult(source_name="v", duration_s=float(BA_GIO), pham_vi_quet_s=float(BA_GIO),
+                              vung_da_khop=[(0.0, float(BA_GIO))])
+        return ScanResult(source_name="v", duration_s=float(DAI_65H), status="error", ly_do_pham_vi="loi_khuc",
+                          vung_loi=[(100.0, float(DAI_65H))])
+
+    monkeypatch.setattr(e, "scan_media", quet)
+    bo = []
+    monkeypatch.setattr(e, "_bo_file_dem", lambda p: bo.append(os.path.basename(p)) or True)
+    e.scan_youtube("https://youtu.be/vid65hxxxxx", luu_lich_su=False)
+    assert lan_tai == [BA_GIO, None] and bo == ["vid65hxxxxx.webm"]
