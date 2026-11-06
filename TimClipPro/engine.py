@@ -1469,8 +1469,10 @@ class Engine:
 
         Build ở phiên/tiến trình khác có thể công bố kho sang file MỚI (đường lui khi file cũ bị khoá) và sửa
         ``khos.json``; ``_lam_moi_sau_build`` chỉ làm mới Engine đã build. Không theo thì phiên kia quét mãi với vân
-        tay CŨ và định danh kho rỗng (audit F-2). Chỉ đổi file của kho đang chọn — không đổi kho; bản ghim cho một
-        job không bao giờ đổi; sổ hỏng/không còn kho đó thì để nguyên (thanh bên tự báo)."""
+        tay CŨ và định danh kho rỗng (audit F-2). Thư mục nguồn cũng theo sổ: «Tạo lại kho» ở tab khác đổi nguồn mà giữ
+        nguyên file thì chốt chống trộn nguồn của «Bổ sung» không được so với thư mục cũ. Chỉ đổi file của kho đang
+        chọn — không đổi kho; bản ghim cho một job không bao giờ đổi; sổ hỏng/không còn kho đó thì để nguyên (thanh bên
+        tự báo)."""
         if getattr(self, "_la_ban_ghim", False) or not self.kho_dang_dung:
             return
         with contextlib.suppress(Exception):
@@ -1479,6 +1481,8 @@ class Engine:
             if muc is not None and os.path.normcase(self._duong_dan_db_kho(muc["db"])) != os.path.normcase(
                     os.path.abspath(self.db_file)):
                 self._ap_dung_kho(self.kho_dang_dung, d)
+            elif muc is not None:
+                self._dat_thu_muc_kho_trong_bo_nho(muc.get("thu_muc", ""))
 
     def list_khos(self) -> list:
         """Danh sách các kho + trạng thái (đã có vân tay chưa, bao nhiêu clip).
