@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 """Test logic thuần dựng hồ sơ vi phạm."""
 
+from types import SimpleNamespace
+
 from conftest import M
 
 from clip_metadata import ClipMetadataResolver
-from dossier import dung_ho_so, render_markdown
+from dossier import dung_ho_so, dung_ho_so_v2, render_markdown
 from engine import ScanResult
 
 
@@ -239,3 +241,36 @@ def test_export_ho_so_trung_ten_them_hau_to(engine, tmp_path, monkeypatch):
         str(tmp_path / "hoso_tuy_chon.md"),
         str(tmp_path / "hoso_tuy_chon_2.md"),
     ]
+
+
+def test_hai_clip_cung_khop_mot_vung_chi_tinh_mot_lan():
+    """Audit 06/11: clip A và bản đăng lại của A khớp cùng một vùng từng cho tổng 19 phút trên video 10 phút (190%)."""
+    kq = ScanResult(source_name="v", duration_s=600, matches=[M("a.opus", start=30, matched=570),
+                                                              M("b.opus", start=30, matched=570)])
+    h = dung_ho_so(kq)
+    assert h.tong_giay_vi_pham == 570 and h.ty_le_video == 95.0
+    assert [m.do_dai_giay for m in h.muc] == [570, 570], "từng mục vẫn giữ độ dài của nó"
+
+
+def test_hai_doan_chong_mot_phan_tinh_phan_hop():
+    kq = ScanResult(source_name="v", duration_s=1000, matches=[M("a.opus", start=0, matched=300),
+                                                               M("b.opus", start=200, matched=300)])
+    assert dung_ho_so(kq).tong_giay_vi_pham == 500
+
+
+def test_ho_so_v2_cung_khong_cong_doi():
+    doan = [SimpleNamespace(goc=SimpleNamespace(clip=c, tieu_de="t", url="u"), giay_bat_dau=30, giay_ket_thuc=600,
+                            link="l", start_s=30.0, end_s=600.0, matched_s=570.0, ty_le=90.0, hashes=9000)
+            for c in ("a.opus", "b.opus")]
+    bc = SimpleNamespace(trang_thai="ok", doan=doan, thoi_luong_s=600.0, tieu_de="v", link_video="u",
+                         pham_vi=SimpleNamespace(quet_mot_phan=False, mo_ta=""))
+    h = dung_ho_so_v2(bc)
+    assert h.tong_giay_vi_pham == 570 and h.ty_le_video == 95.0
+
+
+def test_ho_so_v2_doan_khong_co_moc_ket_thuc_van_tinh():
+    d = SimpleNamespace(goc=SimpleNamespace(clip="a.opus", tieu_de="t", url="u"), giay_bat_dau=None, giay_ket_thuc=None,
+                        link="l", start_s=None, end_s=None, matched_s=60.0, ty_le=90.0, hashes=9000)
+    bc = SimpleNamespace(trang_thai="ok", doan=[d], thoi_luong_s=600.0, tieu_de="v", link_video="u",
+                         pham_vi=SimpleNamespace(quet_mot_phan=False, mo_ta=""))
+    assert dung_ho_so_v2(bc).tong_giay_vi_pham == 60

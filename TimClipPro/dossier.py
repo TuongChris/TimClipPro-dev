@@ -49,6 +49,16 @@ def _thoi_luong_hien_thi(giay) -> str:
     return engine.hhmmss(giay) if giay and giay > 0 else ""
 
 
+def _tong_giay_vi_pham(doan) -> int:
+    """Tổng thời gian vi phạm trên trục VIDEO. Clip gốc và bản đăng lại của nó có thể khớp cùng một vùng: cộng thẳng từng
+    đoạn cho 19 phút trên video 10 phút (190%) trong hồ sơ gửi nền tảng."""
+    khoang = []
+    for d in doan:
+        cuoi = d.matched_s if d.end_s is None else d.end_s
+        khoang.append((cuoi - d.matched_s, cuoi))
+    return round(engine.tong_do_dai(khoang))
+
+
 def dung_ho_so(
     kq: engine.ScanResult,
     meta: dict | None = None,
@@ -78,7 +88,7 @@ def dung_ho_so(
                 hashes=m.hashes,
             ))
 
-    tong_giay_vi_pham = sum(muc.do_dai_giay for muc in cac_muc)
+    tong_giay_vi_pham = _tong_giay_vi_pham(kq.matches if kq.status == "ok" else ())
     ty_le_video = (
         round(100 * tong_giay_vi_pham / kq.duration_s, 1)
         if kq.duration_s > 0
@@ -108,7 +118,7 @@ def dung_ho_so_v2(bc) -> HoSo:
         den_hhmmss=bao_cao_v2.hien_thi_moc(d.giay_ket_thuc), link_moc=d.link,
         do_dai_giay=round(d.matched_s), ty_le=d.ty_le, hashes=d.hashes,
     ) for d in (bc.doan if bc.trang_thai == "ok" else ())]
-    tong_giay_vi_pham = sum(muc.do_dai_giay for muc in cac_muc)
+    tong_giay_vi_pham = _tong_giay_vi_pham(bc.doan if bc.trang_thai == "ok" else ())
     thoi_luong = float(bc.thoi_luong_s or 0.0)
     return HoSo(
         tieu_de_vi_pham=bc.tieu_de,
