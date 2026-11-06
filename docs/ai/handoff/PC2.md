@@ -32,8 +32,8 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 2. Dựng kho theo RAM + bỏ clip > 2 giờ (D-31): PR #23 GỘP (`73c5734`), DEV 8502 cập nhật 06/11 20:16 (sao lưu `data_20261106_201648`).
    Chờ người dùng dựng Kho_Joe_Games (CHƯA có vân tay, thư mục `E:\Kho_Tool_Quet\Kho_Joe_Games`) và đồng bộ thật một kênh để kiểm
    quy tắc 2 giờ (chưa thử YouTube thật).
-3. Audit toàn repo 06/11: số 1–6 đã sửa trên `fix/pc2/audit-0611`, chờ người dùng duyệt gộp + cập nhật DEV. Còn 7–20 + 8 mục nhỏ:
-   báo cáo trong phiên 06/11 (lịch sử chat), số 14 có 21 ca đột biến updater sống.
+3. Audit toàn repo 06/11: số 1–6 GỘP (PR #24, `256e848`), DEV 8502 cập nhật 06/11 22:09 (sao lưu `data_20261106_220855`). PC1 phải cài lại
+   hook. Còn 7–20 + 8 mục nhỏ: báo cáo trong phiên 06/11 (lịch sử chat), số 14 có 21 ca đột biến updater sống.
 4. Người dùng: nghiệm thu DEV đợt 2 theo `C:\Dev\pc2_test_runs\2026-10-26_audit_p3\NGHIEM_THU_DEV_DOT2.md` (~15 phút).
 5. Người dùng quyết: P-6 (3 phương án, `…\2026-10-26_audit_p3\P6_PHUONG_AN.md`); P-7 (`P7_THIET_KE.md` cùng thư mục, công
    cụ `C:\Dev\pc2_test_tools\p7_lich_su_bong`, CHƯA chạy dữ liệu thật — chỉ chạy CHỈ ĐỌC khi duyệt); B-13, F-16; 3 ghép
@@ -50,7 +50,9 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 - Làm: nút Dừng đồng bộ sau bấm đúp; lô nguồn chung tự lưu CSV; đọc kho lỗi không bị nhớ thành kho rỗng; hook quét merge commit, tên có
   dấu cách, đổi tên y nguyên (hook mới ĐÃ CÀI trên PC2, bản cũ không có khối quét nội dung); «Quét toàn bộ» quét hết (D-32); bản đệm cụt bị bỏ.
 - Mỗi lỗi có test đỏ trước khi sửa. Test (chặn mạng, cp1252, venv CookieFix) @ `ee414ed`: nhanh 3429 = 3425/4/0, chậm 22/22, ruff sạch
-  (`C:\Dev\pc2_test_runs\2026-11-06_audit_0611`). Review độc lập: 0 P1, 2 P2 và 5 P3 ở hook/đệm/test, đã sửa hết. Chưa gộp, DEV chưa cập nhật.
+  (`C:\Dev\pc2_test_runs\2026-11-06_audit_0611`). Review độc lập: 0 P1, 2 P2 và 5 P3 ở hook/đệm/test, đã sửa hết.
+- Gộp PR #24 + cập nhật DEV: trước khi tắt, tiến trình thật không có con, ghi 0 B trong 30 s, 26 khoá không bị giữ, hàng đợi Sheets 584 SENT.
+  Sau cập nhật: health ok, đủ 7 tab, console 0 lỗi, dữ liệu không đổi. Đề xuất `CURRENT_STATE.md` (PC1 sửa): integration = `256e848`, PC1 chưa review.
 ### 2026-11-06 — gộp D-31 (PR #23) và cập nhật DEV 8502
 - Người dùng duyệt gộp + cập nhật DEV. Test lại đúng `73c5734`: nhanh 3394 = 3390/4/0, chậm 22/22, ruff sạch (`…\2026-11-06_dung_kho_ram\gop_73c5734`).
 - Trước khi tắt DEV: không tiến trình con, không ghi mới, `tool.lock` rảnh, ghi 0 B trong 15 s, hàng đợi Sheets 584 SENT. Smoke: health ok,
