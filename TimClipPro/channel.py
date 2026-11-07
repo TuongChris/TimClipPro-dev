@@ -1454,6 +1454,8 @@ class ChannelSync:
               "canh_bao_cookie": THONG_BAO_HAI_NGUON_COOKIE if self.cau_hinh_mang.hai_nguon_cookie else ""}
         # Cờ huỷ của CẢ lượt sync, để lệnh nén FFmpeg đang chạy cũng dừng được.
         self._huy_luot_sync = _CoHuyTuHam(cancel_check)
+        # Tạo mới mỗi lượt: lượt trước chết giữa chừng thì cổng còn bị giữ, vì chỉ `xong_mot` nhả cổng.
+        self._cong_nen = threading.Semaphore(1)
         ngu_canh = self._ngu_canh_dang_nhap()
         han_che_moi: dict = {}         # video gặp giới hạn tuổi / hội viên ở lượt này → ghi sổ
         da_tai_luot_nay: set = set()   # video tải xong ở lượt này → gỡ khỏi sổ nếu có
@@ -1486,14 +1488,17 @@ class ChannelSync:
                         self._da_cach_ly.append(ten)
                     except OSError as e:
                         loi.append(f"Không chuyển được {ten} vào {THU_MUC_HONG}: {e}")
+            thieu_so: set = set()
             try:
                 kq["da_doi_soat"] = self._doi_soat(tep["can_doi_soat"])
                 # Đứt giữa metadata và sổ: file đã có dấu nên không vào đối soát, phải bù sổ ở đây.
-                self._mark_done_nhieu(sorted(set(tep["hop_le"]) - set(tep["can_doi_soat"])))
+                thieu_so = set(tep["hop_le"]) - set(tep["can_doi_soat"]) - self.done_ids()
+                if thieu_so:
+                    self._mark_done_nhieu(sorted(thieu_so))
             except Exception as e:  # noqa: BLE001 — không được chặn cả lượt tải
-                kq["so_loi_doi_soat"] = len(tep["can_doi_soat"])
-                loi.append(f"Không đối soát được metadata tại chỗ cho "
-                           f"{len(tep['can_doi_soat'])} file có sẵn: {e}")
+                kq["so_loi_doi_soat"] = len(tep["can_doi_soat"]) or len(thieu_so)
+                loi.append(f"Không đối soát được metadata và sổ đã tải tại chỗ cho "
+                           f"{kq['so_loi_doi_soat']} file có sẵn: {e}")
             hop_le = set(tep["hop_le"])
             chi_trong_so = self._ma_chi_trong_so(tep)
             da_co = hop_le | chi_trong_so
@@ -1663,7 +1668,7 @@ class ChannelSync:
                 os.rmdir(self.tmp_goc)          # chỉ xoá được khi đã rỗng
         bao(1.0, {DONG_BO_DAY_DU: "Đồng bộ xong.",
                   DONG_BO_MOT_PHAN: f"Đồng bộ xong MỘT PHẦN: {kq['so_loi']} video lỗi, {kq['han_che_bo_qua']} video "
-                                    f"bị hạn chế chưa tải, {kq['so_loi_doi_soat']} file chưa ghi được metadata, "
+                                    f"bị hạn chế chưa tải, {kq['so_loi_doi_soat']} file chưa ghi đủ metadata và sổ đã tải, "
                                     "lượt sau làm tiếp.",
                   DONG_BO_BI_CHAN: f"Đồng bộ DỪNG giữa chừng: {kq['chua_thu']} video chưa thử.",
                   DONG_BO_DA_HUY: "Đã dừng đồng bộ theo yêu cầu."}[kq["trang_thai"]])

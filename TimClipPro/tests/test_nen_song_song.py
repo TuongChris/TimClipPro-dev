@@ -460,8 +460,49 @@ def test_doi_soat_hong_khong_duoc_bao_day_du(tmp_path):
     assert kq["trang_thai"] == channel.DONG_BO_MOT_PHAN
     assert so_lan_tai == [], "file âm thanh vẫn tốt, chỉ cần đối soát lại ở lượt sau"
     assert any("metadata" in d for d in kq["loi"])
-    assert "1 file chưa ghi được metadata" in bao[-1]
+    assert "1 file chưa ghi đủ metadata" in bao[-1]
     assert any("1 file đã có trong kho" in cau for _, cau in tom_tat_dong_bo_kenh(kq))
+
+
+def test_bu_so_hong_khong_duoc_bao_day_du(tmp_path):
+    cs, tao, so_lan_tai = _kho_mot_file_that(tmp_path)
+    with open(cs.archive, "w", encoding="utf-8"):
+        pass
+    moi = tao()
+
+    def hong(_):
+        raise PermissionError("giả: sổ chỉ đọc")
+
+    moi._mark_done_nhieu = hong
+    kq = _chay(moi)
+
+    assert kq["trang_thai"] == channel.DONG_BO_MOT_PHAN
+    assert kq["so_loi_doi_soat"] == 1
+    assert so_lan_tai == []
+
+
+def test_luot_truoc_chet_giua_chung_khong_de_lai_cong_nen_khoa(tmp_path):
+    """Báo tiến độ lỗi khi video 1 đang giữ cổng: lượt sau trên cùng đối tượng vẫn phải nén được."""
+    cs, gia = _kenh(tmp_path, 2)
+
+    def bao_hong(_p, m):
+        if str(m).startswith("[2/"):
+            raise RuntimeError("giả: báo tiến độ lỗi")
+
+    with pytest.raises(RuntimeError, match="giả"):
+        cs.sync("kenh", progress=bao_hong)
+
+    huy = threading.Event()
+    ra: dict = {}
+    t = threading.Thread(target=lambda: ra.update(cs.sync("kenh", cancel_check=huy.is_set)), daemon=True)
+    t.start()
+    t.join(CHO)
+    treo = t.is_alive()
+    huy.set()
+    t.join(CHO)
+
+    assert not treo, "lượt sau chờ cổng do lượt trước để lại"
+    assert not ra["da_huy"] and not ra["loi"], ra["loi"]
 
 
 def test_chay_lai_tren_cung_doi_tuong_van_nen_mot_luong(tmp_path):
