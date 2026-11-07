@@ -63,6 +63,7 @@ from scan_ui import (
     tom_tat_dong_bo_kenh,
     tom_tat_tao_van_tay,
 )
+import channel
 from channel import ChannelSync
 from tien_do_dong_bo import SoDongBo
 from ui_tien_do_dong_bo import dong_hieu_suat, ve_tien_do_dong_bo
@@ -1412,6 +1413,20 @@ with tab0:
     st.session_state.kho_dir = st.text_input(
         "Thư mục kho clip gốc (ổ D, E... tùy bạn)", st.session_state.kho_dir,
         placeholder=r"D:\KhoClipGoc")
+    _thu_muc_dong_bo = st.session_state.kho_dir.strip('" ')
+    if _thu_muc_dong_bo and os.path.isdir(_thu_muc_dong_bo):
+        _kho_dai = channel.la_kho_video_dai(_thu_muc_dong_bo)
+        _bat_dai = st.checkbox(
+            f"Kho video dài (nhận video tới {channel.GIAY_CLIP_TOI_DA_KHO_DAI // 3600} giờ)",
+            value=_kho_dai, key=f"kho_video_dai_{_thu_muc_dong_bo}", disabled=dang_dong_bo(),
+            help=f"Áp dụng riêng cho thư mục này; thư mục khác vẫn giới hạn {channel.GIO_CLIP_TOI_DA} giờ. Kho video dài "
+                 "báo đúng vị trí trong video gốc dài, tối đa 2.047 clip, RAM khoảng 1,5 GB mỗi giờ âm thanh. Kho đã có "
+                 "vân tay trước khi bật phải «Tạo lại từ đầu».")
+        if _bat_dai != _kho_dai:
+            try:
+                channel.dat_kho_video_dai(_thu_muc_dong_bo, _bat_dai)
+            except OSError as e:
+                st.error(f"Không đổi được thiết lập kho video dài: {e}")
 
     c1, c2 = st.columns([1, 1])
     with c1:
@@ -1506,7 +1521,7 @@ with tab0:
                                    + "\n- ".join(f"{thoat_markdown(v.title[:60])} ({v.id})"
                                                        for v in trong_so[:10]))
                     if r.get("qua_dai"):
-                        st.info(CAU_QUA_DAI.format(n=len(r["qua_dai"])))
+                        st.info(CAU_QUA_DAI.format(n=len(r["qua_dai"]), gio=r["gio_toi_da"]))
                     if r.get("nghi_hong"):
                         st.warning(
                             f"{len(r['nghi_hong'])} file nghi hỏng/nén dở được tính là còn "

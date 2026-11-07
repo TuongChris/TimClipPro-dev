@@ -237,6 +237,8 @@ Cần nói rõ điều này **KHÔNG** làm hỏng: smoke test 6/6 trích đoạ
 kể cả trích đoạn lấy từ giây 2122 của clip 155 phút. Việc **phát hiện** vẫn chạy; thứ sai
 là **mốc thời gian báo cáo** trong clip gốc.
 
+Cập nhật D-34 (07/11/2026): kho đánh dấu «Kho video dài» dùng `maxtimebits=21` (13,5 giờ, 2.047 clip). Các kho còn lại giữ 16.
+
 Nếu sau này muốn sửa: `maxtimebits=18` đưa giới hạn lên 101,4 phút (còn 3 clip vượt,
 0,20% âm thanh, sức chứa 16.383 clip/kho); `=19` lên 202,9 phút (0 clip vượt, sức chứa
 8.191 clip/kho). **Đổi đồng nghĩa phải dựng lại kho** — nên thời điểm rẻ nhất luôn là

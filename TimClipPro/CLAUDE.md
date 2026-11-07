@@ -95,6 +95,7 @@ Sắp sửa một file của vùng mà rule chưa có trong ngữ cảnh → đ�
 
 - `clip_bat_dau_s`: thời điểm **clip bắt đầu** trong video dài; dùng để hiển thị và tạo link
   nhảy mốc. `start_s` mang cùng ý nghĩa này.
+  Kho video dài (D-34): cả hai bằng `vung_khop_s`, vì đoạn lấy từ giữa video gốc nhiều giờ không có «đầu clip» trong video.
 - `vung_khop_s`: thời điểm **vùng vân tay bắt đầu khớp**, không phải đầu clip.
 - `clip_offset_s`: độ dài phần đầu clip gốc đã bị bỏ qua trước khi vùng khớp bắt đầu.
 

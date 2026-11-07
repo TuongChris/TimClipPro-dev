@@ -156,7 +156,7 @@ CAU_TRONG_SO_KHONG_FILE = (
     "đừng dựng lại (sẽ tải trùng).")
 
 
-CAU_QUA_DAI = f"{{n}} video dài hơn {GIO_CLIP_TOI_DA} giờ được bỏ qua, không tải về (quy tắc của tool, không phải lỗi)."
+CAU_QUA_DAI = "{n} video dài hơn {gio} giờ được bỏ qua, không tải về (quy tắc của tool, không phải lỗi)."
 
 
 def tom_tat_dong_bo_kenh(r: Mapping[str, Any]) -> list:
@@ -196,7 +196,7 @@ def tom_tat_dong_bo_kenh(r: Mapping[str, Any]) -> list:
     if trong_so:
         ra.append(("warning", CAU_TRONG_SO_KHONG_FILE.format(n=trong_so)))
     if r.get("qua_dai"):
-        ra.append(("info", CAU_QUA_DAI.format(n=r["qua_dai"])))
+        ra.append(("info", CAU_QUA_DAI.format(n=r["qua_dai"], gio=r.get("gio_toi_da", GIO_CLIP_TOI_DA))))
     xt = r.get("xac_thuc") or {}
     if xt.get("cau"):
         ra.append((_MUC_DANG_NHAP.get(xt.get("trang_thai", ""), "info"), f"Đăng nhập YouTube: {xt['cau']}"))

@@ -15,6 +15,19 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-34 Kho video dài theo từng thư mục (người dùng, 2026-11-07) — nới D-31 cho thư mục được đánh dấu
+Quyết định: kênh Joe Bart VODs có gần 900 video, phần lớn dài hơn 2 giờ, người dùng cần đồng bộ cả các video đó. Ô «Kho video dài» ở tab
+Đồng bộ ghi file dấu `.kho_video_dai` vào THƯ MỤC kho (đồng bộ chỉ biết thư mục, có thể chạy trước khi kho được đăng ký). Thư mục có dấu:
+đồng bộ và tạo vân tay nhận video tới 13 giờ; «Tạo lại từ đầu» dùng `--maxtimebits 21` (mốc đúng tới 13,5 giờ, tối đa 2.047 clip), ghi
+`maxtimebits` vào sổ kho; báo cáo lấy `start_s` = vùng khớp thật ở `_gan_chi_so`, không sửa `_merge`. Thư mục không dấu giữ D-31 và 16 bit.
+Vì sao: chỉ nới 2 giờ thì đo video 6 giờ tìm đúng 8/8 nhưng đúng vị trí 1/8; 20 bit đúng 8/8, RAM như cũ, tốc độ so khớp trên bảng cỡ thật
+không đổi (20 bit 29–31 giây, 21 bit 29–30 giây, 16 bit 28–30 giây). `_merge` tính mốc ĐẦU CLIP nên đoạn giữa video gốc dài bị báo từ 00:00:00. Chia khúc 25 phút cũng đúng
+nhưng phải thêm ánh xạ khúc → video và vẫn vỡ đoạn dài. Chốt: «Bổ sung» vào kho 16 bit bị chặn (mốc lưu cố định lúc tạo); vượt sức chứa
+clip bị chặn (mã clip tràn sang phần mốc trong ô 32 bit, không có lỗi nào). Video trên 13 giờ vẫn bỏ qua có báo: RAM ~1,5 GB/giờ, 13 giờ ~20 GB.
+Bảng 104,8 triệu ô, ~185.000 hash/giờ âm thanh: kênh lớn dựng theo đợt (`Chỉ lấy N video mới nhất`), không dồn hết vào một kho.
+Chưa làm: chọn lọc Top-N trong kho video dài vẫn theo `ty_le` (phần trăm clip), clip càng dài tỉ lệ càng nhỏ. Bằng chứng: `tests/test_kho_video_dai.py`,
+`C:\Dev\pc2_test_runs\2026-11-07_clip_dai\ket_qua.json`.
+
 ## D-33 Dựng kho nhường ổ cứng cho việc khác (người dùng, 2026-11-06) — thêm vào D-31
 Quyết định: runner dựng kho đặt `IOPRIO_LOW` cùng Below Normal, worker và FFmpeg thừa hưởng; lượt quét không đổi. Hai chốt thời
 gian đổi theo: FFmpeg im 300 giây mới là treo (`CHO_FFMPEG_S`, thư viện 10 giây, không sửa vendored), `CHO_WORKER_S` hết hạn mà CPU/I-O

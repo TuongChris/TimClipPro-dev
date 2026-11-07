@@ -3197,7 +3197,8 @@ class Engine:
     def _ghi_phien_ban_sau_cong_bo(self, *, shifts_kho: int,
                                    cap_nhat_shifts: bool,
                                    moc_build: Optional[float] = None,
-                                   thu_muc: Optional[str] = None) -> list:
+                                   thu_muc: Optional[str] = None,
+                                   maxtimebits: Optional[int] = None) -> list:
         """Sau khi thay file kho: phiên bản mới (+ id bền, shifts, mốc bắt đầu build) trong
         sổ đăng ký; ``thu_muc`` (chỉ «Tạo lại kho từ đầu») = thư mục nguồn MỚI, ghi cùng một
         lần sửa sổ — sổ chỉ đổi nguồn khi file kho đã chứa vân tay của nguồn đó (audit C-2).
@@ -3219,6 +3220,8 @@ class Engine:
                         k["shifts"] = shifts_kho
                     if moc_build:
                         k["moc_build"] = round(float(moc_build), 3)
+                    if maxtimebits:
+                        k["maxtimebits"] = maxtimebits
                     if moi is not None:
                         k["thu_muc"] = moi
                     break
@@ -3298,6 +3301,16 @@ class Engine:
             if kho_hien_tai:
                 shifts_da_luu = max(0, int(kho_hien_tai.get("shifts", 0) or 0))
 
+        kho_dai = channel.la_kho_video_dai(thumuc)
+        bits_kho = channel.MAXTIMEBITS_KHO_DAI if kho_dai else channel.MAXTIMEBITS_MAC_DINH
+        # Bit cố định lúc tạo kho: «Bổ sung» giữ bit của file kho, không theo ô đánh dấu. Thêm clip dài vào kho 16 bit
+        # thì mốc vẫn cuộn sau 25,4 phút (D-34).
+        bits_that = self._bits_kho_dang_dung() if db_da_ton_tai and mode != "new" else bits_kho
+        if kho_dai and bits_that != bits_kho:
+            raise RuntimeError(
+                "Kho này có vân tay từ trước khi bật «Kho video dài», nên chưa lưu được mốc thời gian dài. "
+                "Hãy dùng «Tạo lại từ đầu» thay cho «Bổ sung».")
+
         canh_bao = []
         if db_da_ton_tai and mode != "new" and shifts_da_luu != shifts_kho:
             canh_bao.append(
@@ -3348,7 +3361,8 @@ class Engine:
                 can_xu_ly.append(path)
         # Clip quá dài không tạo vân tay (D-31). Clip đang được LÀM MỚI vẫn xử lý: vân tay cũ của nó sắp bị gỡ, bỏ qua
         # ở đây là mất luôn clip khỏi kho.
-        qua_dai = channel.loc_file_qua_dai(p for p in can_xu_ly if self._khoa_duong_dan(p) not in lam_moi)
+        tran_giay = channel.tran_clip_giay(thumuc)
+        qua_dai = channel.loc_file_qua_dai((p for p in can_xu_ly if self._khoa_duong_dan(p) not in lam_moi), tran_giay)
         if qua_dai:
             can_xu_ly = [p for p in can_xu_ly if p not in qua_dai]
             files = [p for p in files if p not in qua_dai]
@@ -3356,8 +3370,13 @@ class Engine:
             tracker.set_files(files)
             ten_dai = sorted(os.path.basename(p) for p in qua_dai)
             canh_bao.append(
-                f"Bỏ qua {len(qua_dai)} clip dài hơn {channel.GIO_CLIP_TOI_DA} giờ, không tạo vân tay (file vẫn giữ "
+                f"Bỏ qua {len(qua_dai)} clip dài hơn {tran_giay // 3600} giờ, không tạo vân tay (file vẫn giữ "
                 f"nguyên): {', '.join(ten_dai[:10])}" + (f" … (+{len(ten_dai) - 10})" if len(ten_dai) > 10 else "") + ".")
+        # Vượt sức chứa thì mã clip tràn sang phần mốc trong ô 32 bit: kho hỏng mà không có lỗi nào.
+        suc_chua = (1 << (32 - bits_that)) - 1
+        if len(files) > suc_chua:
+            raise RuntimeError(
+                f"Kho này chứa tối đa {suc_chua} clip nhưng thư mục có {len(files)} clip. Hãy chia thành nhiều kho.")
         # Clip có vân tay mà file đã VẮNG khỏi thư mục nguồn (phản biện vòng 2 + 3):
         # * có bản cách ly trong `_hong/` của ĐÚNG thư mục chứa nó → ứng viên gỡ, nhưng chỉ
         #   gỡ khi bản THAY THẾ cùng mã video có vân tay trong kho tạm (kiểm sau bước
@@ -3547,8 +3566,8 @@ class Engine:
             except OSError:
                 pass
 
-        # --maxtimebits 16: cho phép clip gốc dài tới ~25 phút vẫn định vị đúng mốc thời gian
-        tham_so = ["--maxtimebits", "16"]
+        # --maxtimebits: kho thường định vị đúng tới ~25 phút, kho video dài tới 13,5 giờ (chỉ có tác dụng khi tạo mới)
+        tham_so = ["--maxtimebits", str(bits_kho)]
         if shifts_kho > 0:
             tham_so.extend(["--shifts", str(shifts_kho)])
         tham_so.extend(["--list", listfile])
@@ -3666,6 +3685,7 @@ class Engine:
             cap_nhat_shifts=sub == "new" or shifts_da_luu == shifts_kho,
             moc_build=bat_dau_build,
             thu_muc=thumuc if mode == "new" else None,
+            maxtimebits=bits_kho if sub == "new" else None,
         ))
 
         canh_bao.extend(self._cap_nhat_snapshot_sau_build(mode, thumuc.strip('" ') if mode == "new" else None))
@@ -4760,13 +4780,30 @@ class Engine:
         p = start_s / duration
         return "Đầu" if p < 1 / 3 else ("Giữa" if p < 2 / 3 else "Cuối")
 
+    def _bits_kho_dang_dung(self) -> int:
+        """Bit mốc thời gian của kho đang dùng, theo sổ đăng ký; kho dựng trước D-34 luôn là 16."""
+        if not self.kho_dang_dung:
+            return channel.MAXTIMEBITS_MAC_DINH
+        k = next((x for x in self._doc_khos()["danh_sach"] if x["ten"] == self.kho_dang_dung), None) or {}
+        return int(k.get("maxtimebits") or channel.MAXTIMEBITS_MAC_DINH)
+
+    def _kho_moc_dai(self) -> bool:
+        try:
+            return self._bits_kho_dang_dung() > channel.MAXTIMEBITS_MAC_DINH
+        except Exception:  # noqa: BLE001 — sổ lỗi: giữ cách báo cũ, không làm hỏng lượt quét
+            return False
+
     def _gan_chi_so(self, ds: list, duration: float) -> None:
         """Tính tỷ lệ vân tay khớp (%) và vùng vị trí cho từng kết quả."""
         try:
             bang = self._bang_tong_hash()
         except Exception:  # noqa: BLE001 — kho lỗi: ty_le = 0 như cũ, không làm hỏng lượt quét
             bang = ({}, {}, {})
+        kho_dai = self._kho_moc_dai()
         for m in ds:
+            if kho_dai:
+                # `_merge` tính mốc đầu CLIP: đoạn lấy từ giữa video gốc 5 giờ sẽ thành 00:00:00 (D-34).
+                m.start_s = m.clip_bat_dau_s = m.vung_khop_s
             # Mẫu số theo ĐÚNG bản ghi đã khớp, không theo bản cùng tên ở thư mục khác (audit A-1).
             goc = self._tra_tong_hash(bang, getattr(m, "duong_dan_kho", ""), m.clip) or 0
             m.ty_le = min(100.0, round(100.0 * m.hashes / goc, 1)) if goc else 0.0
