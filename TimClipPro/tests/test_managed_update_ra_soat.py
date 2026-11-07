@@ -13,6 +13,7 @@ mã trước khi sửa:
 import os
 import shutil
 import subprocess
+import zipfile
 
 import pytest
 
@@ -610,3 +611,135 @@ def test_ban_cho_duyet_bi_rut_khoi_feed_khong_lam_capnhat_dung_loi(mt):
     shutil.rmtree(os.path.join(mt["nguon"], "stable-1.1.0"))
     assert mt["tao"]().chuan_bi().trang_thai == mu.KHONG_CO
     assert mt["tao"]().ap_dung().trang_thai == mu.KHONG_CO
+
+
+# ---------------------------------------------------------------- audit số 14: kẽ hở tìm bằng đột biến (xoá chốt thì
+# test cũ vẫn xanh)
+
+def _chet_tai(diem):
+    def chet(ten):
+        if ten == diem:
+            raise mu.MatDien(ten)
+
+    return chet
+
+
+def test_khoi_phuc_con_viec_chay_khong_kiem_health_tam_ve_ban_truoc(mt):
+    """Test cài lần đầu không đi qua nhánh này: đã có bản trước thì còn việc chạy = chưa được chốt bản mới."""
+    _cai(mt, "1.0.0")
+    phat_hanh(mt["nguon"], "1.1.0", mt["khoa"])
+    cn = mt["tao"](diem_dung=_chet_tai("POINTER_SWITCHED"))
+    assert cn.chuan_bi().trang_thai == mu.STAGED
+    with pytest.raises(mu.MatDien):
+        cn.ap_dung()
+    assert _hien(mt) == "1.1.0"
+    truoc = _so(mt, "kiem_suc_khoe")
+    with mg.CongBaoTri(mt["cd"].data_dir).viec("lô quét đang chạy"):
+        cn2 = mt["tao"]()
+        assert cn2.phuc_hoi() == mu.STAGED
+    assert _hien(mt) == "1.0.0" and _so(mt, "kiem_suc_khoe") == truoc
+    assert not cn2.cach_ly()
+
+
+def test_chet_giua_quay_lai_khoi_phuc_hoan_tat_quay_lai_va_cach_ly(mt):
+    _cai(mt, "1.0.0")
+    phat_hanh(mt["nguon"], "1.1.0", mt["khoa"])
+    mt["gia"].suc_khoe["kich_hoat"] = False
+    cn = mt["tao"](diem_dung=_chet_tai(mu.ROLLBACK))
+    assert cn.chuan_bi().trang_thai == mu.STAGED
+    with pytest.raises(mu.MatDien):
+        cn.ap_dung()
+    mt["gia"].suc_khoe["kich_hoat"] = True               # health lần này đạt cũng không cứu được bản đã bị từ chối
+    cn2 = mt["tao"]()
+    assert cn2.phuc_hoi() == mu.QUARANTINED
+    assert _hien(mt) == "1.0.0" and cn2.last_good()["phien_ban"] == "1.0.0"
+    assert "1.1.0" in cn2.cach_ly()
+
+
+def test_mat_dau_san_sang_runtime_ung_vien_truoc_ap_dung_khong_doi_con_tro(mt):
+    _cai(mt, "1.0.0")
+    phat_hanh(mt["nguon"], "1.1.0", mt["khoa"], sua_manifest=RUNTIME_MOI)
+    cn = mt["tao"]()
+    assert cn.chuan_bi().trang_thai == mu.STAGED
+    os.remove(os.path.join(cn.nk.doc()["con_tro_moi"]["runtime"], mu.TEN_SAN_SANG))
+    truoc = _so(mt, "sao_luu"), _so(mt, "kiem_suc_khoe")
+    assert cn.ap_dung().trang_thai == mu.LOI
+    assert _hien(mt) == "1.0.0" and (_so(mt, "sao_luu"), _so(mt, "kiem_suc_khoe")) == truoc
+
+
+def test_manifest_ky_dung_khac_nen_tang_bi_cach_ly(mt):
+    """Ca linux_x86_64 cũ dừng ở «Tên gói»: phải có tên gói khớp nền tảng lạ mới tới được chốt nền tảng."""
+    ten = "TimClipPro-1.0.0-linux_x86_64.zip"
+    phat_hanh(mt["nguon"], "1.0.0", mt["khoa"], sua_manifest=dict(nen_tang="linux_x86_64", goi={"ten": ten}))
+    cn = mt["tao"]()
+    assert cn.kiem_tra().trang_thai == mu.KHONG_CO
+    assert "nền tảng này" in cn.cach_ly()["1.0.0"]["ly_do"]
+
+
+def test_khoa_tin_cay_key_id_khong_khop_bi_tu_choi(tmp_path):
+    path = KhoaThu().ghi_tin_cay(str(tmp_path / "trusted_keys.json"))
+    d = mu.doc_json(path)
+    d["khoa"][0]["key_id"] = "0" * 16
+    mu.ghi_json_nguyen_tu(path, d)
+    with pytest.raises(mu.LoiCapNhat) as loi:
+        mu.doc_khoa_tin_cay(path)
+    assert loi.value.ma == "khoa_tin_cay" and "key_id" in str(loi.value)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="junction chỉ có trên Windows")
+def test_cay_release_chua_junction_bi_tu_choi(mt):
+    _cai(mt, "1.0.0")
+    rel = mt["cd"].release_dir("1.0.0")
+    with open(os.path.join(rel, mu.TEN_MANIFEST), "rb") as f:
+        m = mu.doc_manifest(f.read())
+    mu.kiem_cay_release(rel, m)                          # cây lành thì đạt: lỗi dưới đây chỉ do junction
+    dich = os.path.join(str(mt["tmp"]), "ngoai_release")
+    os.makedirs(dich)
+    junction = os.path.join(rel, "TimClipPro", "lien_ket")
+    subprocess.run(["cmd", "/c", "mklink", "/J", junction, dich], check=True, capture_output=True)
+    try:
+        with pytest.raises(mu.TuChoiGoi) as loi:
+            mu.kiem_cay_release(rel, m)
+        assert loi.value.ma == "zip_symlink"
+    finally:
+        os.rmdir(junction)
+
+
+def test_zip_co_muc_ma_hoa_bi_tu_choi(tmp_path):
+    goi, dich = tmp_path / "goi.zip", tmp_path / "dich"
+    with zipfile.ZipFile(goi, "w", zipfile.ZIP_STORED) as z:
+        z.writestr("a.txt", b"noi dung")
+    raw = bytearray(goi.read_bytes())
+    raw[6] |= 1                                          # cờ mã hoá ở header cục bộ
+    raw[raw.index(b"PK\x01\x02") + 8] |= 1               # và ở thư mục trung tâm (zipfile đọc cờ ở đây)
+    goi.write_bytes(raw)
+    with pytest.raises(mu.TuChoiGoi) as loi:
+        mu.giai_nen_an_toan(str(goi), str(dich))
+    assert loi.value.ma == "zip" and "mã hoá" in str(loi.value)
+    assert not dich.exists()
+
+
+def test_runtime_id_thoat_khoi_environments_bi_cach_ly_truoc_khi_tao(mt):
+    phat_hanh(mt["nguon"], "1.0.0", mt["khoa"], sua_manifest=dict(runtime={"runtime_id": "../escaped-runtime"}))
+    goi = []
+    cn = mt["tao"](tao_moi_truong=lambda m, rel, rt: goi.append(rt))
+    assert cn.chuan_bi().trang_thai == mu.KHONG_CO
+    assert "Mã runtime" in cn.cach_ly()["1.0.0"]["ly_do"] and goi == []
+
+
+def test_zip_qua_so_file_bi_tu_choi_khong_giai_nen(tmp_path):
+    goi, dich = tmp_path / "goi.zip", tmp_path / "dich"
+    with zipfile.ZipFile(goi, "w") as z:
+        for ten in ("a.txt", "b.txt", "c.txt"):
+            z.writestr(ten, b"")
+    with pytest.raises(mu.TuChoiGoi) as loi:
+        mu.giai_nen_an_toan(str(goi), str(dich), gioi_han_so_file=2)
+    assert loi.value.ma == "zip" and "quá nhiều file" in str(loi.value)
+    assert not dich.exists()
+
+
+def test_manifest_khai_goi_vuot_tran_bi_cach_ly_khong_tai(mt):
+    phat_hanh(mt["nguon"], "1.0.0", mt["khoa"], sua_manifest=dict(goi={"kich_thuoc": mu.GIOI_HAN_GOI + 1}))
+    cn = mt["tao"]()
+    assert cn.kiem_tra().trang_thai == mu.KHONG_CO
+    assert "Kích thước gói khai báo vượt giới hạn" in cn.cach_ly()["1.0.0"]["ly_do"]
