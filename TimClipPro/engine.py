@@ -1031,6 +1031,13 @@ def thu_muc_data_mac_dinh(root: Optional[str] = None) -> str:
     return runtime_paths.resolve(ma_nguon=goc).data_dir
 
 
+class DanhSachClip(list):
+    """Clip của MỘT file kho, kèm thông số của file đó từ cùng lần nạp (nạp lại kho tốn hàng trăm MB)."""
+
+    maxtimebits: Optional[int] = None   # Số bit mốc thời gian trong ô 32 bit; None = file không ghi
+    so_ma_clip: int = 0                 # ``len(names)``: gồm cả ô đã gỡ, nên có thể lớn hơn số clip
+
+
 class Engine:
     """Lõi xử lý. Không phụ thuộc vào bất kỳ giao diện nào."""
 
@@ -2132,7 +2139,9 @@ class Engine:
                 f"Không đọc được file vân tay {os.path.basename(path)}: "
                 "không phải kho audfprint."
             )
-        ds = []
+        ds = DanhSachClip()
+        ds.maxtimebits = getattr(ht, "maxtimebits", None)
+        ds.so_ma_clip = len(ten_ds)
         for i, ten in enumerate(ten_ds or []):
             if not ten:
                 continue
@@ -3303,13 +3312,6 @@ class Engine:
 
         kho_dai = channel.la_kho_video_dai(thumuc)
         bits_kho = channel.MAXTIMEBITS_KHO_DAI if kho_dai else channel.MAXTIMEBITS_MAC_DINH
-        # Bit cố định lúc tạo kho: «Bổ sung» giữ bit của file kho, không theo ô đánh dấu. Thêm clip dài vào kho 16 bit
-        # thì mốc vẫn cuộn sau 25,4 phút (D-34).
-        bits_that = self._bits_kho_dang_dung() if db_da_ton_tai and mode != "new" else bits_kho
-        if kho_dai and bits_that != bits_kho:
-            raise RuntimeError(
-                "Kho này có vân tay từ trước khi bật «Kho video dài», nên chưa lưu được mốc thời gian dài. "
-                "Hãy dùng «Tạo lại từ đầu» thay cho «Bổ sung».")
 
         canh_bao = []
         if db_da_ton_tai and mode != "new" and shifts_da_luu != shifts_kho:
@@ -3322,7 +3324,7 @@ class Engine:
         tong = len(files)
         # Clip HỮU ÍCH (có hash) của kho hiện tại: để bỏ qua khi bổ sung, và để kiểm
         # kho tạm không làm mất clip đang tốt trước khi thay (audit TCP-02).
-        ds_cu: list = []
+        ds_cu: list = DanhSachClip()
         if db_da_ton_tai:
             try:
                 ds_cu = self._doc_danh_sach_clip(self.db_file)
@@ -3333,6 +3335,14 @@ class Engine:
                         "kho này."
                     ) from e
                 canh_bao.append(f"{e}. Kho sẽ được tạo lại từ đầu.")
+
+        # Bit cố định lúc tạo kho: «Bổ sung» giữ bit của file kho, không theo ô đánh dấu. Thêm clip dài vào kho 16 bit
+        # thì mốc vẫn cuộn sau 25,4 phút (D-34).
+        bits_that = self._bits_kho_dang_dung(ds_cu) if db_da_ton_tai and mode != "new" else bits_kho
+        if kho_dai and bits_that != bits_kho:
+            raise RuntimeError(
+                "Kho này có vân tay từ trước khi bật «Kho video dài», nên chưa lưu được mốc thời gian dài. "
+                "Hãy dùng «Tạo lại từ đầu» thay cho «Bổ sung».")
 
         if mode == "add":
             if ds_cu:
@@ -3372,11 +3382,14 @@ class Engine:
             canh_bao.append(
                 f"Bỏ qua {len(qua_dai)} clip dài hơn {tran_giay // 3600} giờ, không tạo vân tay (file vẫn giữ "
                 f"nguyên): {', '.join(ten_dai[:10])}" + (f" … (+{len(ten_dai) - 10})" if len(ten_dai) > 10 else "") + ".")
-        # Vượt sức chứa thì mã clip tràn sang phần mốc trong ô 32 bit: kho hỏng mà không có lỗi nào.
+        # Vượt sức chứa thì mã clip tràn sang phần mốc trong ô 32 bit: kho hỏng mà không có lỗi nào. Đếm MÃ, không đếm
+        # file: `merge` cấp mã nối tiếp `names`, nên clip vắng file vẫn giữ mã và ô đã gỡ không được dùng lại.
         suc_chua = (1 << (32 - bits_that)) - 1
-        if len(files) > suc_chua:
+        so_ma = (ds_cu.so_ma_clip if mode != "new" else 0) + len(can_xu_ly)
+        if so_ma > suc_chua:
             raise RuntimeError(
-                f"Kho này chứa tối đa {suc_chua} clip nhưng thư mục có {len(files)} clip. Hãy chia thành nhiều kho.")
+                f"Kho này chứa tối đa {suc_chua} clip nhưng lần này cần {so_ma} mã clip (gồm mã của clip đã vắng file "
+                "hoặc đã gỡ, chỉ thu hồi khi «Tạo lại từ đầu»). Hãy tạo lại kho hoặc chia thành nhiều kho.")
         # Clip có vân tay mà file đã VẮNG khỏi thư mục nguồn (phản biện vòng 2 + 3):
         # * có bản cách ly trong `_hong/` của ĐÚNG thư mục chứa nó → ứng viên gỡ, nhưng chỉ
         #   gỡ khi bản THAY THẾ cùng mã video có vân tay trong kho tạm (kiểm sau bước
@@ -4780,8 +4793,12 @@ class Engine:
         p = start_s / duration
         return "Đầu" if p < 1 / 3 else ("Giữa" if p < 2 / 3 else "Cuối")
 
-    def _bits_kho_dang_dung(self) -> int:
-        """Bit mốc thời gian của kho đang dùng, theo sổ đăng ký; kho dựng trước D-34 luôn là 16."""
+    def _bits_kho_dang_dung(self, ds: Optional[list] = None) -> int:
+        """Bit mốc thời gian của kho đang dùng: theo chính file kho (``ds`` = danh sách đã đọc), vì ghi sổ đăng ký sau
+        công bố có thể lỗi. File không cho biết thì theo sổ; kho dựng trước D-34 luôn là 16."""
+        bits = getattr(self.db_clips() if ds is None else ds, "maxtimebits", None)
+        if bits:
+            return int(bits)
         if not self.kho_dang_dung:
             return channel.MAXTIMEBITS_MAC_DINH
         k = next((x for x in self._doc_khos()["danh_sach"] if x["ten"] == self.kho_dang_dung), None) or {}

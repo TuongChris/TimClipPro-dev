@@ -125,7 +125,7 @@ def _gia_audfprint(da_chay: list):
             with gzip.open(db, "rb") as f:
                 ht = pickle.load(f)
         else:
-            ht = hash_table.HashTable(hashbits=4, depth=2, maxtime=16)
+            ht = hash_table.HashTable(hashbits=4, depth=2, maxtime=1 << int(lenh[lenh.index("--maxtimebits") + 1]))
         for p in ds:
             ht.store(p, _cap(5))
             on_line("TIMCLIP_FINGERPRINT_EVENT "

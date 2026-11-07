@@ -6,8 +6,10 @@ báo cáo chỉ ra đúng vùng khớp. Kho không đánh dấu giữ nguyên qu
 """
 from __future__ import annotations
 
+import gzip
 import json
 import os
+import pickle
 
 import pytest
 from streamlit.testing.v1 import AppTest
@@ -17,7 +19,7 @@ from channel import ChannelSync
 from conftest import _ghi_wav, _giai_dieu
 from engine import Engine, Match, liet_ke_media
 from scan_ui import tom_tat_dong_bo_kenh
-from test_bo_clip_dai import GIO, _do_dai_gia, _engine, _gia_audfprint, _nguon, _video
+from test_bo_clip_dai import GIO, _do_dai_gia, _engine, _gia_audfprint, _nguon, _video, hash_table
 
 
 def _kenh_dai(tmp_path, *ds) -> ChannelSync:
@@ -226,6 +228,100 @@ def test_loi_doc_so_kho_khong_lam_hong_luot_quet(tmp_path):
               vung_khop_s=30.0)
     e._gan_chi_so([m], 100.0)
     assert m.start_s == 1.0
+
+
+def _kho_dai_ba_clip(tmp_path, monkeypatch, *ten) -> tuple:
+    """Kho sức chứa 3 clip đã dựng từ ``ten``: ``(engine, nguồn, lệnh đã chạy, clip đã xử lý)``."""
+    monkeypatch.setattr(channel, "MAXTIMEBITS_KHO_DAI", 30)
+    nguon = _nguon(tmp_path, *ten)
+    channel.dat_kho_video_dai(str(nguon), True)
+    _do_dai_gia(monkeypatch, {})
+    e = _engine(tmp_path)
+    e.add_kho("Dai", str(nguon))
+    da_chay: list = []
+    lenh = _bat_lenh(e, da_chay)
+    e.build_database(str(nguon), "new")
+    return e, nguon, lenh, da_chay
+
+
+def test_suc_chua_tinh_ca_clip_con_van_tay_ma_file_da_vang(tmp_path, monkeypatch):
+    """Clip vắng file vẫn giữ vân tay nên vẫn giữ mã: đếm file trong thư mục là thiếu, mã clip tràn."""
+    e, nguon, lenh, da_chay = _kho_dai_ba_clip(tmp_path, monkeypatch, "a.opus", "b.opus")
+    (nguon / "c.opus").write_bytes(b"x")
+    e.build_database(str(nguon), "add")  # 2 + 1 = vừa đúng sức chứa: vẫn được
+    assert da_chay[-1] == [str(nguon / "c.opus")]
+
+    (nguon / "c.opus").replace(tmp_path / "c.opus")
+    (nguon / "d.opus").write_bytes(b"x")
+
+    with pytest.raises(RuntimeError, match="tối đa 3 clip"):
+        e.build_database(str(nguon), "add")
+    assert len(lenh) == 2, "không được chạy audfprint"
+
+
+def test_merge_cap_ma_tu_do_dai_names_khong_dung_lai_o_da_go():
+    """Mọi lượt dựng đi qua `merge`: ô `None` sau `remove` vẫn tiêu hao mã clip tới lúc tạo lại kho."""
+    goc = hash_table.HashTable(hashbits=4, depth=2, maxtime=16)
+    goc.store("a", [(1, 1)])
+    goc.store("b", [(2, 2)])
+    goc.remove("b")
+    them = hash_table.HashTable(hashbits=4, depth=2, maxtime=16)
+    them.store("moi", [(3, 3)])
+
+    goc.merge(them)
+
+    assert goc.names == ["a", None, "moi"]
+
+
+def test_suc_chua_tinh_ca_o_da_go_trong_kho(tmp_path, monkeypatch):
+    e, nguon, lenh, _ = _kho_dai_ba_clip(tmp_path, monkeypatch, "a.opus", "b.opus", "c.opus")
+    with gzip.open(e.db_file, "rb") as f:
+        ht = pickle.load(f)
+    ht.remove(str(nguon / "c.opus"))
+    with gzip.open(e.db_file, "wb") as f:
+        pickle.dump(ht, f)
+    (nguon / "c.opus").unlink()
+    (nguon / "d.opus").write_bytes(b"x")
+
+    with pytest.raises(RuntimeError, match="tối đa 3 clip"):
+        e.build_database(str(nguon), "add")
+    assert len(lenh) == 1, "không được chạy audfprint"
+
+    # Câu lỗi khuyên «Tạo lại từ đầu»: lối thoát đó phải chạy được khi kho đã hết mã, và thu hồi ô đã gỡ.
+    e.build_database(str(nguon), "new")
+    assert e.db_clips(bo_cache=True).so_ma_clip == 3
+
+
+def test_ghi_so_loi_sau_cong_bo_van_theo_bit_that_cua_file_kho(tmp_path, monkeypatch):
+    """Kho đã thành 21 bit mà sổ còn ghi 16: mốc phải theo file kho, không được về 00:00:00."""
+    nguon = _nguon(tmp_path, "a.opus")
+    _do_dai_gia(monkeypatch, {})
+    e = _engine(tmp_path)
+    e.add_kho("Cu", str(nguon))
+    da_chay: list = []
+    _bat_lenh(e, da_chay)
+    e.build_database(str(nguon), "new")
+    channel.dat_kho_video_dai(str(nguon), True)
+    sua_that = e._sua_khos
+
+    def sua_loi(_ham):
+        raise OSError("synthetic: sổ đăng ký đang bị khoá")
+
+    e._sua_khos = sua_loi
+    kq = e.build_database(str(nguon), "new")
+    e._sua_khos = sua_that
+
+    assert any("sổ đăng ký" in c for c in kq["canh_bao"]), kq["canh_bao"]
+    assert e._doc_khos()["danh_sach"][0]["maxtimebits"] == channel.MAXTIMEBITS_MAC_DINH
+
+    ket_qua = e._merge([_dong_khop(900.0, 10800.0)])
+    e._gan_chi_so(ket_qua, 3600.0)
+    assert ket_qua[0].start_hhmmss == "00:15:00"
+
+    # «Bổ sung» cũng theo file kho: không từ chối oan một kho thật sự 21 bit.
+    (nguon / "b.opus").write_bytes(b"x")
+    e.build_database(str(nguon), "add")
+    assert da_chay[-1] == [str(nguon / "b.opus")]
 
 
 def test_giao_dien_bat_tat_kho_video_dai(tmp_path, monkeypatch):
