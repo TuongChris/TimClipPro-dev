@@ -43,11 +43,15 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
    test xfail strict); cập nhật `CURRENT_STATE.md` theo mục 26/10.
 7. Còn mở từ trước: đồng bộ tiếp kênh Joe → vân tay «Kho Joe» (tab «Kho clip gốc», không tạo kho mới); hồ sơ đích Sheets +
    binding khoá NGOÀI State Stable cho DEV; ruleset GitHub (`release/github/`, chưa bật); C7; nghiệm thu preview 8502.
-8. Kho Joe VODs (D-34): DEV lên `fd335dc` 07/11 10:13 (sao lưu `data_20261107_101343`). Lượt 150 video mới nhất chạy từ 10:14 (38 video/giờ).
-   Tiếp: đồng bộ xong → «Kho Joe VODs» «Tạo lại từ đầu» → quét thử. Cả kênh 3.845 giờ cần nhiều kho. DEV chưa có `don_dep`/`engine` đợt 3.
+8. Kho Joe VODs (D-34): DEV lên `fd335dc` 07/11 10:13. Lượt 150 video mới nhất chạy từ 10:14 (~30 video/giờ). Đồng bộ xong: DEV lên `integration/current`
+   (có audit đợt 3 + D-35) → «Kho Joe VODs» «Tạo lại từ đầu» (cần 15–20 GB RAM trống) → quét thử. Cả kênh 3.845 giờ cần nhiều kho.
 9. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-11-07 — đồng bộ nén song song (D-35, nhánh feature/pc2/nen-song-song)
+- Làm: video tải xong thì video kế tiếp tải ngay, video trước nén cùng lúc; tải một luồng, nén một luồng, ghi metadata + sổ đúng thứ tự.
+- Review độc lập: 1 lỗi (Ctrl+C ở CLI không dừng ngay), 2 lỗi hiển thị, 2 test yếu, đã sửa kèm test đỏ. Không thấy lỗi tranh chấp, treo khi Dừng hay mất file.
+- Test (chặn mạng, cp1252, venv CookieFix): số ở PR. Chưa chạy với YouTube thật: mức nhanh hơn ~40% vẫn là ước lượng.
 ### 2026-11-07 — audit số 15, 19, 20 + bỏ `kiem_sheet.py` (nhánh fix/pc2/audit-0611-dot3)
 - `kiem_thoi_luong` dùng `channel.do_dai_media` có trần; file tải dở mồ côi quá tuổi được dọn, vẫn giữ file có khoá tải; lỗi quét giới hạn 6 giờ ghi thời lượng video thật.
 - Test (chặn mạng, cp1252, venv CookieFix): nhanh 3477 = 3473/4/0, ruff sạch. Mỗi lỗi có test đỏ trước.
@@ -63,12 +67,4 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 - Gộp PR #26 (`f1237e2`), DEV 8502 cập nhật 07/11 00:51 (sao lưu `data_20261107_005116`, 354 file) sau khi lượt dựng Kho Joe Games của người dùng xong.
   Lượt đó chạy bản CŨ, 46 phút: 679 clip có vân tay, 82 clip > 2 giờ bị bỏ đúng quy tắc, audfprint báo 28,12% hash bị rơi (bảng đầy; Kho Joe 46%, Cory 22%, SML 4%).
 - Test (chặn mạng, cp1252, venv CookieFix) @ `34eb277`: nhanh 3460 = 3456/4/0, chậm 22/22, ruff sạch, đột biến 7/7 chết. `/ponytail-review`: không lỗi.
-### 2026-11-06 — sửa số 7–13 của audit toàn repo (nhánh fix/pc2/audit-0611-dot2)
-- Làm: hồ sơ không cộng đôi vùng chồng nhau; lưu cấu hình chỉ ghi khoá phiên này đổi; tab cũ theo thư mục nguồn mới; `Thread.start` lỗi không để
-  lại việc ma; lỗi đọc tạm không bị coi là file hỏng; hoàn tác ghi bản `sau_hoan_tac`; updater không báo ACTIVE khi không áp dụng gì. Mỗi lỗi có
-  test đỏ trước. `launcher.py` + `managed_update.py` chỉ có hiệu lực trên máy đã cài sau bootstrap lại.
-- Test (chặn mạng, cp1252, venv CookieFix) @ `79ded22`: nhanh 3455 = 3451/4/0, chậm 22/22, ruff sạch (`C:\Dev\pc2_test_runs\2026-11-06_audit_0611_dot2`).
-  Review độc lập: 2 P2 + 4 P3 trong chính bản sửa (lỗi đọc tạm lúc mở phiên chọn nhầm kho, xoá cấu hình), đã sửa kèm test đỏ.
-- Gộp PR #25 + cập nhật DEV: trước khi tắt, không tiến trình con, ghi 0 B trong 30 s, 26 khoá không bị giữ, Sheets 584 SENT. Sau cập nhật: health ok,
-  đủ 7 tab, console 0 lỗi, CLI `dich` đạt, dữ liệu không đổi. Đề xuất `CURRENT_STATE.md` (PC1 sửa): integration = `3d28ece`, PC1 chưa review.
-- Mục cũ hơn (2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
+- Mục cũ hơn (2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.

@@ -22,12 +22,14 @@ import math
 import os
 import re
 import shutil
+import threading
 import time
 import urllib.parse
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from collections import deque
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Callable, Iterable, Mapping, Optional
 
 from clip_metadata import (basename_compatible, extract_youtube_id, filename_fallback_parts,
@@ -329,14 +331,38 @@ class DaHuyDongBo(RuntimeError):
     """Người dùng bấm Dừng trong lúc đang tải/nén — dừng cả lượt, không phải lỗi video."""
 
 
+@dataclass
+class _ViecVideo:
+    """Một video trong đường ống tải → nén (D-35). ``tai_xong`` báo cho vòng chính được tải video kế tiếp."""
+    v: VideoInfo
+    tai_xong: threading.Event = field(default_factory=threading.Event)
+    tuong_lai: Optional[Future] = None
+    giu_cong_nen: bool = False
+
+
+@contextlib.contextmanager
+def _huy_khi_ra_giua_chung(cs: "ChannelSync", dang: deque):
+    """Vòng chính chết giữa chừng (Ctrl+C ở CLI): huỷ các video còn dở, nếu không lượt chờ chúng chạy hết và video đang
+    chờ cổng nén thì chờ mãi vì không còn ai nhả cổng."""
+    try:
+        yield
+    finally:
+        if dang:
+            cs._huy_luot_sync.dat()
+
+
 class _CoHuyTuHam:
     """Bọc ``cancel_check()`` thành đối tượng có ``is_set()`` cho helper process."""
 
     def __init__(self, ham: Optional[Callable[[], bool]]):
         self._ham = ham
+        self._da_dat = threading.Event()
+
+    def dat(self) -> None:
+        self._da_dat.set()
 
     def is_set(self) -> bool:
-        return bool(self._ham and self._ham())
+        return self._da_dat.is_set() or bool(self._ham and self._ham())
 
 
 def lam_sach_ten(s: str, max_len: int = 80) -> str:
@@ -463,6 +489,11 @@ class ChannelSync:
         # độ dài đó thay cho một lần FFprobe thứ hai trên CHÍNH file ấy (cùng kích thước + mtime = cùng nội dung).
         self._do_dai_vua_kiem: Optional[tuple] = None
         self._lan_kiem_cuoi: Optional[tuple] = None
+        # D-35: tải một luồng (cả lần tải lại ở bước nén), nén một luồng. Video trước giữ cổng nén tới khi vòng chính
+        # ghi xong metadata, nên `_lan_kiem_cuoi` và `_do_dai_vua_kiem` chỉ thuộc một video mỗi lúc.
+        self._khoa_luong_tai = threading.Lock()
+        self._cong_nen = threading.Semaphore(1)
+        self._viec_cua_luong = threading.local()
 
     # ---------- metadata ----------
 
@@ -1161,6 +1192,26 @@ class ChannelSync:
             os.path.normcase(ten))
         return self._da_xac_nhan(path, meta.get(khoa) if khoa else None, tham_chieu_s)
 
+    def _nhuong_lan_tai(self, cancel_event) -> None:
+        """Tải xong: cho video kế tiếp tải ngay, rồi chờ tới lượt nén. Ngoài đường ống của ``sync`` thì không làm gì."""
+        viec = getattr(self._viec_cua_luong, "viec", None)
+        if viec is None:
+            return
+        the = self.theo_doi.tach_video()
+        viec.tai_xong.set()
+        while not self._cong_nen.acquire(timeout=0.2):
+            if cancel_event is not None and cancel_event.is_set():
+                raise DaHuyDongBo("Đã huỷ theo yêu cầu trong lúc chờ nén.")
+        viec.giu_cong_nen = True
+        self.theo_doi.vao_lan_nen(the)
+
+    def _chay_viec(self, viec: _ViecVideo) -> tuple:
+        self._viec_cua_luong.viec = viec
+        try:
+            return self._tai_va_nen(viec.v)
+        finally:
+            self._viec_cua_luong.viec = None
+
     def _tai_va_nen(self, v: VideoInfo, cancel_event=None) -> tuple:
         """Tải bestaudio rồi nén sang opus mono.
 
@@ -1177,7 +1228,6 @@ class ChannelSync:
         """
         os.makedirs(self.tmp_dir, exist_ok=True)
         td = self.theo_doi
-        self._lan_kiem_cuoi = None
         # Huỷ được giữa chừng — khi TẢI (hook tiến độ) lẫn khi nén (FFmpeg dừng khi IM LẶNG quá lâu, audit TCP-15).
         if cancel_event is None:
             cancel_event = getattr(self, "_huy_luot_sync", None)
@@ -1190,17 +1240,20 @@ class ChannelSync:
             if cancel_event is not None and cancel_event.is_set():
                 raise DaHuyDongBo("Đã huỷ theo yêu cầu trong lúc tải.")
 
-        def tai_nguon(vid: str, thu_muc: str) -> tuple:
+        def tai_nguon(vid: str, thu_muc: str, lan_hai: bool = False) -> tuple:
             os.makedirs(thu_muc, exist_ok=True)
-            td.giai_doan(GD_TRICH_XUAT)
-            info = self._tai_thu_tung_client(v.url, dict(
-                format="ba/b",
-                outtmpl=os.path.join(thu_muc, "%(id)s.%(ext)s"),
-                # Số lần yt-dlp tự thử lại + nghỉ giữa chúng: bảng NGAN_SACH["download"].
-                noplaylist=True, continuedl=True,
-                # `hook_huy` cắt lượt tải khi bấm Dừng; `td.hook_tai` chỉ ĐO (byte, tốc độ, định dạng), không bao giờ ném.
-                progress_hooks=[hook_huy, td.hook_tai],
-            ))
+            if not lan_hai:
+                td.giai_doan(GD_TRICH_XUAT)
+            with self._khoa_luong_tai:
+                info = self._tai_thu_tung_client(v.url, dict(
+                    format="ba/b",
+                    outtmpl=os.path.join(thu_muc, "%(id)s.%(ext)s"),
+                    # Số lần yt-dlp tự thử lại + nghỉ giữa chúng: bảng NGAN_SACH["download"].
+                    noplaylist=True, continuedl=True,
+                    # `hook_huy` cắt lượt tải khi bấm Dừng; `td.hook_tai` chỉ ĐO (byte, tốc độ, định dạng), không ném.
+                    # Lần tải lại ở bước nén: làn tải đang là của video kế tiếp, không báo tiến độ vào đó (D-35).
+                    progress_hooks=[hook_huy] if lan_hai else [hook_huy, td.hook_tai],
+                ))
             tho = [os.path.join(thu_muc, f) for f in os.listdir(thu_muc)
                    if f.startswith(vid + ".") and not f.endswith((".part", ".ytdl"))
                    and not f.endswith(DUOI_DANG_NEN)]
@@ -1215,6 +1268,8 @@ class ChannelSync:
             return do_dai_luong_tieng(path) or do_dai_media(path)
 
         info, nguon = tai_nguon(v.id, self.tmp_dir)
+        self._nhuong_lan_tai(cancel_event)
+        self._lan_kiem_cuoi = None
         v = bo_sung_video_info(v, info if isinstance(info, Mapping) else None)
 
         dich = os.path.join(self.dest, self._ten_file(v))
@@ -1240,7 +1295,7 @@ class ChannelSync:
                 # đang giữ) và yt-dlp thấy file đích đã có thì KHÔNG tải lại — "lần tải thứ
                 # hai" khi đó chính là file cũ, và file cụt được đóng dấu "ngắn thật" (vòng 3).
                 _, nguon = tai_nguon(
-                    v.id, os.path.join(self.tmp_dir, f"lan2_{uuid.uuid4().hex[:8]}"))
+                    v.id, os.path.join(self.tmp_dir, f"lan2_{uuid.uuid4().hex[:8]}"), lan_hai=True)
                 do_dai_lai = do_dai_nguon_tieng(nguon)
                 ngan_that_su = (do_dai_lai is not None
                                 and abs(do_dai_lai - do_dai_nguon) <= DUNG_SAI_TAI_LAI_S)
@@ -1466,21 +1521,15 @@ class ChannelSync:
             td.ke_hoach(da_co=kq["bo_qua"], can_tai=kq["can_tai"], han_che_bo_qua=kq["han_che_bo_qua"],
                         se_thu=len(can_tai))
 
-            for i, v in enumerate(can_tai):
-                if cancel_check and cancel_check():
-                    kq["da_huy"] = True
-                    break
-                if self.phien.mo:
-                    # YouTube đã chặn (bot-check, 429, 403 lặp lại…): không tải tiếp hàng trăm
-                    # video còn lại. Kho giữ nguyên; lần đồng bộ sau tải tiếp phần còn thiếu.
-                    kq["chan_youtube"] = self.phien.thong_bao_dung()
-                    loi.append(f"{kq['chan_youtube']} Còn {len(can_tai) - i} video chưa tải.")
-                    break
-                bao(0.02 + 0.96 * i / max(1, len(can_tai)),
-                    f"[{i+1}/{len(can_tai)}] {v.title[:60]}")
-                td.video_bat_dau(i + 1, len(can_tai), v.id, v.title)
+            # Đường ống D-35: tải một video, nén video trước cùng lúc. Metadata, sổ đã tải và kết quả chỉ ghi ở luồng này,
+            # đúng thứ tự, nên phần sau `_tai_va_nen` giữ nguyên như khi chạy tuần tự.
+            dang: deque = deque()
+
+            def xong_mot() -> None:
+                viec = dang.popleft()
+                v = viec.v
                 try:
-                    f, v = self._tai_va_nen(v)
+                    f, v = viec.tuong_lai.result()
                     ngay = valid_upload_date(v.upload_date)
                     # Độ dài FFprobe vừa đo trên CHÍNH file này lúc kiểm (cùng kích thước + mtime) — không đo lần hai.
                     do_dai = self._do_dai_file_vua_dat(f)
@@ -1528,7 +1577,6 @@ class ChannelSync:
                                            f"{THU_MUC_HONG}: {e}")
                 except DaHuyDongBo:
                     kq["da_huy"] = True
-                    break
                 except Exception as e:  # noqa: BLE001
                     # giai_thich_loi: bỏ mã màu ANSI của yt-dlp (Streamlit hiện ra rác)
                     # và nói rõ trường hợp nào là YouTube chặn chứ không phải tool hỏng.
@@ -1548,6 +1596,39 @@ class ChannelSync:
                                              "tieu_de": v.title[:80]}
                     loi.append(f"{v.title[:40]}: "
                                f"{giai_thich_loi(e, self.cau_hinh_mang.co_cookie)}")
+                finally:
+                    if viec.giu_cong_nen:
+                        self._cong_nen.release()
+
+            with ThreadPoolExecutor(max_workers=2, thread_name_prefix="dong_bo_kenh") as tho, \
+                    _huy_khi_ra_giua_chung(self, dang):
+                for i, v in enumerate(can_tai):
+                    while len(dang) >= 2:
+                        xong_mot()
+                    if kq["da_huy"] or (cancel_check and cancel_check()):
+                        kq["da_huy"] = True
+                        break
+                    if self.phien.mo:
+                        # YouTube đã chặn (bot-check, 429, 403 lặp lại…): không tải tiếp hàng trăm
+                        # video còn lại. Kho giữ nguyên; lần đồng bộ sau tải tiếp phần còn thiếu.
+                        kq["chan_youtube"] = self.phien.thong_bao_dung()
+                        loi.append(f"{kq['chan_youtube']} Còn {len(can_tai) - i} video chưa tải.")
+                        break
+                    bao(0.02 + 0.96 * i / max(1, len(can_tai)),
+                        f"[{i+1}/{len(can_tai)}] {v.title[:60]}")
+                    td.video_bat_dau(i + 1, len(can_tai), v.id, v.title)
+                    viec = _ViecVideo(v)
+                    viec.tuong_lai = tho.submit(self._chay_viec, viec)
+                    dang.append(viec)
+                    while not viec.tai_xong.wait(0.1) and not viec.tuong_lai.done():
+                        if len(dang) > 1 and dang[0].tuong_lai.done():
+                            xong_mot()
+                    if not viec.tai_xong.is_set():
+                        # Tải hỏng: chốt theo đúng thứ tự trước khi sang video kế tiếp.
+                        while dang:
+                            xong_mot()
+                while dang:
+                    xong_mot()
             if self.phien.mo and not kq["chan_youtube"]:
                 # Cầu dao mở ở chính video cuối cùng: vẫn phải nói rõ cho người dùng.
                 kq["chan_youtube"] = self.phien.thong_bao_dung()

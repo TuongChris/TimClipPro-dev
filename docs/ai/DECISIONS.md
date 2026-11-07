@@ -15,6 +15,14 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-35 Đồng bộ kênh nén song song với tải video kế tiếp (người dùng, 2026-11-07)
+Quyết định: video tải xong thì video kế tiếp bắt đầu tải ngay, video trước nén cùng lúc. Vì sao: mỗi video dài mất ~2 phút, gồm ~1 phút tải và
+~50 giây nén; CPU chỉ 8% nên nén không cần chờ tải. Không tăng số luồng tải: tải nhiều luồng cùng cookie dễ bị YouTube chặn, nên vẫn một luồng,
+kể cả lần tải lại ở bước nén (`_khoa_luong_tai`); bỏ giãn nhịp cũng không làm. Tối đa hai video trong đường ống, một nén một tải, để đĩa tạm có
+trần. Cổng nén giữ tới khi vòng chính ghi xong metadata + sổ đã tải, nên số đo vừa kiểm chỉ thuộc một video và thứ tự ghi không đổi.
+Tốc độ lượt trước 65 video/giờ trên video ngắn không bị chặn; bản này dự kiến ~60 video/giờ với video dài (chưa đo).
+Sổ tiến độ có thêm làn nén; tốc độ video/giờ không cộng đôi phần chồng thời gian. Bằng chứng: `tests/test_nen_song_song.py`.
+
 ## D-34 Kho video dài theo từng thư mục (người dùng, 2026-11-07) — nới D-31 cho thư mục được đánh dấu
 Quyết định: kênh Joe Bart VODs có gần 900 video, phần lớn dài hơn 2 giờ, người dùng cần đồng bộ cả các video đó. Ô «Kho video dài» ở tab
 Đồng bộ ghi file dấu `.kho_video_dai` vào THƯ MỤC kho (đồng bộ chỉ biết thư mục, có thể chạy trước khi kho được đăng ký). Thư mục có dấu:

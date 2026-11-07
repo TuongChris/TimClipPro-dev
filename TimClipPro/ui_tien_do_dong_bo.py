@@ -100,11 +100,24 @@ def the_kpi(anh: AnhDongBo) -> list:
     ]
 
 
+def _dong_nen(v: Any) -> list:
+    if v.giai_doan != GD_NEN:
+        return []
+    if v.ffmpeg_da_s is None:
+        return [("nen", "Đang khởi động FFmpeg…", None)]
+    chu = f"Nén {thoi_luong(v.ffmpeg_da_s)}" + (f" / {thoi_luong(v.ffmpeg_tong_s)}" if v.ffmpeg_tong_s else "") + \
+        (f" • {v.ffmpeg_toc_do_x:,.0f}× thời gian thực" if v.ffmpeg_toc_do_x else "")
+    return [("nen", chu, v.ty_le_nen)]
+
+
 def dong_video(anh: AnhDongBo) -> list:
     """``[(loại, chữ, tỷ lệ | None)]`` của video đang xử lý — loại ∈ {"tieu_de","giai_doan","tai","nen","chu","canh_bao"}."""
     v = anh.video
+    n = anh.nen
+    duoi = [] if n is None else [("tieu_de", f"Đang nén song song video {n.chi_so}/{n.tong}: {n.tieu_de}", None),
+                                 *_dong_nen(n)]
     if v is None:
-        return []
+        return duoi
     ra = [("tieu_de", f"Video {v.chi_so}/{v.tong}: {v.tieu_de} ({v.video_id})", None)]
     troi = max(0.0, anh.luc_anh - v.giai_doan_bat_dau) if anh.luc_anh else 0.0
     gd = TEN_GIAI_DOAN.get(v.giai_doan, v.giai_doan)
@@ -123,14 +136,7 @@ def dong_video(anh: AnhDongBo) -> list:
     if v.chi_audio is False:
         ra.append(("canh_bao", "Video này chỉ có định dạng CÓ HÌNH ở client đang dùng — tải nhiều byte hơn bản chỉ có "
                                "tiếng (vân tay vẫn chỉ dùng phần tiếng).", None))
-    if v.giai_doan == GD_NEN:
-        if v.ffmpeg_da_s is not None:
-            chu = f"Nén {thoi_luong(v.ffmpeg_da_s)}" + (f" / {thoi_luong(v.ffmpeg_tong_s)}" if v.ffmpeg_tong_s else "") + \
-                (f" • {v.ffmpeg_toc_do_x:,.0f}× thời gian thực" if v.ffmpeg_toc_do_x else "")
-            ra.append(("nen", chu, v.ty_le_nen))
-        else:
-            ra.append(("nen", "Đang khởi động FFmpeg…", None))
-    return ra
+    return ra + _dong_nen(v) + duoi
 
 
 def bang_cong_doan(anh: AnhDongBo) -> list:

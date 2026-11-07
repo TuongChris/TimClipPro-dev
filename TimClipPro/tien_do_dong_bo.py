@@ -38,6 +38,8 @@ TEN_GIAI_DOAN = {
 }
 # Giai đoạn được tính thời gian theo từng video (bảng hiệu suất).
 GD_THEO_VIDEO = (GD_TRICH_XUAT, GD_CHO, GD_TAI, GD_NEN, GD_XAC_MINH, GD_LUU)
+# Giai đoạn sau khi tải: chạy cùng lúc với lượt tải của video kế tiếp (D-35).
+GD_LAN_NEN = (GD_NEN, GD_XAC_MINH, GD_LUU)
 
 # Trạng thái tổng (tương ứng channel.DONG_BO_* khi kết thúc).
 TT_DANG_CHAY = "RUNNING"
@@ -142,6 +144,7 @@ class AnhDongBo:
     chi_hoi_vien: int = 0
     han_che_bo_qua: int = 0
     video: Optional[AnhVideo] = None
+    nen: Optional[AnhVideo] = None       # video đã tải xong, đang nén song song (D-35)
     thong_ke: dict = field(default_factory=dict)   # giai đoạn | "VIDEO" -> ThongKe
     byte_tai_tong: int = 0
     byte_nen_tong: int = 0
@@ -225,6 +228,7 @@ class SoDongBo:
         self._nhip_ffmpeg = 0.0
         self._ffmpeg_moc: Optional[float] = None
         self._nghi_trong_gd = 0.0          # giây nghỉ yt-dlp đã báo trong giai đoạn hiện tại
+        self._so_nen: Optional[tuple] = None  # số đo tạm của video ở làn nén (D-35)
 
     # ---------- nội bộ ----------
 
@@ -247,6 +251,29 @@ class SoDongBo:
             if nghi:
                 self._gd_video[GD_CHO] = self._gd_video.get(GD_CHO, 0.0) + nghi
         self._gd_moc = self._mono()
+
+    def _lay_so_video(self) -> tuple:
+        return (self._anh.video, self._gd_video, self._gd_moc, self._video_moc, self._nghi_trong_gd, self._ffmpeg_moc)
+
+    def _dat_so_video(self, so: tuple) -> None:
+        self._anh = replace(self._anh, video=so[0])
+        self._gd_video, self._gd_moc, self._video_moc, self._nghi_trong_gd, self._ffmpeg_moc = so[1:]
+
+    def _tren_lan_nen(self, ham: Callable, *a: Any, **k: Any) -> None:
+        """Chạy ``ham`` trên video ở làn nén: đổi chỗ số đo vào vị trí «video hiện tại» rồi đổi lại, dưới cùng một
+        khoá, nên mọi phép tính cho một video dùng chung một đường. Không có làn nén thì chạy trên video hiện tại."""
+        if self._so_nen is None:
+            ham(*a, **k)
+            return
+        lan_tai, gd_luot = self._lay_so_video(), self._anh.giai_doan_luot
+        self._dat_so_video(self._so_nen)
+        try:
+            ham(*a, **k)
+        finally:
+            so = self._lay_so_video()
+            self._so_nen = so if so[0] is not None else None
+            self._dat_so_video(lan_tai)
+            self._anh = replace(self._anh, nen=so[0], giai_doan_luot=gd_luot)
 
     def _an_toan(ham):  # noqa: N805 — trang trí nội bộ
         def boc(self, *a, **k):
@@ -292,7 +319,8 @@ class SoDongBo:
         if self._anh.video is not None:
             self._dong_gd()
         tt = TU_DONG_BO.get(trang_thai_dong_bo, TT_MOT_PHAN)
-        self._anh = replace(self._anh, trang_thai=tt, ket_thuc=self._now(), video=None,
+        self._so_nen = None
+        self._anh = replace(self._anh, trang_thai=tt, ket_thuc=self._now(), video=None, nen=None,
                             ly_do_dung=str(ly_do_dung or "")[:400])
         self._ghi({TT_XONG: "Đồng bộ xong.", TT_MOT_PHAN: "Đồng bộ xong MỘT PHẦN.", TT_BI_CHAN: "Đồng bộ DỪNG giữa chừng.",
                    TT_DA_HUY: "Đã dừng theo yêu cầu."}[tt])
@@ -311,7 +339,29 @@ class SoDongBo:
             giai_doan=GD_TRICH_XUAT, bat_dau=now, giai_doan_bat_dau=now), giai_doan_luot=GD_TRICH_XUAT)
 
     @_an_toan
+    def tach_video(self) -> Optional[tuple]:
+        """Video vừa tải xong rời làn tải; trả «thẻ» số đo để đưa vào ``vao_lan_nen`` khi tới lượt nén."""
+        if self._anh.video is None:
+            return None
+        self._dong_gd()
+        the = self._lay_so_video()
+        self._dat_so_video((None, {}, None, None, 0.0, None))
+        return the
+
+    @_an_toan
+    def vao_lan_nen(self, the: Optional[tuple]) -> None:
+        if the is not None:
+            self._so_nen = (*the[:2], self._mono(), *the[3:])
+            self._anh = replace(self._anh, nen=the[0])
+
+    @_an_toan
     def giai_doan(self, gd: str, **truong: Any) -> None:
+        if gd in GD_LAN_NEN:
+            self._tren_lan_nen(self._doi_giai_doan, gd, **truong)
+        else:
+            self._doi_giai_doan(gd, **truong)
+
+    def _doi_giai_doan(self, gd: str, **truong: Any) -> None:
         v = self._anh.video
         if v is None:
             return
@@ -397,6 +447,9 @@ class SoDongBo:
 
     @_an_toan
     def _cap_nhat_ffmpeg(self, da_s: Optional[float]) -> None:
+        self._tren_lan_nen(self._ghi_ffmpeg, da_s)
+
+    def _ghi_ffmpeg(self, da_s: Optional[float]) -> None:
         v = self._anh.video
         if v is None or da_s is None or da_s < 0:
             return
@@ -428,6 +481,10 @@ class SoDongBo:
     def video_xong(self, ket_qua: str, *, loai: str = "", ly_do: str = "", media_s: Optional[float] = None,
                    byte_nen: Optional[int] = None) -> None:
         """``ket_qua``: ``"moi"`` (tải + kiểm + ghi xong) hoặc ``"loi"`` (``loai`` = loại lỗi truy cập)."""
+        self._tren_lan_nen(self._chot_video, ket_qua, loai=loai, ly_do=ly_do, media_s=media_s, byte_nen=byte_nen)
+
+    def _chot_video(self, ket_qua: str, *, loai: str, ly_do: str, media_s: Optional[float],
+                    byte_nen: Optional[int]) -> None:
         v = self._anh.video
         if v is None:
             return
@@ -439,7 +496,9 @@ class SoDongBo:
             if gd in self._gd_video:            # đã đi qua giai đoạn này (kể cả rất ngắn)
                 self._mau[gd].append(self._gd_video[gd])
                 self._tong_gd[gd] += self._gd_video[gd]
-        self._tong_gd["LUOT_VIDEO_S"] += tong_video
+        # Hai video chồng thời gian: chỉ tính phần giây thật kể từ video trước, không cộng đôi (D-35).
+        chu_ky_hien = now_m - self._xet_moc if self._xet_moc is not None else tong_video
+        self._tong_gd["LUOT_VIDEO_S"] += min(tong_video, max(0.0, chu_ky_hien))
         thay = dict(nghi_tong_s=a.nghi_tong_s + self._gd_video.get(GD_CHO, 0.0),
                     byte_tai_tong=a.byte_tai_tong + int(self._gd_video.get("BYTE", 0)))
         if ket_qua == "moi":
@@ -482,7 +541,9 @@ class SoDongBo:
             chu_ky = list(self._chu_ky)
             ewma = self._ewma
             su_kien = tuple(self._su_kien)
-            dang_video_s = (self._mono() - self._video_moc) if (a.video is not None and self._video_moc) else 0.0
+            # Từ lần xét xong gần nhất nếu muộn hơn: phần trước đó đã nằm trong số giây của video vừa xong (D-35).
+            dang_video_s = (self._mono() - max(self._video_moc, self._xet_moc or 0.0)
+                            if a.video is not None and self._video_moc else 0.0)
         thong_ke = {gd: ThongKe(len(ds), _bach_phan_vi(ds, 0.5), _bach_phan_vi(ds, 0.95), tong.get(gd, 0.0))
                     for gd, ds in mau.items()}
         thong_ke["LUOT_VIDEO_S"] = ThongKe(a.da_xet, None, None, tong["LUOT_VIDEO_S"] + dang_video_s)
