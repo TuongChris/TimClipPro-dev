@@ -4,6 +4,7 @@
 import os
 import subprocess
 import sys
+import time
 
 import pytest
 
@@ -84,8 +85,16 @@ def test_tien_trinh_bi_kill_thi_he_dieu_hanh_tu_nha_khoa(tmp_path):
         tien_trinh.kill()
         tien_trinh.wait(timeout=5)
 
-    with KhoaTienTrinh(path):
-        pass
+    # Windows nhả khoá của tiến trình đã chết sau một nhịp ngắn, nhất là lúc máy bận: đo 2-4 lần hỏng trên 30.
+    het_gio = time.monotonic() + 10
+    while True:
+        try:
+            with KhoaTienTrinh(path):
+                return
+        except DangChayRoi:
+            if time.monotonic() > het_gio:
+                raise
+            time.sleep(0.05)
 
 
 def test_chay_giam_sat_khi_dang_khoa_tra_bao_cao_loi(engine):
