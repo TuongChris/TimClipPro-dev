@@ -343,12 +343,12 @@ class _ViecVideo:
 @contextlib.contextmanager
 def _huy_khi_ra_giua_chung(cs: "ChannelSync", dang: deque):
     """Vòng chính chết giữa chừng (Ctrl+C ở CLI): huỷ các video còn dở, nếu không lượt chờ chúng chạy hết và video đang
-    chờ cổng nén thì chờ mãi vì không còn ai nhả cổng."""
+    chờ cổng nén thì chờ mãi vì không còn ai nhả cổng. Không xét ``dang``: video cuối có thể đã rời hàng mà vẫn đang nén."""
     try:
         yield
-    finally:
-        if dang:
-            cs._huy_luot_sync.dat()
+    except BaseException:
+        cs._huy_luot_sync.dat()
+        raise
 
 
 class _CoHuyTuHam:
@@ -1198,12 +1198,13 @@ class ChannelSync:
         if viec is None:
             return
         the = self.theo_doi.tach_video()
-        viec.tai_xong.set()
         while not self._cong_nen.acquire(timeout=0.2):
             if cancel_event is not None and cancel_event.is_set():
                 raise DaHuyDongBo("Đã huỷ theo yêu cầu trong lúc chờ nén.")
         viec.giu_cong_nen = True
         self.theo_doi.vao_lan_nen(the)
+        # Sau khi có cổng: video kế tiếp không vượt lên giữ cổng được, vì cổng chỉ nhả khi ghi sổ đúng thứ tự.
+        viec.tai_xong.set()
 
     def _chay_viec(self, viec: _ViecVideo) -> tuple:
         self._viec_cua_luong.viec = viec
@@ -1442,7 +1443,7 @@ class ChannelSync:
               "chan_youtube": "", "youtube": {},
               # Trạng thái tổng + số đếm để giao diện/CLI KHÔNG báo thành công khi chưa xong (sự cố 15/10/2026):
               # can_tai = video chưa có trong kho; so_loi = đã thử mà hỏng; chua_thu = chưa được thử (cầu dao / Dừng).
-              "trang_thai": DONG_BO_DAY_DU, "can_tai": 0, "so_loi": 0, "chua_thu": 0,
+              "trang_thai": DONG_BO_DAY_DU, "can_tai": 0, "so_loi": 0, "chua_thu": 0, "so_loi_doi_soat": 0,
               "gioi_han_tuoi": 0, "chi_hoi_vien": 0, "xac_thuc": {},
               # Video dài hơn trần của kho (`tran_clip_giay`): cố ý không tải, không phải lỗi (D-31, D-34).
               "qua_dai": 0, "gio_toi_da": tran_clip_giay(self.dest) // 3600,
@@ -1487,7 +1488,10 @@ class ChannelSync:
                         loi.append(f"Không chuyển được {ten} vào {THU_MUC_HONG}: {e}")
             try:
                 kq["da_doi_soat"] = self._doi_soat(tep["can_doi_soat"])
+                # Đứt giữa metadata và sổ: file đã có dấu nên không vào đối soát, phải bù sổ ở đây.
+                self._mark_done_nhieu(sorted(set(tep["hop_le"]) - set(tep["can_doi_soat"])))
             except Exception as e:  # noqa: BLE001 — không được chặn cả lượt tải
+                kq["so_loi_doi_soat"] = len(tep["can_doi_soat"])
                 loi.append(f"Không đối soát được metadata tại chỗ cho "
                            f"{len(tep['can_doi_soat'])} file có sẵn: {e}")
             hop_le = set(tep["hop_le"])
@@ -1640,7 +1644,7 @@ class ChannelSync:
                 kq["trang_thai"] = DONG_BO_DA_HUY
             elif self.phien.mo:
                 kq["trang_thai"] = DONG_BO_BI_CHAN
-            elif kq["so_loi"] or kq["chua_thu"] or kq["han_che_bo_qua"]:
+            elif kq["so_loi"] or kq["chua_thu"] or kq["han_che_bo_qua"] or kq["so_loi_doi_soat"]:
                 kq["trang_thai"] = DONG_BO_MOT_PHAN
             ma_xt, cau_xt = self.phien.trang_thai_dang_nhap(self.cau_hinh_mang.co_cookie)
             kq["xac_thuc"] = {"nguon": self.cau_hinh_mang.nguon_cookie_hieu_luc, "trang_thai": ma_xt, "cau": cau_xt,
@@ -1659,7 +1663,8 @@ class ChannelSync:
                 os.rmdir(self.tmp_goc)          # chỉ xoá được khi đã rỗng
         bao(1.0, {DONG_BO_DAY_DU: "Đồng bộ xong.",
                   DONG_BO_MOT_PHAN: f"Đồng bộ xong MỘT PHẦN: {kq['so_loi']} video lỗi, {kq['han_che_bo_qua']} video "
-                                    "bị hạn chế chưa tải, lượt sau tải tiếp.",
+                                    f"bị hạn chế chưa tải, {kq['so_loi_doi_soat']} file chưa ghi được metadata, "
+                                    "lượt sau làm tiếp.",
                   DONG_BO_BI_CHAN: f"Đồng bộ DỪNG giữa chừng: {kq['chua_thu']} video chưa thử.",
                   DONG_BO_DA_HUY: "Đã dừng đồng bộ theo yêu cầu."}[kq["trang_thai"]])
         return kq

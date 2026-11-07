@@ -333,6 +333,135 @@ def test_ctrl_c_dung_ngay_luot_tai_dang_chay(tmp_path):
     assert time.monotonic() - t0 < CHO / 2
 
 
+def test_video_sau_khong_duoc_vuot_len_giu_cong_nen(tmp_path):
+    """Video 1 chững ngay sau khi báo tải xong: video 2 không được lấy cổng trước, vì sổ chỉ ghi được theo thứ tự."""
+    cs, gia = _kenh(tmp_path, 2)
+    goc = cs._chay_viec
+    v2_dang_nen = threading.Event()
+    huy = threading.Event()
+
+    class Chung(threading.Event):
+        def set(self):
+            super().set()
+            v2_dang_nen.wait(1.0)
+
+    def boc(viec):
+        if viec.v.id == "v1":
+            viec.tai_xong = Chung()
+        return goc(viec)
+
+    def khi_nen(vid):
+        if vid == "v2":
+            v2_dang_nen.set()
+        return ""
+
+    cs._chay_viec = boc
+    gia.khi_nen = khi_nen
+    ra: dict = {}
+    t = threading.Thread(target=lambda: ra.update(cs.sync("kenh", cancel_check=huy.is_set)), daemon=True)
+    t.start()
+    t.join(CHO)
+    treo = t.is_alive()
+    huy.set()
+    t.join(CHO)
+
+    assert not treo, "video 2 giữ cổng chờ ghi sổ, video 1 chờ cổng: treo"
+    assert ra["moi"] == 2
+    assert _so_da_tai(cs) == ["v1", "v2"]
+
+
+def test_ctrl_c_luc_cho_video_cuoi_van_huy_viec_dang_nen(tmp_path, monkeypatch):
+    """Video cuối đã rời hàng chờ, chỉ còn đợi kết quả: Ctrl+C vẫn phải huỷ, không chờ nén hết."""
+    cs, gia = _kenh(tmp_path, 1)
+    thay_huy: list = []
+
+    class Tho(channel.ThreadPoolExecutor):
+        def submit(self, *a, **k):
+            f = super().submit(*a, **k)
+
+            def result(timeout=None):
+                time.sleep(0.2)
+                raise KeyboardInterrupt("giả: Ctrl+C ở CLI")
+
+            f.result = result
+            return f
+
+    def khi_nen(vid):
+        het = time.monotonic() + CHO
+        while time.monotonic() < het:
+            if cs._huy_luot_sync.is_set():
+                thay_huy.append(vid)
+                return ""
+            time.sleep(0.02)
+        return ""
+
+    monkeypatch.setattr(channel, "ThreadPoolExecutor", Tho)
+    gia.khi_nen = khi_nen
+    t0 = time.monotonic()
+    with pytest.raises(KeyboardInterrupt):
+        cs.sync("kenh")
+
+    assert thay_huy == ["v1"]
+    assert time.monotonic() - t0 < CHO / 2
+
+
+MA_THAT = "abcdefghij1"  # RE_ID_TEN_FILE chỉ nhận mã từ 6 ký tự
+
+
+def _kho_mot_file_that(tmp_path):
+    """Một video 3 giây đi qua FFmpeg + ffprobe thật, để file mang dấu xác nhận đúng như kho thật."""
+    ds = [VideoInfo(MA_THAT, "v1", "20260101", 3.0, f"https://youtu.be/{MA_THAT}")]
+    so_lan_tai: list = []
+
+    def tao():
+        cs = ChannelSync(str(tmp_path / "kho"))
+        cs.list_channel = lambda *a, **k: list(ds)
+
+        def tai_gia(url, opts):
+            so_lan_tai.append(url)
+            _ghi_wav(opts["outtmpl"].replace("%(id)s.%(ext)s", f"{MA_THAT}.wav"), _giai_dieu(3.0, seed=7), 22050)
+            return {"id": MA_THAT, "title": "v1", "duration": 3.0, "upload_date": "20260101"}
+
+        cs._tai_thu_tung_client = tai_gia
+        return cs
+
+    cs = tao()
+    assert _chay(cs)["moi"] == 1
+    so_lan_tai.clear()
+    return cs, tao, so_lan_tai
+
+
+def test_dut_giua_metadata_va_so_thi_luot_sau_bu_lai_so(tmp_path):
+    cs, tao, so_lan_tai = _kho_mot_file_that(tmp_path)
+    with open(cs.archive, "w", encoding="utf-8"):
+        pass
+
+    kq = _chay(tao())
+
+    assert kq["trang_thai"] == channel.DONG_BO_DAY_DU
+    assert so_lan_tai == []
+    assert _so_da_tai(cs) == [MA_THAT]
+
+
+def test_doi_soat_hong_khong_duoc_bao_day_du(tmp_path):
+    cs, tao, so_lan_tai = _kho_mot_file_that(tmp_path)
+    with open(cs.meta_file, "w", encoding="utf-8") as f:
+        f.write("{}")
+    moi = tao()
+
+    def hong(_):
+        raise OSError("giả: đĩa đầy")
+
+    moi._doi_soat = hong
+    bao: list = []
+    kq = _chay(moi, progress=lambda p, m: bao.append(m))
+
+    assert kq["trang_thai"] == channel.DONG_BO_MOT_PHAN
+    assert so_lan_tai == [], "file âm thanh vẫn tốt, chỉ cần đối soát lại ở lượt sau"
+    assert any("metadata" in d for d in kq["loi"])
+    assert "1 file chưa ghi được metadata" in bao[-1]
+
+
 def test_chay_lai_tren_cung_doi_tuong_van_nen_mot_luong(tmp_path):
     cs, gia = _kenh(tmp_path)
     gia.khi_tai = lambda vid: (_ for _ in ()).throw(RuntimeError("giả")) if vid == "v3" else None
