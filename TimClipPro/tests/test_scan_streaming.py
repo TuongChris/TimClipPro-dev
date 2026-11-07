@@ -190,7 +190,6 @@ def test_controller_ui_thay_tien_do_va_ket_qua_giua_chung(engine, monkeypatch):
 
     anh = controller.snapshot()
     assert anh.completed == 3 and anh.failed == 0
-    assert anh.batch_progress == pytest.approx(1.0)
     assert [v.matches for v in anh.videos] == [2, 2, 2]
 
 

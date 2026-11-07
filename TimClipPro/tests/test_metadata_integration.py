@@ -419,7 +419,8 @@ def test_target_three_matches_resolve_in_all_reports_without_network(
         upload_date="20260806",
     )
 
-    resolved = engine.resolve_metadata_for_matches(matches)
+    resolver = engine.clip_metadata_resolver()
+    resolved = [resolver.resolve(str(match.clip)) for match in matches]
     assert [item.resolution_method for item in resolved] == ["video_id"] * 3
     assert [item.title for item in resolved] == titles
     coverage = engine.metadata_coverage(matches)

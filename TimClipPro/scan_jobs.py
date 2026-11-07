@@ -122,19 +122,6 @@ class BatchSnapshot:
     worker_alive: bool = False
     gioi_han_video_dai: str = ""
 
-    @property
-    def batch_progress(self) -> float:
-        if self.total <= 0:
-            return 0.0
-        xong = self.completed + self.failed
-        dang = self.videos[self.current_index - 1].progress if (
-            0 < self.current_index <= len(self.videos)
-        ) else 0.0
-        if self.videos and 0 < self.current_index <= len(self.videos):
-            if self.videos[self.current_index - 1].scan_status != QUET_DANG_CHAY:
-                dang = 0.0
-        return max(0.0, min(1.0, (xong + dang) / self.total))
-
 
 # Lô quét ĐANG CHẠY của tiến trình, theo thư mục dữ liệu. Mỗi phiên trình duyệt (tải lại trang = phiên
 # mới) có controller riêng trong ``st.session_state``: không có sổ chung này thì tải lại trang trong lúc

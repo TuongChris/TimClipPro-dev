@@ -24,13 +24,12 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-import sys
 import time
 import uuid
 from datetime import datetime
 from typing import Callable, Optional
 
-from khoa import DangChayRoi, KhoaTienTrinh
+from khoa import DangChayRoi, KhoaTienTrinh, khoa_byte0, nha_byte0
 
 THU_MUC = "bao_tri"
 TEN_MUTEX = "cong.lock"
@@ -81,30 +80,6 @@ def ly_do_ban_cu(environ=None, *, rel_cua_toi: Optional[str] = None) -> str:
     return ""
 
 
-def _khoa_byte0(f) -> None:
-    if sys.platform.startswith("win"):
-        import msvcrt
-
-        f.seek(0)
-        msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
-    else:
-        import fcntl
-
-        fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-
-def _nha_byte0(f) -> None:
-    if sys.platform.startswith("win"):
-        import msvcrt
-
-        f.seek(0)
-        msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
-    else:
-        import fcntl
-
-        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-
-
 def _thu_khoa(path: str):
     """Mở + khoá byte 0 KHÔNG chờ. Trả file đang giữ khoá, hoặc ``None`` nếu người khác giữ."""
     f = open(path, "a+", encoding="utf-8")
@@ -113,7 +88,7 @@ def _thu_khoa(path: str):
         if f.tell() == 0:
             f.write("\n")
             f.flush()
-        _khoa_byte0(f)
+        khoa_byte0(f)
     except OSError:
         f.close()
         return None
@@ -126,7 +101,7 @@ def _thu_khoa(path: str):
 def _nha(f) -> None:
     try:
         with contextlib.suppress(OSError):
-            _nha_byte0(f)
+            nha_byte0(f)
     finally:
         f.close()
 

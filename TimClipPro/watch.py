@@ -324,11 +324,6 @@ def _mo_phien(engine: Any):
     yield PhienYouTube()
 
 
-def _la_loi_youtube(kq: Any) -> bool:
-    """Kết quả hỏng vì YouTube (bị chặn, cần đăng nhập, gỡ, mạng…): không phải kết quả quét."""
-    return getattr(kq, "loi_truy_cap", None) is not None
-
-
 def _la_loi_bao_cao(kq: Any) -> bool:
     """Báo cáo V2 của lượt quét không tạo/đọc được: kết quả khớp đã lưu lịch sử, nhưng KHÔNG
     xuất CSV/gửi Sheets theo bất kỳ luật nào (audit P1-02) — chỉ báo lỗi trong báo cáo Watch."""

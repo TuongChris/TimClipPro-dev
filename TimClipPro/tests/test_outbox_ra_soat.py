@@ -350,19 +350,6 @@ def test_gui_thu_cong_canh_bao_trung_khi_cung_bang_cung_tab_khac_ho_so(mt):
                                 cho_phep_trung=True)
 
 
-def test_xoa_binding_con_viec_gui_chua_xong_tham_chieu_bi_chan(mt):
-    sd.dang_ky_xac_thuc(mt["db"], "phu", mt["khoa"])
-    a = _ho_so(mt, gid=0)
-    _xep(mt, a, 1)
-    con = sqlite3.connect(mt["db"])                              # việc gửi trỏ binding «phu»
-    con.execute("UPDATE hang_doi_gui SET dich_json=replace(dich_json, '\"mac_dinh\"', '\"phu\"')")
-    con.commit()
-    con.close()
-    with pytest.raises(sd.LoiDichGui):
-        sd.xoa_xac_thuc(mt["db"], "phu")
-    assert sd.lay_xac_thuc(mt["db"], "phu") is not None
-
-
 def test_thoat_tien_trinh_dung_moi_nguoi_gui_nen(mt):
     """App thoát êm (Ctrl+C): hook thoát dừng mọi người gửi nền — chờ việc đang bay, nhả quyền."""
     nen = ob.dam_bao_chay_nen(mt["db"], mt["data"], CongGia)

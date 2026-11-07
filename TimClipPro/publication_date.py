@@ -94,14 +94,6 @@ class PublicationDateResult:
         """Có dấu hiệu cần người xem lại (các trường ngày mâu thuẫn nhau)."""
         return any(w.startswith("khac_") for w in self.warnings)
 
-    def to_dict(self) -> dict:
-        return {
-            "publication_date": self.yyyymmdd,
-            "publication_date_source": self.source_field or "",
-            "publication_date_confidence": self.confidence,
-            "publication_date_warnings": list(self.warnings),
-        }
-
 
 KHONG_CO_NGAY = PublicationDateResult(
     date=None,

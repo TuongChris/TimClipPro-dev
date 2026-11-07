@@ -13,30 +13,29 @@ class DangChayRoi(Exception):
     """Đã có tiến trình khác đang giữ khóa."""
 
 
-def _lay_khoa_windows(f: IO[str]) -> None:
-    import msvcrt
+def khoa_byte0(f: IO[str]) -> None:
+    """Khoá byte 0 của file đang mở, KHÔNG chờ: người khác giữ thì ném ``OSError``."""
+    if sys.platform.startswith("win"):
+        import msvcrt
 
-    f.seek(0)
-    msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        f.seek(0)
+        msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+    else:
+        import fcntl
 
-
-def _nha_khoa_windows(f: IO[str]) -> None:
-    import msvcrt
-
-    f.seek(0)
-    msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
-
-
-def _lay_khoa_posix(f: IO[str]) -> None:
-    import fcntl
-
-    fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
 
 
-def _nha_khoa_posix(f: IO[str]) -> None:
-    import fcntl
+def nha_byte0(f: IO[str]) -> None:
+    if sys.platform.startswith("win"):
+        import msvcrt
 
-    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        f.seek(0)
+        msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
 
 class KhoaTienTrinh:
@@ -78,10 +77,7 @@ class KhoaTienTrinh:
             self._file = None
             raise
         try:
-            if sys.platform.startswith("win"):
-                _lay_khoa_windows(f)
-            else:
-                _lay_khoa_posix(f)
+            khoa_byte0(f)
         except OSError as e:
             self._thong_tin = thong_tin_truoc_khi_khoa
             f.close()
@@ -114,10 +110,7 @@ class KhoaTienTrinh:
             return
         try:
             try:
-                if sys.platform.startswith("win"):
-                    _nha_khoa_windows(f)
-                else:
-                    _nha_khoa_posix(f)
+                nha_byte0(f)
             except OSError:
                 pass
         finally:

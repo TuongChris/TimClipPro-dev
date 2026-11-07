@@ -226,14 +226,7 @@ class ResolvedClipMetadata:
     nguon_ngay_raw: str = ""
     nguon_ngay: str = ""
 
-    def public_dict(self) -> dict:
-        return {
-            "id": self.video_id,
-            "title": self.title,
-            "url": self.url,
-            "upload_date": self.upload_date,
-            "duration": self.duration,
-        }
+    public_dict = MetadataEntry.public_dict
 
 
 @dataclass(frozen=True)

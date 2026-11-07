@@ -28,7 +28,6 @@ import shutil
 import sys
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 from channel import ChannelSync
 from clip_metadata import extract_youtube_id, filename_fallback_parts
@@ -138,14 +137,6 @@ def _cau_hinh_mang_mac_dinh():
     from ytdlp_chung import CauHinhMang
 
     return CauHinhMang.tu_file_cau_hinh(thu_muc_data_mac_dinh())
-
-
-def _fetcher_mac_dinh(video_id: str, timeout: Optional[int] = None, *,
-                      phien_youtube: Optional[PhienYouTube] = None) -> dict:
-    cau_hinh = _cau_hinh_mang_mac_dinh()
-    return ChannelSync.lay_info_video(
-        video_id, int(timeout or cau_hinh.network_timeout_s), cau_hinh_mang=cau_hinh,
-        phien_youtube=phien_youtube)
 
 
 def repair(

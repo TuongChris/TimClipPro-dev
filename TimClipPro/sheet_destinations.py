@@ -208,23 +208,6 @@ def dang_ky_xac_thuc(db_path: str, ref: str, duong_dan: str, *,
         return _dang_ky_xac_thuc(con, ref, duong_dan, cho_xoay_khoa)
 
 
-def xoa_xac_thuc(db_path: str, ref: str) -> None:
-    with ket_noi(db_path, ghi=True) as con:
-        if con.execute("SELECT 1 FROM dich_gui_phien_ban WHERE xac_thuc_ref=? LIMIT 1",
-                       (ref,)).fetchone():
-            raise LoiDichGui(f"Binding «{ref}» đang được hồ sơ đích dùng — đổi hồ sơ sang binding "
-                             "khác hoặc lưu trữ hồ sơ trước.")
-        for (dich_json,) in con.execute(
-                "SELECT dich_json FROM hang_doi_gui WHERE trang_thai NOT IN ('SENT','CANCELLED')"):
-            try:
-                ref_viec = json.loads(dich_json).get("xac_thuc_ref")
-            except (ValueError, TypeError, AttributeError):
-                ref_viec = None                  # đích ghim hỏng: người gửi tự chặn việc đó
-            if ref_viec == ref:
-                raise LoiDichGui(f"Binding «{ref}» đang được việc gửi chưa xong tham chiếu.")
-        con.execute("DELETE FROM xac_thuc_gui WHERE ref=?", (ref,))
-
-
 # ---------------------------------------------------------------------------
 #  Hồ sơ đích
 # ---------------------------------------------------------------------------

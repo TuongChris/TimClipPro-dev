@@ -402,11 +402,6 @@ def ngay_dang_tu_info(info: Mapping | None) -> str:
     return resolve_publication_date(info or {}).yyyymmdd
 
 
-def provenance_ngay_dang(info: Mapping | None) -> dict:
-    """Ngày đăng kèm nguồn gốc, để lưu vào clips_meta.json cho audit về sau."""
-    return resolve_publication_date(info or {}).to_dict()
-
-
 def bo_sung_video_info(v: VideoInfo, info: Mapping | None) -> VideoInfo:
     """Trả về VideoInfo đã điền bằng metadata THẬT từ yt-dlp.
 
@@ -948,12 +943,6 @@ class ChannelSync:
         # tên file là bằng chứng offline duy nhất còn lại nếu clips_meta.json mất.
         ngay = valid_upload_date(v.upload_date) or "00000000"
         return f"{ngay} - {lam_sach_ten(v.title)} [{v.id}].{AUDIO_EXT}"
-
-    def _tim_file_cua(self, vid: str) -> Optional[str]:
-        for f in os.listdir(self.dest):
-            if f"[{vid}]" in f and f.lower().endswith("." + AUDIO_EXT):
-                return os.path.join(self.dest, f)
-        return None
 
     def _tai_thu_tung_client(self, url: str, rieng: dict):
         """Tải bằng yt-dlp với hai lớp đường lui: cookie ở ngoài, player client ở trong.

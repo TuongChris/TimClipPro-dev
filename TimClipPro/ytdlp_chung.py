@@ -1192,9 +1192,6 @@ class NhoClientTotNhat:
         else:
             self._hoc_co_cookie = self._hoc_co_cookie or co_cookie
 
-    def quen(self) -> None:
-        self._client = None
-
 
 def _bo_cookie_khoi_tuy_chon(opts: dict) -> dict:
     """Bản sao tuỳ chọn yt-dlp đã gỡ cookie — đúng các khoá :meth:`CauHinhMang.tuy_chon` chỉ đặt khi có cookie (nguồn

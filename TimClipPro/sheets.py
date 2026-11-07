@@ -504,8 +504,3 @@ class SheetsExporter:
                 continue
             return True
         return False
-
-    @classmethod
-    def _co_header(cls, ws, header: Optional[list] = None) -> bool:
-        """Giữ lại cho mã cũ/test: hàng 1 có phải header dùng được không."""
-        return cls._tinh_trang_header(ws, header or []) == "co"

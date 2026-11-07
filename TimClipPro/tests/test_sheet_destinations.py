@@ -169,10 +169,8 @@ def _them_viec(db, dich_id, trang_thai="PENDING"):
     con.close()
 
 
-def test_khong_xoa_duoc_ho_so_hay_binding_con_tham_chieu(co_khoa):
+def test_khong_xoa_duoc_ho_so_con_tham_chieu(co_khoa):
     a = _tao(co_khoa)
-    with pytest.raises(sd.LoiDichGui, match="đang được"):
-        sd.xoa_xac_thuc(co_khoa, "mac_dinh")             # hồ sơ a dùng binding này
     _them_viec(co_khoa, a.id)
     with pytest.raises(sd.LoiDichGui, match="lưu trữ"):
         sd.xoa_dich(co_khoa, a.id)

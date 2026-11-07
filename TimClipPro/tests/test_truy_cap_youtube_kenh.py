@@ -180,8 +180,11 @@ def test_sua_ngay_dang_dung_cau_hinh_mang_cua_nguoi_dung(tmp_path, monkeypatch, 
     (data / "cau_hinh.json").write_text(json.dumps({"network_timeout_s": 77,
                                                     "ytdlp_sleep_requests_s": 2.5}),
                                         encoding="utf-8")
+    (tmp_path / "clips_meta.json").write_text(
+        json.dumps({f"20240101 - Clip [{_ma(1)}].opus": {"id": _ma(1), "upload_date": "20240101",
+                                                         "duration": 100.0}}), encoding="utf-8")
     monkeypatch.setenv("TIMCLIP_DATA_DIR", str(data))
     ydl = _vá(monkeypatch, YdlKichBan(info={"*": lambda _p, m: info_mau(m)}))
-    kiem_ngay_dang._fetcher_mac_dinh(_ma(1))
+    kiem_ngay_dang.repair(str(tmp_path), "Asia/Ho_Chi_Minh", dung_mang=True, apply=False, gioi_han=0)
     assert ydl.opts[-1]["socket_timeout"] == 77
     assert ydl.opts[-1]["sleep_interval_requests"] == 2.5

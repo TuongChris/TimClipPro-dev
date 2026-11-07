@@ -56,12 +56,6 @@ def dong_ho(giay: Optional[float]) -> str:
     return f"{giay // 3600:02d}:{(giay % 3600) // 60:02d}:{giay % 60:02d}"
 
 
-def chu_eta(anh: AnhDongBo) -> str:
-    if anh.eta_s is None:
-        return "Đang ước tính"
-    return thoi_luong(anh.eta_s) + (f" (độ tin cậy {anh.eta_tin_cay})" if anh.eta_tin_cay else "")
-
-
 def phu_eta(anh: AnhDongBo) -> str:
     """Dòng nhỏ dưới giá trị ETA: «Đang ước tính» khi chưa đủ số đo, không thì độ tin cậy."""
     if anh.eta_s is None:

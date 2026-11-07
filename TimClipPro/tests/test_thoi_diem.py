@@ -24,7 +24,6 @@ def test_clip_bat_dau_bu_dung_offset(engine):
     assert match.start_s == 900.0
     assert match.vung_khop_s == 908.5
     assert match.end_s == 938.5
-    assert match.clip_bat_dau_hhmmss == "00:15:00"
 
 
 def test_khong_ra_so_am(engine):

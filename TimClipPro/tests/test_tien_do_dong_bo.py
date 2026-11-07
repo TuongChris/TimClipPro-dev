@@ -136,7 +136,7 @@ def test_eta_khong_bia_so_khi_thieu_du_lieu_hoac_toc_do_doi_manh():
     so, dh = _so()
     so.ke_hoach(da_co=0, can_tai=100, han_che_bo_qua=0, se_thu=100)
     a = so.anh()
-    assert a.eta_s is None and "Đang ước tính" in a.eta_ly_do and ui.chu_eta(a) == "Đang ước tính"
+    assert a.eta_s is None and "Đang ước tính" in a.eta_ly_do and ui.phu_eta(a) == "Đang ước tính"
     for i in range(td.ETA_TOI_THIEU_VIDEO - 1):
         so.video_bat_dau(i + 1, 100, _ma(i), "x")
         dh.tien(20)

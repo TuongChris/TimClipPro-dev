@@ -393,10 +393,6 @@ class Match:
         return hhmmss(self.start_s)
 
     @property
-    def clip_bat_dau_hhmmss(self) -> str:
-        return hhmmss(self.clip_bat_dau_s)
-
-    @property
     def end_hhmmss(self) -> str:
         return hhmmss(self.end_s)
 
@@ -2374,11 +2370,6 @@ class Engine:
     def clip_meta(self) -> dict:
         """Compatibility mapping đã validate; call site báo cáo dùng resolver trực tiếp."""
         return self.clip_metadata_resolver().compatibility_mapping()
-
-    def resolve_metadata_for_matches(self, matches: Iterable) -> tuple:
-        """Resolve một batch đúng thứ tự và giữ duplicate đoạn ↔ clip."""
-        resolver = self.clip_metadata_resolver()
-        return tuple(resolver.resolve(str(match.clip)) for match in matches)
 
     def metadata_coverage(self, matches: Iterable):
         names = [
@@ -4731,10 +4722,6 @@ class Engine:
                 "cùng một chỗ (bản sao?): chỉ tính một lần — nên đặt tên file khác nhau."
             )
         return [g for thu_tu, g in enumerate(gop) if thu_tu not in bo]
-
-    def _chon_loc_dai_dien(self, *args, **kwargs):
-        """Giữ chỗ cho khả năng ghi đè trong test; mặc định dùng hàm thuần."""
-        return chon_dai_dien(*args, **kwargs)
 
     @staticmethod
     def _khoa_ban_ghi(duong_dan: str) -> str:

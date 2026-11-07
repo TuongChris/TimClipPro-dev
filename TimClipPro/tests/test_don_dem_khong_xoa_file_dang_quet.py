@@ -360,7 +360,6 @@ def test_lan_do_dau_cua_don_dem_trung_luc_dat_dau_khong_lam_hong_luot_quet(engin
     lượt quét ném ``DangChayRoi`` (không phải ``OSError``) ra khỏi ``_giu_file_dem`` → lượt quét lỗi
     «Đã có tiến trình khác đang chạy» dù chẳng ai tranh chấp. Đúng: dấu mang tên riêng của lượt quét,
     lần dò chỉ giữ thoáng qua → lượt quét vẫn đặt được dấu và chạy tiếp."""
-    import sys
     import threading
 
     import don_dep
@@ -370,8 +369,7 @@ def test_lan_do_dau_cua_don_dem_trung_luc_dat_dau_khong_lam_hong_luot_quet(engin
     ten_file = f"{VID}.webm"
     dem = _tao_dem(e.dl_dir, ten_file, 1)
     thu_muc_dau = os.path.normcase(os.path.join(os.path.abspath(e.data_dir), don_dep.THU_MUC_DANG_DUNG))
-    ten_lay = "_lay_khoa_windows" if sys.platform.startswith("win") else "_lay_khoa_posix"
-    goc_lay = getattr(khoa, ten_lay)
+    goc_lay = khoa.khoa_byte0
     do_da_khoa = threading.Event()
     luot_quet_da_thu = threading.Event()
     ket_qua_do = []
@@ -400,7 +398,7 @@ def test_lan_do_dau_cua_don_dem_trung_luc_dat_dau_khong_lam_hong_luot_quet(engin
                 luot_quet_da_thu.set()
         return goc_lay(f)
 
-    monkeypatch.setattr(khoa, ten_lay, lay)
+    monkeypatch.setattr(khoa, "khoa_byte0", lay)
     with e._giu_file_dem(dem):
         assert luong_do, "thiết lập sai: lượt quét không đặt dấu"
         luong_do[0].join(5)
