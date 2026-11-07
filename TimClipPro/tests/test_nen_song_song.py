@@ -486,17 +486,20 @@ def test_doc_so_loi_khi_bu_so_khong_duoc_bao_day_du(tmp_path):
     with open(cs.archive, "w", encoding="utf-8"):
         pass
     moi = tao()
-    goc = moi.done_ids
-    lan: list = []
+    doc_so, doi_soat = moi.done_ids, moi._doi_soat
+    sap_hong: list = []
+
+    def sau_doi_soat(can):
+        sap_hong.append(1)  # Bước bù sổ chạy ngay sau đối soát.
+        return doi_soat(can)
 
     def doc_hong_mot_lan():
-        # Lần 1 là `sync` đọc sổ từ đầu lượt; lần 2 là bước bù sổ.
-        lan.append(1)
-        if len(lan) == 2:
+        if sap_hong:
+            sap_hong.clear()
             raise PermissionError("giả: sổ đang bị khoá")
-        return goc()
+        return doc_so()
 
-    moi.done_ids = doc_hong_mot_lan
+    moi._doi_soat, moi.done_ids = sau_doi_soat, doc_hong_mot_lan
     kq = _chay(moi)
 
     assert kq["trang_thai"] == channel.DONG_BO_MOT_PHAN

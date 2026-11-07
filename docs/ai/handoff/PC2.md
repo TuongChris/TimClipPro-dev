@@ -48,6 +48,10 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 9. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-11-07 — Codex review PR #27–#29 (D-36, nhánh fix/pc2/codex-review-0711)
+- Làm: Codex chạy chỉ-nhận-văn-bản, 5 lượt, 12 phát hiện: 11 thật đã sửa kèm test đỏ, 1 bị bác. Lỗi lớn nhất: bổ sung có thể làm tràn mã clip trong kho mà không báo.
+- Lưu ý: video đang đồng bộ chạy bản cũ; DEV chỉ nhận các bản sửa này khi cập nhật. Audit 14, 17, 18 chưa giao Codex.
+- Test: số ở PR. Không chạy Codex với công cụ trên máy (`-s read-only` vẫn đọc được C: và D:).
 ### 2026-11-07 — đồng bộ nén song song (D-35, nhánh feature/pc2/nen-song-song)
 - Làm: video tải xong thì video kế tiếp tải ngay, video trước nén cùng lúc; tải một luồng, nén một luồng, ghi metadata + sổ đúng thứ tự.
 - Review độc lập: 1 lỗi (Ctrl+C ở CLI không dừng ngay), 2 lỗi hiển thị, 2 test yếu, đã sửa kèm test đỏ. Không thấy lỗi tranh chấp, treo khi Dừng hay mất file.
