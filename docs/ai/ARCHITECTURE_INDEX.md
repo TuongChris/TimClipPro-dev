@@ -84,7 +84,6 @@ chạm file) — không phải audit lại mã. Thêm/xoá/đổi vai trò modul
 | `kiem_metadata_kho.py` | Audit metadata kho clip theo chế độ chỉ đọc; chỉ ghi snapshot khi có --apply. | 360 | `8f0558f 2026-10-02` |
 | `kiem_ngang.py` | (không có docstring) | 77 | `448b467 2026-08-07` |
 | `kiem_ngay_dang.py` | Audit và sửa ngày đăng trong clips_meta.json của một kho clip gốc. | 372 | `2cdd1d3 2026-10-03` |
-| `kiem_sheet.py` | kiem_sheet.py — Ghi THỬ một dòng giả vào Google Sheet để kiểm tra dữ liệu có rơi đúng cột. | 93 | `448b467 2026-08-07` |
 | `kiem_thoi_luong.py` | Kiểm tra và bổ sung độ dài media thật cho metadata clip gốc. | 193 | `8f0558f 2026-10-02` |
 | `lich_su.py` | Lược đồ ``lichsu.db`` có phiên bản — lịch sử quét gắn với KHO (audit TCP-07). | 424 | `c981450 2026-10-08` |
 | `luu_tru.py` | Đọc và ghi dữ liệu cấu hình theo cách nguyên tử, có khả năng phục hồi. | 330 | `8f0558f 2026-10-02` |

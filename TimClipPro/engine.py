@@ -5255,6 +5255,9 @@ class Engine:
         r = self.scan_media(f, label=ten, ref=url, source_type="youtube", progress=progress,
                             luu_lich_su=False, pct_start=0.40)
         if r.status != "ok":
+            if tong > 0:
+                r.duration_s = tong  # lịch sử ghi thời lượng VIDEO, không ghi độ dài file phần đầu
+                self._dan_lai_nhan_vung(r)
             return r, f
         if tong <= 0:
             # Không rõ thời lượng nguồn: không khẳng định đã quét trọn hay một phần (vung_da_khop None

@@ -32,8 +32,8 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 2. Dựng kho theo RAM + bỏ clip > 2 giờ (D-31): PR #23 GỘP (`73c5734`), DEV 8502 cập nhật 06/11 20:16 (sao lưu `data_20261106_201648`).
    Chờ người dùng dựng Kho_Joe_Games (CHƯA có vân tay, thư mục `E:\Kho_Tool_Quet\Kho_Joe_Games`) và đồng bộ thật một kênh để kiểm
    quy tắc 2 giờ (chưa thử YouTube thật).
-3. Audit toàn repo 06/11: số 1–13 GỘP (PR #24, #25), PC1 phải cài lại hook. Còn 14–20 + 8 mục nhỏ: báo cáo trong phiên 06/11 (lịch sử
-   chat), số 14 có 21 ca đột biến updater sống. Dựng kho nhường ổ cứng (D-33) xem nhật ký; tạm dừng + lưu giữa chừng CHƯA làm.
+3. Audit toàn repo 06/11: số 1–13, 15, 19, 20 + phần ghi Sheet của số 16 đã GỘP. Còn 14, 17, 18, `SheetsExporter.append` không còn caller
+   sản phẩm + 8 mục nhỏ: báo cáo trong phiên 06/11 (lịch sử chat). PC1 phải cài lại hook. Tạm dừng + lưu giữa chừng khi dựng kho CHƯA làm.
 4. Người dùng: nghiệm thu DEV đợt 2 theo `C:\Dev\pc2_test_runs\2026-10-26_audit_p3\NGHIEM_THU_DEV_DOT2.md` (~15 phút).
 5. Người dùng quyết: P-6 (3 phương án, `…\2026-10-26_audit_p3\P6_PHUONG_AN.md`); P-7 (`P7_THIET_KE.md` cùng thư mục, công
    cụ `C:\Dev\pc2_test_tools\p7_lich_su_bong`, CHƯA chạy dữ liệu thật — chỉ chạy CHỈ ĐỌC khi duyệt); B-13, F-16; 3 ghép
@@ -43,10 +43,14 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
    test xfail strict); cập nhật `CURRENT_STATE.md` theo mục 26/10.
 7. Còn mở từ trước: đồng bộ tiếp kênh Joe → vân tay «Kho Joe» (tab «Kho clip gốc», không tạo kho mới); hồ sơ đích Sheets +
    binding khoá NGOÀI State Stable cho DEV; ruleset GitHub (`release/github/`, chưa bật); C7; nghiệm thu preview 8502.
-8. Kho Joe VODs (D-34): chờ gộp + DEV, rồi tick ô, đồng bộ N video mới nhất, «Tạo lại từ đầu», quét thử. Cả kênh cần nhiều kho.
+8. Kho Joe VODs (D-34): DEV lên `fd335dc` 07/11 10:13 (sao lưu `data_20261107_101343`). Lượt 150 video mới nhất chạy từ 10:14 (38 video/giờ).
+   Tiếp: đồng bộ xong → «Kho Joe VODs» «Tạo lại từ đầu» → quét thử. Cả kênh 3.845 giờ cần nhiều kho. DEV chưa có `don_dep`/`engine` đợt 3.
 9. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-11-07 — audit số 15, 19, 20 + bỏ `kiem_sheet.py` (nhánh fix/pc2/audit-0611-dot3)
+- `kiem_thoi_luong` dùng `channel.do_dai_media` có trần; file tải dở mồ côi quá tuổi được dọn, vẫn giữ file có khoá tải; lỗi quét giới hạn 6 giờ ghi thời lượng video thật.
+- Test (chặn mạng, cp1252, venv CookieFix): nhanh 3477 = 3473/4/0, ruff sạch. Mỗi lỗi có test đỏ trước.
 ### 2026-11-07 — kho video dài theo thư mục (D-34, nhánh feature/pc2/kho-video-dai)
 - Joe Bart VODs: 905 video, 3.845 giờ, dài nhất 10,04 giờ, 849 video trên 2 giờ (`C:\Dev\pc2_test_runs\2026-11-07_kho_video_dai\danh_sach_kenh.json`).
 - Làm: ô «Kho video dài», 13 giờ, 21 bit, báo vùng khớp thật, chặn bổ sung vào kho 16 bit và chặn vượt 2.047 clip. Video 6 giờ: 16 bit đúng vị trí 1/8, 20 bit 8/8.
@@ -67,11 +71,4 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   Review độc lập: 2 P2 + 4 P3 trong chính bản sửa (lỗi đọc tạm lúc mở phiên chọn nhầm kho, xoá cấu hình), đã sửa kèm test đỏ.
 - Gộp PR #25 + cập nhật DEV: trước khi tắt, không tiến trình con, ghi 0 B trong 30 s, 26 khoá không bị giữ, Sheets 584 SENT. Sau cập nhật: health ok,
   đủ 7 tab, console 0 lỗi, CLI `dich` đạt, dữ liệu không đổi. Đề xuất `CURRENT_STATE.md` (PC1 sửa): integration = `3d28ece`, PC1 chưa review.
-### 2026-11-06 — sửa số 1–6 của audit toàn repo (nhánh fix/pc2/audit-0611)
-- Làm: nút Dừng đồng bộ sau bấm đúp; lô nguồn chung tự lưu CSV; đọc kho lỗi không bị nhớ thành kho rỗng; hook quét merge commit, tên có
-  dấu cách, đổi tên y nguyên (hook mới ĐÃ CÀI trên PC2, bản cũ không có khối quét nội dung); «Quét toàn bộ» quét hết (D-32); bản đệm cụt bị bỏ.
-- Mỗi lỗi có test đỏ trước khi sửa. Test (chặn mạng, cp1252, venv CookieFix) @ `ee414ed`: nhanh 3429 = 3425/4/0, chậm 22/22, ruff sạch
-  (`C:\Dev\pc2_test_runs\2026-11-06_audit_0611`). Review độc lập: 0 P1, 2 P2 và 5 P3 ở hook/đệm/test, đã sửa hết.
-- Gộp PR #24 + cập nhật DEV: trước khi tắt, tiến trình thật không có con, ghi 0 B trong 30 s, 26 khoá không bị giữ, hàng đợi Sheets 584 SENT.
-  Sau cập nhật: health ok, đủ 7 tab, console 0 lỗi, dữ liệu không đổi. Đề xuất `CURRENT_STATE.md` (PC1 sửa): integration = `256e848`, PC1 chưa review.
-- Mục cũ hơn (2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
+- Mục cũ hơn (2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.

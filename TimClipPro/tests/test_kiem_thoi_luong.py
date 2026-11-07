@@ -7,6 +7,7 @@ giây và kiểm được đúng phần logic quyết định ghi hay không ghi
 
 import json
 
+import channel
 import kiem_thoi_luong as ktl
 import pytest
 
@@ -140,3 +141,8 @@ def test_gioi_han_chan_so_luong_do(tmp_path, monkeypatch):
 def test_khong_co_clips_meta_thi_khong_no(tmp_path):
     (tmp_path / "trong").mkdir()
     assert ktl.kiem_mot_kho("k", str(tmp_path / "trong"), False, False, 0) == {}
+
+
+def test_do_dai_dung_ban_co_gioi_han_thoi_gian():
+    """Bản chép riêng không có trần: ffprobe treo là công cụ treo theo (audit 06/11 số 15)."""
+    assert ktl.do_dai_media is channel.do_dai_media

@@ -30,25 +30,12 @@ from __future__ import annotations
 import argparse
 import math
 import os
-import subprocess
 import sys
 
+from channel import do_dai_media
 from luu_tru import cap_nhat_json, doc_json_an_toan
 
 TRUONG = "duration_media"
-
-
-def do_dai_media(path: str) -> float | None:
-    """Độ dài thật của file, đo bằng ffprobe. Không đo được thì trả None."""
-    try:
-        r = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-             "-of", "csv=p=0", path],
-            capture_output=True, text=True, encoding="utf-8", errors="replace")
-        gia_tri = float(r.stdout.strip().splitlines()[-1])
-    except Exception:  # noqa: BLE001
-        return None
-    return gia_tri if math.isfinite(gia_tri) and gia_tri > 0 else None
 
 
 def hhmmss(giay: float) -> str:

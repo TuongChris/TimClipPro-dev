@@ -5,7 +5,8 @@ import os
 from types import SimpleNamespace
 
 import don_dep
-from don_dep import MucDem, chon_can_xoa, don_kho_dem
+from don_dep import MucDem, chon_can_xoa, don_kho_dem, duong_khoa_tai, ten_muc_dem
+from khoa import KhoaTienTrinh
 
 
 def test_xoa_theo_tuoi():
@@ -122,24 +123,44 @@ def test_hai_gioi_han_bang_0_khong_xoa_file_that(tmp_path):
     assert path.exists()
 
 
-def test_khong_xoa_file_dang_tai_do(tmp_path):
+def test_file_tai_do_con_moi_khong_bi_xoa_du_vuot_ngan_sach(tmp_path):
     dang_tai = tmp_path / "video.part"
     ytdl = tmp_path / "video.ytdl"
     hoan_chinh = tmp_path / "video.opus"
     for path in (dang_tai, ytdl, hoan_chinh):
-        path.write_bytes(b"x")
-        os.utime(path, (100, 100))
+        path.write_bytes(b"x" * 2048)
+    os.utime(hoan_chinh, (100, 100))
 
-    ket_qua = don_kho_dem(
-        str(tmp_path),
-        max_gb=0,
-        max_ngay=1,
-    )
+    ket_qua = don_kho_dem(str(tmp_path), max_gb=1 / 1024 ** 3, max_ngay=1)
 
     assert dang_tai.exists()
     assert ytdl.exists()
     assert not hoan_chinh.exists()
     assert ket_qua["xoa_file"] == 1
+
+
+def test_file_tai_do_mo_coi_qua_tuoi_duoc_don(tmp_path):
+    for ten in ("video.part", "video.ytdl"):
+        (tmp_path / ten).write_bytes(b"x")
+        os.utime(tmp_path / ten, (100, 100))
+
+    ket_qua = don_kho_dem(str(tmp_path), max_gb=0, max_ngay=1)
+
+    assert ket_qua["xoa_file"] == 2
+    assert not list(tmp_path.glob("video.*"))
+
+
+def test_file_tai_do_qua_tuoi_nhung_dang_giu_khoa_tai_khong_bi_xoa(tmp_path):
+    """NTFS có thể cập nhật mtime trễ khi file đang mở: lượt đang tải được bảo vệ bằng khoá tải, không chỉ bằng tuổi."""
+    dang_tai = tmp_path / "video.webm.part"
+    dang_tai.write_bytes(b"x")
+    os.utime(dang_tai, (100, 100))
+
+    with KhoaTienTrinh(duong_khoa_tai(str(tmp_path), ten_muc_dem(dang_tai.name)), "test: đang tải"):
+        ket_qua = don_kho_dem(str(tmp_path), max_gb=0, max_ngay=1)
+
+    assert dang_tai.exists()
+    assert ket_qua["xoa_file"] == 0
 
 
 def test_khong_de_quy_vao_thu_muc_con(tmp_path):

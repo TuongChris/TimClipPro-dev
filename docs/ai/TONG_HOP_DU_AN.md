@@ -148,7 +148,7 @@ k/N) · Chưa kết luận · Đã dừng. Giới hạn: chưa ghi lịch sử, 
 
 ### 2.11 Công cụ kiểm riêng
 `kiem_metadata_kho.py`, `kiem_ngay_dang.py`, `kiem_thoi_luong.py`, `lich_su.py --kiem/--khoi-phuc`, `kiem_header.py`,
-`kiem_ngang.py`, `kiem_sheet.py`, `health_check.py`, `launcher.py doctor|update`.
+`kiem_ngang.py`, `health_check.py`, `launcher.py doctor|update`.
 
 ### 2.12 Giới hạn đã biết
 - Chỉ dựa vào âm thanh: video bị thay/đè toàn bộ tiếng thì không tìm được; bù tốc độ không phủ đổi tốc độ > ±6 %.

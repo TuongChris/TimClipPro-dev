@@ -5,7 +5,6 @@ paths:
   - "TimClipPro/sheets.py"
   - "TimClipPro/ui_gui_sheets.py"
   - "TimClipPro/lich_su.py"
-  - "TimClipPro/kiem_sheet.py"
   - "TimClipPro/kiem_header.py"
   - "TimClipPro/kiem_ngang.py"
   - "TimClipPro/bang_ngang.py"

@@ -193,6 +193,7 @@ def don_kho_dem(
         return ket_qua
 
     tat_ca = []
+    tai_do_qua_tuoi: list = []
     co_the_xoa = []
     dang_dung = []
     try:
@@ -216,6 +217,9 @@ def don_kho_dem(
         )
         tat_ca.append(item)
         if entry.name.lower().endswith(_DUOI_DANG_TAI):
+            # File tải dở chỉ xoá khi mồ côi quá tuổi, không xoá vì vượt ngân sách. Lượt đang tải giữ khoá tải của mục.
+            if max_ngay > 0 and time.time() - stat.st_mtime > max_ngay * _GIAY_MOI_NGAY:
+                tai_do_qua_tuoi.append(item)
             continue
         if _dang_duoc_dung(thu_muc, entry.name, bo_dau_mo_coi=False):
             dang_dung.append(item)
@@ -232,7 +236,7 @@ def don_kho_dem(
         # Phần ngân sách còn lại cho file nhàn rỗi; file đang dùng một mình đã vượt thì bỏ mọi
         # file nhàn rỗi (``chon_can_xoa`` hiểu ngân sách <= 0 là «không giới hạn» nên giữ >= 1).
         ngan_sach = max(1, ngan_sach - sum(item.kich_thuoc for item in dang_dung))
-    can_xoa = chon_can_xoa(
+    can_xoa = tai_do_qua_tuoi + chon_can_xoa(
         co_the_xoa,
         ngan_sach,
         max_ngay * _GIAY_MOI_NGAY,

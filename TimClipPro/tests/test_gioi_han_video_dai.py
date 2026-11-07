@@ -358,3 +358,14 @@ def test_tai_not_ban_day_du_bi_cut_cung_duoc_bo(tmp_path, monkeypatch):
     monkeypatch.setattr(e, "_bo_file_dem", lambda p: bo.append(os.path.basename(p)) or True)
     e.scan_youtube("https://youtu.be/vid65hxxxxx", luu_lich_su=False)
     assert lan_tai == [BA_GIO, None] and bo == ["vid65hxxxxx.webm"]
+
+
+def test_gioi_han_6_gio_loi_quet_van_ghi_thoi_luong_video_that(tmp_path, monkeypatch):
+    """Lịch sử ghi thời lượng VIDEO, không ghi độ dài file phần đầu (audit 06/11 số 20)."""
+    e, lan_tai = _gia_lap(tmp_path, monkeypatch, che_do=GHVD_6_GIO)[:2]
+    monkeypatch.setattr(e, "scan_media", lambda path, **k: ScanResult(
+        source_name="video", duration_s=float(lan_tai[-1]), status="error", note="khúc hỏng"))
+
+    kq = e.scan_youtube("https://youtu.be/vid65hxxxxx", luu_lich_su=False)
+
+    assert kq.status == "error" and kq.duration_s == DAI_65H
