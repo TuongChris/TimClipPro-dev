@@ -15,6 +15,7 @@ import pytest
 import channel
 from channel import ChannelSync, VideoInfo
 from conftest import _ghi_wav, _giai_dieu
+from scan_ui import tom_tat_dong_bo_kenh
 from tien_do_dong_bo import GD_NEN, GD_TAI, SoDongBo
 from truy_cap_youtube import PhienYouTube
 from ui_tien_do_dong_bo import dong_video
@@ -460,6 +461,7 @@ def test_doi_soat_hong_khong_duoc_bao_day_du(tmp_path):
     assert so_lan_tai == [], "file âm thanh vẫn tốt, chỉ cần đối soát lại ở lượt sau"
     assert any("metadata" in d for d in kq["loi"])
     assert "1 file chưa ghi được metadata" in bao[-1]
+    assert any("1 file đã có trong kho" in cau for _, cau in tom_tat_dong_bo_kenh(kq))
 
 
 def test_chay_lai_tren_cung_doi_tuong_van_nen_mot_luong(tmp_path):

@@ -195,6 +195,9 @@ def tom_tat_dong_bo_kenh(r: Mapping[str, Any]) -> list:
                               "video bị hạn chế»."))
     if trong_so:
         ra.append(("warning", CAU_TRONG_SO_KHONG_FILE.format(n=trong_so)))
+    if r.get("so_loi_doi_soat"):
+        ra.append(("warning", f"{r['so_loi_doi_soat']} file đã có trong kho nhưng chưa ghi được metadata: bấm «Bắt đầu "
+                              "đồng bộ kênh» lần nữa, không phải tải lại."))
     if r.get("qua_dai"):
         ra.append(("info", CAU_QUA_DAI.format(n=r["qua_dai"], gio=r.get("gio_toi_da", GIO_CLIP_TOI_DA))))
     xt = r.get("xac_thuc") or {}
