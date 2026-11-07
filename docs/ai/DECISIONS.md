@@ -21,7 +21,7 @@ chặn ghi và mạng nhưng VẪN đọc được file ngoài thư mục làm v
 chạy ở thư mục rỗng với `--ignore-user-config --ignore-rules --ephemeral --disable shell_tool --disable unified_exec --disable apps --disable plugins
 --disable hooks --disable multi_agent --disable browser_use --disable computer_use --disable image_generation -c web_search="disabled"`. Thử lại file giả
 trước khi đổi cách chạy. Kết quả của Codex là lời khai: phải tái hiện bằng test đỏ mới sửa. Codex không commit, không chạm dữ liệu thật.
-Bằng chứng: `C:\Dev\codex_ketqua` (ngoài Git); 5 lượt, 12 phát hiện: 11 thật, 1 bị bác (dọn job cần đồng hồ nhảy 8 ngày).
+Bằng chứng: `C:\Dev\codex_ketqua` (ngoài Git); 6 lượt, 12 phát hiện: 10 đã sửa, 1 để lại (file ngắn hợp lệ gặp mất điện đúng lúc thì tải lại), 1 bị bác (dọn job cần đồng hồ nhảy 8 ngày).
 
 ## D-35 Đồng bộ kênh nén song song với tải video kế tiếp (người dùng, 2026-11-07)
 Quyết định: video tải xong thì video kế tiếp bắt đầu tải ngay, video trước nén cùng lúc. Vì sao: mỗi video dài mất ~2 phút, gồm ~1 phút tải và
