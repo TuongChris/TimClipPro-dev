@@ -1488,17 +1488,21 @@ class ChannelSync:
                         self._da_cach_ly.append(ten)
                     except OSError as e:
                         loi.append(f"Không chuyển được {ten} vào {THU_MUC_HONG}: {e}")
-            thieu_so: set = set()
             try:
                 kq["da_doi_soat"] = self._doi_soat(tep["can_doi_soat"])
-                # Đứt giữa metadata và sổ: file đã có dấu nên không vào đối soát, phải bù sổ ở đây.
-                thieu_so = set(tep["hop_le"]) - set(tep["can_doi_soat"]) - self.done_ids()
+            except Exception as e:  # noqa: BLE001 — không được chặn cả lượt tải
+                kq["so_loi_doi_soat"] = len(tep["can_doi_soat"])
+                loi.append(f"Không đối soát được metadata tại chỗ cho "
+                           f"{len(tep['can_doi_soat'])} file có sẵn: {e}")
+            # Đứt giữa metadata và sổ: file đã có dấu nên không vào đối soát, phải bù sổ ở đây.
+            thieu_so = set(tep["hop_le"]) - set(tep["can_doi_soat"])
+            try:
+                thieu_so -= self.done_ids()
                 if thieu_so:
                     self._mark_done_nhieu(sorted(thieu_so))
             except Exception as e:  # noqa: BLE001 — không được chặn cả lượt tải
-                kq["so_loi_doi_soat"] = len(tep["can_doi_soat"]) or len(thieu_so)
-                loi.append(f"Không đối soát được metadata và sổ đã tải tại chỗ cho "
-                           f"{kq['so_loi_doi_soat']} file có sẵn: {e}")
+                kq["so_loi_doi_soat"] += len(thieu_so)
+                loi.append(f"Không bù được sổ đã tải cho {len(thieu_so)} file có sẵn: {e}")
             hop_le = set(tep["hop_le"])
             chi_trong_so = self._ma_chi_trong_so(tep)
             da_co = hop_le | chi_trong_so

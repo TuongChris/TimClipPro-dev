@@ -481,6 +481,28 @@ def test_bu_so_hong_khong_duoc_bao_day_du(tmp_path):
     assert so_lan_tai == []
 
 
+def test_doc_so_loi_khi_bu_so_khong_duoc_bao_day_du(tmp_path):
+    cs, tao, _ = _kho_mot_file_that(tmp_path)
+    with open(cs.archive, "w", encoding="utf-8"):
+        pass
+    moi = tao()
+    goc = moi.done_ids
+    lan: list = []
+
+    def doc_hong_mot_lan():
+        # Lần 1 là `sync` đọc sổ từ đầu lượt; lần 2 là bước bù sổ.
+        lan.append(1)
+        if len(lan) == 2:
+            raise PermissionError("giả: sổ đang bị khoá")
+        return goc()
+
+    moi.done_ids = doc_hong_mot_lan
+    kq = _chay(moi)
+
+    assert kq["trang_thai"] == channel.DONG_BO_MOT_PHAN
+    assert kq["so_loi_doi_soat"] == 1
+
+
 def test_luot_truoc_chet_giua_chung_khong_de_lai_cong_nen_khoa(tmp_path):
     """Báo tiến độ lỗi khi video 1 đang giữ cổng: lượt sau trên cùng đối tượng vẫn phải nén được."""
     cs, gia = _kenh(tmp_path, 2)
