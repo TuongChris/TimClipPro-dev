@@ -926,10 +926,11 @@ class CapNhat:
             raw_s = f.read()
         kiem_chu_ky(raw_m, raw_s, self.khoa_tin_cay)              # TRƯỚC khi tin nội dung
         m = doc_manifest(raw_m)
-        if m.kenh != KENH_STABLE:
-            raise TuChoiGoi("kenh", "Manifest không thuộc kênh Stable.")
+        # Tag TRƯỚC các chính sách còn lại: chúng cách ly theo số của tag, chỉ đúng khi manifest thuộc về tag đó.
         if ban.tag != TIEN_TO_TAG + m.phien_ban:
             raise TuChoiGoi("tag", "Phiên bản trong manifest không khớp tag.")
+        if m.kenh != KENH_STABLE:
+            raise TuChoiGoi("kenh", "Manifest không thuộc kênh Stable.")
         if m.nen_tang != NEN_TANG:
             raise TuChoiGoi("nen_tang", "Bản phát hành không dành cho nền tảng này.")
         if m.goi_ten not in ban.assets:

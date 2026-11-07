@@ -117,8 +117,8 @@ def lenh_cli(con_tro: dict, doi_so: list) -> list:
 # ---------------------------------------------------------------------------
 
 def _chay_health(cd: mu.CaiDat, rel: str, rt: str, doi_so: list, han_s: float) -> tuple:
-    """Chạy ``health_check.py`` của release trong tiến trình riêng. Quá hạn / không chạy được = KHÔNG ĐẠT
-    (không bao giờ ném ra ngoài bộ cập nhật). cwd ở state root (cây release đã ký là bất biến)."""
+    """Chạy ``health_check.py`` của release trong tiến trình riêng. Quá hạn / không chạy được / chết không để lại
+    kết quả = KHÔNG ĐẠT (không bao giờ ném ra ngoài bộ cập nhật). cwd ở state root (cây release đã ký là bất biến)."""
     con_tro = {"release": rel, "runtime": rt}
     env = moi_truong_con(cd, con_tro)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -143,7 +143,10 @@ def _chay_health(cd: mu.CaiDat, rel: str, rt: str, doi_so: list, han_s: float) -
     if not isinstance(kq, dict):
         kq = {}
     ok = p.returncode == 0 and kq.get("ok") is True
-    return ok, kq if kq else {"loi": [f"health_check thoát mã {p.returncode}, không có dòng kết quả"]}
+    # Bị giết và bản hỏng thật đều ra mã khác 0, không dòng kết quả (Windows không phân biệt được; lỗi ở mã dự án thì
+    # health_check tự in kết quả): coi là tạm thời, bộ cập nhật cách ly ở lần thứ ``SO_LAN_LOI_TOI_DA``.
+    return ok, kq if kq else {"loi": [f"health_check thoát mã {p.returncode}, không có dòng kết quả"],
+                              "tam_thoi": p.returncode != 0}
 
 
 def kiem_suc_khoe_tien_trinh(cd: mu.CaiDat, *, han_s: float = 600.0):
@@ -299,7 +302,12 @@ def ban_dang_kich_hoat(cn: mu.CapNhat) -> dict:
             f"Khôi phục cập nhật lỗi không lường trước ({type(e).__name__}) — mở bản đang kích hoạt; chạy "
             "«launcher.py doctor».")
         print(f"[CẢNH BÁO] {thong_diep}", file=sys.stderr)
-    return _kiem_con_tro(cn.hien_tai())
+    con_tro = _kiem_con_tro(cn.hien_tai())
+    # Updater ghi ACTIVATING TRƯỚC khi đổi con trỏ, ACTIVE sau health: đọc nhật ký SAU con trỏ là đủ thấy updater khác
+    # chen vào; không giữ khoá updater tới đây (giữ thì updater đó báo bận, launcher khác mở chậm theo).
+    if _trang_thai_nhat_ky(cn.cd) in (mu.ACTIVATING, mu.HEALTHCHECK, mu.ROLLBACK):
+        raise LoiLauncher("Đang hoàn tất một lượt cập nhật — bản mới chưa được kiểm xong; đợi vài phút rồi mở lại.")
+    return con_tro
 
 
 def _trang_thai_nhat_ky(cd: mu.CaiDat) -> Optional[str]:

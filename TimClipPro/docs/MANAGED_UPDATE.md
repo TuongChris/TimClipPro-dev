@@ -142,7 +142,7 @@ và "kích hoạt"; chờ CÓ HẠN; quá hạn thì hoãn, không giết việc
 * Rollback chỉ quay MÃ (con trỏ) về con trỏ TRƯỚC kích hoạt ghi trong nhật ký (`con_tro_cu`; không bao giờ về
   chính bản lỗi, kể cả khi `last_good` đã trỏ sang nó) — **không bao giờ tự khôi phục DB**: việc đã gửi không
   thể quay về chờ gửi, kết quả quét sau backup không mất. Backup chỉ để khôi phục thủ công có duyệt.
-* Health check KHÔNG chạy được (quá hạn, thiếu python của runtime, CSDL bị khoá, lỗi lạ) = KHÔNG ĐẠT → quay
+* Health check KHÔNG chạy được (quá hạn, thiếu python của runtime, CSDL bị khoá, lỗi lạ, tiến trình con chết với mã khác 0 mà không in dòng kết quả) = KHÔNG ĐẠT → quay
   lại NGAY; vì có thể chỉ tạm thời nên chỉ cách ly sau `SO_LAN_LOI_TOI_DA` (3) lần (migration bị khoá/quá hạn
   cũng vậy). Health CHẠY và báo lỗi = tất định → cách ly ngay. Không bao giờ thoát khỏi bộ cập nhật giữa chừng. Kết quả đọc từ dòng `TIMCLIP_HEALTH_KET_QUA {json}`; cwd ở
   state root. Thứ tự chốt: nhật ký ACTIVE rồi mới `last_good` (khôi phục ở ACTIVE ghi bù last_good).
@@ -152,7 +152,8 @@ và "kích hoạt"; chờ CÓ HẠN; quá hạn thì hoãn, không giết việc
   kích thước) khi tải manifest chỉ bỏ qua lần đó. Bỏ cách ly: `launcher.py update bo-cach-ly X.Y.Z`.
 * Khôi phục lỗi khi nhật ký đang giữa lúc kích hoạt (kể cả một updater khác đang kiểm bản mới) → launcher KHÔNG
   mở app (con trỏ có thể là bản chưa qua health) — đợi rồi mở lại. Cài lần đầu bị cắt ở HEALTHCHECK → lần mở sau
-  kiểm health ngay, không chờ rảnh (không có bản nào khác để bảo vệ).
+  kiểm health ngay, không chờ rảnh (không có bản nào khác để bảo vệ). Launcher đọc lại nhật ký SAU khi đọc con trỏ (không giữ khoá updater):
+  updater khác đổi con trỏ ngay sau lúc khôi phục cũng không làm mở bản chưa qua health.
 
 ## 7b. Giao diện «ℹ️ Phiên bản và cập nhật»
 

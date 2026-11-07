@@ -22,7 +22,7 @@ import pytest
 
 import launcher
 import managed_update as mu
-from cap_nhat_gia import KhoaThu, MoiTruongGia, phat_hanh
+from cap_nhat_gia import KhoaThu, MoiTruongGia, cay_mac_dinh, phat_hanh
 from test_launcher import _cai_ban
 
 
@@ -425,3 +425,97 @@ def test_health_tam_thoi_chi_khi_csdl_khoa_la_loi_duy_nhat(tmp_path, monkeypatch
     monkeypatch.setattr(hc, "_engine_tam", hong)
     kq = hc.kiem(str(tmp_path / "data"), "staging")
     assert kq["ok"] is False and not kq.get("tam_thoi"), kq["loi"]
+
+
+# ---------------------------------------------------------------- phản biện ngoài 07/11 (F1, F3)
+
+@pytest.mark.parametrize("ma_thoat,tam_thoi", [(1, True), (0, False)])
+def test_health_khong_co_dong_ket_qua_chi_tam_thoi_khi_thoat_loi(tmp_path, monkeypatch, ma_thoat, tam_thoi):
+    """Bị giết = mã khác 0, không có dòng kết quả. Mã 0 mà không in kết quả không phải bị giết: hỏng hợp đồng, tất định."""
+    monkeypatch.setattr(launcher.subprocess, "run",
+                        lambda *a, **k: types.SimpleNamespace(returncode=ma_thoat, stdout="", stderr=""))
+    ok, kq = launcher._chay_health(_cd(tmp_path), _rel(tmp_path), str(tmp_path / "rt"), ["kiem"], 1.0)
+    assert ok is False and bool(kq.get("tam_thoi")) is tam_thoi
+
+
+def _phat_hanh_health(cai, ma: str):
+    """Bản 1.1.0 có ``health_check.py`` thật chạy bằng Python của test, tiến trình con thật."""
+    phat_hanh(cai["nguon"], "1.1.0", cai["khoa"],
+              cay={**cay_mac_dinh("1.1.0"), "TimClipPro/health_check.py": ma.encode("utf-8")})
+
+
+def _prepare_health_that(cai):
+    cd = mu.CaiDat(goc=cai["goc"], state_root=cai["state"])
+    cai["main"]("update", "prepare", kiem_suc_khoe=launcher.kiem_suc_khoe_tien_trinh(cd))
+    return mu.doc_json(cd.file_trang_thai("quarantine.json"), mac_dinh={})
+
+
+@pytest.mark.parametrize("ma", ["import os\nos.kill(os.getpid(), 9)\n", "raise ImportError('bản hỏng thật')\n"],
+                         ids=["bi_giet", "ban_hong_that"])
+def test_health_chet_khong_ket_qua_co_gioi_han_cach_ly_o_lan_thu_ba(cai, monkeypatch, ma):
+    """Không phân biệt được bị giết với bản hỏng (Windows: cùng mã khác 0, không dòng kết quả) nên đi đường lỗi tạm
+    thời có giới hạn: bản hỏng thật vẫn bị cách ly ở lần 3, không thử lại mãi, không chạm bản đang chạy."""
+    _cai_ban(cai, "1.0.0")
+    _phat_hanh_health(cai, ma)
+    monkeypatch.setattr(launcher, "python_runtime", lambda con_tro: sys.executable)
+    for _ in range(mu.SO_LAN_LOI_TOI_DA - 1):
+        assert "1.1.0" not in _prepare_health_that(cai)
+    assert "1.1.0" in _prepare_health_that(cai)
+    cd = mu.CaiDat(goc=cai["goc"], state_root=cai["state"])
+    assert mu.doc_json(cd.file_trang_thai("current.json"))["phien_ban"] == "1.0.0"
+    with open(cd.file_trang_thai("loi_tam_thoi.json"), encoding="utf-8") as f:
+        so_lan = json.load(f)["1.1.0"]
+    _prepare_health_that(cai)                            # đã cách ly: không chạy health lần nữa
+    assert mu.doc_json(cd.file_trang_thai("loi_tam_thoi.json"))["1.1.0"] == so_lan == mu.SO_LAN_LOI_TOI_DA
+
+
+def test_health_bao_loi_ro_rang_van_cach_ly_ngay(cai, monkeypatch):
+    _cai_ban(cai, "1.0.0")
+    _phat_hanh_health(cai, f"print('{launcher.DAU_KET_QUA_HEALTH} ' + '{{\"ok\": false, \"loi\": [\"x\"]}}')\n"
+                           "raise SystemExit(1)\n")
+    monkeypatch.setattr(launcher, "python_runtime", lambda con_tro: sys.executable)
+    assert "1.1.0" in _prepare_health_that(cai)
+
+
+def _mo_luc_ban_moi_dang_kiem(cai, chuan_bi_launcher) -> dict:
+    """Một updater đang ở health sau kích hoạt (con trỏ đã là ứng viên, khoá updater đang giữ, health sẽ HỎNG) thì
+    launcher đi tới bước đọc con trỏ."""
+    _cai_ban(cai, "1.0.0")
+    phat_hanh(cai["nguon"], "1.1.0", cai["khoa"])
+    assert cai["main"]("update", "prepare") == 0
+    kq = {}
+
+    def kiem(m, rel, rt, che_do):
+        if che_do == "kich_hoat":
+            cn = launcher.tao_cap_nhat(cai["goc"], launcher.doc_cau_hinh(cai["goc"]), **cai["thay"])
+            chuan_bi_launcher(cn)
+            try:
+                kq["da_mo"] = launcher.ban_dang_kich_hoat(cn)["phien_ban"]
+            except launcher.LoiLauncher as e:
+                kq["tu_choi"] = str(e)
+        return che_do != "kich_hoat", "health giả"
+
+    assert cai["main"]("update", "apply", kiem_suc_khoe=kiem) == 1
+    assert kq.get("tu_choi"), kq
+    assert "da_mo" not in kq, kq
+    return kq
+
+
+def test_updater_doi_con_tro_sau_khi_launcher_khoi_phuc_xong_thi_khong_mo_ban_chua_kiem(cai):
+    """Launcher khôi phục xong, nhả khoá, chưa đọc con trỏ thì updater khác đổi con trỏ."""
+    def khoi_phuc_da_xong(cn):
+        cn.phuc_hoi = lambda: mu.STAGED
+
+    _mo_luc_ban_moi_dang_kiem(cai, khoi_phuc_da_xong)
+
+
+def test_updater_doi_con_tro_sau_khi_launcher_doc_nhat_ky_thi_khong_mo_ban_chua_kiem(cai, monkeypatch):
+    """Nhánh BAN: nhật ký launcher vừa đọc còn trước kích hoạt, tới lúc đọc con trỏ thì đã là ứng viên."""
+    that = launcher._trang_thai_nhat_ky
+    con_cu = [mu.BACKED_UP]
+
+    def doc(cd):
+        return con_cu.pop() if con_cu else that(cd)
+
+    monkeypatch.setattr(launcher, "_trang_thai_nhat_ky", doc)
+    _mo_luc_ban_moi_dang_kiem(cai, lambda cn: None)

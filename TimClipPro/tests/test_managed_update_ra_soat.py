@@ -743,3 +743,17 @@ def test_manifest_khai_goi_vuot_tran_bi_cach_ly_khong_tai(mt):
     cn = mt["tao"]()
     assert cn.kiem_tra().trang_thai == mu.KHONG_CO
     assert "Kích thước gói khai báo vượt giới hạn" in cn.cach_ly()["1.0.0"]["ly_do"]
+
+
+# ---------------------------------------------------------------- phản biện ngoài 07/11 (F2)
+
+def test_manifest_kenh_khac_nam_sai_tag_khong_cach_ly_so_phien_ban_cua_tag(mt):
+    """Manifest beta 1.1.0 ký đúng nằm nhầm thư mục stable-2.0.0: nó không nói gì về bản 2.0.0 thật chép vào sau."""
+    _cai(mt, "1.0.0")
+    phat_hanh(mt["nguon"], "1.1.0", mt["khoa"], tag="stable-2.0.0", sua_manifest=dict(kenh="beta"))
+    kq = mt["tao"]().kiem_tra()
+    assert any("không khớp tag" in x for x in kq.chi_tiet), kq
+    assert mt["tao"]().cach_ly() == {}
+    shutil.rmtree(os.path.join(mt["nguon"], "stable-2.0.0"))
+    phat_hanh(mt["nguon"], "2.0.0", mt["khoa"])
+    assert mt["tao"]().chuan_bi().phien_ban == "2.0.0"
