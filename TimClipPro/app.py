@@ -307,8 +307,9 @@ def chay_dong_bo(kenh_url: str, kho_dir: str, gioi_han: int | None, thu_lai_han_
                        "dùng chung cookie YouTube nên dễ bị YouTube chặn.")
         return
     if tv_khac is not None:
-        bao("warning", "Đang chạy «Lấy lại tên video» / «Vá metadata» (cũng hỏi YouTube và ghi metadata kho) — chờ "
-                       "việc đó xong rồi đồng bộ.")
+        ten_viec = {"va_title": "«Lấy lại tên video»", "metadata_network": "«Vá metadata»",
+                    "tai_video": "«Tải video gốc / thumbnail / cả kênh»"}.get(tv_khac.kind, "một việc nền khác")
+        bao("warning", f"Đang chạy {ten_viec} (cũng hỏi YouTube) — chờ việc đó xong rồi đồng bộ.")
         return
     dung_kho = FingerprintJobController.dang_chay_cua(eng)
     if dung_kho is not None and tac_vu_nen.thu_muc_chong_nhau(dung_kho.thu_muc, dich):
@@ -718,7 +719,7 @@ def hien_ket_qua_nguon_chung(kql: nguon_chung.KetQuaLo) -> None:
                     f"{format_publication_date(tt_goc.get('upload_date') or '') or '—'}")
             c3.markdown("⏱️ Thời lượng: "
                         + (hhmmss(dai) if isinstance(dai, (int, float)) and dai > 0 else "—"))
-            st.caption(f"Clip trong kho: `{goc.clip}` · Kho: {kql.kho_ten or kql.kho_id}")
+            st.caption(f"Clip trong kho: {thoat_markdown(goc.clip)} · Kho: {kql.kho_ten or kql.kho_id}")
     for canh_bao in kql.canh_bao:
         st.warning(f"⚠️ {canh_bao}")
     if kql.goc_khac:
@@ -1132,7 +1133,7 @@ if job["running"]:
         )
         if fp.file_name:
             file_slot.markdown(
-                f"**Clip hiện tại ({fp.current}/{fp.total}):** `{fp.file_name}`"
+                f"**Clip hiện tại ({fp.current}/{fp.total}):** {thoat_markdown(fp.file_name)}"
             )
         else:
             file_slot.markdown("**Clip hiện tại:** đang xác định...")
@@ -1338,7 +1339,7 @@ if not job["running"] and (job["results"] or job["error"]):
         def _dong_tai(k: dict) -> str:
             if k["trang_thai"] == "xong":
                 return (f"✅ **{thoat_markdown(k['tieu_de'] or k['url'])}** — {thoat_markdown(k['chat_luong'])}  \n"
-                        f"`{k['duong_dan']}`" + (f"  \n⚠️ {thoat_markdown(k['ghi_chu'])}" if k["ghi_chu"] else ""))
+                        f"{thoat_markdown(k['duong_dan'])}" + (f"  \n⚠️ {thoat_markdown(k['ghi_chu'])}" if k["ghi_chu"] else ""))
             return (f"{'⏭️' if k['trang_thai'] == 'bo_qua' else '❌'} {thoat_markdown(k['url'])}  \n"
                     f"{thoat_markdown(k['ghi_chu'])}")
 
@@ -1534,7 +1535,7 @@ with tab0:
         st.write("")
         st.write("")
         xem_truoc = st.button("👀 Xem danh sách video của kênh", width="stretch",
-                              disabled=not kenh_url)
+                              disabled=not kenh_url or dang_dong_bo())
 
     lay_ngay = st.checkbox(
         "Lấy cả ngày đăng chính xác (chậm: thêm 1 lượt hỏi mỗi video)",
@@ -1599,7 +1600,7 @@ with tab0:
     cc1, cc2 = st.columns(2)
     with cc1:
         if st.button("🔍 Kiểm tra còn thiếu video nào", width="stretch",
-                     disabled=not (kenh_url and st.session_state.kho_dir)):
+                     disabled=not (kenh_url and st.session_state.kho_dir) or dang_dong_bo()):
             with st.spinner("Đang đối chiếu kênh với thư mục kho..."):
                 try:
                     cs = ChannelSync(st.session_state.kho_dir.strip('" '),
