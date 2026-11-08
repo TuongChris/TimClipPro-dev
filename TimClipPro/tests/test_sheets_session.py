@@ -102,6 +102,9 @@ class _Client:
         self.dem = dem
         self._sh = sh
 
+    def set_timeout(self, _han):
+        pass
+
     def open_by_key(self, key):
         self.dem["open_by_key"] += 1
         return self._sh

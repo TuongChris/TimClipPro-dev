@@ -219,7 +219,12 @@ class SheetsExporter:
         """Mở worksheet MỚI. Không dùng cache. ``tao_neu_thieu=False`` (kiểm tra kết nối): CHỈ ĐỌC —
         thiếu tab thì ném ``WorksheetNotFound`` chứ không tự tạo."""
         import gspread
+
+        from outbox import CongGspread
         gc = gspread.service_account(filename=self.key_path)
+        # gspread mặc định KHÔNG có hạn chờ: mạng treo nửa chừng là nút «Kiểm tra kết nối» / đẩy danh sách video treo mãi
+        # (còn giữ ``_KHOA``). Cùng hạn với người gửi outbox.
+        gc.set_timeout(CongGspread.THOI_GIAN_CHO)
         sh = gc.open_by_key(self.sheet_id)
         try:
             return sh.worksheet(self.worksheet)

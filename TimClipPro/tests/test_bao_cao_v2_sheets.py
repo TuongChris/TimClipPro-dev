@@ -75,6 +75,9 @@ def bang(tmp_path, monkeypatch):
             return _WS(dem, hop["noi_dung"])
 
     class _CL:
+        def set_timeout(self, _han):
+            pass
+
         def open_by_key(self, k):
             return _SH()
 

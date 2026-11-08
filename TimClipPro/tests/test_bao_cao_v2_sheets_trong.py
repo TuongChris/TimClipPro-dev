@@ -91,6 +91,9 @@ def sx(tmp_path, monkeypatch):
             return hop["ws"]
 
     class _CL:
+        def set_timeout(self, _han):
+            pass
+
         def open_by_key(self, k):
             return _SH()
 
