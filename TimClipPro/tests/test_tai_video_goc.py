@@ -35,6 +35,12 @@ class YdlGia:
         ma = url[-11:]
         mau = self.opts["outtmpl"]
         ten = mau.replace("%(title).150B", f"Tiêu đề {ma}").replace("%(id)s", ma)
+        if self.opts.get(
+            "writethumbnail"
+        ):  # như yt-dlp + FFmpegThumbnailsConvertor: chỉ còn ảnh .jpg
+            with open(ten.replace("%(ext)s", "jpg"), "wb") as f:
+                f.write(b"anh")
+            return {"id": ma, "title": f"Tiêu đề {ma}"}
         hook = self.opts["progress_hooks"][0]
         with open(ten.replace("%(ext)s", "f137.mp4.part"), "wb") as f:
             f.write(b"x" * 10)
@@ -202,10 +208,22 @@ def test_tab_tai_video_chay_nen_va_hien_ket_qua(tmp_path, monkeypatch):
     goi = {}
 
     def tai_gia(
-        links, thu_muc, cau_hinh_mang, *, player_clients, phien, progress, cancel_check
+        links,
+        thu_muc,
+        cau_hinh_mang,
+        *,
+        player_clients,
+        phien,
+        progress,
+        cancel_check,
+        chat_luong,
     ):
         goi.update(
-            links=links, thu_muc=thu_muc, huy=cancel_check(), co_phien=phien is not None
+            links=links,
+            thu_muc=thu_muc,
+            huy=cancel_check(),
+            co_phien=phien is not None,
+            chat_luong=chat_luong,
         )
         progress(0.5, "Video 1/2: đang tải hình 50%")
         return [
@@ -241,6 +259,7 @@ def test_tab_tai_video_chay_nen_va_hien_ket_qua(tmp_path, monkeypatch):
         str(tmp_path / "video")
     ).run()
     assert at.button(key="bat_dau_tai_video").label == "⬇️ Tải 2 video"
+    at.selectbox(key="cl_tai").select("1080p").run()
     at.button(key="bat_dau_tai_video").click().run()
     for _ in range(50):
         if goi and not at.session_state.job["running"]:
@@ -253,9 +272,177 @@ def test_tab_tai_video_chay_nen_va_hien_ket_qua(tmp_path, monkeypatch):
         "thu_muc": str(tmp_path / "video"),
         "huy": False,
         "co_phien": True,
+        "chat_luong": "1080p",
     }
     chu = " ".join(e.value for e in [*at.markdown, *at.warning, *at.success])
-    assert "Đã tải 1/2 video." in chu and "Video A" in chu and "Video đã bị gỡ" in chu
+    assert (
+        "Đã tải 1/2 — bỏ qua 0, lỗi 1." in chu
+        and "Video A" in chu
+        and "Video đã bị gỡ" in chu
+    )
+
+
+def test_tab_thumbnail_va_ca_kenh_goi_dung_ham(tmp_path, monkeypatch):
+    """AppTest: tab thumbnail gọi ``tai_nhieu(thumbnail=True)``; tab cả kênh gọi ``tai_kenh`` với số video + chất lượng."""
+    import time
+    from pathlib import Path
+
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    goi = []
+    xong = [
+        {
+            "url": URL1,
+            "trang_thai": "xong",
+            "duong_dan": "a.jpg",
+            "tieu_de": "A",
+            "chat_luong": "ảnh JPG",
+            "ghi_chu": "",
+        }
+    ]
+
+    def ghi(ten):
+        def ham(*a, progress, cancel_check, **kw):
+            goi.append(
+                (
+                    ten,
+                    a[:2],
+                    {
+                        k: v
+                        for k, v in kw.items()
+                        if k in ("thumbnail", "gioi_han", "chat_luong")
+                    },
+                )
+            )
+            return xong
+
+        return ham
+
+    monkeypatch.setattr(tv, "tai_nhieu", ghi("nhieu"))
+    monkeypatch.setattr(tv, "tai_kenh", ghi("kenh"))
+    at = AppTest.from_file(
+        str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=120
+    ).run()
+    thu_muc = str(tmp_path / "anh")
+
+    def cho_xong():
+        for _ in range(50):
+            if not at.session_state.job["running"]:
+                break
+            time.sleep(0.1)
+        at.run()
+        assert not at.exception
+        at.session_state.job.update({"results": [], "error": "", "kind": ""})
+        at.run()
+
+    next(
+        t for t in at.text_area if t.label.startswith("Link video cần lấy thumbnail")
+    ).input(URL1).run()
+    next(t for t in at.text_input if t.label == "Thư mục lưu thumbnail").input(
+        thu_muc
+    ).run()
+    at.button(key="bat_dau_tai_anh").click().run()
+    cho_xong()
+    next(t for t in at.text_input if t.label == "Link kênh YouTube cần tải").input(
+        "https://www.youtube.com/@Kenh"
+    ).run()
+    next(
+        n for n in at.number_input if n.label.startswith("Số video mới nhất")
+    ).set_value(30).run()
+    at.selectbox(key="cl_kenh").select("720p").run()
+    at.button(key="bat_dau_tai_kenh").click().run()
+    cho_xong()
+    assert goi == [
+        ("nhieu", ([URL1], thu_muc), {"thumbnail": True}),
+        (
+            "kenh",
+            ("https://www.youtube.com/@Kenh", thu_muc),
+            {"gioi_han": 30, "chat_luong": "720p"},
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    "muc, dinh_dang, ghep",
+    [
+        ("Cao nhất", "bv*+ba/b", "mp4/mkv"),
+        ("1080p", "bv*[height<=1080]+ba/b[height<=1080]", "mp4/mkv"),
+        ("4K (2160p)", "bv*[height<=2160]+ba/b[height<=2160]", "mp4/mkv"),
+        ("Chỉ tiếng", "ba/b", None),
+    ],
+)
+def test_tuy_chon_dinh_dang_theo_chat_luong(muc, dinh_dang, ghep):
+    tc = tv.tuy_chon_dinh_dang(muc)
+    assert tc["format"] == dinh_dang and tc.get("merge_output_format") == ghep
+
+
+def test_chat_luong_sai_bao_loi_truoc_khi_tai(gia, tmp_path):
+    with pytest.raises(ValueError):
+        tv.tai_nhieu([URL1], str(tmp_path), chat_luong="8K")
+    assert gia.goi == []
+
+
+def test_chat_luong_chon_di_toi_yt_dlp(gia, tmp_path):
+    tv.tai_nhieu([URL1], str(tmp_path), chat_luong="720p")
+    assert gia.goi[0][1]["format"] == "bv*[height<=720]+ba/b[height<=720]"
+
+
+def test_thumbnail_luu_jpg_khong_tai_video(gia, tmp_path):
+    kq = tv.tai_nhieu([URL1], str(tmp_path), thumbnail=True)
+    assert kq[0]["trang_thai"] == "xong" and kq[0]["chat_luong"] == "ảnh JPG"
+    assert os.listdir(tmp_path) == ["Tiêu đề abcdefghij1 [abcdefghij1].jpg"]
+    opts = gia.goi[0][1]
+    assert opts["skip_download"] is True and opts["writethumbnail"] is True
+    assert opts["postprocessors"] == [
+        {"key": "FFmpegThumbnailsConvertor", "format": "jpg", "when": "before_dl"}
+    ]
+    assert "format" not in opts
+
+
+def test_bo_qua_video_da_co_nhung_khong_tinh_anh_thumbnail(gia, tmp_path):
+    (tmp_path / "Cũ [abcdefghij1].mkv").write_bytes(b"cu")
+    (tmp_path / "Ảnh [abcdefghij2].jpg").write_bytes(b"anh")
+    kq = tv.tai_nhieu([URL1, URL2], str(tmp_path), bo_qua_da_co=True)
+    assert [k["trang_thai"] for k in kq] == ["bo_qua", "xong"]
+    assert [u for u, _ in gia.goi] == [URL2]
+
+
+def test_tai_kenh_lay_danh_sach_roi_bo_qua_video_da_co(gia, tmp_path, monkeypatch):
+    import channel
+
+    nhan = {}
+
+    def liet_ke(url, limit=None, **kw):
+        nhan.update(url=url, limit=limit, co_phien=kw.get("phien_youtube") is not None)
+        return [
+            channel.VideoInfo(id=m, title=m, upload_date="", duration=0.0, url=f"https://www.youtube.com/watch?v={m}")
+            for m in ("abcdefghij1", "abcdefghij2")
+        ]
+
+    monkeypatch.setattr(channel.ChannelSync, "list_channel", staticmethod(liet_ke))
+    (tmp_path / "Cũ [abcdefghij1].webm").write_bytes(b"cu")
+    kq = tv.tai_kenh(
+        " https://www.youtube.com/@Kenh ", str(tmp_path), gioi_han=5, chat_luong="1080p"
+    )
+    assert nhan == {
+        "url": "https://www.youtube.com/@Kenh",
+        "limit": 5,
+        "co_phien": True,
+    }
+    assert [k["trang_thai"] for k in kq] == ["bo_qua", "xong"]
+    assert gia.goi[0][1]["format"] == "bv*[height<=1080]+ba/b[height<=1080]"
+
+
+def test_tai_kenh_rong_bao_loi(gia, tmp_path, monkeypatch):
+    import channel
+
+    monkeypatch.setattr(
+        channel.ChannelSync, "list_channel", staticmethod(lambda *a, **k: [])
+    )
+    with pytest.raises(RuntimeError, match="không có video"):
+        tv.tai_kenh("https://www.youtube.com/@Kenh", str(tmp_path))
 
 
 def test_chon_thu_muc_doc_utf8_va_bao_loi_ro(monkeypatch):

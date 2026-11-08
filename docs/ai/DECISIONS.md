@@ -20,6 +20,9 @@ Tab «⬇️ Tải video gốc»: nhiều link (mỗi dòng một), ô thư mụ
 tải hình + tiếng chất lượng cao nhất (`bv*+ba/b`, ghép bằng FFmpeg vào MP4 nếu hợp mã hoá, không thì MKV — không chuyển mã).
 Không nén, không vào kho vân tay. Link kênh/playlist YouTube bị từ chối. Chạy ở làn chính (`chay_nen`): không cùng lúc với quét,
 dựng kho hay đồng bộ kênh. Mã: `TimClipPro/tai_video_goc.py`.
+Bổ sung 08/11 (người dùng chọn): ô «Chất lượng tối đa» (Cao nhất, 4K, 1440p, 1080p, 720p, 480p, Chỉ tiếng — lọc
+`height<=`); tab «🖼️ Tải thumbnail» (ảnh lớn nhất, đổi sang JPG, không tải video); tab «📺 Tải cả kênh» (tab Videos, ô số
+video mới nhất, 0 = cả kênh; video đã có file «[mã].đuôi» trong thư mục thì bỏ qua, ảnh không tính). Ba tab chung một thư mục.
 
 ## D-36 Dùng Codex làm người review độc lập, không cho chạm máy (người dùng, 2026-11-07)
 Codex CLI đăng nhập gói ChatGPT của người dùng, dùng để review mã. Rào chắn của Claude không áp cho Codex: thử bằng file giả, `-s read-only`

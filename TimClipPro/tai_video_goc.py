@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -39,6 +40,56 @@ DINH_DANG = "bv*+ba/b"
 VO_GHEP = "mp4/mkv"
 THU_MUC_TAM = ".timclip_tai_do"
 _DUOI_DO_DANG = (".part", ".ytdl", ".temp")
+# Mức TỐI ĐA (chiều cao khung hình): video gốc thấp hơn thì lấy bản cao nhất có. 0 = chỉ tiếng.
+CHAT_LUONG = {
+    "Cao nhất": None,
+    "4K (2160p)": 2160,
+    "1440p": 1440,
+    "1080p": 1080,
+    "720p": 720,
+    "480p": 480,
+    "Chỉ tiếng": 0,
+}
+CHAT_LUONG_MAC_DINH = "Cao nhất"
+# Ảnh lớn nhất YouTube có, đổi sang JPG; không tải video. Không cần định dạng video nào nên không báo lỗi khi thiếu.
+TUY_CHON_THUMBNAIL = {
+    "skip_download": True,
+    "writethumbnail": True,
+    "ignore_no_formats_error": True,
+    "postprocessors": [
+        {"key": "FFmpegThumbnailsConvertor", "format": "jpg", "when": "before_dl"}
+    ],
+}
+_DUOI_ANH = (".jpg", ".jpeg", ".png", ".webp")
+_RE_MA_CUOI_TEN = re.compile(r"\[([A-Za-z0-9_-]{11})\]\.[^.]+$")
+
+
+def tuy_chon_dinh_dang(chat_luong: str = CHAT_LUONG_MAC_DINH) -> dict:
+    """Phần tuỳ chọn yt-dlp chọn định dạng theo mức chất lượng (khoá của :data:`CHAT_LUONG`)."""
+    if chat_luong not in CHAT_LUONG:
+        raise ValueError(f"Mức chất lượng không hợp lệ: {chat_luong!r}")
+    cao = CHAT_LUONG[chat_luong]
+    if cao == 0:
+        return {"format": "ba/b"}
+    if cao is None:
+        return {"format": DINH_DANG, "merge_output_format": VO_GHEP}
+    return {
+        "format": f"bv*[height<={cao}]+ba/b[height<={cao}]",
+        "merge_output_format": VO_GHEP,
+    }
+
+
+def ma_da_co(thu_muc: str) -> set:
+    """Mã video đã có FILE VIDEO/TIẾNG trong ``thu_muc`` (tên kết thúc bằng «[mã].đuôi»; ảnh thumbnail không tính)."""
+    try:
+        ten = os.listdir(thu_muc)
+    except OSError:
+        return set()
+    return {
+        m.group(1)
+        for t in ten
+        if not t.lower().endswith(_DUOI_ANH) and (m := _RE_MA_CUOI_TEN.search(t))
+    }
 
 
 class DaHuyTaiVideo(RuntimeError):
@@ -129,15 +180,24 @@ def tai_nhieu(
     phien: Optional[PhienYouTube] = None,
     progress: Optional[Callable[[float, str], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
+    chat_luong: str = CHAT_LUONG_MAC_DINH,
+    thumbnail: bool = False,
+    bo_qua_da_co: bool = False,
 ) -> list:
     """Tải lần lượt từng link vào ``thu_muc``; trả list dict (:class:`KetQuaTaiVideo`) theo đúng thứ tự link.
 
     Mỗi video tải vào thư mục tạm riêng trong ``thu_muc`` rồi mới chuyển ra tên cuối (không ghi đè file có sẵn); lỗi,
     Dừng hay đổi player client đều dọn sạch phần dở. Một video lỗi không dừng cả lô — trừ khi cầu dao của phiên mở
     (YouTube chặn bot, 429…): các link còn lại «bỏ qua», không gửi thêm request.
+
+    ``chat_luong``: khoá của :data:`CHAT_LUONG`. ``thumbnail``: chỉ lấy ảnh thumbnail (JPG), không tải video.
+    ``bo_qua_da_co``: video đã có file trong ``thu_muc`` (theo «[mã]» ở tên) thì bỏ qua — bấm lại là tải tiếp phần thiếu.
     """
     import yt_dlp
 
+    rieng_dinh_dang = (
+        dict(TUY_CHON_THUMBNAIL) if thumbnail else tuy_chon_dinh_dang(chat_luong)
+    )
     if not shutil.which("ffmpeg"):
         raise RuntimeError(
             "Máy chưa có FFmpeg — cần FFmpeg để ghép hình và tiếng chất lượng cao. Cài FFmpeg rồi thử lại."
@@ -151,6 +211,7 @@ def tai_nhieu(
     huy = cancel_check or (lambda: False)
     n = len(links)
     ket_qua: list = []
+    da_co = ma_da_co(thu_muc) if bo_qua_da_co else set()
 
     for i, url in enumerate(links):
         kq = KetQuaTaiVideo(url=url, trang_thai="loi")
@@ -167,6 +228,9 @@ def tai_nhieu(
         ly_do = kiem_link(url)
         if ly_do:
             kq.ghi_chu = ly_do
+            continue
+        if ma_tu_url(url) in da_co:
+            kq.trang_thai, kq.ghi_chu = "bo_qua", "Đã có trong thư mục."
             continue
         tam = os.path.join(thu_muc, THU_MUC_TAM, uuid.uuid4().hex[:12])
         os.makedirs(tam, exist_ok=True)
@@ -218,8 +282,7 @@ def tai_nhieu(
                 ch.tuy_chon(
                     "download",
                     logger=bo_ghi,
-                    format=DINH_DANG,
-                    merge_output_format=VO_GHEP,
+                    **rieng_dinh_dang,
                     outtmpl=os.path.join(tam, "%(title).150B [%(id)s].%(ext)s"),
                     noplaylist=True,
                     playlist_items="1",
@@ -251,8 +314,15 @@ def tai_nhieu(
                 bo_qua=(DaHuyTaiVideo,),
             )
             xong = _file_xong(tam)
+            if thumbnail:
+                # Bộ chuyển đổi đã thay ảnh gốc (.webp) bằng .jpg; còn lại gì khác thì không phải ảnh cần lấy.
+                xong = [f for f in xong if f.lower().endswith(".jpg")]
             if not xong:
-                raise RuntimeError("Tải xong nhưng không thấy file video.")
+                raise RuntimeError(
+                    "YouTube không trả ảnh thumbnail cho video này."
+                    if thumbnail
+                    else "Tải xong nhưng không thấy file video."
+                )
             if len(xong) > 1:
                 raise RuntimeError(
                     "yt-dlp để lại hình và tiếng thành hai file riêng (chưa ghép được)."
@@ -261,7 +331,7 @@ def tai_nhieu(
             os.rename(xong[0], dich)
             kq.trang_thai, kq.duong_dan = "xong", dich
             kq.tieu_de = str((info or {}).get("title") or "")
-            kq.chat_luong = mo_ta_chat_luong(info or {})
+            kq.chat_luong = "ảnh JPG" if thumbnail else mo_ta_chat_luong(info or {})
             if cau_hinh.co_cookie and (
                 phien.khong_dang_nhap_ly_do or phien.cookie_bi_tu_choi
             ):
@@ -280,6 +350,44 @@ def tai_nhieu(
                 os.rmdir(os.path.join(thu_muc, THU_MUC_TAM))  # chỉ xoá khi rỗng
     bao(1.0, "Xong.")
     return [asdict(k) for k in ket_qua]
+
+
+def tai_kenh(
+    url_kenh: str,
+    thu_muc: str,
+    cau_hinh_mang: Optional[CauHinhMang] = None,
+    *,
+    gioi_han: Optional[int] = None,
+    phien: Optional[PhienYouTube] = None,
+    progress: Optional[Callable[[float, str], None]] = None,
+    **kw,
+) -> list:
+    """Tải video ở tab Videos của kênh (``gioi_han`` video mới nhất; rỗng/0 = cả kênh) vào ``thu_muc``.
+
+    Video đã có file trong thư mục thì bỏ qua: bấm lại là tải tiếp phần còn thiếu. ``kw`` chuyển cho :func:`tai_nhieu`.
+    Kênh bị chặn/không đọc được thì ném lỗi đã phân loại — không coi là «kênh không có video»."""
+    from channel import ChannelSync
+
+    phien = phien or PhienYouTube()
+    if progress:
+        progress(0.0, "Đang lấy danh sách video của kênh...")
+    ds = ChannelSync.list_channel(
+        str(url_kenh or "").strip(),
+        gioi_han or None,
+        cau_hinh_mang=cau_hinh_mang,
+        phien_youtube=phien,
+    )
+    if not ds:
+        raise RuntimeError("Kênh không có video nào ở tab Videos.")
+    return tai_nhieu(
+        [v.url for v in ds],
+        thu_muc,
+        cau_hinh_mang,
+        phien=phien,
+        progress=progress,
+        bo_qua_da_co=True,
+        **kw,
+    )
 
 
 # Chạy ở tiến trình con: tkinter không chạy được trong luồng của Streamlit. Ghi UTF-8 thẳng ra stdout (đường dẫn tiếng Việt).

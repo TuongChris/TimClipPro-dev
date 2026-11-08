@@ -1331,15 +1331,24 @@ if not job["running"] and (job["results"] or job["error"]):
         hien_ket_qua_nguon_chung(job["results"][0])
     elif job["kind"] == "tai_video":
         r = job["results"]
-        so_xong = sum(1 for k in r if k["trang_thai"] == "xong")
-        (st.success if so_xong == len(r) else st.warning)(f"Đã tải {so_xong}/{len(r)} video.")
-        for k in r:
+        _dem = {t: sum(1 for k in r if k["trang_thai"] == t) for t in ("xong", "bo_qua", "loi")}
+        (st.success if not _dem["loi"] else st.warning)(
+            f"Đã tải {_dem['xong']}/{len(r)} — bỏ qua {_dem['bo_qua']}, lỗi {_dem['loi']}.")
+
+        def _dong_tai(k: dict) -> str:
             if k["trang_thai"] == "xong":
-                st.markdown(f"✅ **{thoat_markdown(k['tieu_de'] or k['url'])}** — {thoat_markdown(k['chat_luong'])}  \n"
-                            f"`{k['duong_dan']}`" + (f"  \n⚠️ {thoat_markdown(k['ghi_chu'])}" if k["ghi_chu"] else ""))
-            else:
-                st.markdown(f"{'⏭️' if k['trang_thai'] == 'bo_qua' else '❌'} {thoat_markdown(k['url'])}  \n"
-                            f"{thoat_markdown(k['ghi_chu'])}")
+                return (f"✅ **{thoat_markdown(k['tieu_de'] or k['url'])}** — {thoat_markdown(k['chat_luong'])}  \n"
+                        f"`{k['duong_dan']}`" + (f"  \n⚠️ {thoat_markdown(k['ghi_chu'])}" if k["ghi_chu"] else ""))
+            return (f"{'⏭️' if k['trang_thai'] == 'bo_qua' else '❌'} {thoat_markdown(k['url'])}  \n"
+                    f"{thoat_markdown(k['ghi_chu'])}")
+
+        # Cả kênh có thể hàng trăm dòng: lỗi luôn hiện, phần còn lại gom vào ô mở rộng.
+        for k in r:
+            if k["trang_thai"] == "loi" or len(r) <= 20:
+                st.markdown(_dong_tai(k))
+        if len(r) > 20:
+            with st.expander(f"Xem {_dem['xong'] + _dem['bo_qua']} video đã tải / bỏ qua"):
+                st.markdown("\n\n".join(_dong_tai(k) for k in r if k["trang_thai"] != "loi"))
     elif job["kind"] == "sua":
         r = job["results"]
         st.success(f"✅ Đã dựng lại danh sách: {r['tren_dia']} video thực có trên đĩa "
@@ -1410,24 +1419,19 @@ if not job["running"] and (job["results"] or job["error"]):
 #  Các tab chức năng
 # =====================================================================
 
-tab0, tab_tai, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-    ["📥 Đồng bộ kênh gốc", "⬇️ Tải video gốc", "🎬 Kho clip gốc", "📋 Danh sách video trong kho",
+tab0, tab_tai, tab_anh, tab_kenh, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+    ["📥 Đồng bộ kênh gốc", "⬇️ Tải video gốc", "🖼️ Tải thumbnail", "📺 Tải cả kênh", "🎬 Kho clip gốc", "📋 Danh sách video trong kho",
      "▶️ Quét YouTube", "📁 Quét file trong máy", "📜 Lịch sử", "📤 Gửi Google Sheets"])
 
-# ---------------------------------------------------------------- TẢI VIDEO GỐC
-with tab_tai:
-    st.subheader("Tải video gốc theo link")
-    st.caption("Tải file video (hình + tiếng) chất lượng cao nhất YouTube có — không nén, không đưa vào kho vân tay. "
-               "Bản 4K thường ra file .mkv (mở bằng VLC hoặc ứng dụng Phim & TV của Windows); bản thấp hơn ra .mp4.")
-    links_tai = st.text_area("Link video (mỗi dòng một link)", height=120,
-                             placeholder="https://www.youtube.com/watch?v=...\nhttps://youtu.be/...")
+# ---------------------------------------------------------------- TẢI VIDEO GỐC / THUMBNAIL / CẢ KÊNH
+def _o_thu_muc_tai(nhan: str, khoa: str) -> str:
+    """Ô thư mục lưu + nút «Chọn…» dùng chung cho ba tab tải (một thư mục nhớ chung). Trả đường dẫn đã bỏ ngoặc."""
     c_tm, c_chon = st.columns([5, 1], vertical_alignment="bottom")
     with c_tm:
         st.session_state.thu_muc_tai_video = st.text_input(
-            "Thư mục lưu video", st.session_state.thu_muc_tai_video, placeholder=r"D:\VideoGoc")
+            nhan, st.session_state.thu_muc_tai_video, placeholder=r"D:\VideoGoc")
     with c_chon:
-        if st.button("📂 Chọn…", width="stretch", key="chon_thu_muc_tai",
-                     help="Mở hộp thoại chọn thư mục của Windows"):
+        if st.button("📂 Chọn…", width="stretch", key=f"chon_{khoa}", help="Mở hộp thoại chọn thư mục của Windows"):
             try:
                 _chon = tai_video_goc.chon_thu_muc(st.session_state.thu_muc_tai_video.strip('" '))
             except RuntimeError as e:
@@ -1436,19 +1440,65 @@ with tab_tai:
                 if _chon:
                     st.session_state.thu_muc_tai_video = _chon
                     st.rerun()
-    _ds_link = tai_video_goc.tach_link(links_tai)
-    _thu_muc_tai = st.session_state.thu_muc_tai_video.strip('" ')
-    st.caption("Thư mục được nhớ khi bấm «💾 Lưu cấu hình» ở thanh bên. Link kênh/danh sách phát bị bỏ qua — tải cả kênh "
-               "dùng tab «📥 Đồng bộ kênh gốc».")
-    if st.button(f"⬇️ Tải {len(_ds_link)} video" if _ds_link else "⬇️ Tải video", type="primary",
-                 disabled=not (_ds_link and _thu_muc_tai) or job["running"] or dang_dong_bo(),
-                 key="bat_dau_tai_video"):
-        _phien_tai = truy_cap_youtube.PhienYouTube()
-        chay_nen("tai_video", tai_video_goc.tai_nhieu, _ds_link, _thu_muc_tai, eng.cau_hinh_mang(),
-                 player_clients=list(eng.config.ytdlp_player_clients), phien=_phien_tai,
-                 cancel_check=eng.cancel_event.is_set, phien_youtube=_phien_tai)
+    st.caption("Thư mục được nhớ khi bấm «💾 Lưu cấu hình» ở thanh bên (dùng chung cho các tab tải).")
+    return st.session_state.thu_muc_tai_video.strip('" ')
+
+
+def _bat_dau_tai(ham, *args, **kwargs) -> None:
+    _phien_tai = truy_cap_youtube.PhienYouTube()
+    chay_nen("tai_video", ham, *args, eng.cau_hinh_mang(), player_clients=list(eng.config.ytdlp_player_clients),
+             phien=_phien_tai, cancel_check=eng.cancel_event.is_set, phien_youtube=_phien_tai, **kwargs)
+
+
+def _chua_tai_duoc() -> bool:
     if dang_dong_bo():
         st.caption("Đang đồng bộ kênh — chờ lượt đó xong rồi tải, để hai việc không cùng hỏi YouTube một lúc.")
+    return bool(job["running"]) or dang_dong_bo()
+
+
+with tab_tai:
+    st.subheader("Tải video gốc theo link")
+    st.caption("Tải file video (hình + tiếng) — không nén, không đưa vào kho vân tay. Bản 4K thường ra file .mkv (mở bằng "
+               "VLC hoặc ứng dụng Phim & TV của Windows); bản thấp hơn ra .mp4.")
+    links_tai = st.text_area("Link video (mỗi dòng một link)", height=120,
+                             placeholder="https://www.youtube.com/watch?v=...\nhttps://youtu.be/...")
+    _thu_muc_tai = _o_thu_muc_tai("Thư mục lưu video", "tai")
+    _cl_tai = st.selectbox("Chất lượng tối đa", list(tai_video_goc.CHAT_LUONG), key="cl_tai",
+                           help="Video gốc thấp hơn mức chọn thì lấy bản cao nhất có. «Chỉ tiếng» ra file nhạc.")
+    _ds_link = tai_video_goc.tach_link(links_tai)
+    st.caption("Link kênh/danh sách phát bị bỏ qua — tải cả kênh dùng tab «📺 Tải cả kênh».")
+    if st.button(f"⬇️ Tải {len(_ds_link)} video" if _ds_link else "⬇️ Tải video", type="primary",
+                 disabled=not (_ds_link and _thu_muc_tai) or _chua_tai_duoc(), key="bat_dau_tai_video"):
+        _bat_dau_tai(tai_video_goc.tai_nhieu, _ds_link, _thu_muc_tai, chat_luong=_cl_tai)
+
+with tab_anh:
+    st.subheader("Tải thumbnail của video YouTube")
+    st.caption("Lấy ảnh thumbnail lớn nhất YouTube có (thường 1280×720), lưu dạng .jpg, tên file = tiêu đề + [mã video].")
+    links_anh = st.text_area("Link video cần lấy thumbnail (mỗi dòng một link)", height=120,
+                             placeholder="https://www.youtube.com/watch?v=...\nhttps://youtu.be/...")
+    _thu_muc_anh = _o_thu_muc_tai("Thư mục lưu thumbnail", "anh")
+    _ds_anh = tai_video_goc.tach_link(links_anh)
+    if st.button(f"🖼️ Tải {len(_ds_anh)} thumbnail" if _ds_anh else "🖼️ Tải thumbnail", type="primary",
+                 disabled=not (_ds_anh and _thu_muc_anh) or _chua_tai_duoc(), key="bat_dau_tai_anh"):
+        _bat_dau_tai(tai_video_goc.tai_nhieu, _ds_anh, _thu_muc_anh, thumbnail=True)
+
+with tab_kenh:
+    st.subheader("Tải video gốc của cả kênh")
+    st.caption("Tải file video ở tab Videos của kênh (không lấy Shorts/Live) — không nén, không đưa vào kho vân tay. "
+               "Video đã có trong thư mục (theo [mã video] ở tên file) được bỏ qua: bấm lại là tải tiếp phần còn thiếu.")
+    url_kenh_tai = st.text_input("Link kênh YouTube cần tải", placeholder="https://www.youtube.com/@TenKenh")
+    _thu_muc_kenh = _o_thu_muc_tai("Thư mục lưu video của kênh", "kenh")
+    c_so, c_cl = st.columns(2)
+    with c_so:
+        _so_kenh = st.number_input("Số video mới nhất (0 = cả kênh)", min_value=0, value=10, step=10)
+    with c_cl:
+        _cl_kenh = st.selectbox("Chất lượng tối đa", list(tai_video_goc.CHAT_LUONG), key="cl_kenh",
+                                help="Video gốc thấp hơn mức chọn thì lấy bản cao nhất có. «Chỉ tiếng» ra file nhạc.")
+    st.warning("Video 4K dài có thể nặng hàng chục GB mỗi video — chọn mức chất lượng và số video hợp với ổ đĩa còn trống.")
+    if st.button("📺 Tải video của kênh", type="primary", key="bat_dau_tai_kenh",
+                 disabled=not (url_kenh_tai.strip() and _thu_muc_kenh) or _chua_tai_duoc()):
+        _bat_dau_tai(tai_video_goc.tai_kenh, url_kenh_tai.strip(), _thu_muc_kenh, gioi_han=int(_so_kenh) or None,
+                     chat_luong=_cl_kenh)
 
 # ---------------------------------------------------------------- TAB 0
 with tab0:
