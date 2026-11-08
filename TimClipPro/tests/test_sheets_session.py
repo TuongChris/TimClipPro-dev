@@ -39,14 +39,6 @@ class _Worksheet:
         self.dem["get_all_values"] += 1
         return list(self.noi_dung)
 
-    def append_row(self, row, value_input_option=None):
-        self.dem["append_row"] += 1
-        self.noi_dung.append(row)
-
-    def append_rows(self, rows, value_input_option=None):
-        self.dem["append_rows"] += 1
-        self.noi_dung.extend(rows)
-
     def resize(self, rows=None, cols=None):
         self.dem["resize"] += 1
         if rows is not None:
@@ -119,7 +111,7 @@ def moi_truong(tmp_path, monkeypatch):
     key.write_text('{"client_email": "x@y.iam.gserviceaccount.com"}', encoding="utf-8")
 
     dem = {k: 0 for k in ("service_account", "open_by_key", "worksheet",
-                          "get_values", "get_all_values", "append_row", "append_rows",
+                          "get_values", "get_all_values",
                           "clear", "resize", "update", "add_worksheet")}
     ws = _Worksheet(dem)
     sh = _Spreadsheet(dem, ws)
@@ -141,47 +133,15 @@ def _exporter(moi_truong, sheet="abc123"):
 # Điểm chính: dùng lại kết nối
 # ---------------------------------------------------------------------------
 
-def test_muoi_lan_append_chi_xac_thuc_va_mo_bang_mot_lan(moi_truong):
+def test_muoi_lan_ghi_chi_xac_thuc_va_mo_bang_mot_lan(moi_truong):
     dem = moi_truong["dem"]
     for _ in range(10):
-        _exporter(moi_truong).append(HEADER, ROWS)
+        _exporter(moi_truong).ghi_de(HEADER, ROWS)
 
-    assert dem["service_account"] == 1, "Xác thực lại mỗi lần append là lãng phí"
+    assert dem["service_account"] == 1, "Xác thực lại mỗi lần ghi là lãng phí"
     assert dem["open_by_key"] == 1
     assert dem["worksheet"] == 1
-    assert dem["append_rows"] == 10, "Vẫn phải ghi đủ 10 lượt"
-
-
-def test_khong_tai_toan_bo_bang_de_kiem_tra_header(moi_truong):
-    dem = moi_truong["dem"]
-    for _ in range(10):
-        _exporter(moi_truong).append(HEADER, ROWS)
-
-    assert dem["get_all_values"] == 0, (
-        "get_all_values() kéo về cả bảng — chi phí tăng theo số dòng đã tích luỹ"
-    )
-    assert dem["get_values"] == 1, "Chỉ cần đọc ô A1 đúng một lần cho cả phiên"
-
-
-def test_header_chi_duoc_ghi_dung_mot_lan(moi_truong):
-    dem = moi_truong["dem"]
-    for _ in range(5):
-        _exporter(moi_truong).append(HEADER, ROWS)
-
-    assert dem["append_row"] == 1
-    assert moi_truong["ws"].noi_dung[0] == ["A", "B"]
-    assert len(moi_truong["ws"].noi_dung) == 6      # 1 header + 5 dòng
-
-
-def test_bang_da_co_header_thi_khong_ghi_them(moi_truong):
-    moi_truong["ws"].noi_dung.append(["A", "B"])
-    dem = moi_truong["dem"]
-
-    _exporter(moi_truong).append(HEADER, ROWS)
-    _exporter(moi_truong).append(HEADER, ROWS)
-
-    assert dem["append_row"] == 0
-    assert dem["get_values"] == 1
+    assert dem["update"] == 10, "Vẫn phải ghi đủ 10 lượt"
 
 
 # ---------------------------------------------------------------------------
@@ -190,8 +150,8 @@ def test_bang_da_co_header_thi_khong_ghi_them(moi_truong):
 
 def test_doi_sheet_thi_mo_ket_noi_moi(moi_truong):
     dem = moi_truong["dem"]
-    _exporter(moi_truong, "sheet_mot").append(HEADER, ROWS)
-    _exporter(moi_truong, "sheet_hai").append(HEADER, ROWS)
+    _exporter(moi_truong, "sheet_mot").ghi_de(HEADER, ROWS)
+    _exporter(moi_truong, "sheet_hai").ghi_de(HEADER, ROWS)
 
     assert dem["open_by_key"] == 2
 
@@ -201,10 +161,10 @@ def test_doi_file_key_thi_xac_thuc_lai(moi_truong, tmp_path):
     import time
 
     dem = moi_truong["dem"]
-    _exporter(moi_truong).append(HEADER, ROWS)
+    _exporter(moi_truong).ghi_de(HEADER, ROWS)
     time.sleep(0.01)
     os.utime(moi_truong["key"], None)          # giả lập thay khoá
-    _exporter(moi_truong).append(HEADER, ROWS)
+    _exporter(moi_truong).ghi_de(HEADER, ROWS)
 
     assert dem["service_account"] == 2, "Thay google_key.json phải xác thực lại"
 
@@ -212,39 +172,23 @@ def test_doi_file_key_thi_xac_thuc_lai(moi_truong, tmp_path):
 def test_loi_khi_ghi_thi_bo_cache_de_lan_sau_ket_noi_lai(moi_truong, monkeypatch):
     dem = moi_truong["dem"]
     ws = moi_truong["ws"]
-    goc = ws.append_rows
+    goc = ws.update
     lan = {"n": 0}
 
-    def hong(rows, value_input_option=None):
+    def hong(values=None, range_name=None, value_input_option=None):
         lan["n"] += 1
         if lan["n"] == 1:
             raise RuntimeError("connection reset")
-        return goc(rows, value_input_option=value_input_option)
+        return goc(values=values, range_name=range_name, value_input_option=value_input_option)
 
-    monkeypatch.setattr(ws, "append_rows", hong)
+    monkeypatch.setattr(ws, "update", hong)
 
+    # Kết nối mới mở (chưa từ cache) → ghi_de không tự thử lại, lỗi ném ra.
     with pytest.raises(RuntimeError, match="connection reset"):
-        _exporter(moi_truong).append(HEADER, ROWS)
-    _exporter(moi_truong).append(HEADER, ROWS)
+        _exporter(moi_truong).ghi_de(HEADER, ROWS)
+    _exporter(moi_truong).ghi_de(HEADER, ROWS)
 
     assert dem["service_account"] == 2, "Sau lỗi phải mở kết nối mới"
-
-
-def test_khong_tu_thu_lai_append_de_tranh_ghi_trung(moi_truong, monkeypatch):
-    """Ghi có thể đã tới Google rồi; thử lại ngay tại đây sẽ tạo dòng trùng."""
-    ws = moi_truong["ws"]
-    lan = {"n": 0}
-
-    def hong(rows, value_input_option=None):
-        lan["n"] += 1
-        raise RuntimeError("503 Service Unavailable")
-
-    monkeypatch.setattr(ws, "append_rows", hong)
-
-    with pytest.raises(RuntimeError):
-        _exporter(moi_truong).append(HEADER, ROWS)
-
-    assert lan["n"] == 1, "sheets.append() không được tự thử lại"
 
 
 # ---------------------------------------------------------------------------
@@ -252,34 +196,35 @@ def test_khong_tu_thu_lai_append_de_tranh_ghi_trung(moi_truong, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_lui_ve_get_all_values_khi_gspread_cu(moi_truong, monkeypatch):
+    """gspread cũ không có ``get_values``: kiểm tiêu đề nghiêm ngặt (outbox dùng) đọc ``get_all_values``."""
     ws = moi_truong["ws"]
-    monkeypatch.delattr(type(ws), "get_values", raising=False)
     monkeypatch.setattr(ws, "get_values", None, raising=False)
+    ws.noi_dung[:] = [list(HEADER), ["du lieu", "cu"]]
 
-    _exporter(moi_truong).append(HEADER, ROWS)
+    assert sheets.kiem_tieu_de_nghiem_ngat(ws, HEADER, ws.title) is False
 
     assert moi_truong["dem"]["get_all_values"] == 1
-
-
-def test_rows_rong_khong_cham_toi_mang(moi_truong):
-    assert _exporter(moi_truong).append(HEADER, []) == 0
-    assert moi_truong["dem"]["service_account"] == 0
+    assert moi_truong["dem"]["get_values"] == 0
 
 
 def test_chua_cau_hinh_thi_bao_loi_ro_rang(tmp_path):
     xoa_cache_ket_noi()
     ex = SheetsExporter(key_path=str(tmp_path / "khong_co.json"), sheet="abc")
     with pytest.raises(RuntimeError):
-        ex.append(HEADER, ROWS)
+        ex.ghi_de(HEADER, ROWS)
 
 
-def test_nhieu_thread_append_dong_thoi_van_dung_mot_ket_noi(moi_truong):
-    dem = moi_truong["dem"]
+def test_nhieu_thread_ghi_dong_thoi_van_dung_mot_ket_noi(moi_truong):
+    dem, ws = moi_truong["dem"], moi_truong["ws"]
     loi = []
+    da_ghi = []
+    # Lưới giả không an toàn luồng; ở đây chỉ đếm lượt ghi (list.append là nguyên tử).
+    ws.resize = lambda rows=None, cols=None: None
+    ws.update = lambda values=None, range_name=None, value_input_option=None: da_ghi.append(1)
 
     def chay():
         try:
-            _exporter(moi_truong).append(HEADER, ROWS)
+            _exporter(moi_truong).ghi_de(HEADER, ROWS)
         except Exception as e:  # noqa: BLE001
             loi.append(e)
 
@@ -291,13 +236,13 @@ def test_nhieu_thread_append_dong_thoi_van_dung_mot_ket_noi(moi_truong):
 
     assert not loi
     assert dem["service_account"] == 1
-    assert dem["append_rows"] == 12
+    assert len(da_ghi) == 12
 
 
 def test_kiem_tra_ket_noi_van_mo_moi_khong_dung_cache(moi_truong):
     """«Kiểm tra kết nối» phải thật sự chạm tới Google, không trả lời từ cache."""
     dem = moi_truong["dem"]
-    _exporter(moi_truong).append(HEADER, ROWS)
+    _exporter(moi_truong).ghi_de(HEADER, ROWS)
     ok, _ = _exporter(moi_truong).kiem_tra()
 
     assert ok is True
@@ -311,17 +256,17 @@ def test_cache_o_cap_module_nen_instance_moi_van_dung_lai(moi_truong):
     b = _exporter(moi_truong)
     assert a is not b
 
-    a.append(HEADER, ROWS)
-    b.append(HEADER, ROWS)
+    a.ghi_de(HEADER, ROWS)
+    b.ghi_de(HEADER, ROWS)
 
     assert dem["service_account"] == 1
 
 
 def test_xoa_cache_buoc_ket_noi_lai(moi_truong):
     dem = moi_truong["dem"]
-    _exporter(moi_truong).append(HEADER, ROWS)
+    _exporter(moi_truong).ghi_de(HEADER, ROWS)
     sheets.xoa_cache_ket_noi()
-    _exporter(moi_truong).append(HEADER, ROWS)
+    _exporter(moi_truong).ghi_de(HEADER, ROWS)
 
     assert dem["service_account"] == 2
 
@@ -387,14 +332,6 @@ def test_ghi_de_giu_nguyen_chuoi_bat_dau_bang_dau_bang(moi_truong):
     _exporter(moi_truong).ghi_de(["STT", "Tên video"], [[1, "=SUM(A1)"]])
 
     assert ws.noi_dung[1] == [1, "=SUM(A1)"]
-
-
-def test_ghi_de_luon_ghi_lai_header_du_cache_da_thay_header(moi_truong):
-    ws = moi_truong["ws"]
-    _exporter(moi_truong).append(HEADER, ROWS)
-    _exporter(moi_truong).ghi_de(HEADER, ROWS)
-
-    assert ws.noi_dung[0] == HEADER
 
 
 def test_ghi_de_khong_co_dong_thi_tu_choi(moi_truong):
@@ -466,117 +403,9 @@ def test_ghi_de_ket_noi_moi_that_bai_thi_khong_thu_lai(moi_truong, monkeypatch):
     assert dem["service_account"] == 1
 
 
-# ---------------------------------------------------------------------------
-# Tự khôi phục hàng tiêu đề bị xoá
-# ---------------------------------------------------------------------------
-
-def _them_insert_row(ws):
-    """Bổ sung insert_row cho worksheet giả (gspread thật có sẵn)."""
-    def insert_row(values, index=1, value_input_option=None):
-        ws.dem["insert_row"] += 1
-        ws.noi_dung.insert(index - 1, list(values))
-    ws.insert_row = insert_row
-    ws.dem.setdefault("insert_row", 0)
-
-
-def test_hang_tieu_de_bi_xoa_thi_duoc_ghi_lai(moi_truong):
-    """Ca thật: người dùng xoá hàng tiêu đề trên Google Sheets.
-
-    Trước bản vá, `_co_header` chỉ xem ô A1 có dữ liệu hay không nên hàng dữ
-    liệu ở vị trí số 1 bị hiểu nhầm là header — header không bao giờ được ghi
-    lại, và MỌI thứ đọc bảng theo tên cột (Apps Script, công thức) hỏng IM LẶNG.
-    """
-    ws = moi_truong["ws"]
-    _them_insert_row(ws)
-    ws.noi_dung[:] = [["https://youtu.be/aaaaaaaaaaa", "46229.41"],
-                      ["https://youtu.be/bbbbbbbbbbb", "46230.02"]]
-
-    _exporter(moi_truong).append(HEADER, ROWS)
-
-    assert ws.dem["insert_row"] == 1
-    assert ws.noi_dung[0] == HEADER          # header nằm đúng hàng 1
-    assert ws.noi_dung[1] == ["https://youtu.be/aaaaaaaaaaa", "46229.41"]
-    assert ws.noi_dung[-1] == list(ROWS[0])
-
-
-def test_bang_con_nguyen_header_thi_khong_chen_them(moi_truong):
-    ws = moi_truong["ws"]
-    _them_insert_row(ws)
-    ws.noi_dung[:] = [list(HEADER), ["du lieu", "cu"]]
-
-    _exporter(moi_truong).append(HEADER, ROWS)
-
-    assert ws.dem["insert_row"] == 0
-    assert ws.dem["append_row"] == 0
-    assert ws.noi_dung[0] == HEADER
-
-
-def test_bang_trong_van_ghi_header_bang_append_row(moi_truong):
-    ws = moi_truong["ws"]
-    _them_insert_row(ws)
-
-    _exporter(moi_truong).append(HEADER, ROWS)
-
-    assert ws.dem["insert_row"] == 0
-    assert ws.dem["append_row"] == 1
-    assert ws.noi_dung[0] == HEADER
-
-
-@pytest.mark.parametrize("hang_dau, mong_doi", [
-    ([], "trong"),
-    ([["", "  "]], "trong"),
-    ([["A", "B"]], "co"),
-    ([["a", "b"]], "co"),                       # không phân biệt hoa/thường
-    ([["https://youtu.be/aaaaaaaaaaa", "van ban"]], "thieu"),   # co link -> du lieu
-    ([["46229.41", "van ban"]], "thieu"),                      # co so   -> du lieu
-    ([["Thời điểm quét", "Nguồn video dài"]], "khac"),          # header schema KHAC
-    ([["Cot La", "Cot Lung Tung"]], "khac"),                   # khong ro -> khong tu sua
-])
-def test_nhan_dien_tinh_trang_hang_dau(moi_truong, hang_dau, mong_doi):
-    ws = moi_truong["ws"]
-    ws.noi_dung[:] = [list(r) for r in hang_dau]
-    assert SheetsExporter._tinh_trang_header(ws, HEADER) == mong_doi
-
-
 def test_o_cot_doi_dung_chu_cai():
     """34 cột của bảng Ngang phải ra tới AH — sai chữ cái là đọc nhầm vùng."""
     assert sheets._o_cot(1) == "A"
     assert sheets._o_cot(26) == "Z"
     assert sheets._o_cot(27) == "AA"
     assert sheets._o_cot(34) == "AH"
-
-
-def test_doi_dinh_dang_ngang_sang_doc_KHONG_duoc_chen_them_header(moi_truong):
-    """Ca thật: người dùng gạt «Định dạng đẩy lên Sheets» từ Ngang sang Dọc.
-
-    Header Ngang (34 cột) và Dọc (16 cột) trùng nhau ĐÚNG 0 tên cột, nên hàng 1
-    không khớp schema đang ghi. Nếu coi đó là «thiếu header» mà chèn thêm một hàng
-    thì toàn bộ dữ liệu cũ tụt xuống 1 và mọi công thức tham chiếu theo số hàng
-    (=A15...) trỏ lệch hết — hỏng bảng tính của người dùng vì một cú gạt nhầm.
-    """
-    import bang_ngang
-    from engine import Engine
-
-    ws = moi_truong["ws"]
-    _them_insert_row(ws)
-    ws.noi_dung[:] = [list(bang_ngang.HEADER_NGANG),
-                      ["https://youtu.be/aaaaaaaaaaa"] * len(bang_ngang.HEADER_NGANG)]
-    truoc = [list(r) for r in ws.noi_dung]
-
-    # Bây giờ ghi bằng schema DỌC lên chính bảng đang mang header NGANG.
-    _exporter(moi_truong).append(list(Engine.HEADER), [["x"] * len(Engine.HEADER)])
-
-    assert ws.dem["insert_row"] == 0, "KHÔNG được chèn header khi hàng 1 là schema khác"
-    assert ws.noi_dung[0] == truoc[0], "hàng tiêu đề cũ phải nguyên vẹn"
-    assert ws.noi_dung[1] == truoc[1], "dữ liệu cũ KHÔNG được tụt xuống"
-
-
-def test_hai_bo_header_cua_du_an_khong_trung_ten_cot_nao():
-    """Khoá lại tiền đề của test trên. Ngày nào hai bộ header có cột trùng nhau thì
-    heuristic đếm-cột-khớp phải được xem lại."""
-    import bang_ngang
-    from engine import Engine
-
-    ngang = {x.strip().casefold() for x in bang_ngang.HEADER_NGANG}
-    doc = {x.strip().casefold() for x in Engine.HEADER}
-    assert not (ngang & doc)

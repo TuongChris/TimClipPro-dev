@@ -150,11 +150,11 @@ video dài» cho ra `ok` + 0 khớp + chỉ phần đầu, âm tính trơn sẽ 
 * Giá trị V2 gửi nguyên văn bằng `RAW` (Sheets không hiểu `=…` là công thức, nên không thêm dấu
   `'` — dấu đó sẽ hiện ra trong ô). CSV vẫn chặn công thức (`o_bang_tinh_an_toan`) ở tầng ghi.
   Ngày gửi bằng chuỗi `Month D, YYYY (D-30; trước 02/11/2026: DD/MM/YYYY)` (không bị diễn giải lại theo locale), số vẫn là số.
-* Gửi V2 ở chế độ **nghiêm ngặt** (`SheetsExporter.append(..., nghiem_ngat=True)`): hàng 1 phải
+* Gửi V2 ở chế độ **nghiêm ngặt** (outbox, `sheets.kiem_tieu_de_nghiem_ngat`): hàng 1 phải
   đúng tiêu đề của công cụ theo thứ tự (cột người dùng thêm SAU cột cuối thì được). Có dữ liệu mà
   thiếu/sai tiêu đề → `LoiHeaderSheet` (lỗi vĩnh viễn, không thử lại), KHÔNG chèn/sửa hàng 1,
   KHÔNG append (append theo vị trí dưới tiêu đề sai là lệch cột). Không bao giờ
-  `ghi_de`/clear/sort/resize/update hàng cũ. Đường gửi cũ giữ nguyên hành vi cũ. Watch gặp lỗi
+  `ghi_de`/clear/sort/resize/update hàng cũ. Watch gặp lỗi
   tiêu đề thì thôi gửi cả lượt và báo một lần.
 * **Hàng 1 trống CHƯA phải bảng rỗng** (sửa sau audit, P1-03): hàng 1 trống trong bề rộng tiêu đề
   → dò LẦN HAI toàn trang tính (`get_all_values`, chỉ ở nhánh này; đường chính — hàng 1 đúng tiêu

@@ -74,14 +74,11 @@ def test_sheets_ghi_raw_de_khong_thuc_thi_cong_thuc(tmp_path, monkeypatch):
         def __init__(self):
             self.calls = []
 
-        def get_all_values(self):
-            return []
+        def resize(self, rows=None, cols=None):
+            pass
 
-        def append_row(self, row, value_input_option):
-            self.calls.append(("row", row, value_input_option))
-
-        def append_rows(self, rows, value_input_option):
-            self.calls.append(("rows", rows, value_input_option))
+        def update(self, values=None, range_name=None, value_input_option=None):
+            self.calls.append((values, value_input_option))
 
     ws = WorksheetGia()
     exporter = SheetsExporter(
@@ -91,8 +88,9 @@ def test_sheets_ghi_raw_de_khong_thuc_thi_cong_thuc(tmp_path, monkeypatch):
     monkeypatch.setattr(exporter, "san_sang", lambda: True)
     monkeypatch.setattr(exporter, "_mo_worksheet", lambda so_cot: ws)
 
-    assert exporter.append(["Tieu de"], [["=1+1"]]) == 1
-    assert [call[2] for call in ws.calls] == ["RAW", "RAW"]
+    assert exporter.ghi_de(["Tieu de"], [["=1+1"]]) == 1
+    # RAW: Sheets lưu "=1+1" là văn bản, không chạy công thức.
+    assert ws.calls == [([["Tieu de"], ["=1+1"]], "RAW")]
 
 
 def test_dong_bo_huy_truoc_video_dau_khong_bao_tai_thanh_cong(tmp_path, monkeypatch):

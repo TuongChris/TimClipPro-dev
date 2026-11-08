@@ -33,10 +33,9 @@ LOGGER = logging.getLogger("scan.sheet")
 
 @dataclass
 class _KetNoi:
-    """Kết nối đã mở, dùng lại giữa nhiều lần append/ghi đè."""
+    """Kết nối đã mở, dùng lại giữa nhiều lần ghi đè."""
 
     worksheet: object
-    da_co_header: bool = False
 
 
 # Cache ở cấp MODULE chứ không phải cấp instance, vì `app.py` tạo một
@@ -111,7 +110,7 @@ def _o_sheets(gia_tri):
 
 
 def kiem_tieu_de_nghiem_ngat(ws, header: list, ten_tab: str) -> bool:
-    """Kiểm hàng tiêu đề NGHIÊM NGẶT — CHỈ ĐỌC, dùng chung cho đường gửi cũ và outbox.
+    """Kiểm hàng tiêu đề NGHIÊM NGẶT — CHỈ ĐỌC, outbox dùng trước mỗi lần gửi kết quả quét.
 
     Trả ``True`` khi trang tính TRỐNG THẬT (người gọi ghi tiêu đề trước dòng), ``False`` khi hàng 1
     đúng ``header`` theo thứ tự (cột người dùng thêm SAU cột cuối thì được). Hàng 1 trống (trong bề
@@ -160,7 +159,10 @@ def kiem_tieu_de_nghiem_ngat(ws, header: list, ten_tab: str) -> bool:
 
 
 class SheetsExporter:
-    """Đẩy dữ liệu lên Google Sheets. Tự vô hiệu hóa êm nếu chưa cấu hình."""
+    """Ghi đè trang tính «Danh sách video» + kiểm tra kết nối. Tự vô hiệu hóa êm nếu chưa cấu hình.
+
+    Kết quả quét KHÔNG đi qua lớp này: chỉ qua outbox lưu bền (``outbox.py``, H14).
+    """
 
     def __init__(self, key_path: Optional[str] = None,
                  sheet: str = "", worksheet: str = "KetQuaQuet"):
@@ -236,7 +238,7 @@ class SheetsExporter:
     def _ket_noi(self, so_cot: int = 12) -> _KetNoi:
         """Kết nối dùng lại: xác thực + mở bảng + mở trang tính đúng MỘT lần.
 
-        Trước đây mỗi ``append()`` gọi lại ``service_account()`` →
+        Trước đây mỗi lần ghi gọi lại ``service_account()`` →
         ``open_by_key()`` → ``worksheet()``, tức 3 lượt thiết lập mỗi video.
         """
         khoa = self._khoa_cache()
@@ -279,85 +281,11 @@ class SheetsExporter:
 
     # ---------- ghi dữ liệu ----------
 
-    def append(self, header: list, rows: list, ghi_header_neu_trong: bool = True, *,
-               nghiem_ngat: bool = False) -> int:
-        """
-        Nối thêm các dòng vào cuối trang tính. Trả về số dòng đã ghi.
-        Ném exception nếu lỗi — bên gọi tự quyết định xử lý thế nào.
-
-        ``nghiem_ngat`` (báo cáo V2): hàng 1 phải là ĐÚNG tiêu đề ``header`` theo thứ tự
-        (cột người dùng tự thêm ở SAU cột cuối thì được). Bảng rỗng thật sự → ghi tiêu đề rồi
-        ghi dòng. Bảng có dữ liệu mà thiếu/sai tiêu đề → ``LoiHeaderSheet``, KHÔNG chèn/sửa
-        hàng 1 và KHÔNG append (append theo vị trí dưới tiêu đề sai là lệch cột im lặng).
-        Kiểm lại ở MỌI lần gửi — tiêu đề có thể bị sửa tay giữa hai lần.
-        """
-        if not rows:
-            return 0
-        if not self.san_sang():
-            raise RuntimeError(self.thieu_gi())
-
-        ket_noi = self._ket_noi(len(header))
-        ws = ket_noi.worksheet
-        if nghiem_ngat:
-            try:
-                self._append_nghiem_ngat(ws, header, rows)
-            except LoiHeaderSheet:
-                raise
-            except Exception:
-                self._bo_ket_noi()
-                raise
-            return len(rows)
-        try:
-            if ghi_header_neu_trong and not ket_noi.da_co_header:
-                tinh_trang = self._tinh_trang_header(ws, header)
-                if tinh_trang == "trong":
-                    ws.append_row([str(x) for x in header], value_input_option="RAW")
-                elif tinh_trang == "khac":
-                    # Hàng 1 LÀ một header, chỉ là của schema khác (đổi «Ngang 34
-                    # cột» ↔ «Dọc 16 cột» — hai bộ tên cột trùng nhau ĐÚNG 0 chỗ).
-                    # Chèn thêm header ở đây sẽ đẩy toàn bộ dữ liệu cũ xuống một
-                    # hàng và làm hỏng mọi công thức tham chiếu theo số hàng. Đây là
-                    # lỗi cấu hình của người dùng, không phải bảng thiếu header —
-                    # nói ra chứ tuyệt đối không tự sửa hộ.
-                    LOGGER.warning(
-                        "event=scan.sheet.header_schema_mismatch worksheet=%r "
-                        "so_cot_gui=%d", self.worksheet, len(header),
-                    )
-                elif tinh_trang == "thieu":
-                    # Bảng có dữ liệu nhưng hàng 1 KHÔNG phải header — hầu như luôn
-                    # là do hàng header bị xoá tay. Trước đây ta chỉ xem ô A1 có
-                    # dữ liệu hay không, nên tình huống này bị hiểu nhầm thành «đã
-                    # có header» và header không bao giờ được ghi lại. Hậu quả im
-                    # lặng: mọi thứ đọc bảng theo TÊN CỘT (Apps Script, công thức)
-                    # đều hỏng mà không báo gì.
-                    ws.insert_row([str(x) for x in header], index=1,
-                                  value_input_option="RAW")
-                    LOGGER.warning(
-                        "event=scan.sheet.header_restored worksheet=%r so_cot=%d",
-                        self.worksheet, len(header),
-                    )
-                # Header đã tồn tại thì không thể biến mất giữa phiên; nhớ lại để
-                # những lần append sau khỏi hỏi Google thêm lần nào nữa.
-                ket_noi.da_co_header = True
-            ws.append_rows(
-                [[_o_sheets(v) for v in r] for r in rows],
-                value_input_option="RAW",
-            )
-        except Exception:
-            # Kết nối có thể đã hỏng (token/socket). Bỏ cache để lần sau mở lại,
-            # nhưng KHÔNG tự thử lại append: một lần ghi có thể đã tới Google rồi,
-            # thử lại ở đây sẽ tạo dòng trùng. Gửi kết quả quét đi qua outbox lưu bền (mơ hồ →
-            # UNKNOWN_DELIVERY, không gửi lại mù).
-            self._bo_ket_noi()
-            raise
-        return len(rows)
-
     def ghi_de(self, header: list, rows: list, *, cho_phep_rong: bool = False) -> int:
         r"""Thay TOÀN BỘ nội dung trang tính bằng header + rows. Trả số dòng dữ liệu.
 
-        Khác ``append`` ở một điểm quyết định: hàm này IDEMPOTENT — ghi đè cùng dữ
-        liệu hai lần cho kết quả y hệt một lần, nên không bao giờ sinh dòng trùng
-        và thử lại sau lỗi là an toàn.
+        Hàm này IDEMPOTENT — ghi đè cùng dữ liệu hai lần cho kết quả y hệt một lần,
+        nên không bao giờ sinh dòng trùng và thử lại sau lỗi là an toàn.
 
         Bốn quyết định cần biết trước khi sửa hàm này:
 
@@ -421,7 +349,7 @@ class SheetsExporter:
             # Kết nối lấy từ cache có thể đã chết (token hết hạn, hoặc người dùng
             # tự xoá tab nên sheetId trong Worksheet không còn). ``_ghi_de_mot_lan``
             # đã bỏ cache, nên lượt này mở kết nối mới và ``_mo_worksheet`` tạo lại
-            # tab. An toàn vì ghi đè IDEMPOTENT — khác ``append``.
+            # tab. An toàn vì ghi đè IDEMPOTENT.
             self._ghi_de_mot_lan(gia_tri, so_dong, so_cot)
         return len(rows)
 
@@ -435,77 +363,3 @@ class SheetsExporter:
         except Exception:
             self._bo_ket_noi()
             raise
-        # Header vừa được ghi lại; nhớ để lần ``append`` sau (nếu có) khỏi đọc ô A1.
-        # Đặt SAU khi cả hai lệnh thành công — đặt trước là nói dối cache.
-        ket_noi.da_co_header = True
-
-    def _append_nghiem_ngat(self, ws, header: list, rows: list) -> None:
-        """Một lần gửi nghiêm ngặt: kiểm hàng 1 (``kiem_tieu_de_nghiem_ngat``, CHỈ ĐỌC), quyết định,
-        rồi mới ghi (RAW). Trang tính trống thật → ghi tiêu đề MỘT lần rồi ghi dòng."""
-        if kiem_tieu_de_nghiem_ngat(ws, header, self.worksheet):
-            ws.append_row([str(x) for x in header], value_input_option="RAW")
-        ws.append_rows([[_o_sheets(v) for v in r] for r in rows], value_input_option="RAW")
-
-    # Số tên cột tối thiểu phải khớp thì hàng 1 mới được coi là header. Đặt 3 để
-    # một hàng DỮ LIỆU (toàn link, tên video, ngày giờ) gần như không thể đạt tới,
-    # còn một header thật vẫn qua được kể cả khi người dùng đã đổi tên vài cột.
-    SO_COT_KHOP_TOI_THIEU = 3
-
-    @classmethod
-    def _tinh_trang_header(cls, ws, header: list) -> str:
-        """Phân loại hàng 1: ``"trong"`` | ``"co"`` | ``"thieu"`` | ``"khac"``.
-
-        * ``trong``  — bảng rỗng, cứ ghi header bình thường.
-        * ``co``     — hàng 1 đúng là header của schema đang ghi.
-        * ``thieu``  — hàng 1 là DỮ LIỆU, tức header đã bị xoá tay. Phải phân biệt
-          được ca này, vì đọc mỗi ô A1 như trước thì nó trông y hệt ca ``co``: A1 có
-          dữ liệu nên header không bao giờ được ghi lại, và mọi thứ đọc bảng theo
-          TÊN CỘT sẽ hỏng im lặng cho tới khi có người phát hiện bằng mắt.
-        * ``khac``   — hàng 1 là header nhưng của SCHEMA KHÁC. Ca thật: người dùng
-          gạt «Định dạng đẩy lên Sheets» từ «Ngang 34 cột» sang «Dọc 16 cột» — hai
-          bộ tên cột trùng nhau đúng 0 chỗ. Nếu gộp ca này vào ``thieu`` thì ta sẽ
-          chèn thêm một header, đẩy toàn bộ dữ liệu cũ xuống một hàng và làm lệch
-          mọi công thức tham chiếu theo số hàng. Bên gọi phải cảnh báo, KHÔNG tự sửa.
-
-        Vẫn chỉ đọc ĐÚNG MỘT hàng, không phải cả bảng: ``get_all_values()`` kéo về
-        toàn bộ sheet chỉ để trả lời một câu hỏi về hàng đầu, chi phí tăng theo số
-        dòng đã tích luỹ. Bản gspread cũ không có ``get_values`` thì lùi về cách cũ.
-        """
-        lay = getattr(ws, "get_values", None)
-        if callable(lay):
-            hang_dau = lay("A1:" + _o_cot(len(header)) + "1")
-        else:
-            hang_dau = ws.get_all_values()[:1]
-
-        o = [str(x).strip() for x in (hang_dau[0] if hang_dau else [])]
-        if not any(o):
-            return "trong"
-
-        mong_doi = {str(x).strip().casefold() for x in header if str(x).strip()}
-        khop = sum(1 for x in o if x.casefold() in mong_doi)
-        nguong = min(cls.SO_COT_KHOP_TOI_THIEU, len(mong_doi))
-        if khop >= nguong:
-            return "co"
-        return "thieu" if cls._giong_du_lieu(o) else "khac"
-
-    @staticmethod
-    def _giong_du_lieu(o: list) -> bool:
-        """Hàng này trông giống DỮ LIỆU hay giống một hàng TIÊU ĐỀ?
-
-        Chỉ cần đúng một dấu hiệu là đủ kết luận là dữ liệu, vì cả hai schema của dự
-        án đều có link và mốc thời gian ngay trong vài cột đầu: một link ``http``,
-        hoặc một ô thuần số (Sheets trả ngày giờ/thời lượng về dạng serial như
-        ``46229.41498842592``). Tên cột thì không bao giờ có hai thứ đó.
-
-        Nghi ngờ thì trả về False — nghĩa là KHÔNG tự chèn header. Chèn nhầm làm
-        lệch cả bảng của người dùng; không chèn thì chỉ là bỏ lỡ một lần tự sửa.
-        """
-        for x in o:
-            if "http://" in x or "https://" in x:
-                return True
-            try:
-                float(x.replace(",", "."))
-            except ValueError:
-                continue
-            return True
-        return False
