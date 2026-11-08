@@ -373,3 +373,15 @@ def test_chot_cua_chu_cu_khong_ghi_de_ket_qua_cua_chu_moi(mt):
     assert ng._chot(v, t1, ob.SENT, bien_nhan="{}") is False
     viec = ob.lay_viec(mt["db"], v)
     assert viec.trang_thai == ob.CLAIMED
+
+
+def test_cho_gui_xong_moi_luot_cung_biet_tam_dung(mt):
+    """Audit 08/11: ``cli.py gui`` chờ MỌI lượt (``lo_id=None``) — tạm dừng toàn bộ thì thôi chờ ngay, không ngồi hết
+    ``--cho`` rồi báo «còn chờ» như thể hàng đợi đang chạy."""
+    a = _ho_so(mt, gid=0)
+    _xep(mt, a, 1)
+    ob.dat_tam_dung(mt["db"], True)
+    assert ob.ly_do_tam_dung(mt["db"], None) == "toan_bo"
+    bat_dau = time.monotonic()
+    tt = ob.cho_gui_xong(mt["db"], mt["data"], None, han_s=30, nen=_NenKhongGui())
+    assert time.monotonic() - bat_dau < 5 and tt[ob.PENDING] == 1

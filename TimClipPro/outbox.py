@@ -448,21 +448,21 @@ def dang_tam_dung(db_path: str) -> bool:
     return h is not None and h["gia_tri"] == "1"
 
 
-def ly_do_tam_dung(db_path: str, lo_id: str) -> str:
-    """Việc còn chờ của lượt ``lo_id`` chỉ chờ vì TẠM DỪNG — người gửi chắc chắn không nhận cho tới
+def ly_do_tam_dung(db_path: str, lo_id: Optional[str]) -> str:
+    """Việc còn chờ của lượt ``lo_id`` (``None`` = mọi lượt, như ``tom_tat``) chỉ chờ vì TẠM DỪNG — người gửi chắc chắn không nhận cho tới
     khi người dùng bật lại (audit B-5): ``"toan_bo"`` (tạm dừng toàn bộ), ``"ho_so"`` (mọi việc chờ
     thuộc hồ sơ đang tạm dừng); ``""`` khi không có việc chờ, còn việc đang bay (CLAIMED/SENDING —
     vẫn đi tới kết cục) hoặc còn việc người gửi sẽ nhận."""
     with sd.ket_noi(db_path) as con:
         dem = dict(con.execute(
-            "SELECT trang_thai, COUNT(*) FROM hang_doi_gui WHERE lo_id=? AND trang_thai IN (?,?,?,?)"
-            " GROUP BY trang_thai", (lo_id, CLAIMED, SENDING, *CO_THE_CLAIM)).fetchall())
+            "SELECT trang_thai, COUNT(*) FROM hang_doi_gui WHERE (? IS NULL OR lo_id=?) AND trang_thai IN (?,?,?,?)"
+            " GROUP BY trang_thai", (lo_id, lo_id, CLAIMED, SENDING, *CO_THE_CLAIM)).fetchall())
         if dem.get(CLAIMED, 0) + dem.get(SENDING, 0) or not any(dem.get(t, 0) for t in CO_THE_CLAIM):
             return ""
         con_nhan = con.execute(
-            "SELECT 1 FROM hang_doi_gui WHERE lo_id=? AND trang_thai IN (?,?)"
+            "SELECT 1 FROM hang_doi_gui WHERE (? IS NULL OR lo_id=?) AND trang_thai IN (?,?)"
             " AND dich_id NOT IN (SELECT id FROM dich_gui WHERE trang_thai=?) LIMIT 1",
-            (lo_id, *CO_THE_CLAIM, sd.TT_TAM_DUNG)).fetchone()
+            (lo_id, lo_id, *CO_THE_CLAIM, sd.TT_TAM_DUNG)).fetchone()
     if dang_tam_dung(db_path):
         return "toan_bo"
     return "" if con_nhan else "ho_so"
