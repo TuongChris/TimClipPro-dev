@@ -49,7 +49,7 @@ File có sẵn ────────────────┤
 | Python 3.12 64-bit | Bản runtime chuẩn của dự án; Python 3.14 chỉ mới qua fast suite |
 | Ổ trống | Audio 30 tiếng ≈ 1–2 GB |
 
-Baseline audit 2026-08-06: fast suite chạy trên Python 3.14.6; Docker và hướng dẫn cài đặt
+Baseline audit 2026-08-06: fast suite chạy trên Python 3.14.6; hướng dẫn cài đặt
 chuẩn hóa trên Python 3.12. FFmpeg/FFprobe 8.1.2 và yt-dlp 2026.07.04 đã smoke-test.
 
 ## 3. Cài đặt (một lần)
@@ -150,19 +150,7 @@ python cli.py file    "D:\VideoDai"
 
 Ghép với Task Scheduler của Windows để chạy lúc 2h sáng.
 
-## 9. Docker (tùy chọn — chưa cần lúc này)
-
-Chỉ nên dùng khi muốn đem sang máy khác/NAS mà không phải cài lại gì:
-
-```bash
-docker compose up -d      # mở http://localhost:8501
-```
-
-Nhớ sửa 2 dòng `volumes` trong `docker-compose.yml` cho đúng ổ đĩa của bạn, và khi
-nhập đường dẫn trong giao diện thì dùng đường dẫn **bên trong container** (`/clips`,
-`/videodai`) chứ không phải `D:\...`.
-
-## 10. Lỗi thường gặp
+## 9. Lỗi thường gặp
 
 | Triệu chứng | Xử lý |
 |---|---|
@@ -174,7 +162,7 @@ nhập đường dẫn trong giao diện thì dùng đường dẫn **bên trong
 | Quét ra 0 kết quả dù chắc chắn có | ① Video dài còn tiếng gốc không? ② Giảm «Số hash tối thiểu» ③ Kiểm tra kho đã đủ clip |
 | Báo nhầm | Tăng «Số hash tối thiểu» lên 30–40 |
 
-## 11. Giới hạn cần biết
+## 10. Giới hạn cần biết
 
 Hệ thống dựa trên **âm thanh**. Nếu video dài đã bị **thay/đè toàn bộ tiếng**
 (lồng tiếng lại, nhạc nền to, mute) thì không tìm được — khi đó dùng chế độ AI visual
@@ -184,7 +172,7 @@ của Video Duplicate Finder, hoặc mở rộng hệ thống này bằng nhánh
 Việc tải nội dung từ YouTube bằng công cụ bên thứ ba có thể không phù hợp Điều khoản
 dịch vụ của YouTube — bạn tự cân nhắc phạm vi sử dụng. audfprint theo giấy phép MIT.
 
-## 12. Cấu trúc thư mục
+## 11. Cấu trúc thư mục
 
 ```
 TimClipPro\
@@ -194,7 +182,6 @@ TimClipPro\
 ├── app.py              ← giao diện web local
 ├── cli.py              ← giao diện dòng lệnh
 ├── requirements.txt
-├── Dockerfile / docker-compose.yml   ← tùy chọn, dùng sau
 ├── HUONG_DAN.md
 ├── audfprint-master\   ← bộ máy fingerprint (MIT)
 ├── bin\                ← ffmpeg.exe, ffprobe.exe

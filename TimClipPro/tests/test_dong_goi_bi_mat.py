@@ -192,15 +192,6 @@ def test_gitignore_chan_bien_the_ten_bi_mat(ten):
     assert r.returncode == 0, f"{ten} chưa được .gitignore chặn"
 
 
-def test_dockerignore_chan_cookie_va_thu_muc_khoa():
-    with open(os.path.join(os.path.dirname(dong_goi.__file__), ".dockerignore"),
-              encoding="utf-8") as f:
-        noi_dung = f.read()
-    for mau in ("cookies.txt", "[Cc][Oo][Oo][Kk][Ii][Ee]", "**/credentials/",
-                "clips_meta.json", "khos.json", "cau_hinh.json"):
-        assert mau in noi_dung, mau
-
-
 def _du_an_may_chay(goc):
     _du_an_co_bi_mat(goc)
     (goc / "data").mkdir(exist_ok=True)

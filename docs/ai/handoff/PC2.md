@@ -32,7 +32,8 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 2. Dựng kho theo RAM + bỏ clip > 2 giờ (D-31): PR #23 GỘP (`73c5734`), DEV 8502 cập nhật 06/11 20:16 (sao lưu `data_20261106_201648`).
    Chờ người dùng dựng Kho_Joe_Games (CHƯA có vân tay, thư mục `E:\Kho_Tool_Quet\Kho_Joe_Games`) và đồng bộ thật một kênh để kiểm
    quy tắc 2 giờ (chưa thử YouTube thật).
-3. Audit toàn repo 06/11: số 1–20 xong trừ 17 (giữ `.gs` và `session.log` vì có lý do; Docker chờ người dùng quyết có xoá không).
+3. Audit toàn repo 06/11: số 1–20 xong (17: giữ `.gs` và `session.log` vì có lý do; Docker đã xoá 08/11 theo người dùng —
+   `release_tool.py` vẫn loại tên Dockerfile để build lại bản cũ trùng byte).
    Còn 8 mục nhỏ: báo cáo trong phiên 06/11 (lịch sử chat). PC1 phải cài lại hook. Tạm dừng + lưu giữa chừng khi dựng kho CHƯA làm.
 4. Người dùng: nghiệm thu DEV đợt 2 theo `C:\Dev\pc2_test_runs\2026-10-26_audit_p3\NGHIEM_THU_DEV_DOT2.md` (~15 phút).
 5. Người dùng quyết: P-6 (3 phương án, `…\2026-10-26_audit_p3\P6_PHUONG_AN.md`); P-7 (`P7_THIET_KE.md` cùng thư mục, công

@@ -143,20 +143,7 @@ tên kho. Đặt dự án/kho ở đường dẫn tương đối ngắn nếu g�
 
 Chỉ chạy slow suite khi không có job audfprint thật; test này dùng CPU và có thể mất nhiều phút.
 
-## 10. Docker tùy chọn
-
-Sửa hai bind mount Windows trong `docker-compose.yml`, bảo đảm Docker Desktop đang chạy:
-
-```powershell
-docker compose build
-docker compose up -d
-docker compose ps
-```
-
-Không bake `google_key.json` vào image. Nếu cần Sheets, bỏ comment bind mount read-only đã có
-trong compose. Truy cập <http://127.0.0.1:8501>.
-
-## 11. Lỗi thường gặp
+## 10. Lỗi thường gặp
 
 | Triệu chứng | Lệnh/chẩn đoán |
 |---|---|
@@ -168,16 +155,15 @@ trong compose. Truy cập <http://127.0.0.1:8501>.
 | Báo đang có job | Đọc `data\tool.lock`; không xóa lock khi process chủ vẫn chạy |
 | JSON hỏng | Ứng dụng thử `.bak`, giữ bản hỏng dưới `.hong.<timestamp>` |
 | YouTube 403 | Cập nhật riêng yt-dlp sau khi backup/test; không commit cookie/token |
-| Docker không kết nối daemon | Mở Docker Desktop, chờ engine Linux sẵn sàng |
 
-## 12. Log và output
+## 11. Log và output
 
 - CSV/Markdown/log watch: `ketqua\`.
 - CLI watch chỉ ghi log khi có `--log`.
 - GUI hiện chưa có structured traceback log; giữ thông báo lỗi và reproduction khi báo lỗi.
 - `session.log` lịch sử đang tracked từ source cũ; không đưa log mới vào commit/source zip.
 
-## 13. Cập nhật an toàn
+## 12. Cập nhật an toàn
 
 Trước cập nhật:
 

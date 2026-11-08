@@ -167,7 +167,7 @@ k/N) · Chưa kết luận · Đã dừng. Giới hạn: chưa ghi lịch sử, 
 ### 3.1 Nền tảng (phiên bản theo lock có băm)
 | Thành phần | Phiên bản / ghi chú |
 |---|---|
-| Hệ điều hành | Windows 10/11, chạy 100 % trên máy (không có máy chủ). Có `Dockerfile` chỉ để tham khảo |
+| Hệ điều hành | Windows 10/11, chạy 100 % trên máy (không có máy chủ). Không dùng Docker (đã bỏ 08/11/2026) |
 | Python | **3.12.10** (`win_amd64`) |
 | Giao diện | **Streamlit 1.62.0** (kèm starlette, uvicorn, websockets, altair, pyarrow 25, pydeck, watchdog) |
 | Xử lý bảng | **pandas 3.0.5**, numpy 2.5.2 |

@@ -8,7 +8,7 @@ gộp bằng chứng ở biên khúc, lưu lịch sử SQLite và xuất CSV/Mar
 
 ## Công nghệ và kiểu ứng dụng
 
-- Runtime: Python. Runtime mục tiêu rõ nhất trong repository là Python 3.12 (`Dockerfile`);
+- Runtime: Python. Runtime mục tiêu rõ nhất trong repository là Python 3.12 (`ruff.toml`);
   tài liệu cũ ghi 3.10–3.13. Baseline tại máy audit dùng Python 3.14.6.
 - UI: Streamlit chạy local, entry point `app.py`.
 - CLI/automation: `cli.py`; chế độ giám sát được điều phối bởi `watch.py`.
@@ -18,7 +18,7 @@ gộp bằng chứng ở biên khúc, lưu lịch sử SQLite và xuất CSV/Mar
 - Dữ liệu: JSON nguyên tử, SQLite, pickle nén gzip theo format của audfprint.
 - Tích hợp tùy chọn: Google Sheets qua gspread/service account.
 - Kiểm thử: pytest và Streamlit AppTest.
-- Container: Dockerfile + Docker Compose; chưa có quy trình PyInstaller/.exe.
+- Không có container (Docker đã bỏ 08/11/2026) và không có quy trình PyInstaller/.exe.
 
 ## Sơ đồ module
 
@@ -61,7 +61,6 @@ Các module vận hành bổ trợ:
 - GUI: `python -m streamlit run app.py` hoặc `ChayTool.bat`.
 - CLI: `python cli.py <lenh>`.
 - Giám sát: `python cli.py watch ...` hoặc `GiamSat.bat`.
-- Container: `docker compose up --build` sau khi sửa bind mount trong compose.
 - Test nhanh: `python -m pytest`; test audio thật: `python -m pytest -m slow`.
 
 Launcher ban đầu ưu tiên `py -3`/`python` toàn hệ thống dù repository có `.venv`.
@@ -119,7 +118,6 @@ giữ file hỏng dưới hậu tố `.hong.<timestamp>`.
 - `streamlit`, `pandas`: UI và bảng/CSV tải từ UI.
 - `gspread`, `google-auth`: Google Sheets tùy chọn.
 - `ffmpeg`, `ffprobe`: executable ngoài Python.
-- Docker base `python:3.12-slim`; FFmpeg được cài bằng apt trong image.
 
 `requirements.txt` ban đầu không khóa phiên bản và trộn production với tất cả tích hợp tùy
 chọn. `requirements-lock.txt` tồn tại nhưng đang untracked từ trước audit và được bảo toàn.

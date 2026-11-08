@@ -363,19 +363,6 @@ Khi job lỗi:
 
 Source packager mặc định từ chối overwrite; chỉ dùng `--overwrite` khi target đã được xác minh.
 
-## Docker
-
-```powershell
-docker version
-docker compose build
-docker compose up -d
-docker compose ps
-Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:8501/_stcore/health"
-```
-
-`.dockerignore` phải còn rule cho `google_key.json`, `data/`, `ketqua/`, `.venv/`, `bin/`,
-log và archive. Credential chỉ mount read-only khi cần.
-
 ## Hạn chế vận hành đang mở
 
 - yt-dlp có retry hữu hạn và timeout 30 giây; Google API vẫn phụ thuộc timeout của SDK.
@@ -384,7 +371,6 @@ log và archive. Credential chỉ mount read-only khi cần.
   lặng (không tiến độ) 300 s. Database rất lớn chưa soak-test.
 - Scan tương tác chưa dùng job temp directory riêng/lock chung.
 - GUI có structured technical log riêng cho fingerprint; scan/channel chưa dùng chung facade.
-- Docker build cần nghiệm thu lại trên máy có daemon.
 
 
 ---

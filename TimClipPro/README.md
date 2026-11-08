@@ -7,7 +7,7 @@ CSV/Markdown và tích hợp Google Sheets tùy chọn.
 ## Khởi động nhanh trên Windows
 
 Runtime chuẩn: Python 3.12 64-bit. Máy audit cũng đã chạy fast suite thành công trên
-Python 3.14.6, nhưng Python 3.12 là phiên bản dùng trong Docker và tài liệu cài đặt.
+Python 3.14.6, nhưng Python 3.12 là phiên bản dùng trong tài liệu cài đặt.
 
 ```powershell
 Set-Location "D:\Tool_Tim_Video_v2\TimClipPro"
@@ -27,7 +27,6 @@ tải FFmpeg. Sau khi UI mở, truy cập <http://127.0.0.1:8501>.
   `vameta`, `dondep`, `dung`.
 - Giám sát định kỳ: `GiamSat.bat` hoặc `python cli.py watch`.
 - Source package an toàn: `dong_goi.py` (không phải executable build).
-- Container: `Dockerfile` + `docker-compose.yml`.
 
 Ví dụ CLI:
 
@@ -58,10 +57,8 @@ mỗi tính năng — mốc cần giữ là KHÔNG có dòng `failed`, không ph
 
 - Dữ liệu bền vững: `data/`.
 - Báo cáo/log watch: `ketqua/`.
-- Credential Sheets tùy chọn: `google_key.json` ở root, tuyệt đối không commit/bake vào image.
+- Credential Sheets tùy chọn: `google_key.json` ở root, tuyệt đối không commit.
 - Watch list mẫu: `watchlist.example.json`; không đưa URL vận hành nhạy cảm vào source package.
-- Docker context đã loại credential, data, log, `.venv`, binary Windows và archive qua
-  `.dockerignore`.
 
 Không xóa hoặc ghi đè `data/*.pklz`, `data/lichsu.db`, `downloaded.txt` hay
 `clips_meta.json` nếu chưa có backup. Đừng mở/chạy file `.pklz` nhận từ nguồn không tin cậy;
@@ -85,4 +82,3 @@ Không xóa hoặc ghi đè `data/*.pklz`, `data/lichsu.db`, `downloaded.txt` ha
 - Tải nội dung YouTube có thể chịu giới hạn mạng, quyền truy cập và điều khoản nền tảng.
 - Google Sheets chỉ hoạt động khi người dùng chủ động cung cấp service account và chia sẻ Sheet.
 - Chưa có PyInstaller/.exe; `dong_goi.py` chỉ tạo source zip.
-- Docker build chưa được chạy trong audit vì Docker daemon không hoạt động.

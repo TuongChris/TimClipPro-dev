@@ -83,7 +83,7 @@ BO_QUA_FILE = {"requirements-lock.txt", "session.log", "watchlist.json"}
 DUOI_OK = {".py", ".md", ".txt", ".bat", ".ini", ".json", ".toml", ".yml",
            ".yaml", ".cfg", ".ps1", ".gs"}
 # LICENSE đi kèm thư viện nhúng (audfprint, MIT) phải theo mã khi phân phối lại.
-TEN_KHONG_CO_DUOI_OK = {"dockerfile", ".gitignore", ".dockerignore", "license"}
+TEN_KHONG_CO_DUOI_OK = {".gitignore", "license"}
 
 # File dữ liệu: loại duy nhất bị quét NỘI DUNG (xem docstring đầu module).
 DUOI_DU_LIEU = {".json", ".txt", ".toml", ".ini", ".cfg", ".yml", ".yaml"}
