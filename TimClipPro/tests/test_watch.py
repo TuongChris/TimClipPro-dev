@@ -806,3 +806,15 @@ def test_app_dang_giu_quyen_gui_thi_watch_khong_gui_va_viec_van_ben(engine, monk
         assert "ứng dụng đang giữ quyền" in bao_cao.sheets_note
     finally:
         giu.tha_quyen()
+
+
+def test_vuot_gioi_han_moi_luot_khong_bi_tinh_la_da_quet(engine, monkeypatch, tmp_path):
+    """Audit 08/11: 5 video mới, giới hạn 2 mỗi lượt — 3 video bị cắt KHÔNG phải «đã quét trước»: báo là còn chờ."""
+    videos = [SimpleNamespace(id=f"x{i}", title=f"V{i}", url=f"u{i}") for i in range(5)]
+    monkeypatch.setattr(engine, "ids_da_quet", lambda chi_thanh_cong=True: {"x9"})
+    monkeypatch.setattr(engine, "scan_youtube", lambda url, progress=None: ScanResult(source_name=url, source_ref=url))
+    monkeypatch.setattr(engine, "export_csv_ngang", lambda ket: str(tmp_path / "k.csv"))
+    wl = WatchList(muc=[MucTheoDoi("kenh", "k")], gioi_han_moi_lan=2)
+    bc = chay_giam_sat(engine, wl, lister=lambda url, limit: videos + [SimpleNamespace(id="x9", title="cu", url="u9")])
+    assert (bc.quet_moi, bc.da_quet_truoc, bc.con_cho_luot_sau) == (2, 1, 3)
+    assert "để lượt sau: 3" in bc.tom_tat()

@@ -49,6 +49,8 @@ class UngVien:
 class BaoCao:
     tong_ung_vien: int = 0
     da_quet_truoc: int = 0
+    # Video mới bị cắt bởi giới hạn mỗi lượt (`gioi_han_moi_lan`): CHƯA quét, lượt sau quét tiếp — không phải đã quét.
+    con_cho_luot_sau: int = 0
     quet_moi: int = 0
     nguon_co_vi_pham: int = 0
     tong_bang_chung: int = 0
@@ -114,6 +116,8 @@ class BaoCao:
             f"Tổng ứng viên: {self.tong_ung_vien}",
             f"Đã quét trước: {self.da_quet_truoc}",
             f"Quét mới: {self.quet_moi}",
+            *([f"Chưa quét (vượt giới hạn mỗi lượt) — để lượt sau: {self.con_cho_luot_sau}"]
+              if self.con_cho_luot_sau else []),
             f"Nguồn có vi phạm: {self.nguon_co_vi_pham}",
             f"Tổng bằng chứng: {self.tong_bang_chung}",
             (
@@ -668,7 +672,9 @@ def _thuc_hien_giam_sat(
     da_quet = set() if quet_lai else id_da_quet(engine)
     can_quet = loc_can_quet(ung_vien, da_quet, wl.gioi_han_moi_lan)
     bao_cao.tong_ung_vien = len(ung_vien)
-    bao_cao.da_quet_truoc = len(ung_vien) - len(can_quet)
+    ma_moi = {m.video_id for m in ung_vien if m.video_id}
+    bao_cao.da_quet_truoc = len(ma_moi & da_quet)
+    bao_cao.con_cho_luot_sau = len(ma_moi - da_quet) - len(can_quet)
 
     ket_qua = []
     tong_can_quet = len(can_quet)
