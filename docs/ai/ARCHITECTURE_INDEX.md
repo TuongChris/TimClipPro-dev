@@ -36,6 +36,7 @@ chạm file) — không phải audit lại mã. Thêm/xoá/đổi vai trò modul
 |---|---|---|
 | `engine.py` | Lõi: cắt khúc, fingerprint, so khớp, gộp trùng, SQLite, xuất CSV | Thêm/đổi logic xử lý |
 | `channel.py` | Đồng bộ kênh YouTube → kho audio nén + `clips_meta.json` | Đổi cách tải/nén/đặt tên |
+| `tai_video_goc.py` | Tải video gốc (hình + tiếng, cao nhất) theo link vào thư mục người dùng chọn; hộp thoại chọn thư mục (D-37) | Đổi định dạng/cách đặt tên file tải |
 | `ytdlp_chung.py` | Tuỳ chọn yt-dlp dùng chung: cookie, giãn nhịp, đường lui player client, diễn giải lỗi; cookie chỉ dùng khi máy giải được thử thách JavaScript (`kha_nang_js`: Node.js ≥ 22 + gói yt-dlp-ejs đúng bản yt-dlp ghim → `js_runtimes`) | Đổi bất cứ thứ gì liên quan yt-dlp; nâng yt-dlp thì nâng yt-dlp-ejs CÙNG lúc |
 | `truy_cap_youtube.py` | THUẦN: phân loại lỗi YouTube, che bí mật, chẩn đoán cookie, bảng thử lại, `PhienYouTube` (cầu dao + số đo) | Đổi cách hiểu một lỗi YouTube / ngưỡng dừng |
 | `youtube_doctor.py` | `cli.py youtube-doctor`: chẩn đoán chỉ đọc (mạng chỉ khi `--network`) | Thêm mục chẩn đoán |

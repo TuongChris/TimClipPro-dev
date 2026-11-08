@@ -114,7 +114,8 @@ def test_mac_dinh_van_la_moi_video_tu_chon(tmp_path, monkeypatch):
 def test_che_do_nguon_chung_can_it_nhat_hai_link(tmp_path, monkeypatch):
     at = _app(tmp_path, monkeypatch)
     _radio(at).set_value("Một video gốc chung cho cả lô")
-    at.text_area[0].set_value("https://youtu.be/aaaaaaaaaaa")
+    next(t for t in at.text_area if t.label.startswith("Dán link YouTube")).set_value(
+        "https://youtu.be/aaaaaaaaaaa")
     at.run()
     assert not at.exception
     assert "ít nhất 2 link" in _van_ban(at)

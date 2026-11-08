@@ -45,9 +45,13 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
    binding khoá NGOÀI State Stable cho DEV; ruleset GitHub (`release/github/`, chưa bật); C7; nghiệm thu preview 8502.
 8. Kho Joe VODs (D-34): 150 video mới nhất tải xong 07/11 (197 file, 727 giờ, 21 GB, 0 hỏng). DEV lên `fddcf39` 15:26 (sao lưu
    `data_20261107_152616`). Người dùng muốn để đồng bộ/dựng về ĐÊM. Chưa tạo kho: RAM trống 6,2 GB, cần 15–20 GB. Rồi «Tạo lại từ đầu» → quét thử.
-9. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
+9. Tải video gốc (D-37): người dùng thử 1–2 link thật trên DEV (4K ra .mkv); bấm «Chọn…» mở hộp thoại Windows.
+10. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-11-08 — tải video gốc theo link (D-37, nhánh feature/pc2/tai-video-goc)
+- Tab «⬇️ Tải video gốc»: nhiều link, ô thư mục + «Chọn…», hình + tiếng cao nhất (`bv*+ba/b`, MP4/MKV). Module `tai_video_goc.py`.
+- Test: nhanh và chậm ở PR, 17 test mới (yt-dlp giả, AppTest). CHƯA tải YouTube thật — người dùng thử trên DEV sau khi cập nhật.
 ### 2026-11-07 — Codex bước 2: audit số 14 và 18 (nhánh fix/pc2/audit-14-updater)
 - 14: 10 kiểm tra an toàn của updater có test mới, mỗi test đỏ khi xoá kiểm tra (1 claim sai). Sửa F1–F3: tag trước kênh; health chết không kết quả là
   tạm thời, cách ly ở lần 3; launcher không mở khi nhật ký đang kích hoạt. Updater chỉ tới máy đã cài khi bootstrap lại.
@@ -68,12 +72,4 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 - Joe Bart VODs: 905 video, 3.845 giờ, dài nhất 10,04 giờ, 849 video trên 2 giờ (`C:\Dev\pc2_test_runs\2026-11-07_kho_video_dai\danh_sach_kenh.json`).
 - Làm: ô «Kho video dài», 13 giờ, 21 bit, báo vùng khớp thật, chặn bổ sung vào kho 16 bit và chặn vượt 2.047 clip. Video 6 giờ: 16 bit đúng vị trí 1/8, 20 bit 8/8.
 - Test @ `8bdea14`: nhanh 3473 = 3469/4/0, chậm 23/23 (trước sửa review, test chậm của tính năng chạy lại đạt), ruff sạch, đột biến 14/14 chết.
-### 2026-11-07 — dựng kho nhường ổ cứng (D-33, nhánh fix/pc2/dung-kho-uu-tien-o-dia)
-- Làm: runner `IOPRIO_LOW` thêm vào Below Normal (Below Normal không hạ ưu tiên ổ cứng); FFmpeg im 300 giây mới là treo; `CHO_WORKER_S` hết hạn
-  mà CPU/I-O còn tăng thì gia hạn. Một dòng `ionice` là không đủ: HDD bận làm FFmpeg im 15 giây, clip 1 giờ mất ~1 giờ, chốt cũ huỷ cả lượt.
-- Đo HDD thật (`tools/do_tai/do_uu_tien_o_cung.py`, `C:\Dev\pc2_test_runs\2026-11-06_uu_tien_o_cung`): việc khác 252 → 166 lần đọc/giây ở mức thường, 249
-  ở mức thấp. Runner thật 24 clip + đọc dồn 180 giây: 24/24, 0 thử lại, hash trùng lượt không tải. Máy rảnh gần như không đổi.
-- Gộp PR #26 (`f1237e2`), DEV 8502 cập nhật 07/11 00:51 (sao lưu `data_20261107_005116`, 354 file) sau khi lượt dựng Kho Joe Games của người dùng xong.
-  Lượt đó chạy bản CŨ, 46 phút: 679 clip có vân tay, 82 clip > 2 giờ bị bỏ đúng quy tắc, audfprint báo 28,12% hash bị rơi (bảng đầy; Kho Joe 46%, Cory 22%, SML 4%).
-- Test (chặn mạng, cp1252, venv CookieFix) @ `34eb277`: nhanh 3460 = 3456/4/0, chậm 22/22, ruff sạch, đột biến 7/7 chết. `/ponytail-review`: không lỗi.
-- Mục cũ hơn (2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
+- Mục cũ hơn (2026-11-07 dựng kho nhường ổ cứng D-33; 2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.

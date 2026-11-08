@@ -3,6 +3,15 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-11-07 — dựng kho nhường ổ cứng (D-33, nhánh fix/pc2/dung-kho-uu-tien-o-dia)
+- Làm: runner `IOPRIO_LOW` thêm vào Below Normal (Below Normal không hạ ưu tiên ổ cứng); FFmpeg im 300 giây mới là treo; `CHO_WORKER_S` hết hạn
+  mà CPU/I-O còn tăng thì gia hạn. Một dòng `ionice` là không đủ: HDD bận làm FFmpeg im 15 giây, clip 1 giờ mất ~1 giờ, chốt cũ huỷ cả lượt.
+- Đo HDD thật (`tools/do_tai/do_uu_tien_o_cung.py`, `C:\Dev\pc2_test_runs\2026-11-06_uu_tien_o_cung`): việc khác 252 → 166 lần đọc/giây ở mức thường, 249
+  ở mức thấp. Runner thật 24 clip + đọc dồn 180 giây: 24/24, 0 thử lại, hash trùng lượt không tải. Máy rảnh gần như không đổi.
+- Gộp PR #26 (`f1237e2`), DEV 8502 cập nhật 07/11 00:51 (sao lưu `data_20261107_005116`, 354 file) sau khi lượt dựng Kho Joe Games của người dùng xong.
+  Lượt đó chạy bản CŨ, 46 phút: 679 clip có vân tay, 82 clip > 2 giờ bị bỏ đúng quy tắc, audfprint báo 28,12% hash bị rơi (bảng đầy; Kho Joe 46%, Cory 22%, SML 4%).
+- Test (chặn mạng, cp1252, venv CookieFix) @ `34eb277`: nhanh 3460 = 3456/4/0, chậm 22/22, ruff sạch, đột biến 7/7 chết. `/ponytail-review`: không lỗi.
+
 ### 2026-11-06 — sửa số 7–13 của audit toàn repo (nhánh fix/pc2/audit-0611-dot2)
 - Làm: hồ sơ không cộng đôi vùng chồng nhau; lưu cấu hình chỉ ghi khoá phiên này đổi; tab cũ theo thư mục nguồn mới; `Thread.start` lỗi không để
   lại việc ma; lỗi đọc tạm không bị coi là file hỏng; hoàn tác ghi bản `sau_hoan_tac`; updater không báo ACTIVE khi không áp dụng gì. Mỗi lỗi có

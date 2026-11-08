@@ -15,6 +15,12 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-37 Tải video gốc theo link (người dùng, 2026-11-08)
+Tab «⬇️ Tải video gốc»: nhiều link (mỗi dòng một), ô thư mục + nút «Chọn…» (hộp thoại Windows qua tkinter ở tiến trình con),
+tải hình + tiếng chất lượng cao nhất (`bv*+ba/b`, ghép bằng FFmpeg vào MP4 nếu hợp mã hoá, không thì MKV — không chuyển mã).
+Không nén, không vào kho vân tay. Link kênh/playlist YouTube bị từ chối. Chạy ở làn chính (`chay_nen`): không cùng lúc với quét,
+dựng kho hay đồng bộ kênh. Mã: `TimClipPro/tai_video_goc.py`.
+
 ## D-36 Dùng Codex làm người review độc lập, không cho chạm máy (người dùng, 2026-11-07)
 Codex CLI đăng nhập gói ChatGPT của người dùng, dùng để review mã. Rào chắn của Claude không áp cho Codex: thử bằng file giả, `-s read-only`
 chặn ghi và mạng nhưng VẪN đọc được file ngoài thư mục làm việc trên C: và D:. Nên chỉ chạy kiểu chỉ-nhận-văn-bản: tự gói mã công khai vào lời nhắc,

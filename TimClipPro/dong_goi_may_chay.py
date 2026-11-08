@@ -152,6 +152,7 @@ def gom_thanh_phan(ten_kho: list, kem_ffmpeg: bool,
 KHOA_RIENG_CUA_MAY = (
     "kho_dir",                 # đường dẫn kho clip gốc
     "thu_muc_quet_gan_nhat",   # thư mục quét gần nhất
+    "thu_muc_tai_video",       # thư mục lưu video gốc tải theo link
     "ytdlp_cookiefile",        # đường dẫn file cookie — xem giải thích ở trên
     "ytdlp_cookies_browser",   # trình duyệt lấy cookie — xem giải thích ở trên
 )

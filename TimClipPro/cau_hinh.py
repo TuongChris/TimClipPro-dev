@@ -20,6 +20,7 @@ GIA_TRI_GIAO_DIEN_MAC_DINH = {
     "sheet_dang_ngang": True,
     "kho_dir": "",
     "thu_muc_quet_gan_nhat": "",
+    "thu_muc_tai_video": "",
 }
 
 

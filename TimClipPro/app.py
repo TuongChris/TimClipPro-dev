@@ -64,6 +64,7 @@ from scan_ui import (
     tom_tat_tao_van_tay,
 )
 import channel
+import tai_video_goc
 from channel import ChannelSync
 from tien_do_dong_bo import SoDongBo
 from ui_tien_do_dong_bo import dong_hieu_suat, ve_tien_do_dong_bo
@@ -1328,6 +1329,17 @@ if not job["running"] and (job["results"] or job["error"]):
         st.info("Mở tab «📋 Danh sách video trong kho» và bấm xem lại để thấy tên mới.")
     elif job["kind"] == "nguon_chung":
         hien_ket_qua_nguon_chung(job["results"][0])
+    elif job["kind"] == "tai_video":
+        r = job["results"]
+        so_xong = sum(1 for k in r if k["trang_thai"] == "xong")
+        (st.success if so_xong == len(r) else st.warning)(f"Đã tải {so_xong}/{len(r)} video.")
+        for k in r:
+            if k["trang_thai"] == "xong":
+                st.markdown(f"✅ **{thoat_markdown(k['tieu_de'] or k['url'])}** — {thoat_markdown(k['chat_luong'])}  \n"
+                            f"`{k['duong_dan']}`" + (f"  \n⚠️ {thoat_markdown(k['ghi_chu'])}" if k["ghi_chu"] else ""))
+            else:
+                st.markdown(f"{'⏭️' if k['trang_thai'] == 'bo_qua' else '❌'} {thoat_markdown(k['url'])}  \n"
+                            f"{thoat_markdown(k['ghi_chu'])}")
     elif job["kind"] == "sua":
         r = job["results"]
         st.success(f"✅ Đã dựng lại danh sách: {r['tren_dia']} video thực có trên đĩa "
@@ -1398,9 +1410,45 @@ if not job["running"] and (job["results"] or job["error"]):
 #  Các tab chức năng
 # =====================================================================
 
-tab0, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-    ["📥 Đồng bộ kênh gốc", "🎬 Kho clip gốc", "📋 Danh sách video trong kho",
+tab0, tab_tai, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+    ["📥 Đồng bộ kênh gốc", "⬇️ Tải video gốc", "🎬 Kho clip gốc", "📋 Danh sách video trong kho",
      "▶️ Quét YouTube", "📁 Quét file trong máy", "📜 Lịch sử", "📤 Gửi Google Sheets"])
+
+# ---------------------------------------------------------------- TẢI VIDEO GỐC
+with tab_tai:
+    st.subheader("Tải video gốc theo link")
+    st.caption("Tải file video (hình + tiếng) chất lượng cao nhất YouTube có — không nén, không đưa vào kho vân tay. "
+               "Bản 4K thường ra file .mkv (mở bằng VLC hoặc ứng dụng Phim & TV của Windows); bản thấp hơn ra .mp4.")
+    links_tai = st.text_area("Link video (mỗi dòng một link)", height=120,
+                             placeholder="https://www.youtube.com/watch?v=...\nhttps://youtu.be/...")
+    c_tm, c_chon = st.columns([5, 1], vertical_alignment="bottom")
+    with c_tm:
+        st.session_state.thu_muc_tai_video = st.text_input(
+            "Thư mục lưu video", st.session_state.thu_muc_tai_video, placeholder=r"D:\VideoGoc")
+    with c_chon:
+        if st.button("📂 Chọn…", width="stretch", key="chon_thu_muc_tai",
+                     help="Mở hộp thoại chọn thư mục của Windows"):
+            try:
+                _chon = tai_video_goc.chon_thu_muc(st.session_state.thu_muc_tai_video.strip('" '))
+            except RuntimeError as e:
+                st.error(str(e))
+            else:
+                if _chon:
+                    st.session_state.thu_muc_tai_video = _chon
+                    st.rerun()
+    _ds_link = tai_video_goc.tach_link(links_tai)
+    _thu_muc_tai = st.session_state.thu_muc_tai_video.strip('" ')
+    st.caption("Thư mục được nhớ khi bấm «💾 Lưu cấu hình» ở thanh bên. Link kênh/danh sách phát bị bỏ qua — tải cả kênh "
+               "dùng tab «📥 Đồng bộ kênh gốc».")
+    if st.button(f"⬇️ Tải {len(_ds_link)} video" if _ds_link else "⬇️ Tải video", type="primary",
+                 disabled=not (_ds_link and _thu_muc_tai) or job["running"] or dang_dong_bo(),
+                 key="bat_dau_tai_video"):
+        _phien_tai = truy_cap_youtube.PhienYouTube()
+        chay_nen("tai_video", tai_video_goc.tai_nhieu, _ds_link, _thu_muc_tai, eng.cau_hinh_mang(),
+                 player_clients=list(eng.config.ytdlp_player_clients), phien=_phien_tai,
+                 cancel_check=eng.cancel_event.is_set, phien_youtube=_phien_tai)
+    if dang_dong_bo():
+        st.caption("Đang đồng bộ kênh — chờ lượt đó xong rồi tải, để hai việc không cùng hỏi YouTube một lúc.")
 
 # ---------------------------------------------------------------- TAB 0
 with tab0:
