@@ -14,12 +14,13 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import urllib.parse
 import uuid
 from dataclasses import asdict, dataclass
 from typing import Callable, Optional
 
-from channel import ChannelSync, _CoHuyTuHam
+from channel import HAN_DON_TAM_CU_S, ChannelSync, _CoHuyTuHam
 from truy_cap_youtube import (
     PhienYouTube,
     che_bi_mat,
@@ -177,6 +178,22 @@ def _file_xong(thu_muc: str) -> list:
     )
 
 
+def _don_tam_cu(thu_muc: str) -> None:
+    """Dọn thư mục tạm của lượt tải đã chết từ lâu (app bị tắt, mất điện giữa lượt) — có thể vài GB «.part».
+    Cùng hạn với đồng bộ kênh (``ChannelSync._don_tam_cu``): thư mục tạm còn mới có thể là của lượt khác đang chạy."""
+    goc = os.path.join(thu_muc, THU_MUC_TAM)
+    han = time.time() - HAN_DON_TAM_CU_S
+    with contextlib.suppress(OSError):
+        for ten in os.listdir(goc):
+            p = os.path.join(goc, ten)
+            with contextlib.suppress(OSError):
+                if os.path.getmtime(p) < han:
+                    shutil.rmtree(p, ignore_errors=True) if os.path.isdir(
+                        p
+                    ) else os.remove(p)
+        os.rmdir(goc)  # chỉ xoá khi rỗng
+
+
 def tai_nhieu(
     links: list,
     thu_muc: str,
@@ -210,6 +227,7 @@ def tai_nhieu(
         )
     thu_muc = os.path.abspath(str(thu_muc or "").strip().strip('"'))
     os.makedirs(thu_muc, exist_ok=True)
+    _don_tam_cu(thu_muc)
     cau_hinh = cau_hinh_mang or CauHinhMang()
     phien = phien or PhienYouTube()
     clients = list(player_clients or PLAYER_CLIENTS_MAC_DINH)
@@ -219,6 +237,7 @@ def tai_nhieu(
     ket_qua: list = []
     chi_tieng = not thumbnail and CHAT_LUONG[chat_luong] == 0
     da_co = ma_da_co(thu_muc, chi_tieng) if bo_qua_da_co else set()
+    da_tai: set = set()
     ten_mau = (
         "%(title).150B [%(id)s].audio.%(ext)s"
         if chi_tieng
@@ -243,6 +262,13 @@ def tai_nhieu(
             continue
         if ma_tu_url(url) in da_co:
             kq.trang_thai, kq.ghi_chu = "bo_qua", "Đã có trong thư mục."
+            continue
+        if ma_tu_url(url) in da_tai:
+            # Danh sách phát lặp cùng video, hay hai dạng link của một video: tải một lần là đủ.
+            kq.trang_thai, kq.ghi_chu = (
+                "bo_qua",
+                "Trùng video đã tải ở trên trong lượt này.",
+            )
             continue
         if not thumbnail and shutil.disk_usage(thu_muc).free < TRONG_TOI_THIEU_BYTE:
             kq.trang_thai = "bo_qua"
@@ -283,6 +309,7 @@ def tai_nhieu(
             )
 
         bo_ghi = BoGhiYtdlp(phien)
+        vo_danh: list = []  # client không-cookie đã cứu video này sau khi mọi client có cookie bị 403
 
         def chay(rieng: dict, url=url, tam=tam):
             # Mỗi lần thử (client khác, thử lại khi đứt mạng) bắt đầu từ thư mục rỗng: luồng dở của lần trước có thể
@@ -312,7 +339,8 @@ def tai_nhieu(
                 khi_that_bai=lambda _ten, _loi: phien.ghi_doi_client(),
                 dung_ngay=phien.nen_dung_doi_client,
                 khi_lui_khong_cookie=lambda ten, _loi: (
-                    phien.ghi_tai_khong_dang_nhap_403(ten)
+                    vo_danh.append(ten),
+                    phien.ghi_tai_khong_dang_nhap_403(ten),
                 ),
             )
 
@@ -349,12 +377,19 @@ def tai_nhieu(
             dich = _ten_trong(thu_muc, os.path.basename(xong[0]))
             os.rename(xong[0], dich)
             kq.trang_thai, kq.duong_dan = "xong", dich
+            if ma_tu_url(url):
+                da_tai.add(ma_tu_url(url))
             kq.tieu_de = str((info or {}).get("title") or "")
             kq.chat_luong = "ảnh JPG" if thumbnail else mo_ta_chat_luong(info or {})
             if cau_hinh.co_cookie and (
                 phien.khong_dang_nhap_ly_do or phien.cookie_bi_tu_choi
             ):
                 kq.ghi_chu = "Tải KHÔNG đăng nhập: cookie đã cấu hình nhưng chưa dùng được (xem «Trạng thái YouTube»)."
+            elif vo_danh:
+                kq.ghi_chu = (
+                    "Tải KHÔNG đăng nhập: mọi cách có đăng nhập bị YouTube từ chối (HTTP 403), bản này tải bằng "
+                    f"client «{vo_danh[-1]}» không cookie — chất lượng có thể thấp hơn."
+                )
         except DaHuyTaiVideo:
             kq.trang_thai, kq.ghi_chu = (
                 "bo_qua",

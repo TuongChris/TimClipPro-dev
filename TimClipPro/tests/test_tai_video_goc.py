@@ -520,3 +520,32 @@ def test_file_chi_tieng_khong_chan_tai_video_va_nguoc_lai(gia, tmp_path):
             [URL1], str(tmp_path), bo_qua_da_co=True, chat_luong="Chỉ tiếng"
         )
     ] == ["bo_qua"]
+
+
+def test_thu_muc_tam_cua_luot_da_chet_tu_lau_duoc_don(gia, tmp_path):
+    """App bị tắt giữa lượt tải để lại «.timclip_tai_do/<mã>/…part» (có thể vài GB): lượt sau dọn bản cũ."""
+    cu = tmp_path / tv.THU_MUC_TAM / "luot_cu"
+    cu.mkdir(parents=True)
+    (cu / "x.f313.webm.part").write_bytes(b"x" * 10)
+    xa = 1_000_000_000
+    os.utime(cu, (xa, xa))
+    tv.tai_nhieu([URL1], str(tmp_path))
+    assert not (tmp_path / tv.THU_MUC_TAM).exists()
+
+
+def test_cung_mot_video_hai_lan_trong_mot_luot_chi_tai_mot_lan(gia, tmp_path):
+    kq = tv.tai_nhieu([URL1, "https://youtu.be/abcdefghij1"], str(tmp_path))
+    assert [k["trang_thai"] for k in kq] == ["xong", "bo_qua"]
+    assert len(gia.goi) == 1 and len(os.listdir(tmp_path)) == 1
+
+
+def test_tai_khong_dang_nhap_sau_403_phai_noi_ro(gia, tmp_path, monkeypatch):
+    """Mọi client nhận cookie bị 403, client không-cookie tải được: kết quả phải nói «KHÔNG đăng nhập»."""
+    def thu_gia(clients, chay, opts, *, khi_lui_khong_cookie=None, **kw):
+        ket_qua = chay(opts)
+        khi_lui_khong_cookie("android", RuntimeError("HTTP Error 403"))
+        return ket_qua
+
+    monkeypatch.setattr(tv, "thu_tung_client", thu_gia)
+    kq = tv.tai_nhieu([URL1], str(tmp_path))
+    assert kq[0]["trang_thai"] == "xong" and "KHÔNG đăng nhập" in kq[0]["ghi_chu"]
