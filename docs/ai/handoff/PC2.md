@@ -45,13 +45,12 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
    binding khoá NGOÀI State Stable cho DEV; ruleset GitHub (`release/github/`, chưa bật); C7; nghiệm thu preview 8502.
 8. Kho Joe VODs (D-34): 150 video mới nhất tải xong 07/11 (197 file, 727 giờ, 21 GB, 0 hỏng). DEV lên `fddcf39` 15:26 (sao lưu
    `data_20261107_152616`). Người dùng muốn để đồng bộ/dựng về ĐÊM. Chưa tạo kho: RAM trống 6,2 GB, cần 15–20 GB. Rồi «Tạo lại từ đầu» → quét thử.
-9. Tải video gốc (D-37): người dùng thử 1–2 link thật trên DEV (4K ra .mkv); bấm «Chọn…» mở hộp thoại Windows.
-10. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
+9. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
 ### 2026-11-08 — tải video gốc theo link (D-37, nhánh feature/pc2/tai-video-goc)
 - Tab «⬇️ Tải video gốc»: nhiều link, ô thư mục + «Chọn…», hình + tiếng cao nhất (`bv*+ba/b`, MP4/MKV). Module `tai_video_goc.py`.
-- Test: nhanh và chậm ở PR, 17 test mới (yt-dlp giả, AppTest). CHƯA tải YouTube thật — người dùng thử trên DEV sau khi cập nhật.
+- Test: nhanh và chậm ở PR #32, 17 test mới (yt-dlp giả, AppTest). Gộp `1017142`, DEV cập nhật 08/11 21:08. Người dùng tải thật trên DEV: chạy tốt.
 ### 2026-11-07 — Codex bước 2: audit số 14 và 18 (nhánh fix/pc2/audit-14-updater)
 - 14: 10 kiểm tra an toàn của updater có test mới, mỗi test đỏ khi xoá kiểm tra (1 claim sai). Sửa F1–F3: tag trước kênh; health chết không kết quả là
   tạm thời, cách ly ở lần 3; launcher không mở khi nhật ký đang kích hoạt. Updater chỉ tới máy đã cài khi bootstrap lại.
