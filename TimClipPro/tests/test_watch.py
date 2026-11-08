@@ -549,9 +549,14 @@ def _dich(engine, tmp_path):
     return dich_gia(engine.sqlite_file, tmp_path, installation_id=engine.installation_id())[1]
 
 
-def test_sheets_khoa_thieu_thi_dung_truoc_khi_quet(engine, monkeypatch):
+def test_sheets_khoa_thieu_thi_dung_truoc_khi_quet(engine, monkeypatch, tmp_path):
     """Đã yêu cầu gửi (link cũ) mà không có khoá Google → dừng TRƯỚC khi quét: video đã quét mà
     không gửi được sẽ bị Watch bỏ qua mãi mãi."""
+    import dataclasses
+
+    # Chỗ khoá mặc định (legacy: <thư mục mã>/google_key.json) trỏ vào thư mục tạm: máy phát triển có thể có khoá
+    # thật ở chỗ đó, khi ấy «khoá thiếu» không còn đúng và test hỏng theo máy.
+    monkeypatch.setattr(engine, "runtime", dataclasses.replace(engine.runtime, ma_nguon=str(tmp_path)))
     monkeypatch.setattr(engine, "scan_youtube",
                         lambda url, progress=None: pytest.fail("Không được quét"))
     bao_cao = chay_giam_sat(
