@@ -461,3 +461,12 @@ def test_chon_thu_muc_doc_utf8_va_bao_loi_ro(monkeypatch):
     ra["ma"] = 1
     with pytest.raises(RuntimeError, match="dán đường dẫn"):
         tv.chon_thu_muc()
+
+
+def test_tieu_de_co_part_hay_temp_van_la_file_xong(tmp_path):
+    """Chỉ ĐUÔI tên mới đánh dấu file dở; «.part»/«.temp.» nằm trong tiêu đề không được làm mất video đã tải."""
+    for ten in ("Vlog.part 2 [abcdefghij1].mkv", "Bai.temp.1 [abcdefghij2].mp4", "Do [abcdefghij3].f137.mp4.part",
+                "Do [abcdefghij4].mp4.part-Frag3", "Do [abcdefghij5].mp4.ytdl", "Do [abcdefghij6].temp.mkv"):
+        (tmp_path / ten).write_bytes(b"x")
+    assert [os.path.basename(f) for f in tv._file_xong(str(tmp_path))] == [
+        "Bai.temp.1 [abcdefghij2].mp4", "Vlog.part 2 [abcdefghij1].mkv"]

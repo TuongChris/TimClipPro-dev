@@ -19,6 +19,7 @@ import uuid
 from dataclasses import asdict, dataclass
 from typing import Callable, Optional
 
+from channel import ChannelSync, _CoHuyTuHam
 from truy_cap_youtube import (
     PhienYouTube,
     che_bi_mat,
@@ -39,7 +40,7 @@ DINH_DANG = "bv*+ba/b"
 # MP4 khi mã hoá hợp (H.264/AV1 + AAC), không thì MKV (VP9/AV1 + Opus — thường là bản 4K của YouTube): không chuyển mã.
 VO_GHEP = "mp4/mkv"
 THU_MUC_TAM = ".timclip_tai_do"
-_DUOI_DO_DANG = (".part", ".ytdl", ".temp")
+_RE_FILE_DO = re.compile(r"\.(?:part(?:-Frag\d+)?|ytdl|temp)$|\.temp\.[^.]+$")
 # Mức TỐI ĐA (chiều cao khung hình): video gốc thấp hơn thì lấy bản cao nhất có. 0 = chỉ tiếng.
 CHAT_LUONG = {
     "Cao nhất": None,
@@ -161,13 +162,12 @@ def _ten_trong(thu_muc: str, ten: str) -> str:
 
 
 def _file_xong(thu_muc: str) -> list:
+    # Chỉ ĐUÔI tên đánh dấu file dở (x.part, x.part-Frag3, x.ytdl, x.temp, x.temp.mkv của bộ ghép): tiêu đề có
+    # «.part»/«.temp.» ở giữa vẫn là video đã xong.
     return sorted(
         os.path.join(thu_muc, f)
         for f in os.listdir(thu_muc)
-        if not f.endswith(_DUOI_DO_DANG)
-        and ".temp." not in f
-        and ".part" not in f
-        and os.path.isfile(os.path.join(thu_muc, f))
+        if not _RE_FILE_DO.search(f) and os.path.isfile(os.path.join(thu_muc, f))
     )
 
 
@@ -309,7 +309,7 @@ def tai_nhieu(
                     phien=phien,
                 ),
                 video_id=ma_tu_url(url),
-                cancel_event=_CoHuy(huy),
+                cancel_event=_CoHuyTuHam(huy),
                 loi_huy=DaHuyTaiVideo,
                 bo_qua=(DaHuyTaiVideo,),
             )
@@ -366,8 +366,6 @@ def tai_kenh(
 
     Video đã có file trong thư mục thì bỏ qua: bấm lại là tải tiếp phần còn thiếu. ``kw`` chuyển cho :func:`tai_nhieu`.
     Kênh bị chặn/không đọc được thì ném lỗi đã phân loại — không coi là «kênh không có video»."""
-    from channel import ChannelSync
-
     phien = phien or PhienYouTube()
     if progress:
         progress(0.0, "Đang lấy danh sách video của kênh...")
@@ -419,13 +417,3 @@ def chon_thu_muc(ban_dau: str = "") -> str:
         )
     p = r.stdout.decode("utf-8", "replace").strip()
     return os.path.normpath(p) if p else ""
-
-
-class _CoHuy:
-    """Bọc ``cancel_check`` thành đối tượng có ``is_set()`` cho ``PhienYouTube.chay`` (huỷ được trong lúc nghỉ thử lại)."""
-
-    def __init__(self, ham: Callable[[], bool]):
-        self._ham = ham
-
-    def is_set(self) -> bool:
-        return bool(self._ham())
