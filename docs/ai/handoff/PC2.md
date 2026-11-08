@@ -54,6 +54,9 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 - Test: nhanh và chậm ở PR #32, 17 test mới (yt-dlp giả, AppTest). Gộp `1017142`, DEV cập nhật 08/11 21:08. Người dùng tải thật trên DEV: chạy tốt.
 - Bổ sung (nhánh feature/pc2/tai-video-them): ô «Chất lượng tối đa», tab «🖼️ Tải thumbnail» (JPG), tab «📺 Tải cả kênh» (số
   video mới nhất, bỏ qua video đã có). Cùng ngày: bỏ Docker `fe397a4`, sửa test chập chờn `80aa554`. PR #33 `ec2091d`, DEV 22:37; người dùng thử thật: ổn.
+- Review + audit 08/11 (4 agent, nhánh fix/pc2/audit-0811): 13 sửa kèm test đỏ (ổ sắp đầy, tên .audio, dọn tạm, trùng video,
+  403 vô danh, Markdown tên file, nút khi đồng bộ, hạn chờ gspread, cli gui tạm dừng, Watch «đã quét trước», bỏ SheetsExporter.append
+  −156 dòng); bác 1 (immutable SQLite không tái hiện). CHỜ người dùng: `managed_update.don_ban_cu` chưa ai gọi — gọi sau ACTIVE hay xoá.
 ### 2026-11-07 — Codex bước 2: audit số 14 và 18 (nhánh fix/pc2/audit-14-updater)
 - 14: 10 kiểm tra an toàn của updater có test mới, mỗi test đỏ khi xoá kiểm tra (1 claim sai). Sửa F1–F3: tag trước kênh; health chết không kết quả là
   tạm thời, cách ly ở lần 3; launcher không mở khi nhật ký đang kích hoạt. Updater chỉ tới máy đã cài khi bootstrap lại.

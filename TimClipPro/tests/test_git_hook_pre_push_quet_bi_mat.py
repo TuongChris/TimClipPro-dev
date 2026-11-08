@@ -284,8 +284,8 @@ def test_khung_tu_quet_bat_mau_gia_thieu_dau(tmp_path):
 # hoặc file bị viết lại — khi đó thêm dấu và gỡ khỏi danh sách. KHÔNG thêm file mới vào đây: file mới mang dấu ngay.
 _DA_CO_TRUOC_HOOK_E4 = frozenset({
     "TimClipPro/docs/HARDENING_PLAN.md", "TimClipPro/sheets.py", "TimClipPro/tests/dien_tap_phat_hanh.py",
-    "TimClipPro/tests/outbox_gia.py", "TimClipPro/tests/test_bao_cao_v2_sheets.py",
-    "TimClipPro/tests/test_bao_cao_v2_sheets_trong.py", "TimClipPro/tests/test_danh_sach_video.py",
+    "TimClipPro/tests/outbox_gia.py",
+    "TimClipPro/tests/test_danh_sach_video.py",
     "TimClipPro/tests/test_dong_goi_bi_mat.py", "TimClipPro/tests/test_dong_goi_may_chay.py",
     "TimClipPro/tests/test_sheet_destinations.py", "TimClipPro/tests/test_sheets_session.py",
 })
