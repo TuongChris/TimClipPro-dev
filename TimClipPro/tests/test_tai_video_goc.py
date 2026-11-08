@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+from types import SimpleNamespace
 
 import pytest
 import yt_dlp
@@ -417,7 +418,13 @@ def test_tai_kenh_lay_danh_sach_roi_bo_qua_video_da_co(gia, tmp_path, monkeypatc
     def liet_ke(url, limit=None, **kw):
         nhan.update(url=url, limit=limit, co_phien=kw.get("phien_youtube") is not None)
         return [
-            channel.VideoInfo(id=m, title=m, upload_date="", duration=0.0, url=f"https://www.youtube.com/watch?v={m}")
+            channel.VideoInfo(
+                id=m,
+                title=m,
+                upload_date="",
+                duration=0.0,
+                url=f"https://www.youtube.com/watch?v={m}",
+            )
             for m in ("abcdefghij1", "abcdefghij2")
         ]
 
@@ -465,8 +472,51 @@ def test_chon_thu_muc_doc_utf8_va_bao_loi_ro(monkeypatch):
 
 def test_tieu_de_co_part_hay_temp_van_la_file_xong(tmp_path):
     """Chỉ ĐUÔI tên mới đánh dấu file dở; «.part»/«.temp.» nằm trong tiêu đề không được làm mất video đã tải."""
-    for ten in ("Vlog.part 2 [abcdefghij1].mkv", "Bai.temp.1 [abcdefghij2].mp4", "Do [abcdefghij3].f137.mp4.part",
-                "Do [abcdefghij4].mp4.part-Frag3", "Do [abcdefghij5].mp4.ytdl", "Do [abcdefghij6].temp.mkv"):
+    for ten in (
+        "Vlog.part 2 [abcdefghij1].mkv",
+        "Bai.temp.1 [abcdefghij2].mp4",
+        "Do [abcdefghij3].f137.mp4.part",
+        "Do [abcdefghij4].mp4.part-Frag3",
+        "Do [abcdefghij5].mp4.ytdl",
+        "Do [abcdefghij6].temp.mkv",
+    ):
         (tmp_path / ten).write_bytes(b"x")
     assert [os.path.basename(f) for f in tv._file_xong(str(tmp_path))] == [
-        "Bai.temp.1 [abcdefghij2].mp4", "Vlog.part 2 [abcdefghij1].mkv"]
+        "Bai.temp.1 [abcdefghij2].mp4",
+        "Vlog.part 2 [abcdefghij1].mkv",
+    ]
+
+
+def test_o_dia_sap_day_thi_dung_khong_tai_tiep(gia, tmp_path, monkeypatch):
+    """Tải cả kênh qua đêm không được làm đầy ổ: dưới mức trống tối thiểu thì các video còn lại «bỏ qua»."""
+    trong = {"byte": 50 * 10**9}
+    monkeypatch.setattr(
+        tv.shutil,
+        "disk_usage",
+        lambda p: SimpleNamespace(total=0, used=0, free=trong["byte"]),
+    )
+
+    def day_o(_opts):
+        trong["byte"] = 10**9  # video 1 tải xong thì ổ chỉ còn 1 GB
+
+    gia.hanh_vi[URL1] = day_o
+    kq = tv.tai_nhieu([URL1, URL2], str(tmp_path))
+    assert [k["trang_thai"] for k in kq] == ["xong", "bo_qua"]
+    assert "Ổ đĩa" in kq[1]["ghi_chu"] and [u for u, _ in gia.goi] == [URL1]
+
+
+def test_file_chi_tieng_khong_chan_tai_video_va_nguoc_lai(gia, tmp_path):
+    kq = tv.tai_nhieu([URL1], str(tmp_path), chat_luong="Chỉ tiếng")
+    assert kq[0]["duong_dan"].endswith(
+        "[abcdefghij1].audio.mkv"
+    )  # yt-dlp giả luôn ra .mkv
+    # Đã có bản chỉ-tiếng: tải VIDEO cùng thư mục vẫn phải tải; tải CHỈ TIẾNG lần nữa thì bỏ qua.
+    assert [
+        k["trang_thai"] for k in tv.tai_nhieu([URL1], str(tmp_path), bo_qua_da_co=True)
+    ] == ["xong"]
+    assert [
+        k["trang_thai"]
+        for k in tv.tai_nhieu(
+            [URL1], str(tmp_path), bo_qua_da_co=True, chat_luong="Chỉ tiếng"
+        )
+    ] == ["bo_qua"]

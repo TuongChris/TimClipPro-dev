@@ -63,6 +63,10 @@ TUY_CHON_THUMBNAIL = {
 }
 _DUOI_ANH = (".jpg", ".jpeg", ".png", ".webp")
 _RE_MA_CUOI_TEN = re.compile(r"\[([A-Za-z0-9_-]{11})\]\.[^.]+$")
+# File chỉ-tiếng mang thêm «.audio» trước đuôi: «đã có» của video và của chỉ-tiếng không lẫn nhau.
+_RE_MA_CUOI_TEN_TIENG = re.compile(r"\[([A-Za-z0-9_-]{11})\]\.audio\.[^.]+$")
+# Dưới mức trống này thì không tải video kế: một lượt tải cả kênh qua đêm không được làm đầy ổ.
+TRONG_TOI_THIEU_BYTE = 5 * 10**9
 
 
 def tuy_chon_dinh_dang(chat_luong: str = CHAT_LUONG_MAC_DINH) -> dict:
@@ -80,8 +84,10 @@ def tuy_chon_dinh_dang(chat_luong: str = CHAT_LUONG_MAC_DINH) -> dict:
     }
 
 
-def ma_da_co(thu_muc: str) -> set:
-    """Mã video đã có FILE VIDEO/TIẾNG trong ``thu_muc`` (tên kết thúc bằng «[mã].đuôi»; ảnh thumbnail không tính)."""
+def ma_da_co(thu_muc: str, chi_tieng: bool = False) -> set:
+    """Mã video đã có file trong ``thu_muc``: video = «[mã].đuôi», chỉ-tiếng = «[mã].audio.đuôi» (ảnh không tính).
+    Hai loại tách riêng: có bản chỉ-tiếng không có nghĩa là đã có video, và ngược lại."""
+    mau = _RE_MA_CUOI_TEN_TIENG if chi_tieng else _RE_MA_CUOI_TEN
     try:
         ten = os.listdir(thu_muc)
     except OSError:
@@ -89,7 +95,7 @@ def ma_da_co(thu_muc: str) -> set:
     return {
         m.group(1)
         for t in ten
-        if not t.lower().endswith(_DUOI_ANH) and (m := _RE_MA_CUOI_TEN.search(t))
+        if not t.lower().endswith(_DUOI_ANH) and (m := mau.search(t))
     }
 
 
@@ -211,7 +217,13 @@ def tai_nhieu(
     huy = cancel_check or (lambda: False)
     n = len(links)
     ket_qua: list = []
-    da_co = ma_da_co(thu_muc) if bo_qua_da_co else set()
+    chi_tieng = not thumbnail and CHAT_LUONG[chat_luong] == 0
+    da_co = ma_da_co(thu_muc, chi_tieng) if bo_qua_da_co else set()
+    ten_mau = (
+        "%(title).150B [%(id)s].audio.%(ext)s"
+        if chi_tieng
+        else "%(title).150B [%(id)s].%(ext)s"
+    )
 
     for i, url in enumerate(links):
         kq = KetQuaTaiVideo(url=url, trang_thai="loi")
@@ -231,6 +243,13 @@ def tai_nhieu(
             continue
         if ma_tu_url(url) in da_co:
             kq.trang_thai, kq.ghi_chu = "bo_qua", "Đã có trong thư mục."
+            continue
+        if not thumbnail and shutil.disk_usage(thu_muc).free < TRONG_TOI_THIEU_BYTE:
+            kq.trang_thai = "bo_qua"
+            kq.ghi_chu = (
+                f"Ổ đĩa chứa thư mục lưu còn dưới {TRONG_TOI_THIEU_BYTE // 10**9} GB trống — "
+                "không tải tiếp để khỏi làm đầy ổ. Giải phóng chỗ rồi bấm lại."
+            )
             continue
         tam = os.path.join(thu_muc, THU_MUC_TAM, uuid.uuid4().hex[:12])
         os.makedirs(tam, exist_ok=True)
@@ -283,7 +302,7 @@ def tai_nhieu(
                     "download",
                     logger=bo_ghi,
                     **rieng_dinh_dang,
-                    outtmpl=os.path.join(tam, "%(title).150B [%(id)s].%(ext)s"),
+                    outtmpl=os.path.join(tam, ten_mau),
                     noplaylist=True,
                     playlist_items="1",
                     continuedl=False,
