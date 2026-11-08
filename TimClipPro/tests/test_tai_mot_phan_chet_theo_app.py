@@ -78,10 +78,16 @@ def test_tien_trinh_tai_chet_theo_app_khi_app_chet_dot_ngot(tmp_path):
             con.kill()
             ra = con.communicate(timeout=10)[0].decode("utf-8", "replace")
             pytest.fail(f"app giả không tới bước tải: {ra[-2000:]}")
-        time.sleep(0.3)
-        chau = psutil.Process(int(pid_file.read_text()))
-        part = [p for p in os.listdir(tmp_path / "data" / "downloads") if p.endswith(".part")]
+        # Chờ tới khi tiến trình tải THẬT SỰ ghi .part, không chờ cố định: lúc máy bận (cả bộ test chạy cùng lúc) Python
+        # con khởi động chậm hơn 0,3 giây và test hỏng ngẫu nhiên. File pid cũng có thể đang ghi dở (rỗng).
+        part, het = [], time.monotonic() + 30
+        while time.monotonic() < het and con.poll() is None:
+            part = [p for p in os.listdir(tmp_path / "data" / "downloads") if p.endswith(".part")]
+            if part and pid_file.read_text().strip():
+                break
+            time.sleep(0.05)
         assert part, "tiến trình tải chưa ghi .part"
+        chau = psutil.Process(int(pid_file.read_text()))
 
         con.kill()                    # app chết đột ngột giữa lúc tải
         con.wait(timeout=10)
