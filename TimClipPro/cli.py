@@ -91,7 +91,7 @@ def _in_tong_ket_gui(tt: dict, so_dong: int = -1) -> int:
     if tt[outbox.UNKNOWN]:
         print("     Việc KHÔNG RÕ: đối soát trên Sheet rồi xác nhận trong ứng dụng "
               "(mục «📤 Gửi Google Sheets»); tool không tự gửi lại.")
-    return 1 if (tt[outbox.BLOCKED_CONFIG] or tt[outbox.UNKNOWN]) else 0
+    return 1 if (tt[outbox.BLOCKED_CONFIG] or tt[outbox.BLOCKED_REPORT] or tt[outbox.UNKNOWN]) else 0
 
 
 def _lenh_dich_va_gui(a) -> None:
@@ -609,8 +609,9 @@ def _main():
               f"{so['metadata_requests']} lần lấy thông tin, {so['download_attempts']} lượt tải, "
               f"{so['retries']} lần thử lại, {so['skipped_by_breaker']} video chưa quét.")
         _thoat_neu_youtube_chan(phien.thong_bao_dung())
-    if ma_gui:
-        raise SystemExit(ma_gui)
+    # Như Watch (audit B-11): quét lỗi hay báo cáo V2 lỗi là lỗi — mã 0 thì script/lịch tưởng đã xong (audit 09/11).
+    if ma_gui or loi_bao_cao or any(kq.status != "ok" for kq in ket):
+        raise SystemExit(ma_gui or 1)
 
 
 if __name__ == "__main__":

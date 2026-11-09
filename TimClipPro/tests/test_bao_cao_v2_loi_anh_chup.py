@@ -279,7 +279,9 @@ def test_cli_bao_ro_loi_bao_cao_v2_va_khong_xuat_dong_loi(tmp_path, monkeypatch,
     _hong_dung(monkeypatch, chi_ma=_ma(2))
     monkeypatch.setattr(cli, "Engine", lambda: e)
     monkeypatch.setattr(sys, "argv", ["cli.py", "youtube", _url(_ma(1)), _url(_ma(2))])
-    cli.main()
+    with pytest.raises(SystemExit) as ei:          # audit 09/11: báo cáo V2 lỗi là lỗi — mã 1 như Watch
+        cli.main()
+    assert ei.value.code == 1
     ra = capsys.readouterr().out
     assert "Báo cáo V2" in ra and "Traceback" not in ra
     duong = ra.split("===> Báo cáo CSV:")[1].splitlines()[0].strip()
