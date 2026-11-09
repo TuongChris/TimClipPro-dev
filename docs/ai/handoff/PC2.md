@@ -50,7 +50,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 
 ## Nhật ký
 ### 2026-11-09 — tải theo link 4 kết nối song song (D-40, nhánh feature/pc2/tai-song-song)
-- Người dùng thấy ghép chậm: đo thật một kết nối 0,78–25 MB/s; 4 kết nối ~78 MB/s; tool thật tải 346 MB trong 22,5 s.
+- Người dùng thấy ghép chậm: đo thật một kết nối 0,78–25 MB/s; 4 kết nối ~78 MB/s; tool thật tải 346 MB trong 22,5 s. Gộp `5a2e79a`, DEV 09/11 21:24 (sao lưu `data_20261109_212411`).
 - Lùi một kết nối khi thiếu định dạng; Dừng giữa chừng để lại .part đang mở → sửa (test đỏ + thử thật). Bằng chứng `C:\Dev\pc2_test_runs\2026-11-09_tai_song_song`.
 ### 2026-11-09 — tab «🎞️ Ghép video gốc» (D-39, nhánh feature/pc2/ghep-video-goc)
 - Tải H.264 ≤ 1080p + AAC rồi nối `-c copy` theo thứ tự link, lệch thông số thì dừng + giữ file; `<tên>.moc.csv` + mốc chương.
