@@ -1518,8 +1518,9 @@ with tab_ghep:
     _thu_muc_ghep = _o_thu_muc_tai("Thư mục lưu video ghép", "ghep")
     _ten_ghep = st.text_input("Tên file video ghép (để trống = «Video ghép <ngày giờ>»)")
     _ds_ghep = ghep_video_goc.tach_link(links_ghep)
-    st.caption("Video khác độ phân giải hay số hình/giây (vd. một video 720p giữa các video 1080p) thì tool dừng và báo "
-               "video nào lệch — không ghép ra file hỏng; video đã tải được giữ lại nên ghép lại không phải tải lại.")
+    st.caption("Video khác độ phân giải hay số hình/giây video 1 (vd. một video 60 hình/giây giữa các video 30) thì "
+               "tool tự nén lại RIÊNG video đó cho khớp — lâu hơn vài phút cho mỗi video lệch; tiếng giữ nguyên nên mốc "
+               "vẫn đúng. Video đã tải được giữ lại tới khi ghép xong, bấm lại thì không phải tải lại.")
     if st.button(f"🎞️ Tải và ghép {len(_ds_ghep)} video" if _ds_ghep else "🎞️ Tải và ghép", type="primary",
                  key="bat_dau_ghep_video", disabled=len(_ds_ghep) < 2 or not _thu_muc_ghep or _chua_tai_duoc()):
         _bat_dau_tai(ghep_video_goc.ghep, _ds_ghep, _thu_muc_ghep, ten_file=_ten_ghep)

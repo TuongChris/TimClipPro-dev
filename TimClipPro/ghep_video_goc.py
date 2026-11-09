@@ -7,8 +7,9 @@ Dùng để có video dài mà ĐÁP ÁN đã biết: video gốc nào bắt đ�
 * Tải bằng :func:`tai_video_goc.tai_nhieu` (cùng đường mạng/cookie/cầu dao) với :data:`tai_video_goc.DINH_DANG_GHEP`:
   mọi video cùng kiểu H.264 ≤ 1080p + AAC trong MP4, vào thư mục tạm :data:`THU_MUC_PHAN` trong thư mục lưu.
 * Nối bằng ``ffmpeg -f concat -c copy`` — KHÔNG nén lại, chất lượng giữ nguyên. Nối thẳng chỉ đúng khi mọi file cùng
-  thông số (mã hoá, độ phân giải, số hình/giây, tiếng): lệch thì DỪNG và báo rõ video nào lệch, giữ các file đã tải để
-  lần sau khỏi tải lại — không ghép ra file hỏng ở chỗ nối, không tự nén lại hàng giờ.
+  thông số (mã hoá, độ phân giải, số hình/giây, tiếng). Video lệch video 1 (vd. 60 hình/giây giữa các video 29,97 — người
+  dùng chọn 09/11) được nén lại RIÊNG nó cho khớp video 1; tiếng chép nguyên khi đã khớp nên mốc vẫn đúng tiếng thật.
+  Chuyển xong vẫn lệch thì DỪNG, báo rõ, giữ các file đã tải — không ghép ra file hỏng ở chỗ nối.
 * Độ dài từng phần ghi thẳng vào danh sách nối (``duration``) nên mốc trong file CSV và mốc chương trong video khớp
   đúng chỗ FFmpeg đặt từng phần. Ghép xong và độ dài file ra khớp tổng thì mới xoá thư mục tạm.
 """
@@ -16,6 +17,7 @@ Dùng để có video dài mà ĐÁP ÁN đã biết: video gốc nào bắt đ�
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 import os
@@ -31,6 +33,7 @@ from process_runner import IM_LANG_FFMPEG_S, TRAN_FFPROBE_S, chay_lenh_media
 from ytdlp_chung import CauHinhMang
 
 THU_MUC_PHAN = ".timclip_ghep"
+THU_MUC_KHOP = "khop"  # trong THU_MUC_PHAN: bản đã chuyển cho khớp video 1 (dùng lại khi bấm ghép lại)
 # Thông số phải TRÙNG giữa các phần để nối bằng -c copy (tên hiển thị cho câu báo lệch).
 THONG_SO = {
     "ma_hinh": "mã hoá hình",
@@ -78,6 +81,7 @@ def thong_so(path: str) -> dict:
         (s for s in d.get("streams", []) if s.get("codec_type") == "audio"), {}
     )
     do_dai = float((d.get("format") or {}).get("duration") or 0)
+    tb = str(hinh.get("time_base") or "")
     if not hinh or not tieng or do_dai <= 0:
         raise RuntimeError(
             f"File «{os.path.basename(path)}» thiếu hình, thiếu tiếng hoặc không đo được độ dài."
@@ -92,6 +96,7 @@ def thong_so(path: str) -> dict:
         "tan_so_tieng": tieng.get("sample_rate"),
         "kenh_tieng": tieng.get("channels"),
         "do_dai": do_dai,
+        "nhip_hinh": int(tb.split("/")[1]) if re.fullmatch(r"1/\d+", tb) else 0,
     }
 
 
@@ -110,6 +115,44 @@ def cac_cho_lech(ts: list) -> list:
         if khac:
             bao.append(f"Video {i} «{ten}»: " + "; ".join(khac))
     return bao
+
+
+_PROFILE_X264 = {"High": "high", "Main": "main", "Constrained Baseline": "baseline"}
+
+
+def _ten_khop(nguon: str, chuan: dict) -> str:
+    """Tên bản chuyển: theo file nguồn + thông số đích — ghép lại cùng danh sách thì dùng lại, không nén lại lần nữa."""
+    khoa = os.path.basename(nguon) + json.dumps({k: chuan[k] for k in THONG_SO}, sort_keys=True)
+    return hashlib.sha1(khoa.encode("utf-8")).hexdigest()[:16] + ".mp4"
+
+
+def _chuyen_khop(nguon: str, dich: str, chuan: dict, ts_nguon: dict, *, huy, khi_tien_do):
+    """Nén lại hình của ``nguon`` cho trùng ``chuan`` (độ phân giải — thu nhỏ giữ tỉ lệ + viền đen, số hình/giây,
+    profile, kiểu điểm ảnh, nhịp thời gian); tiếng chép nguyên nếu đã khớp, không thì đổi sang AAC đúng tần số/số kênh.
+    Ghi ra file tạm rồi mới đổi tên — bị Dừng/lỗi không để lại bản dở bị tưởng là xong. Trả kết quả ``chay_lenh_media``."""
+    w, h = chuan["do_phan_giai"].split("x")
+    tieng_khop = all(ts_nguon[k] == chuan[k] for k in ("ma_tieng", "tan_so_tieng", "kenh_tieng"))
+    dang = dich + ".dang.mp4"
+    lenh = [
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", nguon, "-map", "0:v:0", "-map", "0:a:0",
+        "-vf", f"fps={chuan['hinh_giay']},scale={w}:{h}:force_original_aspect_ratio=decrease,"
+        f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", chuan["pix_fmt"],
+    ]
+    if chuan["profile"] in _PROFILE_X264:
+        lenh += ["-profile:v", _PROFILE_X264[chuan["profile"]]]
+    if chuan.get("nhip_hinh"):
+        lenh += ["-video_track_timescale", str(chuan["nhip_hinh"])]
+    lenh += (["-c:a", "copy"] if tieng_khop else
+             ["-c:a", "aac", "-b:a", "192k", "-ar", str(chuan["tan_so_tieng"]), "-ac", str(chuan["kenh_tieng"])])
+    lenh += ["-movflags", "+faststart", "-f", "mp4", dang]
+    r = chay_lenh_media(lenh, cancel_event=_CoHuyTuHam(huy), im_lang_toi_da_s=IM_LANG_FFMPEG_S,
+                        theo_doi_tien_do=True, khi_tien_do=khi_tien_do)
+    if not r.cancelled and r.returncode == 0 and os.path.isfile(dang):
+        os.replace(dang, dich)
+    elif os.path.exists(dang):
+        os.remove(dang)
+    return r
 
 
 def _nhay_concat(path: str) -> str:
@@ -202,7 +245,7 @@ def ghep(
         list(links),
         tam,
         cau_hinh_mang,
-        progress=lambda p, m: bao(0.8 * p, m),
+        progress=lambda p, m: bao(0.7 * p, m),
         cancel_check=huy,
         bo_qua_da_co=True,
         dinh_dang=tv.DINH_DANG_GHEP,
@@ -243,16 +286,57 @@ def ghep(
     if huy():
         return that_bai("Đã dừng theo yêu cầu trước khi ghép.")
 
-    bao(0.82, "Đang kiểm thông số các video...")
+    bao(0.71, "Đang kiểm thông số các video...")
     try:
         ts = [(ten, thong_so(duong)) for ten, _l, duong in phan]
     except RuntimeError as e:
         return that_bai(f"Chưa ghép: {e}")
+    chuan = ts[0][1]
+    can_chuyen = [i for i, (_t, t) in enumerate(ts) if i and any(t[k] != chuan[k] for k in THONG_SO)]
+    if can_chuyen and (chuan["ma_hinh"] != "h264" or chuan["ma_tieng"] != "aac"):
+        # shortcut: chỉ chuyển về H.264 + AAC (định dạng tải chung); video 1 khác kiểu đó thì dừng như trước.
+        return that_bai(
+            "Chưa ghép: các video khác thông số và video 1 không phải H.264 + AAC nên tool không tự chuyển được. "
+            "Bỏ các video lệch khỏi danh sách rồi ghép lại. " + " | ".join(cac_cho_lech(ts)) + "."
+        )
+    if can_chuyen:
+        can = sum(os.path.getsize(phan[i][2]) for i in can_chuyen) + _DU_PHONG_O_DIA
+        if shutil.disk_usage(thu_muc).free < can:
+            return that_bai(f"Chưa ghép: cần chuyển video lệch, ổ đĩa cần còn trống khoảng {can / 1e9:,.1f} GB.")
+        os.makedirs(os.path.join(tam, THU_MUC_KHOP), exist_ok=True)
+    da_chuyen: dict = {}
+    for so, i in enumerate(can_chuyen, start=1):
+        ten, link, duong = phan[i]
+        if duong not in da_chuyen:
+            dich_khop = os.path.join(tam, THU_MUC_KHOP, _ten_khop(duong, chuan))
+            if not os.path.isfile(dich_khop):
+                do_dai_i = ts[i][1]["do_dai"]
+                nhan = f"Đang chuyển video {i + 1} «{ten}» cho khớp video 1 ({so}/{len(can_chuyen)})"
+                bao(0.71 + 0.14 * (so - 1) / len(can_chuyen), nhan + "...")
+
+                def tien_do_chuyen(d: dict, so=so, nhan=nhan, do_dai_i=do_dai_i) -> None:
+                    giay = int(d.get("out_time_us") or d.get("out_time_ms") or 0) / 1e6
+                    bao(0.71 + 0.14 * (so - 1 + min(giay / do_dai_i, 1.0)) / len(can_chuyen),
+                        f"{nhan}: {hhmmss(giay)} / {hhmmss(do_dai_i)}")
+
+                r = _chuyen_khop(duong, dich_khop, chuan, ts[i][1], huy=huy, khi_tien_do=tien_do_chuyen)
+                if r.cancelled:
+                    return that_bai("Đã dừng theo yêu cầu trong lúc chuyển video lệch; phần chuyển dở đã xoá.")
+                if r.returncode != 0 or not os.path.isfile(dich_khop):
+                    return that_bai(f"Chưa ghép: chuyển video {i + 1} «{ten}» cho khớp video 1 bị lỗi: "
+                                    f"{(r.stderr or r.ly_do or '').strip()[-300:]}")
+            da_chuyen[duong] = dich_khop
+        phan[i] = (ten, link, da_chuyen[duong])
+    if can_chuyen:
+        try:
+            ts = [(ten, thong_so(duong)) for ten, _l, duong in phan]
+        except RuntimeError as e:
+            return that_bai(f"Chưa ghép: {e}")
     lech = cac_cho_lech(ts)
     if lech:
         return that_bai(
-            "Chưa ghép: các video khác thông số nên không nối thẳng được (nối vẫn ra file nhưng hỏng ở chỗ "
-            "nối). Bỏ các video lệch khỏi danh sách rồi ghép lại. "
+            "Chưa ghép: đã chuyển các video lệch nhưng vẫn khác thông số video 1 nên không nối thẳng được (nối vẫn "
+            "ra file nhưng hỏng ở chỗ nối). Bỏ các video lệch khỏi danh sách rồi ghép lại. "
             + " | ".join(lech)
             + "."
         )
@@ -338,9 +422,14 @@ def ghep(
         trang_thai="xong",
         duong_dan=dich,
         tieu_de=f"Video ghép {len(phan)} video — {hhmmss(do_dai_ra)}",
-        chat_luong=f"{t0['do_phan_giai']} {t0['ma_hinh']} {t0['hinh_giay']} hình/giây, không nén lại",
+        chat_luong=f"{t0['do_phan_giai']} {t0['ma_hinh']} {t0['hinh_giay']} hình/giây, "
+        + (f"{len(can_chuyen)} video nén lại cho khớp" if can_chuyen else "không nén lại"),
         ghi_chu=f"Mốc thời gian từng video gốc: {duong_moc}",
     )
+    if can_chuyen:
+        dong_ghep["ghi_chu"] += " — Đã chuyển cho khớp video 1 (tiếng giữ nguyên): " + ", ".join(
+            f"Video {i + 1} «{phan[i][0]}»" for i in can_chuyen
+        )
     if abs(do_dai_ra - tong) > LECH_DO_DAI_TOI_DA_S:
         dong_ghep["ghi_chu"] += (
             f" — CẢNH BÁO: video ghép dài {do_dai_ra:.2f} s, tổng các phần {tong:.2f} s; mốc có thể "

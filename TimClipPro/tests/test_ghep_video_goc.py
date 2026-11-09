@@ -69,10 +69,11 @@ def nguon(tmp_path_factory):
         URL[1]: ("Tập 2 = «bí ẩn»; #1", _tao(d / "b.mp4", 3, 880)),
         URL[2]: ("Tập 3 của Joe's", _tao(d / "c.mp4", 2.5, 1320)),
         "lech": ("Bản 360p", _tao(d / "d.mp4", 2, 440, kich_thuoc="640x360")),
+        "lech60": ("Bản 60 hình", _tao(d / "e.mp4", 2, 1320, hinh_giay=60)),
     }
 
 
-def _gia_tai(monkeypatch, nguon, loi=(), lech=False):
+def _gia_tai(monkeypatch, nguon, loi=(), lech=""):
     goi = {}
 
     def tai_nhieu(
@@ -107,7 +108,7 @@ def _gia_tai(monkeypatch, nguon, loi=(), lech=False):
                     }
                 )
             else:
-                ten, src = nguon["lech" if (lech and url == URL[2]) else url]
+                ten, src = nguon[lech if (lech and url == URL[2]) else url]
                 shutil.copy(src, dich)
                 ra.append(
                     {
@@ -209,18 +210,58 @@ def test_ghep_dung_thu_tu_moc_khop_tieng_that_va_xoa_file_le(
     )
 
 
+def _probe(path):
+    return json.loads(
+        subprocess.run(
+            ["ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", path],
+            capture_output=True,
+            check=True,
+        ).stdout
+    )
+
+
 @can_ffmpeg
-def test_video_lech_thong_so_thi_khong_ghep_giu_file_da_tai(
-    nguon, tmp_path, monkeypatch
+@pytest.mark.parametrize("khoa, hz", [("lech", 440), ("lech60", 1320)])
+def test_video_lech_thong_so_tu_chuyen_cho_khop_video_1(
+    nguon, tmp_path, monkeypatch, khoa, hz
 ):
-    _gia_tai(monkeypatch, nguon, lech=True)
+    """Người dùng 09/11: video 2 chạy 60 hình/giây, video 1 29,97 → trước đây dừng. Nay chỉ video lệch được nén lại cho
+    khớp video 1 (độ phân giải, số hình/giây), tiếng giữ nguyên nên mốc vẫn đúng tiếng thật."""
+    _gia_tai(monkeypatch, nguon, lech=khoa)
+    kq = gv.ghep(URL[:3], str(tmp_path), ten_file="ghep")
+    cuoi = kq[-1]
+    assert cuoi["trang_thai"] == "xong", cuoi
+    assert "Video 3" in cuoi["ghi_chu"]  # báo rõ video nào đã chuyển
+    ra = _probe(cuoi["duong_dan"])
+    hinh = next(x for x in ra["streams"] if x["codec_type"] == "video")
+    assert (hinh["width"], hinh["height"], hinh["r_frame_rate"]) == (320, 240, "30/1")
+    assert float(ra["format"]["duration"]) == pytest.approx(7.0, abs=0.2)
+    with open(tmp_path / "ghep.moc.csv", encoding="utf-8-sig") as f:
+        bat_dau = [float(d["Bắt đầu (giây)"]) for d in csv.DictReader(f)]
+    assert bat_dau == pytest.approx([0, 2, 5], abs=0.05)
+    for giay, tan_so in zip(bat_dau, (440, 880, hz)):
+        assert _tan_so_tai(cuoi["duong_dan"], giay + 0.1) == pytest.approx(
+            tan_so, abs=25
+        ), giay
+    assert not os.path.exists(tmp_path / gv.THU_MUC_PHAN)
+
+
+@can_ffmpeg
+def test_chuyen_xong_van_lech_thi_dung_giu_file(nguon, tmp_path, monkeypatch):
+    """Lớp chặn cuối: bản chuyển vẫn khác video 1 (lỗi chuyển) thì KHÔNG nối ra file hỏng ở chỗ nối."""
+    from types import SimpleNamespace
+
+    _gia_tai(monkeypatch, nguon, lech="lech60")
+
+    def chuyen_hong(nguon_file, dich, *_a, **_k):
+        shutil.copy(nguon_file, dich)
+        return SimpleNamespace(cancelled=False, returncode=0, stderr="", ly_do="")
+
+    monkeypatch.setattr(gv, "_chuyen_khop", chuyen_hong)
     kq = gv.ghep(URL[:3], str(tmp_path))
     cuoi = kq[-1]
     assert cuoi["trang_thai"] == "loi"
-    assert (
-        "Video 3" in cuoi["ghi_chu"]
-        and "độ phân giải 640x360 (video 1: 320x240)" in cuoi["ghi_chu"]
-    )
+    assert "số hình/giây 60/1 (video 1: 30/1)" in cuoi["ghi_chu"]
     assert not [f for f in os.listdir(tmp_path) if f.endswith(".mp4")]
     assert (
         len([f for f in os.listdir(tmp_path / gv.THU_MUC_PHAN) if f.endswith(".mp4")])

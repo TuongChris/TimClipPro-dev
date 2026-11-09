@@ -15,6 +15,13 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-41 Ghép video: tự chuyển video lệch thông số cho khớp video 1 (người dùng, 2026-11-09)
+Thay một phần D-39 («lệch thì dừng»): người dùng gặp video 60 hình/giây giữa video 29,97 — chuyện thường gặp. Chỉ video
+lệch được nén lại (libx264 veryfast crf 18; fps, thu nhỏ giữ tỉ lệ + viền, profile, kiểu điểm ảnh, nhịp thời gian của
+video 1); tiếng chép nguyên khi đã khớp. Bản chuyển để ở `.timclip_ghep/khop/` (dùng lại khi bấm ghép lại). Chuyển xong
+vẫn lệch → dừng như cũ. Video 1 không phải H.264 + AAC → dừng như cũ. Đo thật: 48 phút 60 hình/giây → 29,97 mất 6,5 phút,
+tiếng ở mốc nối lệch 0 ms.
+
 ## D-40 Tải video theo link bằng 4 kết nối song song (người dùng, 2026-11-09)
 Đo thật cùng video 334 MB: một kết nối lúc 0,78 MB/s (lượt ghép của người dùng), lúc 13–25 MB/s; cookie không làm chậm.
 `formats=dashy` + `concurrent_fragment_downloads=4` (`ytdlp_chung.tai_song_song`) cho ~78 MB/s; 8 kết nối không nhanh hơn
