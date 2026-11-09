@@ -52,6 +52,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 ### 2026-11-09 — tab «📝 Tiêu đề kênh» (D-38, nhánh feature/pc2/tieu-de-kenh)
 - Một lượt liệt kê nhanh tab Videos → bảng STT/Tiêu đề/Link/Thời lượng, tải CSV (BOM, chặn công thức) và TXT. `tai_video_goc.tieu_de_kenh`.
 - Test: 8 test mới (list_channel giả, AppTest); số nhanh/chậm ở PR. Chưa thử kênh YouTube thật.
+- Audit 09/11 (4 agent, nhánh fix/pc2/audit-0911): 13 sửa (danh sách kênh cụt do 429 coi là đủ, ô xoá kho còn tick, watchlist hỏng → mã 0, hook UTF-16, nút Sheets nhầm việc…); hook mới ĐÃ cài PC2.
 ### 2026-11-08 — tải video gốc theo link (D-37, nhánh feature/pc2/tai-video-goc)
 - Tab «⬇️ Tải video gốc»: nhiều link, ô thư mục + «Chọn…», hình + tiếng cao nhất (`bv*+ba/b`, MP4/MKV). Module `tai_video_goc.py`.
 - Test: nhanh và chậm ở PR #32, 17 test mới (yt-dlp giả, AppTest). Gộp `1017142`, DEV cập nhật 08/11 21:08. Người dùng tải thật trên DEV: chạy tốt.
