@@ -398,6 +398,18 @@ def test_update_recover_in_trang_thai_ro_rang(cai, capsys):
     assert "trạng thái" in out and "ACTIVE" in out
 
 
+def test_update_recover_ket_thuc_bi_chan_thi_ma_1(cai, capsys):
+    """Audit 09/11: kích hoạt bị cắt ngang mà release ứng viên đã mất → khôi phục kết thúc BLOCKED («cần kiểm tay»)
+    nhưng lệnh vẫn trả 0 — script/lịch tưởng ổn."""
+    _cai_ban(cai, "1.0.0")
+    cd = mu.CaiDat(goc=cai["goc"], state_root=cai["state"])
+    mu.ghi_json_nguyen_tu(cd.file_trang_thai("journal.json"), {
+        "trang_thai": mu.HEALTHCHECK, "lich_su": [],
+        "con_tro_moi": {"release": os.path.join(cai["goc"], "releases", "9.9.9"), "manifest_sha256": "ab"}})
+    assert cai["main"]("update", "recover") == 1
+    assert mu.doc_json(cd.file_trang_thai("journal.json"))["trang_thai"] == mu.BLOCKED
+
+
 def test_chua_co_ban_kich_hoat_huong_dan_chay_capnhat(cai, capsys):
     """Bootstrap xong mà bản đầu chưa cài được (hoặc lỗi tạm thời lúc cài lần đầu): chạy lại bootstrap bị TỪ
     CHỐI — hướng dẫn đúng là CapNhat.bat."""

@@ -545,8 +545,10 @@ def main(argv=None, *, goc: Optional[str] = None, chay=_chay_cho_con, **thay) ->
                 print(json.dumps(cn.trang_thai(), ensure_ascii=False, indent=1, default=str))
                 return 0
             if con == "recover":
-                print(f"Khôi phục theo nhật ký xong — trạng thái: {cn.phuc_hoi()}.")
-                return 0
+                tt = cn.phuc_hoi()
+                print(f"Khôi phục theo nhật ký xong — trạng thái: {tt}.")
+                # BLOCKED = cần người kiểm (audit 09/11). QUARANTINED thì không: nhật ký giữ nó từ lượt cũ đã báo.
+                return 1 if tt == mu.BLOCKED else 0
             if con == "bo-cach-ly":
                 if len(argv) < 3:
                     raise LoiLauncher("Cần phiên bản: update bo-cach-ly X.Y.Z")
