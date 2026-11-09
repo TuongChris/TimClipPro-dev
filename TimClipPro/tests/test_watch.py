@@ -69,6 +69,14 @@ def test_doc_file_khong_ton_tai(tmp_path):
     assert not path.exists()
 
 
+def test_doc_watchlist_luu_dang_utf8_co_bom(tmp_path):
+    """Notepad/PowerShell hay lưu «UTF-8 with BOM»: đọc được, không coi là hỏng (audit 09/11)."""
+    path = tmp_path / "watchlist.json"
+    path.write_text('{"muc": [{"loai": "link", "url": "https://youtu.be/dQw4w9WgXcQ"}]}', encoding="utf-8-sig")
+    assert len(doc_watchlist(str(path)).muc) == 1
+    assert not list(tmp_path.glob("watchlist.json.hong.*"))
+
+
 @pytest.mark.parametrize("noi_dung", ["", "{json hong"])
 def test_doc_json_rong_hoac_hong_khong_bi_nuot_loi(tmp_path, noi_dung):
     path = tmp_path / "watchlist.json"

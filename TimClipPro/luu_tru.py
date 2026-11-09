@@ -271,7 +271,7 @@ def cap_nhat_json(
 def _doc_json(path: str) -> Any:
     for lan in range(SO_LAN_DOC):
         try:
-            with open(path, encoding="utf-8") as f:
+            with open(path, encoding="utf-8-sig") as f:   # Notepad/PowerShell lưu «UTF-8 with BOM» (audit 09/11)
                 return json.load(f)
         except PermissionError:           # phần mềm diệt virus / sao lưu giữ file trong tích tắc
             if lan == SO_LAN_DOC - 1:

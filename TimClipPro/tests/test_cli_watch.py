@@ -47,8 +47,11 @@ class _YeuCauDungGia:
 def test_cli_watch_khong_co_danh_sach_in_huong_dan(
     monkeypatch,
     capsys,
+    tmp_path,
 ):
     duong_dan = []
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "watchlist.json").write_text('{"muc": []}', encoding="utf-8")   # có file, chưa có mục
     monkeypatch.setattr("sys.argv", ["cli.py", "watch"])
     monkeypatch.setattr(cli, "Engine", _EngineGia)
     monkeypatch.setattr(cli, "YeuCauDung", _YeuCauDungGia)
@@ -64,6 +67,34 @@ def test_cli_watch_khong_co_danh_sach_in_huong_dan(
     assert duong_dan == ["watchlist.json"]
     assert "Hãy tạo file watchlist.json theo mẫu" in noi_dung
     assert '"gioi_han_moi_lan": 20' in noi_dung
+
+
+def _cli_watch(monkeypatch, tmp_path, doc):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("sys.argv", ["cli.py", "watch"])
+    monkeypatch.setattr(cli, "Engine", _EngineGia)
+    monkeypatch.setattr(cli, "YeuCauDung", _YeuCauDungGia)
+    monkeypatch.setattr(cli.watch, "doc_watchlist", doc)
+    with pytest.raises(SystemExit) as ei:
+        cli.main()
+    return ei.value.code
+
+
+def test_cli_watch_khong_thay_file_danh_sach_thi_thoat_ma_1(monkeypatch, capsys, tmp_path):
+    """Audit 09/11: watchlist hỏng bị đổi tên `.hong.*` ở lượt đầu → mọi lượt theo lịch sau đó «không có mục» + mã 0,
+    Task Scheduler báo xanh trong khi không còn gì được giám sát."""
+    assert _cli_watch(monkeypatch, tmp_path, lambda path: WatchList()) == 1
+    assert "watchlist.json" in capsys.readouterr().err
+
+
+def test_cli_watch_file_danh_sach_hong_bao_gon_ma_1(monkeypatch, capsys, tmp_path):
+    from luu_tru import LoiDuLieu
+
+    def hong(path):
+        raise LoiDuLieu("Không đọc được JSON. File hỏng đã giữ tại watchlist.json.hong.1")
+
+    assert _cli_watch(monkeypatch, tmp_path, hong) == 1
+    assert "File hỏng đã giữ" in capsys.readouterr().err
 
 
 def test_cli_watch_chuyen_tham_so_va_in_tom_tat(monkeypatch, capsys):

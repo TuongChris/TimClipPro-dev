@@ -32,6 +32,7 @@ from channel import ChannelSync
 from clip_metadata import configure_metadata_logging
 from dung_lai import YeuCauDung, mtime_file_dung_cu
 from khoa import DangChayRoi
+from luu_tru import LoiDuLieu
 from engine import (Engine, LoiLuuBen, SoKhoHong, liet_ke_media, mo_ta_pham_vi,
                     thu_muc_data_mac_dinh)
 from truy_cap_youtube import LoiTruyCapYouTube
@@ -166,6 +167,11 @@ def _chay_lenh_watch(a, eng: Engine, moc_bat_dau: float | None = None) -> None:
             "}"
         )
         dung_lai.don_file_dung()
+        if not os.path.isfile(watchlist_path):
+            # Lượt theo lịch mà KHÔNG có file (file hỏng đã bị đổi tên .hong.*): mã 0 thì Task Scheduler báo xanh mãi
+            # trong khi không còn gì được giám sát (audit 09/11).
+            print(f"\nLỖI: không thấy {watchlist_path} — không có gì được giám sát.", file=sys.stderr)
+            raise SystemExit(1)
         return
     if a.gioi_han > 0:
         wl.gioi_han_moi_lan = a.gioi_han
@@ -220,6 +226,10 @@ def main():
     except LoiLuuBen as e:
         # Không ghi được lịch sử: lần quét chưa lưu, chưa xếp hàng gửi — báo rõ, không traceback.
         print(f"\nLỖI LƯU BỀN: {e}", file=sys.stderr)
+        raise SystemExit(1) from None
+    except LoiDuLieu as e:
+        # File dữ liệu (watchlist…) hỏng, đã giữ bản hỏng: báo gọn, mã 1 — không traceback.
+        print(f"\nLỖI DỮ LIỆU: {e}", file=sys.stderr)
         raise SystemExit(1) from None
     except lich_su.LoiLichSuHong as e:
         # lichsu.db hỏng (audit B-8): cần người kiểm/khôi phục — câu lỗi đã chỉ cách, không traceback.
