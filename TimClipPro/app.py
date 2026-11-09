@@ -1420,8 +1420,8 @@ if not job["running"] and (job["results"] or job["error"]):
 #  Các tab chức năng
 # =====================================================================
 
-tab0, tab_tai, tab_anh, tab_kenh, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-    ["📥 Đồng bộ kênh gốc", "⬇️ Tải video gốc", "🖼️ Tải thumbnail", "📺 Tải cả kênh", "🎬 Kho clip gốc", "📋 Danh sách video trong kho",
+tab0, tab_tai, tab_anh, tab_kenh, tab_td, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+    ["📥 Đồng bộ kênh gốc", "⬇️ Tải video gốc", "🖼️ Tải thumbnail", "📺 Tải cả kênh", "📝 Tiêu đề kênh", "🎬 Kho clip gốc", "📋 Danh sách video trong kho",
      "▶️ Quét YouTube", "📁 Quét file trong máy", "📜 Lịch sử", "📤 Gửi Google Sheets"])
 
 # ---------------------------------------------------------------- TẢI VIDEO GỐC / THUMBNAIL / CẢ KÊNH
@@ -1500,6 +1500,32 @@ with tab_kenh:
                  disabled=not (url_kenh_tai.strip() and _thu_muc_kenh) or _chua_tai_duoc()):
         _bat_dau_tai(tai_video_goc.tai_kenh, url_kenh_tai.strip(), _thu_muc_kenh, gioi_han=int(_so_kenh) or None,
                      chat_luong=_cl_kenh)
+
+with tab_td:
+    st.subheader("Tải danh sách tiêu đề của kênh")
+    st.caption("Lấy tiêu đề, link và thời lượng mọi video ở tab Videos của kênh (không lấy Shorts/Live) — không tải video "
+               "nào; kênh vài nghìn video thường xong trong khoảng một phút.")
+    url_td = st.text_input("Link kênh YouTube cần lấy tiêu đề", placeholder="https://www.youtube.com/@TenKenh")
+    if st.button("📝 Lấy danh sách tiêu đề", type="primary", key="lay_tieu_de",
+                 disabled=not url_td.strip() or _chua_tai_duoc()):
+        st.session_state.tieu_de_kenh = None
+        with st.spinner("Đang lấy danh sách (không tải gì cả)..."):
+            try:
+                st.session_state.tieu_de_kenh = (
+                    url_td.strip(), tai_video_goc.tieu_de_kenh(url_td.strip(), eng.cau_hinh_mang()))
+            except Exception as e:  # noqa: BLE001 — lỗi YouTube đã phân loại sẵn câu tiếng Việt
+                st.error(f"Lỗi: {e}")
+    if st.session_state.get("tieu_de_kenh"):
+        _url_td, _dong_td = st.session_state.tieu_de_kenh
+        st.success(f"Kênh có {len(_dong_td)} video.")
+        st.dataframe(pd.DataFrame(_dong_td), width="stretch", hide_index=True, height=320,
+                     column_config={"Link": st.column_config.LinkColumn()})
+        _ten_td = tai_video_goc.ten_file_kenh(_url_td)
+        c_csv, c_txt = st.columns(2)
+        c_csv.download_button("⬇️ Tải file CSV (mở bằng Excel)", tai_video_goc.csv_tieu_de(_dong_td),
+                              file_name=f"{_ten_td}.csv", mime="text/csv", on_click="ignore", width="stretch")
+        c_txt.download_button("⬇️ Tải file TXT (chỉ tiêu đề)", tai_video_goc.txt_tieu_de(_dong_td),
+                              file_name=f"{_ten_td}.txt", mime="text/plain", on_click="ignore", width="stretch")
 
 # ---------------------------------------------------------------- TAB 0
 with tab0:

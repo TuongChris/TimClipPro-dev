@@ -9,6 +9,8 @@ với cùng hai lớp đường lui (cookie ngoài, player client trong) như ``
 from __future__ import annotations
 
 import contextlib
+import csv
+import io
 import os
 import re
 import shutil
@@ -21,6 +23,7 @@ from dataclasses import asdict, dataclass
 from typing import Callable, Optional
 
 from channel import HAN_DON_TAM_CU_S, ChannelSync, _CoHuyTuHam
+from kiem_thoi_luong import hhmmss
 from truy_cap_youtube import (
     PhienYouTube,
     che_bi_mat,
@@ -440,6 +443,46 @@ def tai_kenh(
         bo_qua_da_co=True,
         **kw,
     )
+
+
+
+COT_TIEU_DE = ("STT", "Tiêu đề", "Link", "Thời lượng")
+
+
+def tieu_de_kenh(url_kenh: str, cau_hinh_mang: Optional[CauHinhMang] = None, *,
+                 phien: Optional[PhienYouTube] = None) -> list:
+    """Tiêu đề + link + thời lượng mọi video ở tab Videos của kênh, mới nhất trước — MỘT lượt liệt kê nhanh, không tải
+    gì (D-38). Mỗi dòng là dict theo :data:`COT_TIEU_DE`; thời lượng không biết (live) để trống. Kênh bị chặn/không đọc
+    được thì ném lỗi đã phân loại; kênh rỗng → ``RuntimeError``."""
+    ds = ChannelSync.list_channel(str(url_kenh or "").strip(), cau_hinh_mang=cau_hinh_mang,
+                                  phien_youtube=phien or PhienYouTube())
+    if not ds:
+        raise RuntimeError("Kênh không có video nào ở tab Videos.")
+    return [{"STT": i, "Tiêu đề": v.title, "Link": f"https://www.youtube.com/watch?v={v.id}",
+             "Thời lượng": hhmmss(v.duration) if v.duration > 0 else ""} for i, v in enumerate(ds, 1)]
+
+
+def csv_tieu_de(dong: list) -> bytes:
+    """CSV có BOM (Excel đọc đúng tiếng Việt); ô có thể bị hiểu là công thức (``=`` ``+`` ``-`` ``@``) được chặn."""
+    from engine import o_bang_tinh_an_toan        # engine nặng: chỉ nạp khi xuất file
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(COT_TIEU_DE)
+    w.writerows([o_bang_tinh_an_toan(d[c]) for c in COT_TIEU_DE] for d in dong)
+    return buf.getvalue().encode("utf-8-sig")
+
+
+def txt_tieu_de(dong: list) -> bytes:
+    """Mỗi dòng một tiêu đề, nguyên văn (file chữ không có công thức)."""
+    return "".join(d["Tiêu đề"] + "\r\n" for d in dong).encode("utf-8")
+
+
+def ten_file_kenh(url_kenh: str) -> str:
+    """Tên file (không đuôi) theo @tên hoặc mã UC… của kênh; không nhận ra thì ``tieu_de_kenh``."""
+    m = re.search(r"/@([^/?#]+)", url_kenh or "") or re.search(r"/channel/(UC[\w-]+)", url_kenh or "")
+    ten = re.sub(r'[\\/:*?"<>|\s]+', "_", urllib.parse.unquote(m.group(1))).strip("._") if m else ""
+    return f"tieu_de_{ten or 'kenh'}"
 
 
 # Chạy ở tiến trình con: tkinter không chạy được trong luồng của Streamlit. Ghi UTF-8 thẳng ra stdout (đường dẫn tiếng Việt).

@@ -549,3 +549,91 @@ def test_tai_khong_dang_nhap_sau_403_phai_noi_ro(gia, tmp_path, monkeypatch):
     monkeypatch.setattr(tv, "thu_tung_client", thu_gia)
     kq = tv.tai_nhieu([URL1], str(tmp_path))
     assert kq[0]["trang_thai"] == "xong" and "KHÔNG đăng nhập" in kq[0]["ghi_chu"]
+
+
+# ---------------------------------------------------------------- tiêu đề của kênh (D-38)
+
+def _kenh_gia(monkeypatch, ds):
+    import channel
+
+    nhan = {}
+
+    def liet_ke(url, limit=None, **kw):
+        nhan.update(url=url, limit=limit, co_phien=kw.get("phien_youtube") is not None)
+        return [channel.VideoInfo(id=m, title=t, upload_date="", duration=d, url="")
+                for m, t, d in ds]
+
+    monkeypatch.setattr(channel.ChannelSync, "list_channel", staticmethod(liet_ke))
+    return nhan
+
+
+def test_tieu_de_kenh_mot_luot_liet_ke_khong_gioi_han(monkeypatch):
+    nhan = _kenh_gia(monkeypatch, [("abcdefghij1", "Tập 1: Mở đầu", 3725.9), ("abcdefghij2", "Live", 0.0)])
+    dong = tv.tieu_de_kenh(" https://www.youtube.com/@Kenh ")
+    assert nhan == {"url": "https://www.youtube.com/@Kenh", "limit": None, "co_phien": True}
+    assert dong == [
+        {"STT": 1, "Tiêu đề": "Tập 1: Mở đầu", "Link": "https://www.youtube.com/watch?v=abcdefghij1",
+         "Thời lượng": "01:02:05"},
+        {"STT": 2, "Tiêu đề": "Live", "Link": "https://www.youtube.com/watch?v=abcdefghij2", "Thời lượng": ""},
+    ]
+
+
+def test_tieu_de_kenh_rong_bao_loi(monkeypatch):
+    _kenh_gia(monkeypatch, [])
+    with pytest.raises(RuntimeError, match="không có video"):
+        tv.tieu_de_kenh("https://www.youtube.com/@Kenh")
+
+
+def test_csv_tieu_de_mo_dung_trong_excel_va_chan_cong_thuc():
+    import csv
+    import io
+
+    dong = [{"STT": 1, "Tiêu đề": "=HYPERLINK(\"x\")", "Link": "https://www.youtube.com/watch?v=abcdefghij1",
+             "Thời lượng": "00:10:00"},
+            {"STT": 2, "Tiêu đề": "Tiếng Việt, có dấu phẩy", "Link": "l", "Thời lượng": ""}]
+    raw = tv.csv_tieu_de(dong)
+    assert raw.startswith(b"\xef\xbb\xbf")                     # BOM: Excel đọc đúng tiếng Việt
+    bang = list(csv.reader(io.StringIO(raw.decode("utf-8-sig"))))
+    assert bang == [["STT", "Tiêu đề", "Link", "Thời lượng"],
+                    ["1", "'=HYPERLINK(\"x\")", "https://www.youtube.com/watch?v=abcdefghij1", "00:10:00"],
+                    ["2", "Tiếng Việt, có dấu phẩy", "l", ""]]
+
+
+def test_txt_tieu_de_moi_dong_mot_tieu_de():
+    dong = [{"STT": 1, "Tiêu đề": "Tập 1"}, {"STT": 2, "Tiêu đề": "=Tập 2"}]
+    assert tv.txt_tieu_de(dong) == "Tập 1\r\n=Tập 2\r\n".encode("utf-8")
+
+
+@pytest.mark.parametrize("url, ten", [
+    ("https://www.youtube.com/@T%C3%AAn%20K%C3%AAnh/videos", "tieu_de_Tên_Kênh"),
+    ("https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv", "tieu_de_UCabcdefghijklmnopqrstuv"),
+    ("https://www.youtube.com/c/a:b?x=1", "tieu_de_kenh"),
+])
+def test_ten_file_kenh(url, ten):
+    assert tv.ten_file_kenh(url) == ten
+
+
+def test_tab_tieu_de_kenh_hien_bang_va_hai_nut_tai(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    nhan = []
+
+    def gia_lap(url, cau_hinh_mang=None, **kw):
+        nhan.append(url)
+        return [{"STT": 1, "Tiêu đề": "Tập 1", "Link": "https://www.youtube.com/watch?v=abcdefghij1",
+                 "Thời lượng": "00:01:00"}]
+
+    monkeypatch.setattr(tv, "tieu_de_kenh", gia_lap)
+    at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=120).run()
+    next(t for t in at.text_input if t.label == "Link kênh YouTube cần lấy tiêu đề").input(
+        "https://www.youtube.com/@Kenh").run()
+    at.button(key="lay_tieu_de").click().run()
+    assert not at.exception and nhan == ["https://www.youtube.com/@Kenh"]
+    assert any("1 video" in s.value for s in at.success)
+    assert at.session_state.tieu_de_kenh[1][0]["Tiêu đề"] == "Tập 1"
+    assert sorted(e.label for e in at.get("download_button")) == [
+        "⬇️ Tải file CSV (mở bằng Excel)", "⬇️ Tải file TXT (chỉ tiêu đề)"]

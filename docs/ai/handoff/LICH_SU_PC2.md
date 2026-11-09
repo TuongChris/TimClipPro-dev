@@ -3,6 +3,10 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-11-07 — kho video dài theo thư mục (D-34, nhánh feature/pc2/kho-video-dai)
+- Joe Bart VODs: 905 video, 3.845 giờ, dài nhất 10,04 giờ, 849 video trên 2 giờ (`C:\Dev\pc2_test_runs\2026-11-07_kho_video_dai\danh_sach_kenh.json`).
+- Làm: ô «Kho video dài», 13 giờ, 21 bit, báo vùng khớp thật, chặn bổ sung vào kho 16 bit và chặn vượt 2.047 clip. Video 6 giờ: 16 bit đúng vị trí 1/8, 20 bit 8/8.
+- Test @ `8bdea14`: nhanh 3473 = 3469/4/0, chậm 23/23 (trước sửa review, test chậm của tính năng chạy lại đạt), ruff sạch, đột biến 14/14 chết.
 ### 2026-11-07 — dựng kho nhường ổ cứng (D-33, nhánh fix/pc2/dung-kho-uu-tien-o-dia)
 - Làm: runner `IOPRIO_LOW` thêm vào Below Normal (Below Normal không hạ ưu tiên ổ cứng); FFmpeg im 300 giây mới là treo; `CHO_WORKER_S` hết hạn
   mà CPU/I-O còn tăng thì gia hạn. Một dòng `ionice` là không đủ: HDD bận làm FFmpeg im 15 giây, clip 1 giờ mất ~1 giờ, chốt cũ huỷ cả lượt.

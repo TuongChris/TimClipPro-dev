@@ -15,6 +15,12 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-38 Tab «📝 Tiêu đề kênh» (người dùng, 2026-11-09)
+Lấy tiêu đề + link + thời lượng mọi video ở tab Videos của kênh (không Shorts/Live) bằng MỘT lượt liệt kê nhanh
+(`ChannelSync.list_channel`, không ngày đăng/lượt xem — những thứ đó cần một request mỗi video). Hiện bảng, tải CSV (UTF-8
+BOM cho Excel, ô `= + - @` được chặn công thức) và TXT (mỗi dòng một tiêu đề). Không chạy khi đang quét/tải/đồng bộ.
+Mã: `TimClipPro/tai_video_goc.py` (`tieu_de_kenh`, `csv_tieu_de`, `txt_tieu_de`, `ten_file_kenh`).
+
 ## D-37 Tải video gốc theo link (người dùng, 2026-11-08)
 Tab «⬇️ Tải video gốc»: nhiều link (mỗi dòng một), ô thư mục + nút «Chọn…» (hộp thoại Windows qua tkinter ở tiến trình con),
 tải hình + tiếng chất lượng cao nhất (`bv*+ba/b`, ghép bằng FFmpeg vào MP4 nếu hợp mã hoá, không thì MKV — không chuyển mã).
