@@ -54,7 +54,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 - Lùi một kết nối khi thiếu định dạng; Dừng giữa chừng để lại .part đang mở → sửa (test đỏ + thử thật). Bằng chứng `C:\Dev\pc2_test_runs\2026-11-09_tai_song_song`.
 ### 2026-11-09 — tab «🎞️ Ghép video gốc» (D-39, nhánh feature/pc2/ghep-video-goc)
 - Tải H.264 ≤ 1080p + AAC rồi nối `-c copy` theo thứ tự link; `<tên>.moc.csv` + mốc chương. Video lệch thông số: tự nén lại
-  cho khớp video 1 (D-41, nhánh feature/pc2/ghep-tu-chuyen; thử thật 2 video của người dùng 29,97 + 60: mốc lệch 0 ms; gộp `bc7c509`, DEV 09/11 22:01). Cảnh báo «QT chapter track not found» (chương > ~190 s bị FFmpeg 9 bỏ khỏi track chương QuickTime): `-movie_timescale` = tần số tiếng, nhánh fix/pc2/chuong-quicktime.
+  cho khớp video 1 (D-41, nhánh feature/pc2/ghep-tu-chuyen; thử thật 2 video của người dùng 29,97 + 60: mốc lệch 0 ms; gộp `bc7c509`, DEV 09/11 22:01). Cảnh báo «QT chapter track not found» (chương > ~190 s bị FFmpeg 9 bỏ khỏi track chương QuickTime): `-movie_timescale` = tần số tiếng, nhánh fix/pc2/chuong-quicktime, gộp `25be505`, DEV 22:55.
 - Test: video tổng hợp FFmpeg thật, tiếng bíp riêng mỗi phần — mốc CSV khớp tiếng thật ±0,05 s. Gộp `ee8e6cd`, DEV 09/11 20:36 (sao lưu `data_20261109_203615`); chưa thử YouTube thật.
 ### 2026-11-09 — tab «📝 Tiêu đề kênh» (D-38, nhánh feature/pc2/tieu-de-kenh)
 - Một lượt liệt kê nhanh tab Videos → bảng STT/Tiêu đề/Link/Thời lượng, tải CSV (BOM, chặn công thức) và TXT. `tai_video_goc.tieu_de_kenh`.
