@@ -719,12 +719,12 @@ def hien_ket_qua_nguon_chung(kql: nguon_chung.KetQuaLo) -> None:
                     f"{format_publication_date(tt_goc.get('upload_date') or '') or '—'}")
             c3.markdown("⏱️ Thời lượng: "
                         + (hhmmss(dai) if isinstance(dai, (int, float)) and dai > 0 else "—"))
-            st.caption(f"Clip trong kho: {thoat_markdown(goc.clip)} · Kho: {kql.kho_ten or kql.kho_id}")
+            st.caption(f"Clip trong kho: {thoat_markdown(goc.clip)} · Kho: {thoat_markdown(kql.kho_ten or kql.kho_id)}")
     for canh_bao in kql.canh_bao:
         st.warning(f"⚠️ {canh_bao}")
     if kql.goc_khac:
         st.caption("Các video gốc khác cũng có ở mọi video: "
-                   + ", ".join(k.clip for k in kql.goc_khac[:10]))
+                   + ", ".join(thoat_markdown(k.clip) for k in kql.goc_khac[:10]))
 
     st.dataframe(df_nguon_chung(kql), width="stretch", hide_index=True)
     so_lieu = kql.so_lieu or {}
@@ -1133,7 +1133,7 @@ if job["running"]:
         )
         status_slot.info(
             f"**Công đoạn:** {TEN_PHASE.get(fp.phase, fp.phase)}  \n"
-            f"{fp.message}"
+            f"{thoat_markdown(fp.message)}"   # tên clip = chữ ngoài (audit 09/11)
         )
         if fp.file_name:
             file_slot.markdown(
@@ -1254,7 +1254,7 @@ if job["running"]:
         if anh.ung_vien:
             st.info(f"**Video gốc đang xét:** {thoat_markdown(anh.ung_vien_tieu_de)}  \n`{anh.ung_vien}`")
         if anh.message:
-            st.caption(anh.message)
+            st.caption(thoat_markdown(anh.message))   # có tiêu đề YouTube (audit 09/11)
         st.dataframe(build_nguon_chung_status_dataframe(anh.videos), width="stretch",
                      hide_index=True, height=260)
         st.caption("Trong lúc lô chạy, Giám sát tự động và tạo kho phải chờ — kho vân tay "
