@@ -869,12 +869,18 @@ class ChannelSync:
                 opts["playlistend"] = limit
             phien.dem_yeu_cau("listing")
             bo_ghi.loi.clear()
+            bo_ghi.canh_bao.clear()
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
-            if not info and bo_ghi.loi:
-                # `ignoreerrors` đã nuốt lỗi và trả None: lấy lại câu lỗi thật để phân loại —
-                # trước đây thành "kênh không có video nào" (đổ lỗi cho link).
+            if bo_ghi.loi:
+                # `ignoreerrors` đã nuốt lỗi: trả None (trước đây thành "kênh không có video nào"), hoặc trả các trang
+                # ĐÃ đọc khi trang sau bị chặn/429 (audit 09/11 — danh sách thiếu bị coi là đủ). Lấy lại câu lỗi thật
+                # để phân loại, cầu dao xử lý như mọi lỗi truy cập.
                 raise RuntimeError(bo_ghi.loi[-1])
+            cut = next((c for c in bo_ghi.canh_bao if "Incomplete data received" in c), "")
+            if cut:
+                # yt-dlp hết lượt thử thì chỉ CẢNH BÁO rồi dừng lật trang (youtube/_base.py `_extract_response`).
+                raise RuntimeError(f"YouTube trả dữ liệu không đủ khi lật trang danh sách — {cut}")
             return info or {}
 
         info = phien.chay("listing", liet_ke)

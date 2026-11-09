@@ -97,6 +97,31 @@ def test_liet_ke_kenh_bi_429_khong_tra_danh_sach_rong(tmp_path, monkeypatch, ngh
         ChannelSync(str(tmp_path)).sync("https://www.youtube.com/@kenh")
 
 
+
+def test_liet_ke_kenh_bi_chan_giua_chung_khong_coi_la_du(monkeypatch, nghi_ngan):
+    """Audit 09/11: trang 2 bị 429 — yt-dlp (``ignoreerrors``) trả các video của trang 1 như bình thường. Danh sách
+    thiếu mà coi là đủ thì đồng bộ báo «đầy đủ», «Kiểm tra còn thiếu» báo không thiếu, file tiêu đề kênh bị cụt."""
+    def liet_ke(phien, url):
+        phien.opts["logger"].error(R429.format(id="UCkenh"))
+        return _danh_sach([_ma(1), _ma(2), _ma(3)])
+
+    _vá(monkeypatch, YdlKichBan(liet_ke=liet_ke))
+    with pytest.raises(t.LoiTruyCapYouTube) as ei:
+        ChannelSync.list_channel("https://www.youtube.com/@kenh")
+    assert ei.value.that_bai.category == t.RATE_LIMITED
+
+
+def test_liet_ke_kenh_du_lieu_khong_du_khong_coi_la_du(monkeypatch, nghi_ngan):
+    """yt-dlp hết lượt thử «Incomplete data received» thì chỉ CẢNH BÁO rồi dừng lật trang."""
+    def liet_ke(phien, url):
+        phien.opts["logger"].warning("Incomplete data received. Giving up after 3 retries")
+        return _danh_sach([_ma(1)])
+
+    _vá(monkeypatch, YdlKichBan(liet_ke=liet_ke))
+    with pytest.raises(t.LoiTruyCapYouTube):
+        ChannelSync.list_channel("https://www.youtube.com/@kenh")
+
+
 def test_liet_ke_kenh_tra_ve_tab_thi_bao_ro_khong_coi_la_video(monkeypatch, nghi_ngan):
     """`/channel/UC…` thiếu `/videos`: yt-dlp trả các TAB, id = id kênh (Tier 2)."""
     kenh = "UC" + "x" * 22
