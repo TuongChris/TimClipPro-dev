@@ -64,6 +64,7 @@ from scan_ui import (
     tom_tat_tao_van_tay,
 )
 import channel
+import ghep_video_goc
 import tai_video_goc
 from channel import ChannelSync
 from tien_do_dong_bo import SoDongBo
@@ -308,7 +309,7 @@ def chay_dong_bo(kenh_url: str, kho_dir: str, gioi_han: int | None, thu_lai_han_
         return
     if tv_khac is not None:
         ten_viec = {"va_title": "«Lấy lại tên video»", "metadata_network": "«Vá metadata»",
-                    "tai_video": "«Tải video gốc / thumbnail / cả kênh»"}.get(tv_khac.kind, "một việc nền khác")
+                    "tai_video": "«Tải video gốc / thumbnail / cả kênh / ghép video»"}.get(tv_khac.kind, "một việc nền khác")
         bao("warning", f"Đang chạy {ten_viec} (cũng hỏi YouTube) — chờ việc đó xong rồi đồng bộ.")
         return
     dung_kho = FingerprintJobController.dang_chay_cua(eng)
@@ -1424,8 +1425,9 @@ if not job["running"] and (job["results"] or job["error"]):
 #  Các tab chức năng
 # =====================================================================
 
-tab0, tab_tai, tab_anh, tab_kenh, tab_td, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-    ["📥 Đồng bộ kênh gốc", "⬇️ Tải video gốc", "🖼️ Tải thumbnail", "📺 Tải cả kênh", "📝 Tiêu đề kênh", "🎬 Kho clip gốc", "📋 Danh sách video trong kho",
+tab0, tab_tai, tab_anh, tab_kenh, tab_ghep, tab_td, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+    ["📥 Đồng bộ kênh gốc", "⬇️ Tải video gốc", "🖼️ Tải thumbnail", "📺 Tải cả kênh", "🎞️ Ghép video gốc",
+     "📝 Tiêu đề kênh", "🎬 Kho clip gốc", "📋 Danh sách video trong kho",
      "▶️ Quét YouTube", "📁 Quét file trong máy", "📜 Lịch sử", "📤 Gửi Google Sheets"])
 
 # ---------------------------------------------------------------- TẢI VIDEO GỐC / THUMBNAIL / CẢ KÊNH
@@ -1504,6 +1506,23 @@ with tab_kenh:
                  disabled=not (url_kenh_tai.strip() and _thu_muc_kenh) or _chua_tai_duoc()):
         _bat_dau_tai(tai_video_goc.tai_kenh, url_kenh_tai.strip(), _thu_muc_kenh, gioi_han=int(_so_kenh) or None,
                      chat_luong=_cl_kenh)
+
+with tab_ghep:
+    st.subheader("Ghép nhiều video gốc thành một video dài")
+    st.caption("Tải từng video (H.264 tối đa 1080p + tiếng AAC, file MP4 — cùng một kiểu để nối mà KHÔNG nén lại) rồi ghép "
+               "theo đúng thứ tự link; link lặp lại thì video lặp lại. Kèm file «.moc.csv» ghi video gốc nào bắt đầu ở "
+               "giây nào (và mốc chương ngay trong video) — đem video dài đi quét rồi so với file mốc để đo độ chính xác. "
+               "Ghép xong thì xoá các file lẻ.")
+    links_ghep = st.text_area("Link video cần ghép (mỗi dòng một link, theo thứ tự ghép)", height=140,
+                              placeholder="https://www.youtube.com/watch?v=...\nhttps://youtu.be/...")
+    _thu_muc_ghep = _o_thu_muc_tai("Thư mục lưu video ghép", "ghep")
+    _ten_ghep = st.text_input("Tên file video ghép (để trống = «Video ghép <ngày giờ>»)")
+    _ds_ghep = ghep_video_goc.tach_link(links_ghep)
+    st.caption("Video khác độ phân giải hay số hình/giây (vd. một video 720p giữa các video 1080p) thì tool dừng và báo "
+               "video nào lệch — không ghép ra file hỏng; video đã tải được giữ lại nên ghép lại không phải tải lại.")
+    if st.button(f"🎞️ Tải và ghép {len(_ds_ghep)} video" if _ds_ghep else "🎞️ Tải và ghép", type="primary",
+                 key="bat_dau_ghep_video", disabled=len(_ds_ghep) < 2 or not _thu_muc_ghep or _chua_tai_duoc()):
+        _bat_dau_tai(ghep_video_goc.ghep, _ds_ghep, _thu_muc_ghep, ten_file=_ten_ghep)
 
 with tab_td:
     st.subheader("Tải danh sách tiêu đề của kênh")

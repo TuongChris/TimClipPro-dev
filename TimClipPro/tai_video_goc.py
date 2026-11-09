@@ -56,6 +56,13 @@ CHAT_LUONG = {
     "Chỉ tiếng": 0,
 }
 CHAT_LUONG_MAC_DINH = "Cao nhất"
+# Ghép video (D-39): MỌI video cùng một kiểu H.264 ≤ 1080p + AAC trong MP4 để nối bằng `-c copy` (không nén lại). Video
+# không có cặp đó thì lấy bản ≤ 1080p bất kỳ — bước kiểm thông số trước khi ghép sẽ báo nó lệch.
+DINH_DANG_GHEP = {
+    "format": "bv*[vcodec^=avc1][height<=1080]+ba[acodec^=mp4a]/b[vcodec^=avc1][height<=1080][acodec^=mp4a]"
+              "/bv*[height<=1080]+ba/b[height<=1080]",
+    "merge_output_format": "mp4",
+}
 # Ảnh lớn nhất YouTube có, đổi sang JPG; không tải video. Không cần định dạng video nào nên không báo lỗi khi thiếu.
 TUY_CHON_THUMBNAIL = {
     "skip_download": True,
@@ -209,6 +216,7 @@ def tai_nhieu(
     chat_luong: str = CHAT_LUONG_MAC_DINH,
     thumbnail: bool = False,
     bo_qua_da_co: bool = False,
+    dinh_dang: Optional[dict] = None,
 ) -> list:
     """Tải lần lượt từng link vào ``thu_muc``; trả list dict (:class:`KetQuaTaiVideo`) theo đúng thứ tự link.
 
@@ -218,11 +226,12 @@ def tai_nhieu(
 
     ``chat_luong``: khoá của :data:`CHAT_LUONG`. ``thumbnail``: chỉ lấy ảnh thumbnail (JPG), không tải video.
     ``bo_qua_da_co``: video đã có file trong ``thu_muc`` (theo «[mã]» ở tên) thì bỏ qua — bấm lại là tải tiếp phần thiếu.
+    ``dinh_dang``: tuỳ chọn định dạng yt-dlp thay cho ``chat_luong`` (vd. :data:`DINH_DANG_GHEP`).
     """
     import yt_dlp
 
     rieng_dinh_dang = (
-        dict(TUY_CHON_THUMBNAIL) if thumbnail else tuy_chon_dinh_dang(chat_luong)
+        dict(TUY_CHON_THUMBNAIL) if thumbnail else dict(dinh_dang) if dinh_dang else tuy_chon_dinh_dang(chat_luong)
     )
     if not shutil.which("ffmpeg"):
         raise RuntimeError(

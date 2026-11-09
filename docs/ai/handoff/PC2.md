@@ -49,6 +49,9 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 9. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-11-09 — tab «🎞️ Ghép video gốc» (D-39, nhánh feature/pc2/ghep-video-goc)
+- Tải H.264 ≤ 1080p + AAC rồi nối `-c copy` theo thứ tự link, lệch thông số thì dừng + giữ file; `<tên>.moc.csv` + mốc chương.
+- Test: video tổng hợp FFmpeg thật, tiếng bíp riêng mỗi phần — mốc CSV khớp tiếng thật ±0,05 s. Chưa thử YouTube thật.
 ### 2026-11-09 — tab «📝 Tiêu đề kênh» (D-38, nhánh feature/pc2/tieu-de-kenh)
 - Một lượt liệt kê nhanh tab Videos → bảng STT/Tiêu đề/Link/Thời lượng, tải CSV (BOM, chặn công thức) và TXT. `tai_video_goc.tieu_de_kenh`.
 - Test: 8 test mới (list_channel giả, AppTest); số nhanh/chậm ở PR. Chưa thử kênh YouTube thật.
@@ -74,7 +77,4 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 - Làm: video tải xong thì video kế tiếp tải ngay, video trước nén cùng lúc; tải một luồng, nén một luồng, ghi metadata + sổ đúng thứ tự.
 - Review độc lập: 1 lỗi (Ctrl+C ở CLI không dừng ngay), 2 lỗi hiển thị, 2 test yếu, đã sửa kèm test đỏ. Không thấy lỗi tranh chấp, treo khi Dừng hay mất file.
 - Test (chặn mạng, cp1252, venv CookieFix): số ở PR. Chưa chạy với YouTube thật: mức nhanh hơn ~40% vẫn là ước lượng.
-### 2026-11-07 — audit số 15, 19, 20 + bỏ `kiem_sheet.py` (nhánh fix/pc2/audit-0611-dot3)
-- `kiem_thoi_luong` dùng `channel.do_dai_media` có trần; file tải dở mồ côi quá tuổi được dọn, vẫn giữ file có khoá tải; lỗi quét giới hạn 6 giờ ghi thời lượng video thật.
-- Test (chặn mạng, cp1252, venv CookieFix): nhanh 3477 = 3473/4/0, ruff sạch. Mỗi lỗi có test đỏ trước.
-- Mục cũ hơn (2026-11-07 kho video dài D-34; 2026-11-07 dựng kho nhường ổ cứng D-33; 2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
+- Mục cũ hơn (2026-11-07 audit số 15, 19, 20; 2026-11-07 kho video dài D-34; 2026-11-07 dựng kho nhường ổ cứng D-33; 2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.

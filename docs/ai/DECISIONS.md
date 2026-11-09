@@ -15,6 +15,13 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-39 Ghép video gốc thành video dài có đáp án (người dùng, 2026-11-09)
+Tab «🎞️ Ghép video gốc»: dán link theo thứ tự (lặp = video lặp), tải H.264 ≤ 1080p + AAC trong MP4 (người dùng chọn
+định dạng chung thay vì 4K, vì tool chỉ so tiếng) rồi nối `ffmpeg -f concat -c copy` — không nén lại. Video khác thông số
+(độ phân giải, số hình/giây, mã hoá, tiếng) → DỪNG, báo video nào lệch, giữ file đã tải; không tự nén lại. Kèm `<tên>.moc.csv`
+(bắt đầu/kết thúc từng video gốc) + mốc chương trong video — đáp án để đo độ chính xác quét. Ghép xong, độ dài khớp
+tổng (≤ 1 s) thì xoá file lẻ (người dùng chọn). Mã: `TimClipPro/ghep_video_goc.py`.
+
 ## D-38 Tab «📝 Tiêu đề kênh» (người dùng, 2026-11-09)
 Lấy tiêu đề + link + thời lượng mọi video ở tab Videos của kênh (không Shorts/Live) bằng MỘT lượt liệt kê nhanh
 (`ChannelSync.list_channel`, không ngày đăng/lượt xem — những thứ đó cần một request mỗi video). Hiện bảng, tải CSV (UTF-8
