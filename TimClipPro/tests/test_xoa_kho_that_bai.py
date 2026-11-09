@@ -185,6 +185,39 @@ def test_giao_dien_xoa_kho_bi_giu_file_thi_bao_loi_khong_rerun_lang_le(tmp_path,
     assert (data_dir / "kho_test.pklz").exists()
 
 
+
+def test_giao_dien_xoa_kho_xong_o_xac_nhan_khong_con_tick_cho_kho_khac(tmp_path, monkeypatch):
+    """Audit 09/11: ô xác nhận dùng chung còn tick sau khi xoá A → chọn C là nút «Xoá kho C» đã bật sẵn."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True)
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    (data_dir / "khos.json").write_text(json.dumps({
+        "dang_dung": "A",
+        "danh_sach": [{"ten": t, "thu_muc": "", "db": f"kho_{t}.pklz", "id": f"id_{t}"} for t in ("A", "B", "C")],
+    }, ensure_ascii=False), encoding="utf-8")
+    xoa = []
+    monkeypatch.setattr(Engine, "delete_kho", lambda self, ten: xoa.append(ten))
+
+    def o_xac_nhan(at):
+        return next(c for c in at.checkbox if c.label.startswith("Tôi xác nhận muốn xóa vân tay"))
+
+    def chon(at, ten):
+        return next(s for s in at.selectbox if s.label.startswith("Xoá kho")).set_value(ten).run()
+
+    at = chon(AppTest.from_file(str(APP_PY), default_timeout=120).run(), "A")
+    at = o_xac_nhan(at).check().run()
+    at = next(b for b in at.button if b.label == "🗑️ Xoá kho «A»").click().run()
+    assert xoa == ["A"] and not at.exception
+    at = chon(at, "C")
+    assert o_xac_nhan(at).value is False
+    assert next(b for b in at.button if b.label == "🗑️ Xoá kho «C»").disabled
+    at = chon(at, "B")
+    at = o_xac_nhan(at).check().run()
+    at = chon(at, "C")
+    assert o_xac_nhan(at).value is False, "đổi kho đang chọn cũng phải hỏi lại"
+
+
 # --- Audit C-11: file vân tay CŨ của nhánh công bố dự phòng (``db_cu``) ---------------------
 #
 # Build công bố kho mà file cũ đang bị khoá (diệt virus / tiến trình khác) → ``os.replace`` ném

@@ -1731,9 +1731,12 @@ with tab1:
 
         xoa = st.selectbox("Xoá kho (chỉ xoá vân tay, KHÔNG xoá file video của bạn)",
                            ["— chọn —"] + [k["ten"] for k in khos])
+        # Ô xác nhận gắn ĐÚNG kho đang chọn, bỏ tick sau khi xoá (audit 09/11 — như tab Lịch sử): ô dùng chung còn
+        # tick thì chọn kho khác là nút xoá đã bật sẵn.
+        khoa_xn_kho = f"xac_nhan_xoa_kho_{xoa}"
         xac_nhan_xoa_kho = st.checkbox(
             "Tôi xác nhận muốn xóa vân tay của kho đã chọn",
-            disabled=xoa == "— chọn —",
+            disabled=xoa == "— chọn —", key=khoa_xn_kho,
         )
         if xoa != "— chọn —" and st.button(
             f"🗑️ Xoá kho «{xoa}»",
@@ -1748,6 +1751,7 @@ with tab1:
                 # File vân tay đang bị tiến trình khác giữ: kho còn nguyên (audit C-4).
                 st.error(str(e))
             else:
+                st.session_state.pop(khoa_xn_kho, None)
                 st.rerun()
 
     st.divider()
@@ -1857,7 +1861,7 @@ with tab1:
         )
     confirm_offline = st.checkbox(
         "Tôi xác nhận chỉ tạo/cập nhật snapshot metadata offline của kho đang dùng",
-        key="confirm_metadata_offline",
+        key=f"confirm_metadata_offline_{eng.kho_dang_dung}",   # đổi kho → hỏi lại
     )
     if st.button(
         "🛠️ Khôi phục metadata offline",
@@ -1886,7 +1890,7 @@ with tab1:
         )
         confirm_network = st.checkbox(
             "Tôi xác nhận cho phép gọi YouTube để vá các entry còn thiếu",
-            key="confirm_metadata_network",
+            key=f"confirm_metadata_network_{eng.kho_dang_dung}",
         )
         if st.button(
             "Bắt đầu vá metadata thiếu",
