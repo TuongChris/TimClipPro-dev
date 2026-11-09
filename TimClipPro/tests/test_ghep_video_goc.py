@@ -371,3 +371,29 @@ def test_tab_ghep_video_goi_dung_ham(tmp_path, monkeypatch):
 
 def test_tach_link_giu_thu_tu_va_link_lap():
     assert gv.tach_link(f" {URL[0]} \n\n{URL[1]}\n{URL[0]}\n") == [URL[0], URL[1], URL[0]]
+
+
+@can_ffmpeg
+def test_chuong_dai_hon_3_phut_van_con_track_chuong_quicktime(tmp_path, monkeypatch):
+    """Thật 09/11: mọi video ghép báo «Referenced QT chapter track not found». FFmpeg đặt nhịp track chương = BCNN nhịp
+    hình (15360) và tiếng 44,1 kHz = 11.289.600/giây → chương > ~190 s tràn 32-bit, bị bỏ; hết chương thì mất track,
+    trình phát chỉ đọc chương QuickTime (Apple) không thấy mốc nào."""
+    d = tmp_path / "nguon"
+    d.mkdir()
+    nguon = {
+        URL[0]: ("Dài A", _tao(d / "a.mp4", 200, 440, kich_thuoc="64x64")),
+        URL[1]: ("Dài B", _tao(d / "b.mp4", 200, 880, kich_thuoc="64x64")),
+    }
+    _gia_tai(monkeypatch, nguon)
+    cuoi = gv.ghep(URL[:2], str(tmp_path / "ra"), ten_file="dai")[-1]
+    assert cuoi["trang_thai"] == "xong", cuoi
+    r = subprocess.run(
+        ["ffprobe", "-v", "warning", "-show_streams", "-show_chapters", "-of", "json", cuoi["duong_dan"]],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "chapter track not found" not in r.stderr
+    ra = json.loads(r.stdout)
+    assert [s["codec_type"] for s in ra["streams"]] == ["video", "audio", "data"]  # data = track chương QuickTime
+    assert [float(c["start_time"]) for c in ra["chapters"]] == pytest.approx([0, 200], abs=0.05)

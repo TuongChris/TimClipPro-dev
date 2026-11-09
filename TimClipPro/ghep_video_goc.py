@@ -369,6 +369,12 @@ def ghep(
             f"Đang ghép: {hhmmss(giay_ra)} / {hhmmss(tong)}",
         )
 
+    # Track chương QuickTime đo bằng nhịp của CẢ FILE; không đặt thì FFmpeg 9 lấy BCNN nhịp hình và tiếng (15360 với
+    # 44,1 kHz → 11.289.600/giây): chương > ~190 s tràn 32-bit bị bỏ, hết chương thì mất track (cảnh báo «Referenced QT
+    # chapter track not found», trình phát Apple không thấy mốc). Nhịp file = tần số tiếng: chương tới ~13 giờ; nhịp
+    # của track hình/tiếng không đổi (đo 09/11).
+    tan_so = str(ts[0][1]["tan_so_tieng"] or "")
+    nhip_chuong = ["-movie_timescale", tan_so] if tan_so.isdigit() else []
     r = chay_lenh_media(
         [
             "ffmpeg",
@@ -392,6 +398,7 @@ def ghep(
             "1",
             "-c",
             "copy",
+            *nhip_chuong,
             "-movflags",
             "+faststart",
             "-f",
