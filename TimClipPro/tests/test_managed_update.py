@@ -298,6 +298,9 @@ def test_health_staging_loi_thi_cach_ly_khong_kich_hoat_khong_lap_lai(mt):
     assert mt["tao"]().chuan_bi().trang_thai == mu.QUARANTINED
     assert _hien(mt) == "1.0.0"
     assert mt["tao"]().chuan_bi().trang_thai == mu.KHONG_CO   # không cài đi cài lại mỗi lần mở
+    # Audit 09/11: CapNhat.bat chạy prepare rồi apply — nhật ký vẫn QUARANTINED của lượt cũ mà apply trả nó ra (mã
+    # 1, dừng màn hình) thì MỖI lần chạy sau đều báo lỗi dù không có gì hỏng.
+    assert mt["tao"]().ap_dung().trang_thai == mu.KHONG_CO
 
 
 def test_health_sau_kich_hoat_loi_quay_ve_ban_truoc_khong_khoi_phuc_db(mt):

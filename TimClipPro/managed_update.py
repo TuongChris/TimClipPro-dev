@@ -1202,8 +1202,10 @@ class CapNhat:
         if not nk or nk.get("trang_thai") != STAGED:
             # ACTIVE ở đây là của lượt TRƯỚC: in ra sẽ giống vừa cập nhật xong. WAITING_APPROVAL đã báo lúc chuẩn bị;
             # bản có thể đã rút khỏi feed, lặp lại thì «apply» thành lỗi dù không có gì để làm.
+            # QUARANTINED: bản lỗi đã cách ly và báo lúc đó; prepare bỏ qua nó — trả ra thì CapNhat.bat báo lỗi MỖI lần
+            # (audit 09/11). BLOCKED giữ nguyên: vẫn cần người kiểm.
             tt = nk.get("trang_thai") if nk else KHONG_CO
-            return KetQua(KHONG_CO if tt in (ACTIVE, WAITING_APPROVAL) else tt, "",
+            return KetQua(KHONG_CO if tt in (ACTIVE, WAITING_APPROVAL, QUARANTINED) else tt, "",
                           "Không có bản nào đang chờ áp dụng.")
         den = doc_hoan(self.cd.goc)
         if den is not None:
