@@ -975,10 +975,14 @@ with st.sidebar:
             except Exception as e:  # noqa: BLE001
                 st.error(f"Không lưu được cấu hình: {e}")
     with c_mac_dinh:
+        xac_nhan_mac_dinh = st.checkbox(
+            "Chắc chắn khôi phục", key="xac_nhan_khoi_phuc_mac_dinh",
+            help="Bỏ toàn bộ cấu hình đã lưu (cookie, kho, link Sheet…). Bản cũ được giữ ở "
+                 "data\\cau_hinh.json.truoc_khoi_phuc.")
         if st.button(
             "↩️ Khôi phục mặc định",
             width="stretch",
-            disabled=job["running"],
+            disabled=job["running"] or not xac_nhan_mac_dinh,
         ):
             try:
                 eng.khoi_phuc_cau_hinh_mac_dinh()

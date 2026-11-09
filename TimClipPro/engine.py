@@ -1215,10 +1215,13 @@ class Engine:
         self._moc_cau_hinh = du_lieu
 
     def khoi_phuc_cau_hinh_mac_dinh(self) -> None:
-        """Xóa cấu hình đã lưu và áp Config mặc định ngay trong phiên hiện tại."""
+        """Bỏ cấu hình đã lưu và áp Config mặc định ngay trong phiên hiện tại. Bản đang lưu được giữ lại ở
+        ``cau_hinh.json.truoc_khoi_phuc`` (bấm nhầm vẫn lấy lại được cookie, kho, link Sheet — audit 09/11)."""
         self._moc_cau_hinh = {}
         duong_dan = os.path.join(self.data_dir, cau_hinh.TEN_FILE)
-        for hau_to in ("", ".bak", ".tmp"):
+        with contextlib.suppress(FileNotFoundError):
+            os.replace(duong_dan, duong_dan + ".truoc_khoi_phuc")
+        for hau_to in (".bak", ".tmp"):            # còn .bak thì lần đọc sau tự «phục hồi» cấu hình cũ
             with contextlib.suppress(FileNotFoundError):
                 os.remove(duong_dan + hau_to)
         self.config = Config()

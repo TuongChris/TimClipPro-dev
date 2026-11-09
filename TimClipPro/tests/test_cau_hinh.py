@@ -106,6 +106,30 @@ def test_khoi_phuc_mac_dinh(tmp_path):
     assert doc_cau_hinh(str(tmp_path / "data")) == {}
 
 
+def test_khoi_phuc_mac_dinh_giu_ban_cu_de_lay_lai(tmp_path):
+    """Audit 09/11: bấm nhầm «Khôi phục mặc định» từng xoá cả cấu hình lẫn .bak — mất cookie, kho, link Sheet."""
+    engine = Engine(root=str(tmp_path))
+    engine.config.chunk_s = 1800
+    engine.luu_cau_hinh({})
+    cu = (tmp_path / "data" / TEN_FILE).read_bytes()
+    engine.khoi_phuc_cau_hinh_mac_dinh()
+    assert (tmp_path / "data" / (TEN_FILE + ".truoc_khoi_phuc")).read_bytes() == cu
+
+
+def test_nut_khoi_phuc_mac_dinh_can_xac_nhan(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=120).run()
+    nut = next(b for b in at.button if b.label == "↩️ Khôi phục mặc định")
+    assert nut.disabled
+    at = at.checkbox(key="xac_nhan_khoi_phuc_mac_dinh").check().run()
+    assert not next(b for b in at.button if b.label == "↩️ Khôi phục mặc định").disabled
+
+
 def test_file_chua_ton_tai_khong_bi_tao(tmp_path):
     assert doc_cau_hinh(str(tmp_path)) == {}
     assert not (tmp_path / TEN_FILE).exists()
