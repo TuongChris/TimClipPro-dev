@@ -2167,7 +2167,9 @@ with tab4:
 # ---------------------------------------------------------------- TAB 5
 with tab5:
     st.subheader("Lịch sử các lần quét")
-    jobs = eng.list_jobs()
+    jobs = eng.list_jobs(200)
+    if len(jobs) >= 200:   # audit 09/11: trước đây lặng lẽ cắt
+        st.caption("Chỉ hiện 200 lần quét gần nhất. Các lần cũ hơn vẫn được lưu trong lịch sử, chỉ không hiện ở bảng này.")
     if not jobs:
         st.info("Chưa có lần quét nào.")
     else:
