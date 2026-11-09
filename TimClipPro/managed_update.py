@@ -1298,7 +1298,12 @@ class CapNhat:
         self.nk.ghi(ACTIVE, loi="")
         self.diem_dung(ACTIVE)
         ghi_json_nguyen_tu(self.cd.file_trang_thai("last_good.json"), con_tro_moi)
-        return KetQua(ACTIVE, m.phien_ban, f"Đã chuyển sang bản {m.phien_ban}.")
+        thong_diep = f"Đã chuyển sang bản {m.phien_ban}."
+        try:
+            don_ban_cu(self.cd, giu=2)
+        except Exception as e:  # noqa: BLE001 — dọn lỗi chỉ để lại file thừa; cập nhật đã xong, không biến thành lỗi
+            thong_diep += f" Chưa dọn được bản cũ ({e})."
+        return KetQua(ACTIVE, m.phien_ban, thong_diep)
 
     def _quay_lai(self, m: Manifest, ly_do: str, *, cach_ly: bool = True) -> KetQua:
         """Quay MÃ về con trỏ TRƯỚC kích hoạt (không bao giờ về chính bản lỗi). DB KHÔNG BAO GIỜ tự khôi phục
@@ -1422,34 +1427,48 @@ class CapNhat:
 # ---------------------------------------------------------------------------
 
 def don_ban_cu(cai_dat: CaiDat, *, giu: int = 2) -> list:
-    """Xoá release/runtime KHÔNG phải current/last_good/ứng viên trong nhật ký, giữ ``giu`` bản mới nhất.
+    """Xoá release KHÔNG phải current/last_good/con trỏ trong nhật ký (mới + cũ), giữ ``giu`` bản mới nhất;
+    rồi xoá runtime đã sẵn sàng mà không release còn lại nào dùng. Gọi sau mỗi lần ACTIVE (giữ quyền updater).
     Không bao giờ chạm state root, kho hay thư mục ngoài installation root. Con trỏ/nhật ký HỎNG →
     ``LoiCapNhat``, không xoá gì (đọc lỏng sẽ coi bản đang chạy là "không ai dùng")."""
-    tham_chieu = set()
-    for ten in ("current.json", "last_good.json"):
-        d = doc_json(cai_dat.file_trang_thai(ten))
-        if isinstance(d, dict):
-            tham_chieu.update({os.path.normcase(os.path.abspath(d.get("release", ""))),
-                               os.path.normcase(os.path.abspath(d.get("runtime", "")))})
+    def chuan(p: str) -> str:
+        return os.path.normcase(os.path.abspath(p))
+
+    con_tro = [doc_json(cai_dat.file_trang_thai(ten)) for ten in ("current.json", "last_good.json")]
     nk = doc_json(cai_dat.file_trang_thai("journal.json"))
-    if isinstance(nk, dict) and isinstance(nk.get("con_tro_moi"), dict):
-        tham_chieu.update({os.path.normcase(os.path.abspath(nk["con_tro_moi"].get(k, "")))
-                           for k in ("release", "runtime")})
-    da_xoa = []
+    if isinstance(nk, dict):
+        con_tro += [nk.get("con_tro_moi"), nk.get("con_tro_cu")]
+    tham_chieu = {chuan(d.get(k) or "") for d in con_tro if isinstance(d, dict) for k in ("release", "runtime")}
     if not os.path.isdir(cai_dat.releases):
-        return da_xoa
+        return []
     ban = []
     for ten in os.listdir(cai_dat.releases):
         with contextlib.suppress(LoiCapNhat):
             ban.append((phan_tich_phien_ban(ten), ten))
     ban.sort(reverse=True)
-    for _, ten in ban[giu:]:
-        p = os.path.normcase(os.path.abspath(cai_dat.release_dir(ten)))
-        if p not in tham_chieu:
-            cai_dat.kiem_xoa(cai_dat.release_dir(ten))      # MR-P1-01: không bao giờ xoá trúng state root
-            shutil.rmtree(cai_dat.release_dir(ten), ignore_errors=True)
-            da_xoa.append(cai_dat.release_dir(ten))
-    return da_xoa
+    xoa = [cai_dat.release_dir(ten) for _, ten in ban[giu:] if chuan(cai_dat.release_dir(ten)) not in tham_chieu]
+    # Runtime: giữ mọi runtime mà release CÒN LẠI khai trong manifest. Không đọc được manifest nào → không đoán,
+    # không xoá runtime nào. Runtime chưa có dấu sẵn sàng (dở dang) để nguyên.
+    rt_giu, doc_du = set(tham_chieu), True
+    for _, ten in ban:
+        rel = cai_dat.release_dir(ten)
+        if rel in xoa:
+            continue
+        try:
+            with open(os.path.join(rel, TEN_MANIFEST), "rb") as f:
+                rt_giu.add(chuan(cai_dat.runtime_dir(doc_manifest(f.read()).runtime_id)))
+        except (OSError, LoiCapNhat):
+            doc_du = False
+    if doc_du and os.path.isdir(cai_dat.environments):
+        for ten in os.listdir(cai_dat.environments):
+            rt = cai_dat.runtime_dir(ten)
+            if _RUNTIME_ID.match(ten) and os.path.isfile(os.path.join(rt, TEN_SAN_SANG)) and chuan(rt) not in rt_giu:
+                xoa.append(rt)
+    for p in xoa:
+        cai_dat.kiem_xoa(p)                  # MR-P1-01: kiểm HẾT trước khi xoá cái nào — không xoá trúng state root
+    for p in xoa:
+        shutil.rmtree(p, ignore_errors=True)
+    return xoa
 
 
 def bay_gio_epoch() -> float:

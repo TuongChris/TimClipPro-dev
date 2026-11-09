@@ -431,13 +431,15 @@ def test_github_theo_chuyen_huong_hop_le(tmp_path):
     assert [a for _, a in http.goi] == [False, False]
 
 
-def test_don_ban_cu_con_tro_hong_khong_xoa_gi(mt):
+def test_don_ban_cu_con_tro_hong_khong_xoa_gi(mt, monkeypatch):
+    don = mu.don_ban_cu
+    monkeypatch.setattr(mu, "don_ban_cu", lambda *a, **k: [])   # dựng 3 bản mà không tự dọn sau ACTIVE
     for pb in ("1.0.0", "1.1.0", "1.2.0"):
         _cai(mt, pb)
     with open(mt["cd"].file_trang_thai("current.json"), "w", encoding="utf-8") as f:
         f.write("{hỏng")
     with pytest.raises(mu.LoiCapNhat):
-        mu.don_ban_cu(mt["cd"], giu=1)
+        don(mt["cd"], giu=1)
     assert all(os.path.isdir(mt["cd"].release_dir(pb)) for pb in ("1.0.0", "1.1.0", "1.2.0"))
 
 

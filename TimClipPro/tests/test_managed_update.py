@@ -494,16 +494,43 @@ def test_nguon_github_gioi_han_kich_thuoc_khi_tai(tmp_path):
 
 # ---------------------------------------------------------------- dọn bản cũ
 
-def test_don_ban_cu_khong_xoa_ban_dang_dung_hay_last_good(mt):
+def test_don_ban_cu_khong_xoa_ban_dang_dung_hay_last_good(mt, monkeypatch):
+    don = mu.don_ban_cu
+    monkeypatch.setattr(mu, "don_ban_cu", lambda *a, **k: [])   # dựng 3 bản mà không tự dọn sau ACTIVE
     for pb in ("1.0.0", "1.1.0", "1.2.0"):
         _cai(mt, pb)
     shutil.copy(mt["cd"].file_trang_thai("current.json"), mt["cd"].file_trang_thai("x.json"))
     lg = mu.doc_json(mt["cd"].file_trang_thai("current.json"))
     lg = {**lg, "phien_ban": "1.1.0", "release": mt["cd"].release_dir("1.1.0")}
     mu.ghi_json_nguyen_tu(mt["cd"].file_trang_thai("last_good.json"), lg)
-    da_xoa = mu.don_ban_cu(mt["cd"], giu=1)
+    da_xoa = don(mt["cd"], giu=1)
     assert da_xoa == [mt["cd"].release_dir("1.0.0")]
     assert os.path.isdir(mt["cd"].release_dir("1.1.0")) and os.path.isdir(mt["cd"].release_dir("1.2.0"))
+
+
+
+def test_cap_nhat_xong_tu_don_ban_cu_giu_hai_ban_va_runtime_cua_chung(mt):
+    """Sau ACTIVE: giữ 2 bản mới nhất + runtime chúng dùng (kể cả runtime dùng chung với bản đã xoá)."""
+    for pb, rt in (("1.0.0", "py312-a"), ("1.1.0", "py312-b"), ("1.2.0", "py312-b"), ("1.3.0", "py312-c")):
+        _cai(mt, pb, sua_manifest={"runtime": {"runtime_id": rt}})
+    cd = mt["cd"]
+    assert not os.path.exists(cd.release_dir("1.0.0")) and not os.path.exists(cd.release_dir("1.1.0"))
+    assert not os.path.exists(cd.runtime_dir("py312-a"))
+    for pb in ("1.2.0", "1.3.0"):
+        assert os.path.isdir(cd.release_dir(pb))
+    for rt in ("py312-b", "py312-c"):
+        assert os.path.isdir(cd.runtime_dir(rt))
+
+
+def test_don_ban_cu_loi_khong_lam_hong_cap_nhat_da_xong(mt, monkeypatch):
+    _cai(mt, "1.0.0")
+
+    def hong(*a, **k):
+        raise mu.LoiCapNhat("bo_cuc", "giả")
+
+    monkeypatch.setattr(mu, "don_ban_cu", hong)
+    _cai(mt, "1.1.0")
+    assert _hien(mt) == "1.1.0"
 
 
 # ---------------------------------------------------------------- người dùng hoãn
