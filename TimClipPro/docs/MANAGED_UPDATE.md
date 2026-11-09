@@ -18,7 +18,8 @@ PC2: launcher update prepare  (tải manifest+chữ ký → XÁC MINH → tải 
      launcher update apply    (rút cổng → chờ rảnh CÓ HẠN → backup → migration tự động an toàn
                                → đổi con trỏ current → health sau kích hoạt → ghi ACTIVE → last_good) = ACTIVE
                               (rồi dọn: giữ 2 release mới nhất + con trỏ current/last_good/nhật ký và runtime
-                               chúng dùng; xoá release/runtime khác — `don_ban_cu`; dọn lỗi không đổi ACTIVE)
+                               chúng dùng; xoá release/runtime khác — `don_ban_cu`; runtime đang chạy thì để lần
+                               sau; dọn lỗi không đổi ACTIVE)
      launcher app|watch       (khôi phục nhật ký dở → chạy bản current)
 ```
 

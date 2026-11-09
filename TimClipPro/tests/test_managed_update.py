@@ -522,6 +522,60 @@ def test_cap_nhat_xong_tu_don_ban_cu_giu_hai_ban_va_runtime_cua_chung(mt):
         assert os.path.isdir(cd.runtime_dir(rt))
 
 
+
+def test_don_ban_cu_giu_ban_vua_dung_khi_ban_moi_hon_bi_cach_ly(mt):
+    """1.2.0 bị cách ly vẫn nằm trong releases/ và chiếm một chỗ «2 bản mới nhất»: bản vừa dùng (1.1.0) chỉ còn
+    được giữ nhờ ``con_tro_cu`` của nhật ký — mất nó là mất đường quay về."""
+    _cai(mt, "1.0.0")
+    _cai(mt, "1.1.0")
+    phat_hanh(mt["nguon"], "1.2.0", mt["khoa"])
+    mt["gia"].suc_khoe["staging"] = False
+    assert mt["tao"]().chuan_bi().trang_thai == mu.QUARANTINED
+    assert os.path.isdir(mt["cd"].release_dir("1.2.0"))
+    mt["gia"].suc_khoe["staging"] = True
+    _cai(mt, "1.1.1")
+    assert os.path.isdir(mt["cd"].release_dir("1.1.0"))
+    assert not os.path.exists(mt["cd"].release_dir("1.0.0"))
+
+
+def test_don_ban_cu_khong_doc_duoc_manifest_thi_khong_xoa_runtime_nao(mt, monkeypatch):
+    don = mu.don_ban_cu
+    monkeypatch.setattr(mu, "don_ban_cu", lambda *a, **k: [])   # dựng 3 bản mà không tự dọn sau ACTIVE
+    for pb, rt in (("1.0.0", "py312-a"), ("1.1.0", "py312-b"), ("1.2.0", "py312-c")):
+        _cai(mt, pb, sua_manifest={"runtime": {"runtime_id": rt}})
+    cd = mt["cd"]
+    os.remove(os.path.join(cd.release_dir("1.1.0"), mu.TEN_MANIFEST))
+    assert don(cd, giu=2) == [cd.release_dir("1.0.0")]
+    assert all(os.path.isdir(cd.runtime_dir(rt)) for rt in ("py312-a", "py312-b", "py312-c"))
+
+
+def test_don_ban_cu_xoa_runtime_xoa_do_mat_dau_san_sang(mt):
+    """Xoá dở (file bị giữ, mất điện) làm mất ``.san_sang.json`` trước tiên — lần sau vẫn phải dọn được."""
+    _cai(mt, "1.0.0", sua_manifest={"runtime": {"runtime_id": "py312-a"}})
+    cd = mt["cd"]
+    for ten in ("py312-cu", "py312-a.xoa-1"):
+        os.makedirs(os.path.join(cd.runtime_dir(ten), "Lib"))
+    _cai(mt, "1.1.0", sua_manifest={"runtime": {"runtime_id": "py312-a"}})
+    assert not os.path.exists(cd.runtime_dir("py312-cu")) and not os.path.exists(cd.runtime_dir("py312-a.xoa-1"))
+    assert os.path.isdir(cd.runtime_dir("py312-a"))
+
+
+@pytest.mark.skipif(os.name != "nt", reason="chỉ Windows chặn đổi tên thư mục có file đang mở")
+def test_don_ban_cu_bo_qua_runtime_dang_bi_giu_de_lan_sau(mt, monkeypatch):
+    """App bản cũ còn mở qua hai lần cập nhật: runtime của nó đang bị giữ → không xoá dở, để lần sau."""
+    don = mu.don_ban_cu
+    monkeypatch.setattr(mu, "don_ban_cu", lambda *a, **k: [])
+    for pb, rt in (("1.0.0", "py312-a"), ("1.1.0", "py312-b"), ("1.2.0", "py312-c")):
+        _cai(mt, pb, sua_manifest={"runtime": {"runtime_id": rt}})
+    cd = mt["cd"]
+    py = os.path.join(cd.runtime_dir("py312-a"), "Scripts", "python.exe")
+    with open(py, "rb"):                                        # «python.exe đang chạy»
+        assert cd.runtime_dir("py312-a") not in don(cd, giu=2)
+    assert os.path.isfile(py) and os.path.isfile(os.path.join(cd.runtime_dir("py312-a"), mu.TEN_SAN_SANG))
+    assert don(cd, giu=2) == [cd.runtime_dir("py312-a")]
+    assert not os.path.exists(cd.runtime_dir("py312-a"))
+
+
 def test_don_ban_cu_loi_khong_lam_hong_cap_nhat_da_xong(mt, monkeypatch):
     _cai(mt, "1.0.0")
 

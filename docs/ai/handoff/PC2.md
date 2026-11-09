@@ -56,7 +56,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   video mới nhất, bỏ qua video đã có). Cùng ngày: bỏ Docker `fe397a4`, sửa test chập chờn `80aa554`. PR #33 `ec2091d`, DEV 22:37; người dùng thử thật: ổn.
 - Review + audit 08/11 (nhánh fix/pc2/audit-0811): 13 sửa kèm test đỏ, bỏ SheetsExporter.append −156 dòng; bác 1 (immutable
   SQLite). 09/11 người dùng chọn: `don_ban_cu` gọi sau ACTIVE, giữ 2 bản + runtime chúng dùng (nhánh fix/pc2/don-ban-cu;
-  nhanh 3535/4/0, chậm 24/24). Tới Stable chỉ khi phát hành bản mới.
+  review: dọn cả runtime xoá dở, runtime đang chạy để lần sau; nhanh 3539/4/0, chậm 24/24). Tới Stable khi phát hành.
 ### 2026-11-07 — Codex bước 2: audit số 14 và 18 (nhánh fix/pc2/audit-14-updater)
 - 14: 10 kiểm tra an toàn của updater có test mới, mỗi test đỏ khi xoá kiểm tra (1 claim sai). Sửa F1–F3: tag trước kênh; health chết không kết quả là
   tạm thời, cách ly ở lần 3; launcher không mở khi nhật ký đang kích hoạt. Updater chỉ tới máy đã cài khi bootstrap lại.

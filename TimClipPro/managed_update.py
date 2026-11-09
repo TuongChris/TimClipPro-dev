@@ -1448,7 +1448,8 @@ def don_ban_cu(cai_dat: CaiDat, *, giu: int = 2) -> list:
     ban.sort(reverse=True)
     xoa = [cai_dat.release_dir(ten) for _, ten in ban[giu:] if chuan(cai_dat.release_dir(ten)) not in tham_chieu]
     # Runtime: giữ mọi runtime mà release CÒN LẠI khai trong manifest. Không đọc được manifest nào → không đoán,
-    # không xoá runtime nào. Runtime chưa có dấu sẵn sàng (dở dang) để nguyên.
+    # không xoá runtime nào. KHÔNG đòi dấu sẵn sàng: hàm chạy khi giữ quyền updater, sau ACTIVE — không runtime nào
+    # đang dựng; còn xoá dở thì dấu ``.san_sang.json`` mất ĐẦU TIÊN (thứ tự tên) mà rác vẫn phải dọn được.
     rt_giu, doc_du = set(tham_chieu), True
     for _, ten in ban:
         rel = cai_dat.release_dir(ten)
@@ -1462,13 +1463,24 @@ def don_ban_cu(cai_dat: CaiDat, *, giu: int = 2) -> list:
     if doc_du and os.path.isdir(cai_dat.environments):
         for ten in os.listdir(cai_dat.environments):
             rt = cai_dat.runtime_dir(ten)
-            if _RUNTIME_ID.match(ten) and os.path.isfile(os.path.join(rt, TEN_SAN_SANG)) and chuan(rt) not in rt_giu:
+            if _RUNTIME_ID.match(ten) and os.path.isdir(rt) and chuan(rt) not in rt_giu:
                 xoa.append(rt)
     for p in xoa:
         cai_dat.kiem_xoa(p)                  # MR-P1-01: kiểm HẾT trước khi xoá cái nào — không xoá trúng state root
+    da_xoa = []
     for p in xoa:
-        shutil.rmtree(p, ignore_errors=True)
-    return xoa
+        dich = p
+        if os.path.dirname(p) == cai_dat.environments and ".xoa-" not in os.path.basename(p):
+            # Đổi tên trước: Windows từ chối khi python.exe/DLL bên trong đang chạy (app bản cũ còn mở) → để lần
+            # sau, không xoá dở. Tên ``.xoa-…`` vẫn khớp _RUNTIME_ID nên xoá dở vẫn được dọn lại.
+            dich = f"{p}.xoa-{time.time_ns()}"
+            try:
+                os.rename(p, dich)
+            except OSError:
+                continue
+        shutil.rmtree(dich, ignore_errors=True)
+        da_xoa.append(p)
+    return da_xoa
 
 
 def bay_gio_epoch() -> float:
