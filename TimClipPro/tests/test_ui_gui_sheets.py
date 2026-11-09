@@ -13,6 +13,7 @@ import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from streamlit.testing.v1 import AppTest
 
 import outbox as ob
@@ -194,6 +195,32 @@ def test_o_dong_y_trung_gan_theo_tung_viec(tmp_path, monkeypatch):
     next(sb for sb in at.selectbox if sb.key == "gui_chon_viec").set_value(y).run()
     assert _nut(at, "⚠️ Gửi lại").disabled is True
     assert ob.lay_viec(eng.sqlite_file, y).trang_thai == ob.UNKNOWN
+
+
+@pytest.mark.parametrize("nhan, trang_thai_y", [("✅ Đã kiểm: dòng đã có trên Sheet", ob.SENT),
+                                                ("🔁 Thử gửi lại (sau khi đã sửa bảng/khoá)", ob.SENT)])
+def test_nut_cua_viec_vua_bien_mat_khong_ap_len_viec_khac(tmp_path, monkeypatch, nhan, trang_thai_y):
+    """Audit 09/11: chọn Y, Y được xử lý ở nơi khác (người gửi nền / tab khác) ngay trước cú bấm → ô chọn rơi về X
+    và nút KHOÁ CHUNG áp lên X (đánh dấu «đã có trên Sheet» một việc có thể chưa gửi)."""
+    at = _app(tmp_path, monkeypatch)
+    eng = at.session_state.eng
+    x, y = _hai_viec_khong_ro(eng, tmp_path)
+    if nhan.startswith("🔁"):
+        con = sqlite3.connect(eng.sqlite_file)
+        con.execute("UPDATE hang_doi_gui SET trang_thai=?", (ob.BLOCKED_CONFIG,))
+        con.commit()
+        con.close()
+    truoc_x = ob.lay_viec(eng.sqlite_file, x).trang_thai
+    at.run()
+    next(sb for sb in at.selectbox if sb.key == "gui_chon_viec").set_value(y).run()
+    nut = _nut(at, nhan)
+    con = sqlite3.connect(eng.sqlite_file)
+    con.execute("UPDATE hang_doi_gui SET trang_thai=? WHERE id=?", (trang_thai_y, y))
+    con.commit()
+    con.close()
+    nut.click().run()
+    assert not at.exception
+    assert ob.lay_viec(eng.sqlite_file, x).trang_thai == truoc_x
 
 
 def test_thao_tac_tren_viec_vua_doi_trang_thai_bao_loi_khong_vo_trang(tmp_path, monkeypatch):

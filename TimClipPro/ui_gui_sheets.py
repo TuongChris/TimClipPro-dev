@@ -277,6 +277,8 @@ def _ve_hang_doi(eng) -> None:
                                 f"{v.id[:8]} — #{v.job_id} — {outbox.NHAN_TRANG_THAI[v.trang_thai]}"
                                 for v in ds if v.id == i), key="gui_chon_viec")
         v = next(x for x in ds if x.id == chon)
+        # Nút khoá THEO mã việc (audit 09/11): việc đang chọn biến khỏi danh sách đúng lúc bấm thì ô chọn rơi về việc
+        # khác — nút khoá chung sẽ áp cú bấm lên việc đó (đánh dấu «đã có trên Sheet» một việc chưa gửi).
         st.caption(f"Mã việc {v.id} · lần quét #{v.job_id} · máy {v.dich.installation_id[:8] if _dich_doc_duoc(v) else '?'}")
         if v.trang_thai == outbox.UNKNOWN:
             st.warning("Request có thể đã tới Google mà phản hồi bị mất — tool KHÔNG tự gửi lại. Mở "
@@ -291,25 +293,25 @@ def _ve_hang_doi(eng) -> None:
                 st.error(khong_gui_lai)
             c1, c2 = st.columns(2)
             with c1:
-                if st.button("✅ Đã kiểm: dòng đã có trên Sheet", key="gui_xac_nhan"):
+                if st.button("✅ Đã kiểm: dòng đã có trên Sheet", key=f"gui_xac_nhan_{v.id}"):
                     if _thu(outbox.xac_nhan_da_gui, _db(eng), v.id, "người dùng đối soát trên giao diện"):
                         st.rerun()
             with c2:
                 # Ô đồng ý gắn ĐÚNG việc đang chọn: đổi sang việc khác thì phải đồng ý lại.
                 dong_y = st.checkbox("Tôi chấp nhận có thể trùng dòng", key=f"gui_dong_y_trung_{v.id}")
-                if st.button("⚠️ Gửi lại", key="gui_lai_unknown", disabled=not dong_y or bool(khong_gui_lai)):
+                if st.button("⚠️ Gửi lại", key=f"gui_lai_unknown_{v.id}", disabled=not dong_y or bool(khong_gui_lai)):
                     if _thu(outbox.gui_lai_co_the_trung, _db(eng), v.id):
                         dam_bao_nguoi_gui(eng, bat_buoc=True)
                         st.rerun()
         if v.trang_thai in (outbox.BLOCKED_CONFIG, outbox.RETRY_WAIT):
-            if st.button("🔁 Thử gửi lại (sau khi đã sửa bảng/khoá)", key="gui_thu_lai"):
+            if st.button("🔁 Thử gửi lại (sau khi đã sửa bảng/khoá)", key=f"gui_thu_lai_{v.id}"):
                 if _thu(outbox.thu_lai, _db(eng), v.id):
                     dam_bao_nguoi_gui(eng, bat_buoc=True)
                     st.rerun()
         if v.trang_thai in (outbox.PENDING, outbox.RETRY_WAIT, outbox.CLAIMED, outbox.BLOCKED_CONFIG,
                             outbox.BLOCKED_REPORT, outbox.UNKNOWN):
             huy = st.checkbox("Tôi muốn huỷ việc gửi này", key=f"gui_huy_xn_{v.id}")
-            if st.button("✖ Huỷ việc gửi", key="gui_huy", disabled=not huy):
+            if st.button("✖ Huỷ việc gửi", key=f"gui_huy_{v.id}", disabled=not huy):
                 if _thu(outbox.huy, _db(eng), v.id):
                     st.rerun()
 
