@@ -49,6 +49,9 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 9. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-11-09 — tải theo link chỉ lấy một đoạn (D-42, nhánh feature/pc2/cat-doan-video)
+- Ô «Từ»/«Đến» ở tab «⬇️ Tải video gốc»: tải trọn rồi cắt nén lại, đúng từng khung hình; xoá video trọn khi đoạn ra đúng độ dài.
+- Thử file thật 1080p: đoạn 30 s cắt 4,7 s, 899 khung = lý thuyết, tiếng đầu đoạn lệch 0 ms. Chưa thử YouTube thật.
 ### 2026-11-09 — tải theo link 4 kết nối song song (D-40, nhánh feature/pc2/tai-song-song)
 - Người dùng thấy ghép chậm: đo thật một kết nối 0,78–25 MB/s; 4 kết nối ~78 MB/s; tool thật tải 346 MB trong 22,5 s. Gộp `5a2e79a`, DEV 09/11 21:24 (sao lưu `data_20261109_212411`).
 - Lùi một kết nối khi thiếu định dạng; Dừng giữa chừng để lại .part đang mở → sửa (test đỏ + thử thật). Bằng chứng `C:\Dev\pc2_test_runs\2026-11-09_tai_song_song`.
@@ -73,8 +76,4 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   tạm thời, cách ly ở lần 3; launcher không mở khi nhật ký đang kích hoạt. Updater chỉ tới máy đã cài khi bootstrap lại.
 - 18: xoá code chết, gộp khoá byte 0 vào `khoa.py`, −144 dòng. 17: không xoá gì. Test khoá chập chờn (2–4/30) nay 30/30.
 - Test @ `b050ee5`: nhanh 3521 = 3517/4/0, chậm 24/24, ruff sạch.
-### 2026-11-07 — Codex review PR #27–#29 (D-36, nhánh fix/pc2/codex-review-0711)
-- Làm: Codex chạy chỉ-nhận-văn-bản, 6 lượt, 12 phát hiện: 10 đã sửa kèm test đỏ, 1 để lại, 1 bị bác. Lỗi lớn nhất: bổ sung có thể làm tràn mã clip trong kho mà không báo.
-- Lưu ý: video đang đồng bộ chạy bản cũ; DEV chỉ nhận các bản sửa này khi cập nhật. Audit 14, 17, 18 chưa giao Codex.
-- Test: số ở PR. Không chạy Codex với công cụ trên máy (`-s read-only` vẫn đọc được C: và D:).
-- Mục cũ hơn (2026-11-07 đồng bộ nén song song D-35; 2026-11-07 audit số 15, 19, 20; 2026-11-07 kho video dài D-34; 2026-11-07 dựng kho nhường ổ cứng D-33; 2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
+- Mục cũ hơn (2026-11-07 Codex review PR #27–#29 D-36; 2026-11-07 đồng bộ nén song song D-35; 2026-11-07 audit số 15, 19, 20; 2026-11-07 kho video dài D-34; 2026-11-07 dựng kho nhường ổ cứng D-33; 2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.

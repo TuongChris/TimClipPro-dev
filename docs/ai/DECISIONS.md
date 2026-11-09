@@ -15,6 +15,13 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-42 Tải video theo link: chỉ lấy một đoạn «Từ … Đến …» (người dùng, 2026-11-09)
+Hai ô «Từ»/«Đến» trong tab «⬇️ Tải video gốc» (trống = cả video, một đoạn dùng chung cho mọi link). Người dùng chọn
+tải TRỌN (4 kết nối, D-40) rồi cắt bằng FFmpeg có nén lại đoạn cắt (`-ss` trước `-i`, H.264 crf 18 + AAC): đúng từng
+khung hình; KHÔNG tải một phần bằng yt-dlp `download_ranges` (một kết nối, `-c copy` chỉ cắt ở khung hình chính).
+Đoạn ra lệch độ dài > 0,06 s thì không tin; đúng thì xoá video trọn (người dùng chọn), sai/mốc vượt độ dài thì giữ ở
+`.timclip_cat` để bấm lại khỏi tải lại. Mã: `TimClipPro/cat_video_goc.py`.
+
 ## D-41 Ghép video: tự chuyển video lệch thông số cho khớp video 1 (người dùng, 2026-11-09)
 Thay một phần D-39 («lệch thì dừng»): người dùng gặp video 60 hình/giây giữa video 29,97 — chuyện thường gặp. Chỉ video
 lệch được nén lại (libx264 veryfast crf 18; fps, thu nhỏ giữ tỉ lệ + viền, profile, kiểu điểm ảnh, nhịp thời gian của

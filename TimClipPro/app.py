@@ -64,6 +64,7 @@ from scan_ui import (
     tom_tat_tao_van_tay,
 )
 import channel
+import cat_video_goc
 import ghep_video_goc
 import tai_video_goc
 from channel import ChannelSync
@@ -1473,10 +1474,36 @@ with tab_tai:
     _cl_tai = st.selectbox("Chất lượng tối đa", list(tai_video_goc.CHAT_LUONG), key="cl_tai",
                            help="Video gốc thấp hơn mức chọn thì lấy bản cao nhất có. «Chỉ tiếng» ra file nhạc.")
     _ds_link = tai_video_goc.tach_link(links_tai)
+    c_tu, c_den = st.columns(2)
+    with c_tu:
+        _tu_tai = st.text_input("Từ (chỉ lấy một đoạn — để trống = cả video)", key="tu_tai", placeholder="vd. 1:23")
+    with c_den:
+        _den_tai = st.text_input("Đến (phút:giây hoặc giờ:phút:giây)", key="den_tai", placeholder="vd. 2:45.5")
+    _tu_s = _den_s = None
+    _loi_doan = ""
+    try:
+        _tu_s, _den_s = cat_video_goc.doc_moc(_tu_tai), cat_video_goc.doc_moc(_den_tai)
+        if (_tu_s is None) != (_den_s is None):
+            _loi_doan = "Điền cả «Từ» lẫn «Đến» — hoặc để trống cả hai để tải cả video."
+        elif _tu_s is not None and _den_s <= _tu_s:
+            _loi_doan = "Mốc «Đến» phải sau mốc «Từ»."
+    except ValueError as e:
+        _loi_doan = str(e)
+    if _loi_doan:
+        st.error(_loi_doan)
+    elif _tu_s is not None:
+        st.caption(f"Tải trọn từng video rồi cắt CHÍNH XÁC đoạn {cat_video_goc.moc_hien(_tu_s)}–{cat_video_goc.moc_hien(_den_s)} "
+                   f"({_den_s - _tu_s:g} giây; đúng từng khung hình vì nén lại đoạn cắt). Cắt xong thì xoá video trọn.")
     st.caption("Link kênh/danh sách phát bị bỏ qua — tải cả kênh dùng tab «📺 Tải cả kênh».")
-    if st.button(f"⬇️ Tải {len(_ds_link)} video" if _ds_link else "⬇️ Tải video", type="primary",
-                 disabled=not (_ds_link and _thu_muc_tai) or _chua_tai_duoc(), key="bat_dau_tai_video"):
-        _bat_dau_tai(tai_video_goc.tai_nhieu, _ds_link, _thu_muc_tai, chat_luong=_cl_tai)
+    _co_doan = _tu_s is not None and not _loi_doan
+    _nhan_tai = "✂️ Tải và cắt" if _co_doan else "⬇️ Tải"
+    if st.button(f"{_nhan_tai} {len(_ds_link)} video" if _ds_link else f"{_nhan_tai} video", type="primary",
+                 disabled=not (_ds_link and _thu_muc_tai) or bool(_loi_doan) or _chua_tai_duoc(),
+                 key="bat_dau_tai_video"):
+        if _co_doan:
+            _bat_dau_tai(cat_video_goc.tai_doan, _ds_link, _thu_muc_tai, tu_s=_tu_s, den_s=_den_s, chat_luong=_cl_tai)
+        else:
+            _bat_dau_tai(tai_video_goc.tai_nhieu, _ds_link, _thu_muc_tai, chat_luong=_cl_tai)
 
 with tab_anh:
     st.subheader("Tải thumbnail của video YouTube")
