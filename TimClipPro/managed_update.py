@@ -1483,7 +1483,3 @@ def don_ban_cu(cai_dat: CaiDat, *, giu: int = 2) -> list:
         shutil.rmtree(dich, ignore_errors=True)
         da_xoa.append(p)
     return da_xoa
-
-
-def bay_gio_epoch() -> float:
-    return time.time()

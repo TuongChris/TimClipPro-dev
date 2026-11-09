@@ -19,7 +19,6 @@ def test_luu_roi_doc_lai_giu_nguyen(tmp_path):
     engine.config.ncores = 3
     engine.luu_cau_hinh({
         "sheet_link": "https://docs.google.com/spreadsheets/d/abc",
-        "sheet_auto": False,
         "sheet_dang_ngang": False,
         "kho_dir": "D:/Kho clip",
         "thu_muc_quet_gan_nhat": "D:/Video dài",
@@ -29,7 +28,7 @@ def test_luu_roi_doc_lai_giu_nguyen(tmp_path):
 
     assert engine_moi.config.chunk_s == 1800
     assert engine_moi.config.ncores == 3
-    assert engine_moi.cau_hinh_da_luu["sheet_auto"] is False
+    assert engine_moi.cau_hinh_da_luu["sheet_dang_ngang"] is False
     assert engine_moi.cau_hinh_da_luu["kho_dir"] == "D:/Kho clip"
 
 
@@ -94,7 +93,7 @@ def test_khong_luu_khoa_bi_mat(tmp_path):
 def test_khoi_phuc_mac_dinh(tmp_path):
     engine = Engine(root=str(tmp_path))
     engine.config.chunk_s = 1800
-    engine.luu_cau_hinh({"sheet_auto": False})
+    engine.luu_cau_hinh({"sheet_dang_ngang": False})
     path = tmp_path / "data" / TEN_FILE
     assert path.exists()
 

@@ -310,10 +310,5 @@ class CongBaoTri:
         return con_song
 
 
-def vao_cong(cong: Optional[CongBaoTri], ten: str):
-    """Tiện ích cho nơi gọi có thể không có cổng (test cũ, engine giả): ``None`` → không làm gì."""
-    return cong.viec(ten) if cong is not None else contextlib.nullcontext()
-
-
 __all__ = ["CongBaoTri", "DangBaoTri", "DangChayRoi", "LeaseViec", "LoiCong", "PhienRut",
-           "nhan_viec_cua", "vao_cong", "vao_cong_cua"]
+           "nhan_viec_cua", "vao_cong_cua"]

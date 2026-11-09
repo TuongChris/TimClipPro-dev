@@ -16,7 +16,6 @@ TEN_FILE = "cau_hinh.json"
 # Chỉ các tùy chọn giao diện không bí mật này được phép ghi cùng Config.
 GIA_TRI_GIAO_DIEN_MAC_DINH = {
     "sheet_link": "",
-    "sheet_auto": True,
     "sheet_dang_ngang": True,
     "kho_dir": "",
     "thu_muc_quet_gan_nhat": "",
