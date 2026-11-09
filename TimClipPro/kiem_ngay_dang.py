@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 
 from channel import ChannelSync
 from clip_metadata import extract_youtube_id, filename_fallback_parts
-from luu_tru import cap_nhat_json
+from luu_tru import LoiDuLieu, cap_nhat_json
 from truy_cap_youtube import PhienYouTube, che_bi_mat
 from publication_date import (
     MUI_GIO_MAC_DINH,
@@ -63,9 +63,23 @@ class ThongKe:
     mo_ho: list = field(default_factory=list)
 
 
-def _doc_meta(kho: str) -> tuple[ChannelSync, dict]:
+def _doc_meta(kho: str, *, chi_doc: bool = True) -> tuple[ChannelSync, dict]:
+    """``chi_doc`` (audit, dry-run): đọc NGHIÊM NGẶT — file hỏng → ``LoiDuLieu``, không đổi tên, không chép .bak đè, không
+    tạo khoá trong kho (audit 09/11: ``load_meta`` tự phục hồi nên chế độ «chỉ đọc» từng ghi vào clips_meta.json)."""
     cs = ChannelSync(kho)
-    return cs, cs.load_meta()
+    if not chi_doc:
+        return cs, cs.load_meta()
+    if not os.path.isfile(cs.meta_file):
+        return cs, {}
+    try:
+        with open(cs.meta_file, encoding="utf-8-sig") as f:
+            meta = json.load(f)
+    except (OSError, ValueError) as e:
+        raise LoiDuLieu(f"Không đọc được {cs.meta_file} ({type(e).__name__}) — chế độ chỉ đọc nên KHÔNG sửa gì; mở "
+                        "kho trong ứng dụng (tự phục hồi từ .bak) hoặc kiểm file rồi chạy lại.") from e
+    if not isinstance(meta, dict):
+        raise LoiDuLieu(f"{cs.meta_file} không phải object JSON — chế độ chỉ đọc nên KHÔNG sửa gì.")
+    return cs, meta
 
 
 def audit(kho: str, mui_gio: str) -> ThongKe:
@@ -157,7 +171,7 @@ def repair(
     và khiến bị chặn nặng hơn. Entry lỗi không bị ghi gì nên lần chạy sau tiếp
     tục được từ chỗ dở.
     """
-    cs, meta = _doc_meta(kho)
+    cs, meta = _doc_meta(kho, chi_doc=not apply)
     # Một lượt sửa = một phiên YouTube: bị nghi là bot/429 ở clip đầu thì dừng NGAY — trước đây
     # phải đợi đủ ``dung_sau_n_loi`` (25) request hỏng liên tiếp mới dừng.
     phien = PhienYouTube()
@@ -288,6 +302,14 @@ def repair(
 
 
 def main() -> int:
+    try:
+        return _main()
+    except LoiDuLieu as e:
+        print(f"LỖI DỮ LIỆU: {e}", file=sys.stderr)
+        return 1
+
+
+def _main() -> int:
     p = argparse.ArgumentParser(
         description="Audit/sửa ngày đăng trong clips_meta.json (mặc định chỉ đọc)."
     )

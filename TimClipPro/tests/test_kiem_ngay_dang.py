@@ -6,7 +6,10 @@ from __future__ import annotations
 import json
 from datetime import date
 
+import pytest
+
 import kiem_ngay_dang
+from luu_tru import LoiDuLieu
 
 VN = "Asia/Ho_Chi_Minh"
 
@@ -49,6 +52,24 @@ def test_audit_khong_ghi_gi_va_phan_loai_dung(tmp_path):
     # TEN_MOI có epoch 17:00 UTC -> giờ VN sang hôm sau -> phát hiện sẽ đổi.
     assert [t[0] for t in tk.se_doi] == [TEN_MOI]
     assert (tmp_path / "clips_meta.json").read_text(encoding="utf-8") == truoc
+
+
+
+@pytest.mark.parametrize("che_do", ["audit", "repair_dry_run"])
+def test_meta_hong_che_do_khong_ghi_thi_khong_dung_vao_file(tmp_path, che_do):
+    """Audit 09/11: đọc qua ``load_meta`` (tự phục hồi) thì chế độ «chỉ đọc» đổi tên file hỏng thành .hong.*, chép .bak
+    cũ hơn đè lên và tạo khoá trong thư mục kho — rồi báo số liệu của dữ liệu CŨ."""
+    kho = tmp_path / "kho"
+    kho.mkdir()
+    (kho / "clips_meta.json.bak").write_text('{"a [AAAAAAAAAAA].opus": {"id": "AAAAAAAAAAA"}}', encoding="utf-8")
+    (kho / "clips_meta.json").write_text('{"a [AAAAAAAAAAA].opus": {"id": "AAAA', encoding="utf-8")
+    truoc = {f.name: f.read_bytes() for f in kho.iterdir()}
+    with pytest.raises(LoiDuLieu):
+        if che_do == "audit":
+            kiem_ngay_dang.audit(str(kho), VN)
+        else:
+            kiem_ngay_dang.repair(str(kho), VN, dung_mang=False, apply=False, gioi_han=0)
+    assert {f.name: f.read_bytes() for f in kho.iterdir()} == truoc
 
 
 def test_repair_offline_chi_sua_entry_co_epoch_va_dry_run_khong_ghi(tmp_path):
