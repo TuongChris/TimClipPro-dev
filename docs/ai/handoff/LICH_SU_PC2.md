@@ -3,6 +3,10 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-11-07 — đồng bộ nén song song (D-35, nhánh feature/pc2/nen-song-song)
+- Làm: video tải xong thì video kế tiếp tải ngay, video trước nén cùng lúc; tải một luồng, nén một luồng, ghi metadata + sổ đúng thứ tự.
+- Review độc lập: 1 lỗi (Ctrl+C ở CLI không dừng ngay), 2 lỗi hiển thị, 2 test yếu, đã sửa kèm test đỏ. Không thấy lỗi tranh chấp, treo khi Dừng hay mất file.
+- Test (chặn mạng, cp1252, venv CookieFix): số ở PR. Chưa chạy với YouTube thật: mức nhanh hơn ~40% vẫn là ước lượng.
 ### 2026-11-07 — audit số 15, 19, 20 + bỏ `kiem_sheet.py` (nhánh fix/pc2/audit-0611-dot3)
 - `kiem_thoi_luong` dùng `channel.do_dai_media` có trần; file tải dở mồ côi quá tuổi được dọn, vẫn giữ file có khoá tải; lỗi quét giới hạn 6 giờ ghi thời lượng video thật.
 - Test (chặn mạng, cp1252, venv CookieFix): nhanh 3477 = 3473/4/0, ruff sạch. Mỗi lỗi có test đỏ trước.

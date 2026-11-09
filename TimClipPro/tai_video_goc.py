@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import csv
+import gc
 import io
 import os
 import re
@@ -25,6 +26,7 @@ from typing import Callable, Optional
 from channel import HAN_DON_TAM_CU_S, ChannelSync, _CoHuyTuHam
 from kiem_thoi_luong import hhmmss
 from truy_cap_youtube import (
+    FORMAT_OR_EXTRACTOR_ERROR,
     PhienYouTube,
     che_bi_mat,
     ma_tu_url,
@@ -35,7 +37,9 @@ from ytdlp_chung import (
     PLAYER_CLIENTS_MAC_DINH,
     BoGhiYtdlp,
     CauHinhMang,
+    bo_tai_song_song,
     chay_kem_duong_lui_cookie,
+    tai_song_song,
     thu_tung_client,
 )
 
@@ -323,7 +327,7 @@ def tai_nhieu(
         bo_ghi = BoGhiYtdlp(phien)
         vo_danh: list = []  # client không-cookie đã cứu video này sau khi mọi client có cookie bị 403
 
-        def chay(rieng: dict, url=url, tam=tam):
+        def mot_lan(rieng: dict, url=url, tam=tam):
             # Mỗi lần thử (client khác, thử lại khi đứt mạng) bắt đầu từ thư mục rỗng: luồng dở của lần trước có thể
             # là định dạng khác, để lại thì ghép nhầm hoặc thành hai file (xem ChannelSync._tai_thu_tung_client).
             for f in os.listdir(tam):
@@ -333,6 +337,16 @@ def tai_nhieu(
             with yt_dlp.YoutubeDL(rieng) as ydl:
                 return ydl.extract_info(url, download=True)
 
+        def chay(rieng: dict, mot_lan=mot_lan):
+            try:
+                return mot_lan(rieng)
+            except yt_dlp.utils.DownloadError as e:
+                mot_ket_noi = bo_tai_song_song(rieng)
+                if mot_ket_noi is None or phan_loai_loi(e).category != FORMAT_OR_EXTRACTOR_ERROR:
+                    raise
+            # Tải song song bỏ định dạng không báo dung lượng (ytdlp_chung.tai_song_song): cùng client, một kết nối.
+            return mot_lan(mot_ket_noi)
+
         def tai_voi(ch: CauHinhMang, tam=tam, hook=hook, chay=chay, bo_ghi=bo_ghi):
             return thu_tung_client(
                 ch.player_clients(clients),
@@ -340,6 +354,7 @@ def tai_nhieu(
                 ch.tuy_chon(
                     "download",
                     logger=bo_ghi,
+                    **tai_song_song(),
                     **rieng_dinh_dang,
                     outtmpl=os.path.join(tam, ten_mau),
                     noplaylist=True,
@@ -412,6 +427,11 @@ def tai_nhieu(
             kq.ghi_chu = che_bi_mat(f.human_message_vi or tom_tat_ky_thuat(e))
         finally:
             shutil.rmtree(tam, ignore_errors=True)
+            if os.path.exists(tam):
+                # Dừng giữa lúc tải song song: yt-dlp không đóng file .part, handle nằm trong vòng tham chiếu
+                # frame ↔ traceback — chỉ gc mới đóng, mà Windows không cho xoá file đang mở (đo thật 09/11).
+                gc.collect()
+                shutil.rmtree(tam, ignore_errors=True)
             with contextlib.suppress(OSError):
                 os.rmdir(os.path.join(thu_muc, THU_MUC_TAM))  # chỉ xoá khi rỗng
     bao(1.0, "Xong.")

@@ -174,7 +174,7 @@ def test_doi_client_khi_khong_co_dinh_dang_khong_de_lai_file_do(gia, tmp_path):
 
     def lan_dau_hong(_opts):
         lan["n"] += 1
-        if lan["n"] == 1:
+        if lan["n"] <= 2:  # client đầu hỏng cả lượt nhiều kết nối lẫn lượt lùi một kết nối
             raise DownloadError(
                 "ERROR: [youtube] abcdefghij1: Requested format is not available"
             )
@@ -186,7 +186,7 @@ def test_doi_client_khi_khong_co_dinh_dang_khong_de_lai_file_do(gia, tmp_path):
         o.get("extractor_args", {}).get("youtube", {}).get("player_client")
         for _, o in gia.goi
     ]
-    assert clients == [None, ["tv"]]
+    assert clients == [None, None, ["tv"]]
     assert os.listdir(tmp_path) == ["Tiêu đề abcdefghij1 [abcdefghij1].mkv"]
 
 
@@ -637,3 +637,74 @@ def test_tab_tieu_de_kenh_hien_bang_va_hai_nut_tai(tmp_path, monkeypatch):
     assert at.session_state.tieu_de_kenh[1][0]["Tiêu đề"] == "Tập 1"
     assert sorted(e.label for e in at.get("download_button")) == [
         "⬇️ Tải file CSV (mở bằng Excel)", "⬇️ Tải file TXT (chỉ tiêu đề)"]
+
+
+def _song_song(opts):
+    return (
+        opts.get("concurrent_fragment_downloads"),
+        opts.get("extractor_args", {}).get("youtube", {}).get("formats"),
+    )
+
+
+def test_tai_nhieu_ket_noi_song_song_giu_player_client(gia, tmp_path):
+    """Một kết nối tải lúc nhanh lúc chậm (đo 09/11: 0,78–25 MB/s); tách khúc 10 MB tải 4 khúc cùng lúc ~78 MB/s."""
+    kq = tv.tai_nhieu([URL1], str(tmp_path), player_clients=["tv"])
+    assert kq[0]["trang_thai"] == "xong"
+    opts = gia.goi[0][1]
+    assert _song_song(opts) == (4, ["dashy"])
+    assert opts["extractor_args"]["youtube"]["player_client"] == ["tv"]
+
+
+def test_khong_co_dinh_dang_khi_tai_song_song_thi_lui_mot_ket_noi(gia, tmp_path):
+    """Chế độ khúc bỏ định dạng YouTube không báo dung lượng: hỏng «không có định dạng» → thử lại một kết nối, cùng client."""
+
+    def hong_khi_song_song(opts):
+        if _song_song(opts)[1]:
+            raise DownloadError(
+                "ERROR: [youtube] abcdefghij1: Requested format is not available"
+            )
+
+    gia.hanh_vi[URL1] = hong_khi_song_song
+    kq = tv.tai_nhieu([URL1], str(tmp_path), player_clients=["tv"])
+    assert kq[0]["trang_thai"] == "xong"
+    assert [_song_song(o) for _, o in gia.goi] == [(4, ["dashy"]), (None, None)]
+    assert gia.goi[1][1]["extractor_args"]["youtube"]["player_client"] == ["tv"]
+    assert os.listdir(tmp_path) == ["Tiêu đề abcdefghij1 [abcdefghij1].mkv"]
+
+
+def test_loi_khac_khi_tai_song_song_khong_lui_mot_ket_noi(gia, tmp_path):
+    def bi_go(_opts):
+        raise DownloadError(
+            "ERROR: [youtube] abcdefghij1: Video unavailable. This video has been removed by the uploader"
+        )
+
+    gia.hanh_vi[URL1] = bi_go
+    kq = tv.tai_nhieu([URL1], str(tmp_path), player_clients=["tv"])
+    assert kq[0]["trang_thai"] == "loi"
+    assert [_song_song(o) for _, o in gia.goi] == [(4, ["dashy"])]
+
+
+def test_dung_khi_file_part_con_mo_trong_vong_tham_chieu_van_xoa_sach(gia, tmp_path):
+    """Thật (09/11, tải song song): bị Dừng thì yt-dlp KHÔNG đóng file .part — handle nằm trong vòng tham chiếu
+    frame ↔ traceback, Windows không cho xoá file đang mở → .part trăm MB nằm lại trong thư mục tạm."""
+    dung = {"co": False}
+
+    def bam_dung_khi_dang_ghi(opts):
+        ctx = {}
+        ctx["dest_stream"] = open(
+            os.path.join(os.path.dirname(opts["outtmpl"]), "dang_ghi.f137.mp4.part"), "wb"
+        )
+        ctx["vong"] = ctx  # vòng tham chiếu: refcount không tự đóng file
+        dung["co"] = True
+        try:
+            opts["progress_hooks"][0](
+                {"status": "downloading", "downloaded_bytes": 6, "total_bytes": 10, "info_dict": {}}
+            )
+        except Exception as e:  # noqa: BLE001
+            ctx["loi"] = e  # như yt-dlp: ngữ cảnh giữ lỗi, lỗi giữ traceback → frame giữ ctx
+            raise
+
+    gia.hanh_vi[URL1] = bam_dung_khi_dang_ghi
+    kq = tv.tai_nhieu([URL1], str(tmp_path), cancel_check=lambda: dung["co"])
+    assert kq[0]["trang_thai"] == "bo_qua"
+    assert os.listdir(tmp_path) == []

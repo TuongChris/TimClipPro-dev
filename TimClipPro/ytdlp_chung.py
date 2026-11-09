@@ -1193,6 +1193,43 @@ class NhoClientTotNhat:
             self._hoc_co_cookie = self._hoc_co_cookie or co_cookie
 
 
+# Tải theo link (D-40): yt-dlp mặc định tải luồng YouTube bằng MỘT kết nối, khúc 10 MB lần lượt — tốc độ một kết nối
+# lúc nhanh lúc chậm (đo 09/11 cùng video 334 MB: 0,78–25 MB/s). ``formats=dashy`` tách luồng thành khúc 10 MB (ghép lại
+# giống từng byte) để ``concurrent_fragment_downloads`` tải nhiều khúc cùng lúc (~78 MB/s, 4 hay 8 kết nối như nhau — giữ 4
+# cho đỡ giống máy tự động). Đánh đổi: dashy BỎ định dạng YouTube không báo dung lượng → nơi gọi lùi một kết nối khi
+# «không có định dạng» (:func:`bo_tai_song_song`).
+SO_KET_NOI_TAI = 4
+
+
+def tai_song_song() -> dict:
+    """Tuỳ chọn yt-dlp tải một video bằng :data:`SO_KET_NOI_TAI` kết nối song song — gộp vào :meth:`CauHinhMang.tuy_chon`.
+    ``player_client`` của :func:`thu_tung_client` được GỘP vào ``extractor_args`` này, không ghi đè."""
+    return {"concurrent_fragment_downloads": SO_KET_NOI_TAI, "extractor_args": {"youtube": {"formats": ["dashy"]}}}
+
+
+def bo_tai_song_song(opts: dict) -> Optional[dict]:
+    """Bản ``opts`` tải MỘT kết nối như cũ (giữ player client, cookie...); ``None`` khi ``opts`` không bật song song."""
+    ea = opts.get("extractor_args") or {}
+    yt = ea.get("youtube") or {}
+    if "dashy" not in (yt.get("formats") or []):
+        return None
+    yt = {k: v for k, v in yt.items() if k != "formats"}
+    ea = {k: v for k, v in ea.items() if k != "youtube"}
+    if yt:
+        ea["youtube"] = yt
+    ra = {k: v for k, v in opts.items() if k not in ("concurrent_fragment_downloads", "extractor_args")}
+    if ea:
+        ra["extractor_args"] = ea
+    return ra
+
+
+def _gan_client(opts: dict, client: str) -> dict:
+    """``opts`` với ``player_client=[client]`` GỘP vào ``extractor_args`` sẵn có (vd. :func:`tai_song_song`)."""
+    ea = dict(opts.get("extractor_args") or {})
+    ea["youtube"] = {**(ea.get("youtube") or {}), "player_client": [client]}
+    return {**opts, "extractor_args": ea}
+
+
 def _bo_cookie_khoi_tuy_chon(opts: dict) -> dict:
     """Bản sao tuỳ chọn yt-dlp đã gỡ cookie — đúng các khoá :meth:`CauHinhMang.tuy_chon` chỉ đặt khi có cookie (nguồn
     cookie + bộ chạy JS), phần còn lại (timeout, nhịp, logger, hook) giữ nguyên."""
@@ -1260,9 +1297,7 @@ def thu_tung_client(
     if bo_nho is not None:
         clients = bo_nho.sap_xep(clients, co_cookie=co_cookie)
     for client in (clients or [""]):
-        rieng = dict(opts)
-        if client:
-            rieng["extractor_args"] = {"youtube": {"player_client": [client]}}
+        rieng = _gan_client(opts, client) if client else dict(opts)
         if da_thu and truoc_khi_thu_lai:
             truoc_khi_thu_lai()
         try:
@@ -1297,8 +1332,7 @@ def thu_tung_client(
         loi_403 = loi_dai_dien
         khong_cookie = _bo_cookie_khoi_tuy_chon(opts)
         for client in bi_go:
-            rieng = dict(khong_cookie)
-            rieng["extractor_args"] = {"youtube": {"player_client": [client]}}
+            rieng = _gan_client(khong_cookie, client)
             if truoc_khi_thu_lai:
                 truoc_khi_thu_lai()
             ten = f"{client} không cookie"

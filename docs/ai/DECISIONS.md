@@ -15,6 +15,14 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-40 Tải video theo link bằng 4 kết nối song song (người dùng, 2026-11-09)
+Đo thật cùng video 334 MB: một kết nối lúc 0,78 MB/s (lượt ghép của người dùng), lúc 13–25 MB/s; cookie không làm chậm.
+`formats=dashy` + `concurrent_fragment_downloads=4` (`ytdlp_chung.tai_song_song`) cho ~78 MB/s; 8 kết nối không nhanh hơn
+nên giữ 4 cho đỡ giống máy tự động. Áp cho `tai_video_goc.tai_nhieu` (tab tải video gốc, thumbnail, cả kênh, ghép); đồng bộ
+kênh KHÔNG đổi. Dashy bỏ định dạng không báo dung lượng → «không có định dạng» thì thử lại một kết nối cùng client.
+`thu_tung_client` nay GỘP `player_client` vào `extractor_args` thay vì ghi đè. Dừng giữa chừng: yt-dlp không đóng `.part`
+→ `gc.collect()` rồi xoá lại thư mục tạm.
+
 ## D-39 Ghép video gốc thành video dài có đáp án (người dùng, 2026-11-09)
 Tab «🎞️ Ghép video gốc»: dán link theo thứ tự (lặp = video lặp), tải H.264 ≤ 1080p + AAC trong MP4 (người dùng chọn
 định dạng chung thay vì 4K, vì tool chỉ so tiếng) rồi nối `ffmpeg -f concat -c copy` — không nén lại. Video khác thông số
