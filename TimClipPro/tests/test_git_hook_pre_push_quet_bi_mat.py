@@ -161,6 +161,20 @@ def test_them_roi_xoa_o_commit_sau_van_bi_chan_va_khong_in_noi_dung(may):
     assert _git(may, "ls-remote", "private", "refs/heads/fix/pc2/thu").stdout.strip() == ""
 
 
+@pytest.mark.parametrize("ma_hoa", ["utf-16", "utf-16-be"])
+def test_bi_mat_trong_file_utf16_cua_powershell_bi_chan(may, ma_hoa):
+    """Audit 09/11: PowerShell 5.1 ghi `>`/Out-File dạng UTF-16 — byte 0 xen giữa mọi ký tự, mẫu nào cũng trượt."""
+    _nhanh(may)
+    p = os.path.join(may, "docs", "xuat.txt")
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "wb") as f:
+        f.write(("-----BEGIN " + "PRIVATE KEY-----\nMIIE\n").encode(ma_hoa))
+    _git(may, "add", "docs/xuat.txt")
+    _git(may, "commit", "-q", "-m", "thu: utf16")
+    rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
+    assert rc != 0 and " docs/xuat.txt: " in out, out
+
+
 @pytest.mark.parametrize("duong_dan", ["TimClipPro/google_key_client02.json", "docs/cookies.txt",
                                        "release/khoa_ky.pem", "TimClipPro/secrets/ghi_chu.txt",
                                        "TimClipPro/du-an-0123456789ab.json", "state/installation.json"])

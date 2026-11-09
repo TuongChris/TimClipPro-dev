@@ -99,7 +99,8 @@ def test_lock_cung_bi_quet_bi_mat(tmp_path):
     b"TOKEN = '1//0" + b"gAbCdEfGhIjKlMnOpQrStUvWxYz0123456789'",
     b"-----BEGIN ENCRYPTED " + b"PRIVATE KEY-----\nMIIE\n",
     b"-----BEGIN DSA " + b"PRIVATE KEY-----\nMIIE\n",
-], ids=["sa_nhay_don", "client_secret", "refresh_token", "pem_ma_hoa", "pem_dsa"])
+    ("-----BEGIN " + "PRIVATE KEY-----\nMIIE\n").encode("utf-16"),       # PowerShell 5.1 `>` (audit 09/11)
+], ids=["sa_nhay_don", "client_secret", "refresh_token", "pem_ma_hoa", "pem_dsa", "pem_utf16"])
 def test_mau_bi_mat_bo_sung(bi_mat):
     files = {"TimClipPro/app.py": b"# app\n", "TimClipPro/engine.py": b"# engine\n",
              "TimClipPro/cau_hinh_mau.py": bi_mat}

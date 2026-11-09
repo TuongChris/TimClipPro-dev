@@ -17,13 +17,14 @@
 remote="$1"
 z=0000000000000000000000000000000000000000
 
+# File UTF-16 (PowerShell 5.1 `>`/Out-File) có byte 0 xen giữa mọi ký tự: `tr -d '\000'` bỏ đi rồi mới so mẫu.
 # In «<commit> <file>: <loại>» cho mỗi chỗ nhạy cảm trong các commit từ $2 chưa có trên remote $1 (rỗng = sạch).
 quet_noi_dung() {
   # Thông điệp commit (WR-8 — cũng lên repo công khai) in sau «commit <SHA>», mỗi dòng thụt 1 khoảng trắng (%w(0,1,1):
   # không ngắt dòng) nên không dòng nào của nó giống «commit <SHA>», «+++ » hay «+» của diff.
   git -c core.quotePath=false log -p --cc --text --no-color --no-ext-diff \
       --format='commit %H%n%w(0,1,1)%B' "$2" --not \
-      --remotes="$1" -- </dev/null | awk -v duyet=" ${TIMCLIP_MAU_GIA_DA_DUYET:-} " '
+      --remotes="$1" -- </dev/null | tr -d '\000' | awk -v duyet=" ${TIMCLIP_MAU_GIA_DA_DUYET:-} " '
     function bao(loai,   k) {
       k = c SUBSEP f SUBSEP loai
       if (k in da_bao) return

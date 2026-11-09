@@ -112,7 +112,7 @@ def chon_file_phat_hanh(files: dict) -> dict:
                 bo_py.append(p)
             continue
         for loai, mau in MAU_BI_MAT:
-            if mau.search(data):
+            if mau.search(data.replace(b"\x00", b"")):        # UTF-16 (PowerShell 5.1): byte 0 xen giữa ký tự
                 loi.append(f"{p}: {loai}")
                 break
         else:
@@ -191,7 +191,7 @@ def dong_goi_tu_files(files: dict, commit_day_du: str, tree: str, phien_ban: str
     đi kèm release ở ``TimClipPro/wheels/``, băm của ĐÚNG file phải có trong lock."""
     mu.phan_tich_phien_ban(phien_ban)
     for loai, mau in MAU_BI_MAT:
-        if mau.search(lock):
+        if mau.search(lock.replace(b"\x00", b"")):
             raise LoiPhatHanh(f"Lock chứa nội dung nhạy cảm ({loai}) — không phát hành.")
     if b"--hash=sha256:" not in lock:
         print("[CẢNH BÁO] Lock chưa có băm gói — PC2 sẽ TỪ CHỐI tạo runtime từ bản này (chỉ dùng để thử).",
