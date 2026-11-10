@@ -218,6 +218,7 @@ def test_tab_tai_video_chay_nen_va_hien_ket_qua(tmp_path, monkeypatch):
         progress,
         cancel_check,
         chat_luong,
+        chuan_hoa_am,
     ):
         goi.update(
             links=links,
@@ -225,6 +226,7 @@ def test_tab_tai_video_chay_nen_va_hien_ket_qua(tmp_path, monkeypatch):
             huy=cancel_check(),
             co_phien=phien is not None,
             chat_luong=chat_luong,
+            chuan_hoa_am=chuan_hoa_am,
         )
         progress(0.5, "Video 1/2: đang tải hình 50%")
         return [
@@ -274,6 +276,7 @@ def test_tab_tai_video_chay_nen_va_hien_ket_qua(tmp_path, monkeypatch):
         "huy": False,
         "co_phien": True,
         "chat_luong": "1080p",
+        "chuan_hoa_am": True,  # D-43: ô «Đưa âm lượng về mức YouTube» tick sẵn
     }
     chu = " ".join(e.value for e in [*at.markdown, *at.warning, *at.success])
     assert (
@@ -737,5 +740,47 @@ def test_dung_khi_file_part_con_mo_trong_vong_tham_chieu_van_xoa_sach(gia, tmp_p
 
     gia.hanh_vi[URL1] = bam_dung_khi_dang_ghi
     kq = tv.tai_nhieu([URL1], str(tmp_path), cancel_check=lambda: dung["co"])
+    assert kq[0]["trang_thai"] == "bo_qua"
+    assert os.listdir(tmp_path) == []
+
+
+def test_chuan_hoa_am_luong_chi_khi_bat_va_ghi_chu(gia, tmp_path, monkeypatch):
+    """D-43: tick «Đưa âm lượng về mức YouTube» → chỉnh file vừa tải (trong thư mục tạm, trước khi ra tên cuối)."""
+    import am_luong
+
+    goi = []
+
+    def chuan_hoa(path, **kw):
+        goi.append(path)
+        return "Âm lượng -28.5 → -14 LUFS (mức YouTube)."
+
+    monkeypatch.setattr(am_luong, "chuan_hoa", chuan_hoa)
+    tv.tai_nhieu([URL1], str(tmp_path / "a"))
+    assert goi == []  # mặc định không đụng âm lượng
+    kq = tv.tai_nhieu([URL1], str(tmp_path / "b"), chuan_hoa_am=True)
+    assert len(goi) == 1 and tv.THU_MUC_TAM in goi[0]
+    assert kq[0]["trang_thai"] == "xong" and "-14 LUFS" in kq[0]["ghi_chu"]
+
+
+def test_chinh_am_luong_hong_van_giu_video_da_tai(gia, tmp_path, monkeypatch):
+    import am_luong
+
+    def hong(path, **kw):
+        raise RuntimeError("ffmpeg hỏng")
+
+    monkeypatch.setattr(am_luong, "chuan_hoa", hong)
+    kq = tv.tai_nhieu([URL1], str(tmp_path), chuan_hoa_am=True)
+    assert kq[0]["trang_thai"] == "xong" and "Chưa chỉnh được âm lượng" in kq[0]["ghi_chu"]
+    assert os.path.isfile(kq[0]["duong_dan"])
+
+
+def test_dung_luc_chinh_am_luong_la_dung_ca_luot(gia, tmp_path, monkeypatch):
+    import am_luong
+
+    def dung(path, **kw):
+        raise am_luong.DaHuyChinhAmLuong("dừng")
+
+    monkeypatch.setattr(am_luong, "chuan_hoa", dung)
+    kq = tv.tai_nhieu([URL1], str(tmp_path), chuan_hoa_am=True)
     assert kq[0]["trang_thai"] == "bo_qua"
     assert os.listdir(tmp_path) == []

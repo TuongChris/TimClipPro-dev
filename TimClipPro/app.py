@@ -1454,6 +1454,12 @@ def _o_thu_muc_tai(nhan: str, khoa: str) -> str:
     return st.session_state.thu_muc_tai_video.strip('" ')
 
 
+O_AM_LUONG = "🔊 Đưa âm lượng về mức YouTube (-14 LUFS)"
+GIAI_THICH_AM_LUONG = ("Nhiều video gốc được thu rất nhỏ; xem trên YouTube nghe to là nhờ «Âm lượng ổn định». Tick ô này thì "
+                       "tải xong tool đo độ to và chỉnh về mức YouTube (có giới hạn đỉnh, không rè); hình giữ nguyên. "
+                       "Video vốn đã đủ to thì giữ nguyên. Bỏ tick = giữ đúng âm lượng gốc.")
+
+
 def _bat_dau_tai(ham, *args, **kwargs) -> None:
     _phien_tai = truy_cap_youtube.PhienYouTube()
     chay_nen("tai_video", ham, *args, eng.cau_hinh_mang(), player_clients=list(eng.config.ytdlp_player_clients),
@@ -1497,15 +1503,17 @@ with tab_tai:
         st.caption(f"Tải trọn từng video rồi cắt CHÍNH XÁC đoạn {cat_video_goc.moc_hien(_tu_s)}–{cat_video_goc.moc_hien(_den_s)} "
                    f"({_den_s - _tu_s:g} giây; đúng từng khung hình vì nén lại đoạn cắt). Cắt xong thì xoá video trọn.")
     st.caption("Link kênh/danh sách phát bị bỏ qua — tải cả kênh dùng tab «📺 Tải cả kênh».")
+    _am_tai = st.checkbox(O_AM_LUONG, value=True, key="am_tai", help=GIAI_THICH_AM_LUONG)
     _co_doan = _tu_s is not None and not _loi_doan
     _nhan_tai = "✂️ Tải và cắt" if _co_doan else "⬇️ Tải"
     if st.button(f"{_nhan_tai} {len(_ds_link)} video" if _ds_link else f"{_nhan_tai} video", type="primary",
                  disabled=not (_ds_link and _thu_muc_tai) or bool(_loi_doan) or _chua_tai_duoc(),
                  key="bat_dau_tai_video"):
         if _co_doan:
-            _bat_dau_tai(cat_video_goc.tai_doan, _ds_link, _thu_muc_tai, tu_s=_tu_s, den_s=_den_s, chat_luong=_cl_tai)
+            _bat_dau_tai(cat_video_goc.tai_doan, _ds_link, _thu_muc_tai, tu_s=_tu_s, den_s=_den_s, chat_luong=_cl_tai,
+                         chuan_hoa_am=_am_tai)
         else:
-            _bat_dau_tai(tai_video_goc.tai_nhieu, _ds_link, _thu_muc_tai, chat_luong=_cl_tai)
+            _bat_dau_tai(tai_video_goc.tai_nhieu, _ds_link, _thu_muc_tai, chat_luong=_cl_tai, chuan_hoa_am=_am_tai)
 
 with tab_anh:
     st.subheader("Tải thumbnail của video YouTube")
@@ -1547,12 +1555,13 @@ with tab_ghep:
     _thu_muc_ghep = _o_thu_muc_tai("Thư mục lưu video ghép", "ghep")
     _ten_ghep = st.text_input("Tên file video ghép (để trống = «Video ghép <ngày giờ>»)")
     _ds_ghep = ghep_video_goc.tach_link(links_ghep)
+    _am_ghep = st.checkbox(O_AM_LUONG, value=True, key="am_ghep", help=GIAI_THICH_AM_LUONG)
     st.caption("Video khác độ phân giải hay số hình/giây video 1 (vd. một video 60 hình/giây giữa các video 30) thì "
                "tool tự nén lại RIÊNG video đó cho khớp — lâu hơn vài phút cho mỗi video lệch; tiếng giữ nguyên nên mốc "
                "vẫn đúng. Video đã tải được giữ lại tới khi ghép xong, bấm lại thì không phải tải lại.")
     if st.button(f"🎞️ Tải và ghép {len(_ds_ghep)} video" if _ds_ghep else "🎞️ Tải và ghép", type="primary",
                  key="bat_dau_ghep_video", disabled=len(_ds_ghep) < 2 or not _thu_muc_ghep or _chua_tai_duoc()):
-        _bat_dau_tai(ghep_video_goc.ghep, _ds_ghep, _thu_muc_ghep, ten_file=_ten_ghep)
+        _bat_dau_tai(ghep_video_goc.ghep, _ds_ghep, _thu_muc_ghep, ten_file=_ten_ghep, chuan_hoa_am=_am_ghep)
 
 with tab_td:
     st.subheader("Tải danh sách tiêu đề của kênh")

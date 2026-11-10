@@ -15,6 +15,13 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-43 Đưa âm lượng video tải về mức YouTube (người dùng, 2026-11-10)
+Đo thật: video Joe Bartolozzi tải về -28,5 LUFS, SSS/TikTok -14; xem trên YouTube nghe to nhờ «Âm lượng ổn định» (người
+dùng tắt đi thì nhỏ y như file tải). Ô tick «🔊 Đưa âm lượng về mức YouTube (-14 LUFS)» (tick sẵn) ở tab Tải video gốc
+(cả cắt đoạn) và Ghép: `loudnorm` hai lượt, đỉnh ≤ -1 dBTP, hình chép nguyên, tiếng nén lại (AAC 192k; vỏ webm/opus →
+Opus 160k), giữ tần số lấy mẫu. Gần mức (≤ 1 LU) thì giữ nguyên từng byte. Ghép: chỉnh TỪNG video trước khi nối. Không
+chọn luồng DRC của YouTube (không phải video nào cũng có). Mã: `TimClipPro/am_luong.py`.
+
 ## D-42 Tải video theo link: chỉ lấy một đoạn «Từ … Đến …» (người dùng, 2026-11-09)
 Hai ô «Từ»/«Đến» trong tab «⬇️ Tải video gốc» (trống = cả video, một đoạn dùng chung cho mọi link). Người dùng chọn
 tải TRỌN (4 kết nối, D-40) rồi cắt bằng FFmpeg có nén lại đoạn cắt (`-ss` trước `-i`, H.264 crf 18 + AAC): đúng từng

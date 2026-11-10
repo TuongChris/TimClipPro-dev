@@ -455,3 +455,28 @@ def test_do_lai_video_ghep_hong_khong_mat_ket_qua(nguon, tmp_path, monkeypatch):
     kq = gv.ghep(URL[:2], str(tmp_path), ten_file="hong")
     assert kq[-1]["trang_thai"] == "xong" and "không đo lại được" in kq[-1]["ghi_chu"]
     assert os.path.isdir(tmp_path / gv.THU_MUC_PHAN)  # chưa kiểm được thì giữ file lẻ
+
+
+def _lufs(path):
+    import re
+
+    r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-vn", "-af", "ebur128", "-f", "null", "-"],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+    return float(re.findall(r"I:\s+(-?[\d.]+) LUFS", r.stderr)[-1])
+
+
+@can_ffmpeg
+def test_ghep_chuan_hoa_am_luong_tung_video_moc_van_dung(nguon, tmp_path, monkeypatch):
+    """D-43: chỉnh âm lượng TỪNG video trước khi nối (như YouTube làm cho từng video) — mốc vẫn khớp tiếng thật."""
+    _gia_tai(monkeypatch, nguon)
+    nho = gv.ghep(URL[:3], str(tmp_path / "a"), ten_file="g")[-1]
+    assert _lufs(nho["duong_dan"]) < -18  # tiếng bíp tổng hợp nhỏ hơn mức YouTube
+    _gia_tai(monkeypatch, nguon)
+    cuoi = gv.ghep(URL[:3], str(tmp_path / "b"), ten_file="g", chuan_hoa_am=True)[-1]
+    assert cuoi["trang_thai"] == "xong", cuoi
+    assert _lufs(cuoi["duong_dan"]) == pytest.approx(-14, abs=1.0)
+    with open(tmp_path / "b" / "g.moc.csv", encoding="utf-8-sig") as f:
+        bat_dau = [float(d["Bắt đầu (giây)"]) for d in csv.DictReader(f)]
+    assert bat_dau == pytest.approx([0, 2, 5], abs=0.05)
+    for giay, hz in zip(bat_dau, (440, 880, 1320)):
+        assert _tan_so_tai(cuoi["duong_dan"], giay + 0.1) == pytest.approx(hz, abs=25), giay

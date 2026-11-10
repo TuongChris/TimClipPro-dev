@@ -23,6 +23,7 @@ import uuid
 from dataclasses import asdict, dataclass
 from typing import Callable, Optional
 
+import am_luong
 from channel import HAN_DON_TAM_CU_S, ChannelSync, _CoHuyTuHam
 from kiem_thoi_luong import hhmmss
 from truy_cap_youtube import (
@@ -220,6 +221,7 @@ def tai_nhieu(
     thumbnail: bool = False,
     bo_qua_da_co: bool = False,
     dinh_dang: Optional[dict] = None,
+    chuan_hoa_am: bool = False,
 ) -> list:
     """Tải lần lượt từng link vào ``thu_muc``; trả list dict (:class:`KetQuaTaiVideo`) theo đúng thứ tự link.
 
@@ -230,6 +232,7 @@ def tai_nhieu(
     ``chat_luong``: khoá của :data:`CHAT_LUONG`. ``thumbnail``: chỉ lấy ảnh thumbnail (JPG), không tải video.
     ``bo_qua_da_co``: video đã có file trong ``thu_muc`` (theo «[mã]» ở tên) thì bỏ qua — bấm lại là tải tiếp phần thiếu.
     ``dinh_dang``: tuỳ chọn định dạng yt-dlp thay cho ``chat_luong`` (vd. :data:`DINH_DANG_GHEP`).
+    ``chuan_hoa_am``: đưa âm lượng file vừa tải về mức YouTube (:func:`am_luong.chuan_hoa`, D-43).
     """
     import yt_dlp
 
@@ -391,6 +394,15 @@ def tai_nhieu(
                 raise RuntimeError(
                     "yt-dlp để lại hình và tiếng thành hai file riêng (chưa ghép được)."
                 )
+            ghi_am = ""
+            if chuan_hoa_am and not thumbnail:
+                bao(min((i + 0.97) / n, 1.0), f"{dau}: đang chỉnh âm lượng về mức YouTube...")
+                try:
+                    ghi_am = am_luong.chuan_hoa(xong[0], huy=huy)
+                except am_luong.DaHuyChinhAmLuong as e:
+                    raise DaHuyTaiVideo(str(e)) from e
+                except RuntimeError as e:
+                    ghi_am = f"Chưa chỉnh được âm lượng ({e}) — giữ âm lượng gốc."
             dich = _ten_trong(thu_muc, os.path.basename(xong[0]))
             os.rename(xong[0], dich)
             kq.trang_thai, kq.duong_dan = "xong", dich
@@ -407,6 +419,7 @@ def tai_nhieu(
                     "Tải KHÔNG đăng nhập: mọi cách có đăng nhập bị YouTube từ chối (HTTP 403), bản này tải bằng "
                     f"client «{vo_danh[-1]}» không cookie — chất lượng có thể thấp hơn."
                 )
+            kq.ghi_chu = " ".join(x for x in (kq.ghi_chu, ghi_am) if x)
         except DaHuyTaiVideo:
             kq.trang_thai, kq.ghi_chu = (
                 "bo_qua",

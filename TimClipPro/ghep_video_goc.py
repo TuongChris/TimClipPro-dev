@@ -27,9 +27,10 @@ from datetime import datetime
 from typing import Callable, Optional
 
 import tai_video_goc as tv
+from am_luong import DaHuyChinhAmLuong, chuan_hoa, doc_ffprobe
 from channel import _CoHuyTuHam
 from kiem_thoi_luong import hhmmss
-from process_runner import IM_LANG_FFMPEG_S, TRAN_FFPROBE_S, chay_lenh_media
+from process_runner import IM_LANG_FFMPEG_S, chay_lenh_media
 from ytdlp_chung import CauHinhMang
 
 THU_MUC_PHAN = ".timclip_ghep"
@@ -54,28 +55,6 @@ _KY_TU_CAM = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 def tach_link(van_ban: str) -> list:
     """Mỗi dòng một link, GIỮ thứ tự và link lặp lại (khác :func:`tai_video_goc.tach_link`): lặp = video xuất hiện lặp."""
     return [d.strip().strip('"') for d in str(van_ban or "").splitlines() if d.strip().strip('"')]
-
-
-def doc_ffprobe(path: str) -> dict:
-    """``ffprobe -show_streams -show_format`` dạng dict; không đọc được → ``RuntimeError`` (câu tiếng Việt)."""
-    r = chay_lenh_media(
-        [
-            "ffprobe",
-            "-v",
-            "error",
-            "-show_streams",
-            "-show_format",
-            "-of",
-            "json",
-            path,
-        ],
-        tran_tong_s=TRAN_FFPROBE_S,
-    )
-    if r.returncode != 0 or r.timed_out:
-        raise RuntimeError(
-            f"Không đọc được thông số file «{os.path.basename(path)}» bằng ffprobe."
-        )
-    return json.loads(r.stdout or "{}")
 
 
 def thong_so(path: str) -> dict:
@@ -254,6 +233,7 @@ def ghep(
     cau_hinh_mang: Optional[CauHinhMang] = None,
     *,
     ten_file: str = "",
+    chuan_hoa_am: bool = False,
     progress: Optional[Callable[[float, str], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
     **kw,
@@ -310,6 +290,18 @@ def ghep(
         phan.append((ten, k["url"], duong))
     if huy():
         return that_bai("Đã dừng theo yêu cầu trước khi ghép.")
+    ghi_am = []
+    if chuan_hoa_am:
+        # Từng video riêng (như YouTube), TRƯỚC khi kiểm thông số/nối; video đã ở mức thì giữ nguyên — bấm lại với file lẻ
+        # còn giữ từ lượt trước không nén lại lần nữa.
+        for so, duong in enumerate(dict.fromkeys(d for *_x, d in phan), start=1):
+            bao(0.70, f"Đang chỉnh âm lượng video {so} về mức YouTube...")
+            try:
+                chuan_hoa(duong, huy=huy)
+            except DaHuyChinhAmLuong:
+                return that_bai("Đã dừng theo yêu cầu trong lúc chỉnh âm lượng.")
+            except RuntimeError as e:
+                ghi_am.append(f"Video {so}: chưa chỉnh được âm lượng ({e}).")
 
     bao(0.71, "Đang kiểm thông số các video...")
     try:
@@ -458,7 +450,9 @@ def ghep(
         tieu_de=f"Video ghép {len(phan)} video — {hhmmss(do_dai_ra if do_dai_ra is not None else tong)}",
         chat_luong=f"{t0['do_phan_giai']} {t0['ma_hinh']} {t0['hinh_giay']} hình/giây, "
         + (f"{len(can_chuyen)} video nén lại cho khớp" if can_chuyen else "không nén lại"),
-        ghi_chu=f"Mốc thời gian từng video gốc: {duong_moc}",
+        ghi_chu=f"Mốc thời gian từng video gốc: {duong_moc}"
+        + (" — Âm lượng từng video đã đưa về mức YouTube (-14 LUFS)." if chuan_hoa_am and not ghi_am else "")
+        + "".join(f" — {x}" for x in ghi_am),
     )
     if can_chuyen:
         dong_ghep["ghi_chu"] += " — Đã chuyển cho khớp video 1 (tiếng giữ nguyên): " + ", ".join(

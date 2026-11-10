@@ -352,3 +352,17 @@ def test_doan_ra_khong_tin_duoc_doi_ten_loi_va_giu_video_tron(tmp_path, monkeypa
     assert k["duong_dan"] in k["ghi_chu"]
     assert [f for f in os.listdir(ra) if f.endswith(".mp4")] == [os.path.basename(k["duong_dan"])]
     assert os.listdir(ra / cv.THU_MUC_TAM)  # video trọn giữ lại
+
+
+@can_ffmpeg
+def test_cat_chuan_hoa_am_luong(tmp_path, monkeypatch):
+    """D-43: tiếng nguồn biên độ tối đa (to hơn mức YouTube) → đoạn cắt đưa về ~-14 LUFS."""
+    import re
+
+    _gia_tai(monkeypatch, _tao(tmp_path / "nguon.mp4"))
+    k = cv.tai_doan([URL[0]], str(tmp_path / "ra"), tu_s=1, den_s=7, chuan_hoa_am=True)[0]
+    assert k["trang_thai"] == "xong", k
+    assert "LUFS" in k["ghi_chu"]
+    r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", k["duong_dan"], "-vn", "-af", "ebur128", "-f",
+                        "null", "-"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    assert float(re.findall(r"I:\s+(-?[\d.]+) LUFS", r.stderr)[-1]) == pytest.approx(-14, abs=1.0)

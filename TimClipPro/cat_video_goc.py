@@ -14,9 +14,9 @@ import os
 import re
 from typing import Callable, Optional
 
+import am_luong
 import tai_video_goc as tv
 from channel import _CoHuyTuHam
-from ghep_video_goc import doc_ffprobe
 from kiem_thoi_luong import hhmmss
 from process_runner import IM_LANG_FFMPEG_S, chay_lenh_media
 from ytdlp_chung import CauHinhMang
@@ -61,7 +61,7 @@ def moc_hien(giay: float, cach: str = ":") -> str:
 
 def _do(path: str) -> tuple:
     """(độ dài giây, có luồng hình không — ảnh bìa đính kèm không tính)."""
-    d = doc_ffprobe(path)
+    d = am_luong.doc_ffprobe(path)
     hinh = next(
         (
             s
@@ -143,6 +143,7 @@ def tai_doan(
     tu_s: float,
     den_s: float,
     chat_luong: str = tv.CHAT_LUONG_MAC_DINH,
+    chuan_hoa_am: bool = False,
     progress: Optional[Callable[[float, str], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
     **kw,
@@ -244,11 +245,19 @@ def tai_doan(
             k.update(duong_dan=loi, ghi_chu=f"Không tin được: {ly_do}. File đoạn cắt để ở «{loi}»; video trọn vẫn giữ "
                                              f"ở «{tam}».")
             continue
+        ghi_am = ""
+        if chuan_hoa_am:
+            bao(0.7 + 0.3 * (i + 1) / len(ket_qua), f"Video {i + 1}/{len(ket_qua)}: đang chỉnh âm lượng...")
+            try:
+                ghi_am = " " + am_luong.chuan_hoa(dich, huy=huy)
+            except am_luong.DaHuyChinhAmLuong:
+                ghi_am = " Đã dừng lúc chỉnh âm lượng — đoạn cắt giữ âm lượng gốc."
+            except RuntimeError as e:
+                ghi_am = f" Chưa chỉnh được âm lượng ({e}) — đoạn cắt giữ âm lượng gốc."
         k.update(
             trang_thai="xong",
             duong_dan=dich,
-            ghi_chu=f"Đoạn {doan} ({den_s - tu_s:.3f} s), cắt đúng từng khung "
-            "hình (nén lại đoạn cắt).",
+            ghi_chu=f"Đoạn {doan} ({den_s - tu_s:.3f} s), cắt đúng từng khung hình (nén lại đoạn cắt)." + ghi_am,
         )
         with contextlib.suppress(OSError):
             os.remove(nguon)

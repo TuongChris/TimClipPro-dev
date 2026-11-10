@@ -49,6 +49,9 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 9. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-11-10 — âm lượng về mức YouTube (D-43, nhánh feature/pc2/am-luong-youtube)
+- Video Joe tải về -28,5 LUFS vì YouTube phát bằng «Âm lượng ổn định». Ô tick (sẵn) ở tab Tải + Ghép → `am_luong.chuan_hoa`.
+- Thử 3 phút Joe thật: -28,0 → -14,4 LUFS, đỉnh -0,8 dB, hình trùng MD5, 9,8 s. Ghép: mốc vẫn khớp tiếng thật.
 ### 2026-11-10 — audit phần video mới (nhánh fix/pc2/audit-1011)
 - 11 sửa kèm test đỏ: file đáp án `.moc.csv` bị ghi đè, cắt từ bản cũ khác chất lượng, tải song song mất định dạng thiếu dung
   lượng + gọi YouTube gấp đôi (nay `dashy,duplicate` ghép cặp theo URL), ffprobe hỏng mất kết quả, đoạn cắt lỗi đổi tên `.loi`…
@@ -67,12 +70,4 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 - Một lượt liệt kê nhanh tab Videos → bảng STT/Tiêu đề/Link/Thời lượng, tải CSV (BOM, chặn công thức) và TXT. `tai_video_goc.tieu_de_kenh`.
 - Test: 8 test mới (list_channel giả, AppTest); số nhanh/chậm ở PR. Chưa thử kênh YouTube thật.
 - Audit 09/11 (4 agent, nhánh fix/pc2/audit-0911): 13 sửa (danh sách kênh cụt do 429 coi là đủ, ô xoá kho còn tick, watchlist hỏng → mã 0, hook UTF-16, nút Sheets nhầm việc…); hook mới ĐÃ cài PC2.
-### 2026-11-08 — tải video gốc theo link (D-37, nhánh feature/pc2/tai-video-goc)
-- Tab «⬇️ Tải video gốc»: nhiều link, ô thư mục + «Chọn…», hình + tiếng cao nhất (`bv*+ba/b`, MP4/MKV). Module `tai_video_goc.py`.
-- Test: nhanh và chậm ở PR #32, 17 test mới (yt-dlp giả, AppTest). Gộp `1017142`, DEV cập nhật 08/11 21:08. Người dùng tải thật trên DEV: chạy tốt.
-- Bổ sung (nhánh feature/pc2/tai-video-them): ô «Chất lượng tối đa», tab «🖼️ Tải thumbnail» (JPG), tab «📺 Tải cả kênh» (số
-  video mới nhất, bỏ qua video đã có). Cùng ngày: bỏ Docker `fe397a4`, sửa test chập chờn `80aa554`. PR #33 `ec2091d`, DEV 22:37; người dùng thử thật: ổn.
-- Review + audit 08/11 (nhánh fix/pc2/audit-0811): 13 sửa kèm test đỏ, bỏ SheetsExporter.append −156 dòng; bác 1 (immutable
-  SQLite). 09/11 người dùng chọn: `don_ban_cu` gọi sau ACTIVE, giữ 2 bản + runtime chúng dùng (nhánh fix/pc2/don-ban-cu;
-  review: dọn cả runtime xoá dở, runtime đang chạy để lần sau; nhanh 3539/4/0, chậm 24/24). Tới Stable khi phát hành.
-- Mục cũ hơn (2026-11-07 Codex bước 2 audit 14 + 18; 2026-11-07 Codex review PR #27–#29 D-36; 2026-11-07 đồng bộ nén song song D-35; 2026-11-07 audit số 15, 19, 20; 2026-11-07 kho video dài D-34; 2026-11-07 dựng kho nhường ổ cứng D-33; 2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
+- Mục cũ hơn (2026-11-08 tải video gốc D-37 + review/audit 08/11; 2026-11-07 Codex bước 2 audit 14 + 18; 2026-11-07 Codex review PR #27–#29 D-36; 2026-11-07 đồng bộ nén song song D-35; 2026-11-07 audit số 15, 19, 20; 2026-11-07 kho video dài D-34; 2026-11-07 dựng kho nhường ổ cứng D-33; 2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
