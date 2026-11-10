@@ -53,11 +53,11 @@ _KY_TU_CAM = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 def tach_link(van_ban: str) -> list:
     """Mỗi dòng một link, GIỮ thứ tự và link lặp lại (khác :func:`tai_video_goc.tach_link`): lặp = video xuất hiện lặp."""
-    return [d.strip() for d in str(van_ban or "").splitlines() if d.strip()]
+    return [d.strip().strip('"') for d in str(van_ban or "").splitlines() if d.strip().strip('"')]
 
 
-def thong_so(path: str) -> dict:
-    """Thông số cần trùng để nối + ``do_dai`` (giây, của format — đúng độ dài FFmpeg dùng khi nối)."""
+def doc_ffprobe(path: str) -> dict:
+    """``ffprobe -show_streams -show_format`` dạng dict; không đọc được → ``RuntimeError`` (câu tiếng Việt)."""
     r = chay_lenh_media(
         [
             "ffprobe",
@@ -75,7 +75,12 @@ def thong_so(path: str) -> dict:
         raise RuntimeError(
             f"Không đọc được thông số file «{os.path.basename(path)}» bằng ffprobe."
         )
-    d = json.loads(r.stdout or "{}")
+    return json.loads(r.stdout or "{}")
+
+
+def thong_so(path: str) -> dict:
+    """Thông số cần trùng để nối + ``do_dai`` (giây, của format — đúng độ dài FFmpeg dùng khi nối)."""
+    d = doc_ffprobe(path)
     hinh = next((s for s in d.get("streams", []) if s.get("codec_type") == "video"), {})
     tieng = next(
         (s for s in d.get("streams", []) if s.get("codec_type") == "audio"), {}
@@ -153,6 +158,25 @@ def _chuyen_khop(nguon: str, dich: str, chuan: dict, ts_nguon: dict, *, huy, khi
     elif os.path.exists(dang):
         os.remove(dang)
     return r
+
+
+def _nhip_file(ts: list) -> list:
+    """``-movie_timescale`` cho track chương QuickTime (xem chỗ gọi): tần số tiếng, trừ khi MỘT phần dài tới mức tràn
+    32-bit ở nhịp đó (≈ 13,5 giờ với 44,1 kHz) → 1000 (mốc chương làm tròn 1 ms)."""
+    tan_so = str(ts[0][1]["tan_so_tieng"] or "")
+    if not tan_so.isdigit():
+        return []
+    dai_nhat = max(t["do_dai"] for _, t in ts)
+    return ["-movie_timescale", tan_so if dai_nhat * int(tan_so) < 2**31 else "1000"]
+
+
+def _ten_ra(thu_muc: str, ten: str) -> str:
+    """Đường dẫn ``<tên>.mp4`` mà CẢ ``.mp4`` lẫn ``.moc.csv`` cùng tên đều chưa có — không ghi đè file đáp án cũ của một
+    video đã chuyển đi chỗ khác."""
+    goc, i = ten, 2
+    while any(os.path.exists(os.path.join(thu_muc, goc + duoi)) for duoi in (".mp4", ".moc.csv")):
+        goc, i = f"{ten} ({i})", i + 1
+    return os.path.join(thu_muc, goc + ".mp4")
 
 
 def _nhay_concat(path: str) -> str:
@@ -258,6 +282,7 @@ def ghep(
         "tieu_de": "",
         "chat_luong": "",
         "ghi_chu": "",
+        "la_dong_ghep": True,
     }
     ket_qua.append(dong_ghep)
 
@@ -281,7 +306,7 @@ def ghep(
         if k["trang_thai"] == "loi" or not duong or not os.path.isfile(duong):
             return that_bai("Chưa ghép: có video chưa tải được (xem các dòng ở trên).")
         # Link lặp lại: lượt tải báo «trùng», không trả tiêu đề — dùng tiêu đề của lần đầu.
-        ten = ten_theo_ma.setdefault(ma, k["tieu_de"] or _ten_tu_file(duong))
+        ten = ten_theo_ma.setdefault(ma or k["url"], k["tieu_de"] or _ten_tu_file(duong))
         phan.append((ten, k["url"], duong))
     if huy():
         return that_bai("Đã dừng theo yêu cầu trước khi ghép.")
@@ -349,7 +374,7 @@ def ghep(
         [(ten, link, t["do_dai"]) for (ten, link, _d), (_t, t) in zip(phan, ts)]
     )
     ten = ten_file_ra(ten_file)
-    dich = tv._ten_trong(thu_muc, f"{ten}.mp4")
+    dich = _ten_ra(thu_muc, ten)
     dang_ghi = os.path.join(tam, "dang_ghep.mp4")
     ds_noi, meta = (
         os.path.join(tam, "danh_sach_noi.txt"),
@@ -371,10 +396,9 @@ def ghep(
 
     # Track chương QuickTime đo bằng nhịp của CẢ FILE; không đặt thì FFmpeg 9 lấy BCNN nhịp hình và tiếng (15360 với
     # 44,1 kHz → 11.289.600/giây): chương > ~190 s tràn 32-bit bị bỏ, hết chương thì mất track (cảnh báo «Referenced QT
-    # chapter track not found», trình phát Apple không thấy mốc). Nhịp file = tần số tiếng: chương tới ~13 giờ; nhịp
+    # chapter track not found», trình phát Apple không thấy mốc). Nhịp file = tần số tiếng (:func:`_nhip_file`); nhịp
     # của track hình/tiếng không đổi (đo 09/11).
-    tan_so = str(ts[0][1]["tan_so_tieng"] or "")
-    nhip_chuong = ["-movie_timescale", tan_so] if tan_so.isdigit() else []
+    nhip_chuong = _nhip_file(ts)
     r = chay_lenh_media(
         [
             "ffmpeg",
@@ -423,12 +447,15 @@ def ghep(
     with open(duong_moc, "wb") as f:
         f.write(csv_moc(dong))
 
-    do_dai_ra = thong_so(dich)["do_dai"]
+    try:
+        do_dai_ra = thong_so(dich)["do_dai"]
+    except RuntimeError as e:
+        do_dai_ra, loi_do = None, str(e)
     t0 = ts[0][1]
     dong_ghep.update(
         trang_thai="xong",
         duong_dan=dich,
-        tieu_de=f"Video ghép {len(phan)} video — {hhmmss(do_dai_ra)}",
+        tieu_de=f"Video ghép {len(phan)} video — {hhmmss(do_dai_ra if do_dai_ra is not None else tong)}",
         chat_luong=f"{t0['do_phan_giai']} {t0['ma_hinh']} {t0['hinh_giay']} hình/giây, "
         + (f"{len(can_chuyen)} video nén lại cho khớp" if can_chuyen else "không nén lại"),
         ghi_chu=f"Mốc thời gian từng video gốc: {duong_moc}",
@@ -437,12 +464,20 @@ def ghep(
         dong_ghep["ghi_chu"] += " — Đã chuyển cho khớp video 1 (tiếng giữ nguyên): " + ", ".join(
             f"Video {i + 1} «{phan[i][0]}»" for i in can_chuyen
         )
-    if abs(do_dai_ra - tong) > LECH_DO_DAI_TOI_DA_S:
+    if do_dai_ra is None:
+        dong_ghep["ghi_chu"] += (
+            f" — CẢNH BÁO: không đo lại được độ dài video ghép ({loi_do}); chưa chắc mốc đúng. Giữ các video đã tải ở "
+            f"«{tam}»."
+        )
+    elif abs(do_dai_ra - tong) > LECH_DO_DAI_TOI_DA_S:
         dong_ghep["ghi_chu"] += (
             f" — CẢNH BÁO: video ghép dài {do_dai_ra:.2f} s, tổng các phần {tong:.2f} s; mốc có thể "
             f"lệch. Giữ các video đã tải ở «{tam}»."
         )
     else:
         shutil.rmtree(tam, ignore_errors=True)
+        for k in ket_qua[:-1]:  # file lẻ vừa xoá: đừng để dòng từng link trỏ vào đó
+            if k["trang_thai"] in ("xong", "bo_qua"):
+                k.update(trang_thai="xong", duong_dan="", ghi_chu="Đã nối vào video ghép bên dưới; file lẻ đã xoá.")
     bao(1.0, "Xong.")
     return ket_qua

@@ -174,7 +174,7 @@ def test_doi_client_khi_khong_co_dinh_dang_khong_de_lai_file_do(gia, tmp_path):
 
     def lan_dau_hong(_opts):
         lan["n"] += 1
-        if lan["n"] <= 2:  # client đầu hỏng cả lượt nhiều kết nối lẫn lượt lùi một kết nối
+        if lan["n"] == 1:
             raise DownloadError(
                 "ERROR: [youtube] abcdefghij1: Requested format is not available"
             )
@@ -186,7 +186,7 @@ def test_doi_client_khi_khong_co_dinh_dang_khong_de_lai_file_do(gia, tmp_path):
         o.get("extractor_args", {}).get("youtube", {}).get("player_client")
         for _, o in gia.goi
     ]
-    assert clients == [None, None, ["tv"]]
+    assert clients == [None, ["tv"]]
     assert os.listdir(tmp_path) == ["Tiêu đề abcdefghij1 [abcdefghij1].mkv"]
 
 
@@ -651,37 +651,68 @@ def test_tai_nhieu_ket_noi_song_song_giu_player_client(gia, tmp_path):
     kq = tv.tai_nhieu([URL1], str(tmp_path), player_clients=["tv"])
     assert kq[0]["trang_thai"] == "xong"
     opts = gia.goi[0][1]
-    assert _song_song(opts) == (4, ["dashy"])
+    assert _song_song(opts) == (4, ["dashy", "duplicate"])
     assert opts["extractor_args"]["youtube"]["player_client"] == ["tv"]
 
 
-def test_khong_co_dinh_dang_khi_tai_song_song_thi_lui_mot_ket_noi(gia, tmp_path):
-    """Chế độ khúc bỏ định dạng YouTube không báo dung lượng: hỏng «không có định dạng» → thử lại một kết nối, cùng client."""
+def test_loi_dinh_dang_moi_client_chi_hoi_youtube_mot_lan(gia, tmp_path):
+    """Audit 10/11 mục 3: đường lui một kết nối từng chạy lại CẢ lượt trích xuất với mọi lỗi nhóm định dạng (n challenge,
+    HTTP 400, «No video formats found» của client không nhận cookie) → gấp đôi số lần hỏi YouTube."""
 
-    def hong_khi_song_song(opts):
-        if _song_song(opts)[1]:
-            raise DownloadError(
-                "ERROR: [youtube] abcdefghij1: Requested format is not available"
-            )
+    def hong(_opts):
+        raise DownloadError("ERROR: [youtube] abcdefghij1: Requested format is not available")
 
-    gia.hanh_vi[URL1] = hong_khi_song_song
-    kq = tv.tai_nhieu([URL1], str(tmp_path), player_clients=["tv"])
-    assert kq[0]["trang_thai"] == "xong"
-    assert [_song_song(o) for _, o in gia.goi] == [(4, ["dashy"]), (None, None)]
-    assert gia.goi[1][1]["extractor_args"]["youtube"]["player_client"] == ["tv"]
-    assert os.listdir(tmp_path) == ["Tiêu đề abcdefghij1 [abcdefghij1].mkv"]
-
-
-def test_loi_khac_khi_tai_song_song_khong_lui_mot_ket_noi(gia, tmp_path):
-    def bi_go(_opts):
-        raise DownloadError(
-            "ERROR: [youtube] abcdefghij1: Video unavailable. This video has been removed by the uploader"
-        )
-
-    gia.hanh_vi[URL1] = bi_go
+    gia.hanh_vi[URL1] = hong
     kq = tv.tai_nhieu([URL1], str(tmp_path), player_clients=["tv"])
     assert kq[0]["trang_thai"] == "loi"
-    assert [_song_song(o) for _, o in gia.goi] == [(4, ["dashy"])]
+    assert len(gia.goi) == 1
+
+
+def test_tai_nhieu_boc_bo_chon_dinh_dang_moi_lan_tai(gia, tmp_path, monkeypatch):
+    goi = []
+    monkeypatch.setattr(tv, "dung_ban_khuc", lambda ydl: goi.append(ydl))
+    tv.tai_nhieu([URL1, URL2], str(tmp_path))
+    assert len(goi) == 2
+
+
+def _dd(fid, url, **kw):
+    f = {"format_id": fid, "url": url, "protocol": "https", "ext": "mp4", **kw}
+    if "-dashy" in fid:
+        f.update(protocol="http_dash_segments", fragments=[{"url": url + "&range=0-9"}])
+    return f
+
+
+def test_dung_ban_khuc_chon_tren_ban_thuong_roi_doi_sang_khuc_cung_url():
+    """Audit 10/11 mục 4: chỉ ``formats=dashy`` thì yt-dlp BỎ định dạng không báo dung lượng (vd. 1080p60 «299») — bộ
+    chọn lặng lẽ lấy bản kém hơn. Nay chọn trên danh sách ĐỦ bản thường, rồi đổi sang bản khúc cùng URL nếu có."""
+    hinh = {"vcodec": "avc1.640028", "acodec": "none", "height": 1080}
+    tieng = {"vcodec": "none", "acodec": "mp4a.40.2", "ext": "m4a", "abr": 128}
+    # Thật 10/11: video nhiều ngôn ngữ tiếng → yt-dlp đánh số lại mã trùng («140-11», «140-dashy-11»): ghép cặp theo URL.
+    ds = [
+        # bản khúc đứng TRƯỚC bản thường: yt-dlp coi định dạng đứng sau là tốt hơn — chỉ ghép cặp mới ra bản khúc.
+        _dd("140-dashy-0", "U140bn", filesize=10, language="bn", **tieng),
+        _dd("140-0", "U140bn", filesize=10, language="bn", **tieng),
+        _dd("140-dashy-1", "U140", filesize=10, language="en", language_preference=10, **tieng),
+        _dd("140-1", "U140", filesize=10, language="en", language_preference=10, **tieng),
+        _dd("137-dashy", "U137", filesize=100, fps=30, tbr=4000, **hinh),
+        _dd("137", "U137", filesize=100, fps=30, tbr=4000, **hinh),
+        _dd("299", "U299", fps=60, tbr=6000, **hinh),  # không có dung lượng → không có bản khúc
+    ]
+    ydl = yt_dlp.YoutubeDL({"format": "bv*[vcodec^=avc1][height<=1080]+ba[acodec^=mp4a]", "quiet": True,
+                            "extractor_args": {"youtube": {"formats": ["dashy", "duplicate"]}}})
+    tv.dung_ban_khuc(ydl)
+    kq = ydl._select_formats(ds, ydl.format_selector)
+    assert [f["format_id"] for f in kq[0]["requested_formats"]] == ["299", "140-dashy-1"]
+    assert kq[0]["protocol"] == "https+http_dash_segments"
+    kq = ydl._select_formats([f for f in ds if not f["format_id"].startswith("299")], ydl.format_selector)
+    assert [f["format_id"] for f in kq[0]["requested_formats"]] == ["137-dashy", "140-dashy-1"]
+
+
+def test_dung_ban_khuc_khong_bat_song_song_thi_de_nguyen():
+    ydl = yt_dlp.YoutubeDL({"format": "b", "quiet": True})
+    goc = ydl.format_selector
+    tv.dung_ban_khuc(ydl)
+    assert ydl.format_selector is goc
 
 
 def test_dung_khi_file_part_con_mo_trong_vong_tham_chieu_van_xoa_sach(gia, tmp_path):

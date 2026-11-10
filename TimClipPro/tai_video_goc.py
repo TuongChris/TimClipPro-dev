@@ -26,7 +26,6 @@ from typing import Callable, Optional
 from channel import HAN_DON_TAM_CU_S, ChannelSync, _CoHuyTuHam
 from kiem_thoi_luong import hhmmss
 from truy_cap_youtube import (
-    FORMAT_OR_EXTRACTOR_ERROR,
     PhienYouTube,
     che_bi_mat,
     ma_tu_url,
@@ -37,8 +36,8 @@ from ytdlp_chung import (
     PLAYER_CLIENTS_MAC_DINH,
     BoGhiYtdlp,
     CauHinhMang,
-    bo_tai_song_song,
     chay_kem_duong_lui_cookie,
+    dung_ban_khuc,
     tai_song_song,
     thu_tung_client,
 )
@@ -327,7 +326,7 @@ def tai_nhieu(
         bo_ghi = BoGhiYtdlp(phien)
         vo_danh: list = []  # client không-cookie đã cứu video này sau khi mọi client có cookie bị 403
 
-        def mot_lan(rieng: dict, url=url, tam=tam):
+        def chay(rieng: dict, url=url, tam=tam):
             # Mỗi lần thử (client khác, thử lại khi đứt mạng) bắt đầu từ thư mục rỗng: luồng dở của lần trước có thể
             # là định dạng khác, để lại thì ghép nhầm hoặc thành hai file (xem ChannelSync._tai_thu_tung_client).
             for f in os.listdir(tam):
@@ -335,17 +334,8 @@ def tai_nhieu(
                     os.remove(os.path.join(tam, f))
             phien.dem_yeu_cau("download")
             with yt_dlp.YoutubeDL(rieng) as ydl:
+                dung_ban_khuc(ydl)
                 return ydl.extract_info(url, download=True)
-
-        def chay(rieng: dict, mot_lan=mot_lan):
-            try:
-                return mot_lan(rieng)
-            except yt_dlp.utils.DownloadError as e:
-                mot_ket_noi = bo_tai_song_song(rieng)
-                if mot_ket_noi is None or phan_loai_loi(e).category != FORMAT_OR_EXTRACTOR_ERROR:
-                    raise
-            # Tải song song bỏ định dạng không báo dung lượng (ytdlp_chung.tai_song_song): cùng client, một kết nối.
-            return mot_lan(mot_ket_noi)
 
         def tai_voi(ch: CauHinhMang, tam=tam, hook=hook, chay=chay, bo_ghi=bo_ghi):
             return thu_tung_client(

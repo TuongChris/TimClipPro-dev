@@ -1338,14 +1338,16 @@ if not job["running"] and (job["results"] or job["error"]):
         hien_ket_qua_nguon_chung(job["results"][0])
     elif job["kind"] == "tai_video":
         r = job["results"]
-        _dem = {t: sum(1 for k in r if k["trang_thai"] == t) for t in ("xong", "bo_qua", "loi")}
-        (st.success if not _dem["loi"] else st.warning)(
-            f"Đã tải {_dem['xong']}/{len(r)} — bỏ qua {_dem['bo_qua']}, lỗi {_dem['loi']}.")
+        _r_tai = [k for k in r if not k.get("la_dong_ghep")]  # dòng «🎞️ Video ghép» không phải một video tải
+        _dem = {t: sum(1 for k in _r_tai if k["trang_thai"] == t) for t in ("xong", "bo_qua", "loi")}
+        (st.success if not (_dem["loi"] or any(k["trang_thai"] == "loi" for k in r)) else st.warning)(
+            f"Đã tải {_dem['xong']}/{len(_r_tai)} — bỏ qua {_dem['bo_qua']}, lỗi {_dem['loi']}.")
 
         def _dong_tai(k: dict) -> str:
             if k["trang_thai"] == "xong":
-                return (f"✅ **{thoat_markdown(k['tieu_de'] or k['url'])}** — {thoat_markdown(k['chat_luong'])}  \n"
-                        f"{thoat_markdown(k['duong_dan'])}" + (f"  \n⚠️ {thoat_markdown(k['ghi_chu'])}" if k["ghi_chu"] else ""))
+                return (f"✅ **{thoat_markdown(k['tieu_de'] or k['url'])}** — {thoat_markdown(k['chat_luong'])}"
+                        + (f"  \n{thoat_markdown(k['duong_dan'])}" if k["duong_dan"] else "")
+                        + (f"  \n⚠️ {thoat_markdown(k['ghi_chu'])}" if k["ghi_chu"] else ""))
             return (f"{'⏭️' if k['trang_thai'] == 'bo_qua' else '❌'} {thoat_markdown(k['url'])}  \n"
                     f"{thoat_markdown(k['ghi_chu'])}")
 

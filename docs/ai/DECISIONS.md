@@ -35,6 +35,8 @@ tiếng ở mốc nối lệch 0 ms.
 nên giữ 4 cho đỡ giống máy tự động. Áp cho `tai_video_goc.tai_nhieu` (tab tải video gốc, thumbnail, cả kênh, ghép); đồng bộ
 kênh KHÔNG đổi. Dashy bỏ định dạng không báo dung lượng → «không có định dạng» thì thử lại một kết nối cùng client.
 `thu_tung_client` nay GỘP `player_client` vào `extractor_args` thay vì ghi đè. Dừng giữa chừng: yt-dlp không đóng `.part`
+Sửa 10/11 (audit): `formats=dashy,duplicate` + `dung_ban_khuc` — chọn định dạng trên bản THƯỜNG rồi đổi sang bản khúc
+cùng URL; bỏ đường lui một kết nối (hết mất định dạng thiếu dung lượng, hết gọi YouTube gấp đôi khi lỗi).
 → `gc.collect()` rồi xoá lại thư mục tạm.
 
 ## D-39 Ghép video gốc thành video dài có đáp án (người dùng, 2026-11-09)

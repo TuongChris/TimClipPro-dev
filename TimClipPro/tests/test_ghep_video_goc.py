@@ -83,7 +83,7 @@ def _gia_tai(monkeypatch, nguon, loi=(), lech=""):
         os.makedirs(thu_muc, exist_ok=True)
         ra = []
         for url in links:
-            ma = tv.ma_tu_url(url)
+            ma = tv.ma_tu_url(url) or url.rsplit("/", 1)[-1]  # link không phải YouTube: không có mã 11 ký tự
             dich = os.path.join(thu_muc, f"x [{ma}].mp4")
             if url in loi:
                 ra.append(
@@ -397,3 +397,61 @@ def test_chuong_dai_hon_3_phut_van_con_track_chuong_quicktime(tmp_path, monkeypa
     ra = json.loads(r.stdout)
     assert [s["codec_type"] for s in ra["streams"]] == ["video", "audio", "data"]  # data = track chương QuickTime
     assert [float(c["start_time"]) for c in ra["chapters"]] == pytest.approx([0, 200], abs=0.05)
+
+
+def test_tach_link_bo_dau_nhay():
+    """Audit 10/11 mục 10: dán từ Excel ra «"https://…"» — tab Tải bỏ dấu nháy, tab Ghép thì báo «không phải link»."""
+    assert gv.tach_link(f'"{URL[0]}"\n {URL[1]} ') == [URL[0], URL[1]]
+
+
+def test_nhip_file_chuong_video_rat_dai_dung_1000():
+    """Audit 10/11 mục 9: nhịp file = 44100 thì MỘT chương > 2^31/44100 ≈ 13,5 giờ tràn → mất chương QuickTime."""
+    ts = [("a", {"tan_so_tieng": "44100", "do_dai": 3600.0}), ("b", {"tan_so_tieng": "44100", "do_dai": 50000.0})]
+    assert gv._nhip_file(ts[:1]) == ["-movie_timescale", "44100"]
+    assert gv._nhip_file(ts) == ["-movie_timescale", "1000"]
+    assert gv._nhip_file([("a", {"tan_so_tieng": None, "do_dai": 1.0})]) == []
+
+
+@can_ffmpeg
+def test_ten_ra_khong_de_file_moc_cu_va_dong_link_khong_tro_file_da_xoa(nguon, tmp_path, monkeypatch):
+    """Audit 10/11 mục 1 + 7: tên chỉ kiểm «.mp4» trống rồi GHI ĐÈ «.moc.csv» cũ (đáp án của video đã chuyển đi);
+    sau khi ghép, dòng từng link vẫn trỏ file lẻ trong thư mục tạm vừa xoá."""
+    _gia_tai(monkeypatch, nguon)
+    (tmp_path / "Thu.moc.csv").write_bytes(b"dap an cu")
+    kq = gv.ghep(URL[:2], str(tmp_path), ten_file="Thu")
+    assert kq[-1]["trang_thai"] == "xong", kq[-1]
+    assert os.path.basename(kq[-1]["duong_dan"]) == "Thu (2).mp4"
+    assert (tmp_path / "Thu.moc.csv").read_bytes() == b"dap an cu"
+    assert (tmp_path / "Thu (2).moc.csv").is_file()
+    assert kq[-1]["la_dong_ghep"] is True
+    for k in kq[:-1]:
+        assert k["duong_dan"] == "" and "ghép" in k["ghi_chu"]
+
+
+@can_ffmpeg
+def test_link_khong_phai_youtube_giu_tieu_de_rieng(nguon, tmp_path, monkeypatch):
+    """Audit 10/11 mục 8: link không có mã YouTube → mọi link dùng chung tiêu đề link đầu trong CSV và chương."""
+    vimeo = ["https://vimeo.com/111", "https://vimeo.com/222"]
+    nguon2 = {vimeo[0]: nguon[URL[0]], vimeo[1]: nguon[URL[1]]}
+    _gia_tai(monkeypatch, nguon2)
+    kq = gv.ghep(vimeo, str(tmp_path), ten_file="vm")
+    assert kq[-1]["trang_thai"] == "xong", kq[-1]
+    with open(tmp_path / "vm.moc.csv", encoding="utf-8-sig") as f:
+        assert [d["Tiêu đề"] for d in csv.DictReader(f)] == ["Tập 1: Mở đầu", "Tập 2 = «bí ẩn»; #1"]
+
+
+@can_ffmpeg
+def test_do_lai_video_ghep_hong_khong_mat_ket_qua(nguon, tmp_path, monkeypatch):
+    """Audit 10/11 mục 5: ffprobe hỏng ở lần đo video ghép → lỗi bay ra tác vụ nền, mất hết các dòng kết quả."""
+    _gia_tai(monkeypatch, nguon)
+    goc = gv.thong_so
+
+    def thong_so(path):
+        if gv.THU_MUC_PHAN not in path:
+            raise RuntimeError("Không đọc được file bằng ffprobe.")
+        return goc(path)
+
+    monkeypatch.setattr(gv, "thong_so", thong_so)
+    kq = gv.ghep(URL[:2], str(tmp_path), ten_file="hong")
+    assert kq[-1]["trang_thai"] == "xong" and "không đo lại được" in kq[-1]["ghi_chu"]
+    assert os.path.isdir(tmp_path / gv.THU_MUC_PHAN)  # chưa kiểm được thì giữ file lẻ

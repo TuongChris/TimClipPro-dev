@@ -3,6 +3,11 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-11-07 — Codex bước 2: audit số 14 và 18 (nhánh fix/pc2/audit-14-updater)
+- 14: 10 kiểm tra an toàn của updater có test mới, mỗi test đỏ khi xoá kiểm tra (1 claim sai). Sửa F1–F3: tag trước kênh; health chết không kết quả là
+  tạm thời, cách ly ở lần 3; launcher không mở khi nhật ký đang kích hoạt. Updater chỉ tới máy đã cài khi bootstrap lại.
+- 18: xoá code chết, gộp khoá byte 0 vào `khoa.py`, −144 dòng. 17: không xoá gì. Test khoá chập chờn (2–4/30) nay 30/30.
+- Test @ `b050ee5`: nhanh 3521 = 3517/4/0, chậm 24/24, ruff sạch.
 ### 2026-11-07 — Codex review PR #27–#29 (D-36, nhánh fix/pc2/codex-review-0711)
 - Làm: Codex chạy chỉ-nhận-văn-bản, 6 lượt, 12 phát hiện: 10 đã sửa kèm test đỏ, 1 để lại, 1 bị bác. Lỗi lớn nhất: bổ sung có thể làm tràn mã clip trong kho mà không báo.
 - Lưu ý: video đang đồng bộ chạy bản cũ; DEV chỉ nhận các bản sửa này khi cập nhật. Audit 14, 17, 18 chưa giao Codex.

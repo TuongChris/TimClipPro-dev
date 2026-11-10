@@ -70,6 +70,7 @@ def _gia_tai(monkeypatch, src, chi_tieng=False, loi=()):
         links, thu_muc, cau_hinh_mang=None, *, progress=None, cancel_check=None, **kw
     ):
         goi.update(kw)
+        goi.setdefault("thu_muc", []).append(thu_muc)
         os.makedirs(thu_muc, exist_ok=True)
         ra = []
         for url in links:
@@ -310,3 +311,44 @@ def test_tab_tai_video_co_doan_goi_tai_doan(tmp_path, monkeypatch):
         ([URL[0]], str(tmp_path / "v"), 120.0, 150.5, tv.CHAT_LUONG_MAC_DINH)
     ]
     assert any("Đoạn cắt A" in m.value for m in at.markdown)
+
+
+def test_moc_hien_lam_tron_khong_cut_duoi():
+    """Audit 10/11 mục 11: 59,9996 → phần lẻ làm tròn thành 1 nhưng giây không cộng → «00:00:59,»."""
+    assert cv.moc_hien(59.9996) == "00:01:00"
+    assert cv.moc_hien(59.9996, ".") == "00.01.00"
+
+
+@can_ffmpeg
+def test_chat_luong_khac_khong_cat_tu_video_cu(tmp_path, monkeypatch):
+    """Audit 10/11 mục 2: lượt 720p hỏng để lại video trọn; lượt «Cao nhất» nhận ra theo mã video và cắt từ bản 720p."""
+    goi = _gia_tai(monkeypatch, _tao(tmp_path / "nguon.mp4"))
+    ra = tmp_path / "ra"
+    assert cv.tai_doan([URL[0]], str(ra), tu_s=5, den_s=12, chat_luong="720p")[0]["trang_thai"] == "loi"
+    assert cv.tai_doan([URL[0]], str(ra), tu_s=5, den_s=7, chat_luong="Cao nhất")[0]["trang_thai"] == "xong"
+    assert goi["thu_muc"][0] != goi["thu_muc"][1]
+
+
+@can_ffmpeg
+@pytest.mark.parametrize("hong", ["lech", "ffprobe"])
+def test_doan_ra_khong_tin_duoc_doi_ten_loi_va_giu_video_tron(tmp_path, monkeypatch, hong):
+    """Audit 10/11 mục 5 + 6: đoạn lệch độ dài giữ TÊN ĐẸP (dễ dùng nhầm), ghi chú không nêu file; ffprobe hỏng ở lần đo
+    đoạn ra thì lỗi bay ra tác vụ nền, mất hết dòng kết quả."""
+    _gia_tai(monkeypatch, _tao(tmp_path / "nguon.mp4"))
+    goc = cv._do
+
+    def do(path):
+        if cv.THU_MUC_TAM in path:
+            return goc(path)
+        if hong == "ffprobe":
+            raise RuntimeError("Không đọc được file bằng ffprobe.")
+        return 99.0, True
+
+    monkeypatch.setattr(cv, "_do", do)
+    ra = tmp_path / "ra"
+    k = cv.tai_doan([URL[0]], str(ra), tu_s=2, den_s=4)[0]
+    assert k["trang_thai"] == "loi"
+    assert k["duong_dan"].endswith(".loi.mp4") and os.path.isfile(k["duong_dan"])
+    assert k["duong_dan"] in k["ghi_chu"]
+    assert [f for f in os.listdir(ra) if f.endswith(".mp4")] == [os.path.basename(k["duong_dan"])]
+    assert os.listdir(ra / cv.THU_MUC_TAM)  # video trọn giữ lại

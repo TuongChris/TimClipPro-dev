@@ -10,15 +10,15 @@ cắt ``-c copy`` chỉ dừng được ở khung hình chính, lệch vài giâ
 from __future__ import annotations
 
 import contextlib
-import json
 import os
 import re
 from typing import Callable, Optional
 
 import tai_video_goc as tv
 from channel import _CoHuyTuHam
+from ghep_video_goc import doc_ffprobe
 from kiem_thoi_luong import hhmmss
-from process_runner import IM_LANG_FFMPEG_S, TRAN_FFPROBE_S, chay_lenh_media
+from process_runner import IM_LANG_FFMPEG_S, chay_lenh_media
 from ytdlp_chung import CauHinhMang
 
 THU_MUC_TAM = ".timclip_cat"
@@ -52,6 +52,7 @@ def doc_moc(van_ban: str) -> Optional[float]:
 
 def moc_hien(giay: float, cach: str = ":") -> str:
     """00:01:23 hoặc 00:01:23,5 — giữ phần lẻ của giây (``hhmmss`` bỏ mất); ``cach="."`` cho tên file Windows."""
+    giay = round(giay, 3)  # làm tròn MỘT lần: 59,9996 → 60 (không thành «00:00:59,»)
     phan_le = round(giay % 1, 3)
     return hhmmss(giay).replace(":", cach) + (
         f",{f'{phan_le:.3f}'[2:].rstrip('0')}" if phan_le else ""
@@ -60,24 +61,7 @@ def moc_hien(giay: float, cach: str = ":") -> str:
 
 def _do(path: str) -> tuple:
     """(độ dài giây, có luồng hình không — ảnh bìa đính kèm không tính)."""
-    r = chay_lenh_media(
-        [
-            "ffprobe",
-            "-v",
-            "error",
-            "-show_streams",
-            "-show_format",
-            "-of",
-            "json",
-            path,
-        ],
-        tran_tong_s=TRAN_FFPROBE_S,
-    )
-    if r.returncode != 0 or r.timed_out:
-        raise RuntimeError(
-            f"Không đọc được file «{os.path.basename(path)}» bằng ffprobe."
-        )
-    d = json.loads(r.stdout or "{}")
+    d = doc_ffprobe(path)
     hinh = next(
         (
             s
@@ -170,7 +154,9 @@ def tai_doan(
     bao = progress or (lambda _p, _m: None)
     huy = cancel_check or (lambda: False)
     thu_muc = os.path.abspath(str(thu_muc or "").strip().strip('"'))
-    tam = os.path.join(thu_muc, THU_MUC_TAM)
+    # Một thư mục tạm cho mỗi mức chất lượng: video trọn giữ lại từ lượt trước (nhận ra theo [mã video]) chỉ được dùng
+    # lại khi cùng mức — khác mức thì tải lại, không cắt từ bản 720p cũ khi người dùng chọn «Cao nhất».
+    tam = os.path.join(thu_muc, THU_MUC_TAM, f"cl_{tv.CHAT_LUONG.get(chat_luong)}")
     chi_tieng = tv.CHAT_LUONG.get(chat_luong) == 0
     ket_qua = tv.tai_nhieu(
         list(links),
@@ -245,13 +231,18 @@ def tai_doan(
                 f"FFmpeg cắt lỗi: {(r.stderr or r.ly_do or '').strip()[-300:]}"
             )
             continue
-        dai_ra = _do(dich)[0]
-        if abs(dai_ra - (den_s - tu_s)) > LECH_DO_DAI_TOI_DA_S:
-            k.update(
-                duong_dan=dich,
-                ghi_chu=f"Đoạn cắt dài {dai_ra:.3f} s, yêu cầu {den_s - tu_s:.3f} s — không tin "
-                f"được; video trọn vẫn giữ ở «{tam}».",
-            )
+        try:
+            dai_ra = _do(dich)[0]
+            ly_do = (f"đoạn cắt dài {dai_ra:.3f} s, yêu cầu {den_s - tu_s:.3f} s"
+                     if abs(dai_ra - (den_s - tu_s)) > LECH_DO_DAI_TOI_DA_S else "")
+        except RuntimeError as e:
+            ly_do = f"không đo lại được đoạn cắt ({e})"
+        if ly_do:
+            # Đổi tên «.loi»: tên đẹp «… (00.01.23-00.02.45).mp4» dễ bị dùng nhầm như một đoạn cắt đúng.
+            loi = tv._ten_trong(thu_muc, os.path.splitext(os.path.basename(dich))[0] + ".loi" + os.path.splitext(dich)[1])
+            os.replace(dich, loi)
+            k.update(duong_dan=loi, ghi_chu=f"Không tin được: {ly_do}. File đoạn cắt để ở «{loi}»; video trọn vẫn giữ "
+                                             f"ở «{tam}».")
             continue
         k.update(
             trang_thai="xong",
@@ -261,7 +252,8 @@ def tai_doan(
         )
         with contextlib.suppress(OSError):
             os.remove(nguon)
-    with contextlib.suppress(OSError):
-        os.rmdir(tam)  # chỉ xoá khi rỗng: còn video giữ lại để bấm lại thì để nguyên
+    for d in (tam, os.path.dirname(tam)):  # chỉ xoá khi rỗng: còn video giữ lại để bấm lại thì để nguyên
+        with contextlib.suppress(OSError):
+            os.rmdir(d)
     bao(1.0, "Xong.")
     return ket_qua

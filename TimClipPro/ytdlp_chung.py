@@ -1196,31 +1196,47 @@ class NhoClientTotNhat:
 # Tải theo link (D-40): yt-dlp mặc định tải luồng YouTube bằng MỘT kết nối, khúc 10 MB lần lượt — tốc độ một kết nối
 # lúc nhanh lúc chậm (đo 09/11 cùng video 334 MB: 0,78–25 MB/s). ``formats=dashy`` tách luồng thành khúc 10 MB (ghép lại
 # giống từng byte) để ``concurrent_fragment_downloads`` tải nhiều khúc cùng lúc (~78 MB/s, 4 hay 8 kết nối như nhau — giữ 4
-# cho đỡ giống máy tự động). Đánh đổi: dashy BỎ định dạng YouTube không báo dung lượng → nơi gọi lùi một kết nối khi
-# «không có định dạng» (:func:`bo_tai_song_song`).
+# cho đỡ giống máy tự động). Chỉ ``dashy`` thì yt-dlp BỎ định dạng YouTube không báo dung lượng → bộ chọn lặng lẽ lấy
+# bản kém hơn (audit 10/11). Thêm ``duplicate``: giữ CẢ bản thường lẫn bản khúc (cùng URL; mã «<id>-dashy», video nhiều
+# ngôn ngữ tiếng thì yt-dlp đánh số lại thành «140-11» / «140-dashy-11» — đo thật 10/11, nên ghép cặp theo URL, không
+# theo mã); :func:`dung_ban_khuc` chọn trên bản thường rồi mới đổi sang bản khúc.
 SO_KET_NOI_TAI = 4
+_KHUC = "http_dash_segments"
 
 
 def tai_song_song() -> dict:
-    """Tuỳ chọn yt-dlp tải một video bằng :data:`SO_KET_NOI_TAI` kết nối song song — gộp vào :meth:`CauHinhMang.tuy_chon`.
-    ``player_client`` của :func:`thu_tung_client` được GỘP vào ``extractor_args`` này, không ghi đè."""
-    return {"concurrent_fragment_downloads": SO_KET_NOI_TAI, "extractor_args": {"youtube": {"formats": ["dashy"]}}}
+    """Tuỳ chọn yt-dlp tải một video bằng :data:`SO_KET_NOI_TAI` kết nối song song — gộp vào :meth:`CauHinhMang.tuy_chon`
+    và bật :func:`dung_ban_khuc` trên đối tượng ``YoutubeDL``. ``player_client`` của :func:`thu_tung_client` được GỘP vào
+    ``extractor_args`` này, không ghi đè."""
+    return {"concurrent_fragment_downloads": SO_KET_NOI_TAI,
+            "extractor_args": {"youtube": {"formats": ["dashy", "duplicate"]}}}
 
 
-def bo_tai_song_song(opts: dict) -> Optional[dict]:
-    """Bản ``opts`` tải MỘT kết nối như cũ (giữ player client, cookie...); ``None`` khi ``opts`` không bật song song."""
-    ea = opts.get("extractor_args") or {}
-    yt = ea.get("youtube") or {}
-    if "dashy" not in (yt.get("formats") or []):
-        return None
-    yt = {k: v for k, v in yt.items() if k != "formats"}
-    ea = {k: v for k, v in ea.items() if k != "youtube"}
-    if yt:
-        ea["youtube"] = yt
-    ra = {k: v for k, v in opts.items() if k not in ("concurrent_fragment_downloads", "extractor_args")}
-    if ea:
-        ra["extractor_args"] = ea
-    return ra
+def dung_ban_khuc(ydl: Any) -> None:
+    """Bọc bộ chọn định dạng của ``ydl``: chọn trên các bản THƯỜNG (đúng như tải một kết nối — không mất định dạng thiếu
+    dung lượng), rồi đổi từng định dạng được chọn sang bản khúc CÙNG URL (cùng client) nếu có. Không bật
+    :func:`tai_song_song` hoặc ``ydl`` không có bộ chọn (thumbnail, test giả) → để nguyên."""
+    from yt_dlp.utils import determine_protocol
+
+    chon_goc = getattr(ydl, "format_selector", None)
+    yt = ((getattr(ydl, "params", None) or {}).get("extractor_args") or {}).get("youtube") or {}
+    if not callable(chon_goc) or "dashy" not in (yt.get("formats") or []):
+        return
+
+    def chon(ctx: dict):
+        url_thuong = {f.get("url") for f in ctx["formats"] if f.get("protocol") != _KHUC}
+        # Bản khúc = khúc có URL trùng một bản thường; định dạng DASH từ manifest (URL manifest riêng) vẫn là bản thường.
+        khuc = {f.get("url"): f for f in ctx["formats"] if f.get("protocol") == _KHUC and f.get("url") in url_thuong}
+        la_khuc = {id(f) for f in khuc.values()}
+        thuong = [f for f in ctx["formats"] if id(f) not in la_khuc]
+        for kq in chon_goc({**ctx, "formats": thuong}):
+            phan = [khuc.get(f.get("url"), f) for f in kq.get("requested_formats", (kq,))]
+            if "requested_formats" in kq:
+                yield {**kq, "requested_formats": phan, "protocol": "+".join(map(determine_protocol, phan))}
+            else:
+                yield phan[0]
+
+    ydl.format_selector = chon
 
 
 def _gan_client(opts: dict, client: str) -> dict:
