@@ -52,7 +52,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 ### 2026-11-10 — audit phần video mới (nhánh fix/pc2/audit-1011)
 - 11 sửa kèm test đỏ: file đáp án `.moc.csv` bị ghi đè, cắt từ bản cũ khác chất lượng, tải song song mất định dạng thiếu dung
   lượng + gọi YouTube gấp đôi (nay `dashy,duplicate` ghép cặp theo URL), ffprobe hỏng mất kết quả, đoạn cắt lỗi đổi tên `.loi`…
-- Thử thật (video Marvin): chọn `137-dashy` + `140-dashy-11` (video nhiều ngôn ngữ tiếng đánh số lại mã), tải 23,4 s, Dừng sạch.
+- Thử thật (video Marvin): chọn `137-dashy` + `140-dashy-11` (video nhiều ngôn ngữ tiếng đánh số lại mã), tải 23,4 s, Dừng sạch. Gộp `07ae606`, DEV 10/11 08:52.
 ### 2026-11-09 — tải theo link chỉ lấy một đoạn (D-42, nhánh feature/pc2/cat-doan-video)
 - Ô «Từ»/«Đến» ở tab «⬇️ Tải video gốc»: tải trọn rồi cắt nén lại, đúng từng khung hình; xoá video trọn khi đoạn ra đúng độ dài.
 - Thử file thật 1080p: đoạn 30 s cắt 4,7 s, 899 khung = lý thuyết, tiếng đầu đoạn lệch 0 ms. Gộp `473ac5d`, DEV 23:44. Chưa thử YouTube thật.
