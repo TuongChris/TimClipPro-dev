@@ -548,3 +548,18 @@ def test_cong_cho_qua_file_chi_co_ban_ghi_httponly(tmp_path):
     p = _ghi(tmp_path, _DAU + _dong(".youtube.com", "SID", httponly=True))
     y.kiem_tra_file_cookie(p)
     assert y.CauHinhMang(cookiefile=p).tuy_chon()["cookiefile"].duong_dan == p
+
+
+def test_che_bi_mat_an_ten_mat_khau_trong_url_proxy():
+    """Audit tổng 11/11: file proxy Twitch (D-44) là ``http://tên:mật_khẩu@máy:cổng``; câu lỗi mạng chép nguyên URL
+    proxy vào log/ghi chú."""
+    tho = ("Unable to connect to proxy socks5://alice:PassCanary781@proxy.example:1080 (timed out); "
+           "ProxyError http://nguoidung:Mk9x@127.0.0.1:8080")
+    s = t.che_bi_mat(tho)
+    assert "PassCanary781" not in s and "alice" not in s and "Mk9x" not in s
+    assert "socks5://[đã ẩn]@proxy.example:1080" in s and "http://[đã ẩn]@127.0.0.1:8080" in s
+    assert t.che_bi_mat(s) == s
+    nhay = t.che_bi_mat("http://alice:O'Brien781@proxy.example:8080")
+    assert nhay == "http://[đã ẩn]@proxy.example:8080" and t.che_bi_mat(nhay) == nhay
+    giu = "https://www.youtube.com/@kenh_cua_toi http://127.0.0.1:8502/x?v=abcdefghijk"
+    assert t.che_bi_mat(giu) == giu

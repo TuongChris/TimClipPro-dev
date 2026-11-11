@@ -22,9 +22,11 @@ z=0000000000000000000000000000000000000000
 quet_noi_dung() {
   # Thông điệp commit (WR-8 — cũng lên repo công khai) in sau «commit <SHA>», mỗi dòng thụt 1 khoảng trắng (%w(0,1,1):
   # không ngắt dòng) nên không dòng nào của nó giống «commit <SHA>», «+++ » hay «+» của diff.
-  git -c core.quotePath=false log -p --cc --text --no-color --no-ext-diff \
+  # git log hỏng giữa chừng (đối tượng thiếu/hỏng) thì awk chỉ thấy phần đã in: dòng gác «LOI_QUET_GIT» (không dòng nào
+  # của log trông như thế — thông điệp thụt 1 khoảng, diff có tiền tố) biến lỗi quét thành CHẶN thay vì «sạch».
+  { git -c core.quotePath=false log -p --cc --text --no-color --no-ext-diff \
       --format='commit %H%n%w(0,1,1)%B' "$2" --not \
-      --remotes="$1" -- </dev/null | tr -d '\000' | awk -v duyet=" ${TIMCLIP_MAU_GIA_DA_DUYET:-} " '
+      --remotes="$1" -- </dev/null || echo LOI_QUET_GIT; } | tr -d '\000' | awk -v duyet=" ${TIMCLIP_MAU_GIA_DA_DUYET:-} " '
     function bao(loai,   k) {
       k = c SUBSEP f SUBSEP loai
       if (k in da_bao) return
@@ -66,9 +68,11 @@ quet_noi_dung() {
                t ~ /\.key\.json$/ || t ~ /\.json\.key$/ || t ~ /-[0-9a-f]{12}\.json$/) bao("file khoá Google")
       else if (t ~ /cookie[^\/]*\.txt$/) bao("file cookie")
       else if (t ~ /(^|\/)installation\.json$/) bao("file định danh cài đặt")
+      else if (t ~ /(^|\/)\.env(\.[^\/]*)?$/ && t !~ /\.env\.(example|sample|template)$/) bao("file .env")
       else if (t ~ /(^|\/)(secrets|credentials)\//) bao("thư mục bí mật")
     }
     BEGIN { gsub(/[ \t,;]+/, " ", duyet); duyet = tolower(duyet) }
+    /^LOI_QUET_GIT$/ { ct = ""; c = "(quét)"; f = "(git log)"; bao("không đọc được nội dung để quét"); next }
     # SHA ĐỦ 40 ký tự: dán thẳng vào TIMCLIP_MAU_GIA_DA_DUYET. Sau nó là thông điệp, tới dòng KHÔNG thụt đầu tiên.
     /^commit [0-9a-f]+$/ { ct = $2; c = $2; f = "(thông điệp commit)"; tdiep = 1; dau = 1; next }
     tdiep && /^ / { kiem(substr($0, 2)); next }
@@ -118,8 +122,8 @@ while read lref lsha rref rsha; do
       echo "pre-push: CHẶN tạo mới integration/current" >&2
       exit 1
     fi
-    if ! git for-each-ref --format='%(objectname)' "refs/remotes/$remote/feature/" "refs/remotes/$remote/fix/" \
-        | grep -qx "$lsha"; then
+    if ! git for-each-ref --format='%(objectname)' "refs/remotes/$remote/feature/pc1/" "refs/remotes/$remote/feature/pc2/" \
+        "refs/remotes/$remote/fix/pc1/" "refs/remotes/$remote/fix/pc2/" | grep -qx "$lsha"; then
       echo "pre-push: CHẶN integration/current -> $lsha: không phải ĐẦU một nhánh việc trên $remote (đẩy nhánh + PR trước, rồi git fetch $remote)" >&2
       exit 1
     fi

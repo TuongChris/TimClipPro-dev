@@ -58,6 +58,7 @@ MAU_BI_MAT = (
     ("khoá API Google", re.compile(rb"AIza[0-9A-Za-z_\-]{35}")),
     ("token OAuth Google", re.compile(rb"ya29\.[0-9A-Za-z_\-]{20,}")),
     ("token GitHub", re.compile(rb"gh[pousr]_[0-9A-Za-z]{30,}")),
+    ("token GitHub", re.compile(rb"github_pat_[0-9A-Za-z_]{22,}")),
     ("cookie phiên YouTube", re.compile(rb"__Secure-[0-9A-Z]*PSID[A-Z]*\s*[=\t]\s*[^\s;]{10,}")),
     ("khoá riêng PEM", re.compile(rb"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")),
     ("service account Google", re.compile(rb'["\']type["\']\s*:\s*["\']service' + rb'_account["\']')),

@@ -59,7 +59,10 @@ THONG_SO = {
     "ma_tieng": "mã hoá tiếng",
     "tan_so_tieng": "tần số tiếng",
     "kenh_tieng": "số kênh tiếng",
+    # Đo thật (audit tổng 11/11): hai MP4 H.264 2 giây nhịp 1/15360 và 1/90000 nối -c copy ra file 23 giây, mốc hình nhảy.
+    "nhip_hinh": "nhịp thời gian hình",
 }
+_THONG_SO_TIENG = ("ma_tieng", "tan_so_tieng", "kenh_tieng")
 # File ra lệch tổng độ dài các phần quá mức này thì không tin mốc — giữ file tạm, báo.
 LECH_DO_DAI_TOI_DA_S = 1.0
 _DU_PHONG_O_DIA = 10**9
@@ -133,16 +136,21 @@ def _chuyen_khop(nguon: str, dich: str, chuan: dict, ts_nguon: dict, *, huy, khi
     profile, kiểu điểm ảnh, nhịp thời gian); tiếng chép nguyên nếu đã khớp, không thì đổi sang AAC đúng tần số/số kênh.
     Ghi ra file tạm rồi mới đổi tên — bị Dừng/lỗi không để lại bản dở bị tưởng là xong. Trả kết quả ``chay_lenh_media``."""
     w, h = chuan["do_phan_giai"].split("x")
-    tieng_khop = all(ts_nguon[k] == chuan[k] for k in ("ma_tieng", "tan_so_tieng", "kenh_tieng"))
+    tieng_khop = all(ts_nguon[k] == chuan[k] for k in _THONG_SO_TIENG)
+    # Hình chỉ lệch nhịp thời gian: chép nguyên hình, muxer đổi nhịp — vài giây thay vì nén lại cả video.
+    chi_lech_nhip = all(ts_nguon[k] == chuan[k] for k in THONG_SO if k not in (*_THONG_SO_TIENG, "nhip_hinh"))
     dang = dich + ".dang.mp4"
-    lenh = [
-        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", nguon, "-map", "0:v:0", "-map", "0:a:0",
-        "-vf", f"fps={chuan['hinh_giay']},scale={w}:{h}:force_original_aspect_ratio=decrease,"
-        f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1",
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", chuan["pix_fmt"],
-    ]
-    if chuan["profile"] in _PROFILE_X264:
-        lenh += ["-profile:v", _PROFILE_X264[chuan["profile"]]]
+    lenh = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", nguon, "-map", "0:v:0", "-map", "0:a:0"]
+    if chi_lech_nhip:
+        lenh += ["-c:v", "copy"]
+    else:
+        lenh += [
+            "-vf", f"fps={chuan['hinh_giay']},scale={w}:{h}:force_original_aspect_ratio=decrease,"
+            f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", chuan["pix_fmt"],
+        ]
+        if chuan["profile"] in _PROFILE_X264:
+            lenh += ["-profile:v", _PROFILE_X264[chuan["profile"]]]
     if chuan.get("nhip_hinh"):
         lenh += ["-video_track_timescale", str(chuan["nhip_hinh"])]
     lenh += (["-c:a", "copy"] if tieng_khop else

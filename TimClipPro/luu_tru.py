@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import threading
 import time
 import uuid
@@ -325,13 +326,20 @@ def doc_json_an_toan(
             if tu_phuc_hoi and os.path.isfile(file_bak):
                 try:
                     du_lieu_bak = _doc_json(file_bak)
+                except (OSError, MemoryError) as loi_tam:
+                    # Bản sao còn nguyên, chỉ đang bị khoá (diệt virus, tiến trình khác): rơi xuống nhánh «cả hai hỏng»
+                    # là đổi tên file chính đi — lần đọc sau trả MẶC ĐỊNH dù .bak cứu được (soát bản sửa 11/11).
+                    raise LoiDuLieu(f"Tạm thời không đọc được bản sao {file_bak} ({type(loi_tam).__name__}); "
+                                    "file giữ nguyên, hãy thử lại.") from loi_tam
                 except Exception:
                     pass
                 else:
-                    # Giữ lại bản hỏng để còn điều tra, rồi mới phục hồi từ bản sao.
+                    # Giữ lại bản hỏng để còn điều tra, rồi mới phục hồi từ bản sao. CHÉP chứ không đổi tên: ghi bản
+                    # phục hồi lỗi/bị ngắt thì file chính (hỏng) vẫn còn → lần đọc sau phục hồi lại từ .bak, không trả
+                    # «mặc định» như thể chưa từng có dữ liệu (audit tổng 11/11).
                     file_hong = _duong_dan_file_hong(duong_dan)
                     try:
-                        os.replace(duong_dan, file_hong)
+                        shutil.copy2(duong_dan, file_hong)
                     except OSError:
                         file_hong = ""
                     ghi_json_an_toan(

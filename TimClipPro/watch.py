@@ -150,12 +150,12 @@ _MAU_ID_YOUTUBE = (
         re.IGNORECASE,
     ),
     re.compile(
-        r"^https?://(?:www\.)?youtube\.com/watch\?"
+        r"^https?://(?:www\.|m\.)?youtube\.com/watch\?"
         r"(?:[^&#]+&)*v=([A-Za-z0-9_-]{6,20})(?=$|[&#])",
         re.IGNORECASE,
     ),
     re.compile(
-        r"^https?://(?:www\.)?youtube\.com/shorts/"
+        r"^https?://(?:www\.|m\.)?youtube\.com/(?:shorts|live)/"
         r"([A-Za-z0-9_-]{6,20})(?=$|[?&#/])",
         re.IGNORECASE,
     ),
@@ -258,6 +258,7 @@ def lay_ung_vien(
     lister: Optional[Callable] = None,
     gioi_han_kenh: int = 50,
     phien: Optional[PhienYouTube] = None,
+    dung: Optional[Callable[[], bool]] = None,
 ) -> tuple:
     """
     Mở rộng watchlist thành danh sách ứng viên.
@@ -266,14 +267,14 @@ def lay_ung_vien(
     danh_sach_loi: list[str], mỗi phần tử là một dòng mô tả lỗi.
 
     ``phien``: phiên YouTube của lượt Watch — liệt kê một kênh bị chặn/429 thì không hỏi tiếp
-    các kênh còn lại.
+    các kênh còn lại. ``dung()`` đúng (người dùng bấm Dừng) → không liệt kê thêm kênh nào.
     """
     if lister is None:
         lister = ChannelSync.list_channel
 
     ung_vien = []
     loi = []
-    bo_qua_kenh = 0
+    bo_qua_kenh = bo_qua_vi_dung = 0
     for muc in wl.muc:
         if not muc.bat:
             continue
@@ -295,6 +296,9 @@ def lay_ung_vien(
             if phien is not None and phien.mo:
                 bo_qua_kenh += 1
                 continue
+            if dung is not None and dung():
+                bo_qua_vi_dung += 1
+                continue
             try:
                 video_trong_kenh = lister(muc.url, gioi_han_kenh)
             except Exception as e:  # noqa: BLE001
@@ -312,6 +316,8 @@ def lay_ung_vien(
 
     if bo_qua_kenh:
         loi.append(f"Chưa liệt kê {bo_qua_kenh} kênh: {phien.thong_bao_dung()}")
+    if bo_qua_vi_dung:
+        loi.append(f"Đã dừng theo yêu cầu khi đang liệt kê kênh; chưa liệt kê {bo_qua_vi_dung} kênh.")
     return ung_vien, loi
 
 
@@ -666,7 +672,8 @@ def _thuc_hien_giam_sat(
         y_dinh = replace(y_dinh, lo_id=uuid.uuid4().hex)
         bao_cao.dich_gui = y_dinh.dich.nhan
 
-    ung_vien, loi = lay_ung_vien(wl, lister=lister, phien=phien)
+    ung_vien, loi = lay_ung_vien(wl, lister=lister, phien=phien,
+                                 dung=(lambda: bool(dung_lai.can_dung())) if dung_lai is not None else None)
     bao_cao.loi.extend(loi)
     # Lịch sử chỉ tính video đã kiểm XONG với đúng kho này (audit TCP-07).
     da_quet = set() if quet_lai else id_da_quet(engine)

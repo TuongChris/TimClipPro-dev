@@ -36,6 +36,8 @@ import psutil
 # Nhịp soi cây process. Bằng đúng chu kỳ vòng lặp cũ lúc subprocess im lặng, nên
 # vẫn bắt được tiến trình FFmpeg tồn tại rất ngắn.
 CHU_KY_SOI_CON_S = 0.2
+# Số dòng chờ giữa luồng đọc ống và vòng rút (test hạ xuống để tái hiện hàng đợi đầy).
+HANG_DOI_DONG = 256
 
 
 # =====================================================================
@@ -328,7 +330,9 @@ def run_observed_process(
     """Chạy process mà không block trên ``readline`` khi stdout im lặng."""
     started = time.monotonic()
     last_output = started
-    output: queue.Queue[str | None] = queue.Queue(maxsize=256)
+    output: queue.Queue[str | None] = queue.Queue(maxsize=HANG_DOI_DONG)
+    # Bên đọc chỉ bỏ dở khi bên rút đã THÔI rút (huỷ/lỗi/hết lượt) — tiến trình con đã thoát chưa có nghĩa ống đã cạn.
+    thoi_rut = threading.Event()
     tail: deque[str] = deque(maxlen=max(1, tail_lines))
     cancelled = False
     timed_out = False
@@ -361,7 +365,9 @@ def run_observed_process(
                         output.put(value, timeout=0.2)
                         break
                     except queue.Full:
-                        if process.poll() is not None:
+                        # Trước đây: con đã thoát + hàng đợi đầy 0,2 giây (bên rút chậm một nhịp) là BỎ phần còn lại
+                        # của ống — mất các dòng cuối, kể cả thông báo lỗi (audit tổng 11/11).
+                        if thoi_rut.is_set():
                             return
         finally:
             with contextlib.suppress(queue.Full):
@@ -401,7 +407,7 @@ def run_observed_process(
                 line = output.get(timeout=0.2)
             except queue.Empty:
                 line = ""
-            for _ in range(512):
+            for lan in range(512):
                 if line is None:
                     eof = True
                 elif line:
@@ -410,6 +416,8 @@ def run_observed_process(
                         tail.append(line)
                     if on_line:
                         on_line(line)
+                if lan == 511:
+                    break  # dòng kế để vòng sau rút — rút ra rồi mới hết lượt là MẤT dòng đó (audit tổng 11/11)
                 try:
                     line = output.get_nowait()
                 except queue.Empty:
@@ -497,6 +505,7 @@ def run_observed_process(
         nhom.ket_thuc()
         raise
     finally:
+        thoi_rut.set()
         # Gốc đã thoát nhưng job còn process = cháu mồ côi (worker, FFmpeg). Chúng
         # thuộc về job này nên phải dừng ở đây, không được để sống tiếp giữ file.
         mo_coi = nhom.so_process_con_song()

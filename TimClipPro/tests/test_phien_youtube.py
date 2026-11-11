@@ -379,3 +379,20 @@ def test_tuy_chon_theo_thao_tac_lay_ngan_sach_noi_bo_tu_mot_bang():
     meta = ch.tuy_chon("metadata", noplaylist=True)
     assert meta["noplaylist"] is True and "extractor_retries" in meta
     assert "retries" not in y.CauHinhMang().tuy_chon(), "gọi kiểu cũ không đổi"
+
+
+def test_cho_thu_lai_xong_ma_cau_dao_da_mo_thi_khong_goi_tiep():
+    """Audit tổng 11/11: đồng bộ kênh chạy 2 luồng dùng CHUNG một phiên. Luồng A đang chờ thử lại lỗi mạng thì luồng B
+    gặp bot-check, mở cầu dao — hết lúc chờ, A không được gửi thêm request vào đúng bức tường đó."""
+    p = None
+
+    def cho(giay, ev=None):
+        p.ghi_loi(RuntimeError(BOT))  # thao tác khác của cùng phiên mở cầu dao trong lúc chờ
+        return False
+
+    p = t.PhienYouTube(ham_cho=cho)
+    ham, goi = _ham(TAM, "xong")
+    with pytest.raises(t.LoiTruyCapYouTube) as ei:
+        p.chay("metadata", ham)
+    assert ei.value.that_bai.category == t.BLOCKED_BY_BREAKER
+    assert len(goi) == 1

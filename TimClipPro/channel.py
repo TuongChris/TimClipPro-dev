@@ -1740,7 +1740,9 @@ class ChannelSync:
                 if co_tham_chieu:
                     # Chưa có tham chiếu bên ngoài thì file chưa được kiểm đủ: không ghi số
                     # đo của nó thành metadata để khỏi bị dùng làm "tham chiếu" về sau.
-                    if not _so_duong(muc.get("duration_media")) and do_dai:
+                    # File đã ĐỔI so với dấu cũ (thay bản cụt bằng bản đủ mà chưa kịp ghi metadata): số đo cũ là của file
+                    # khác — resolver ưu tiên `duration_media` nên phải lấy số đo mới (audit tổng 11/11).
+                    if do_dai and (not _so_duong(muc.get("duration_media")) or muc.get("xac_nhan_tep") != xac_nhan):
                         muc["duration_media"] = round(float(do_dai), 3)
                     muc["xac_nhan_tep"] = xac_nhan
                 # Chỉ đếm mục THẬT SỰ đổi: file không có tham chiếu bị kiểm lại mỗi lượt mà
@@ -1878,10 +1880,11 @@ class ChannelSync:
         Dùng khi: tải bị đứt giữa chừng, archive mất/hỏng, hoặc file bị xoá thủ công.
         An toàn tuyệt đối — chỉ ghi lại file text, không đụng vào file audio.
         """
-        tren_dia = self.quet_id_tren_dia()
         # Tên tạm DUY NHẤT + khoá thư mục: hai process sửa archive cùng lúc không còn
         # dùng chung một file `.tmp` (cùng kiểu lỗi với audit TCP-03).
         with khoa_json(self.archive):
+            # Chụp đĩa TRONG khoá: chụp trước thì video một lượt đồng bộ khác vừa đặt + ghi sổ bị xoá khỏi sổ (audit tổng 11/11).
+            tren_dia = self.quet_id_tren_dia()
             cu = self.done_ids()
             file_tam = f"{self.archive}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp"
             try:

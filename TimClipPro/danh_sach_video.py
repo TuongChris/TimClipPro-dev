@@ -256,8 +256,11 @@ def _duyet_file(thu_muc: str, ten_kho: str) -> tuple[list[str], int]:
     # Thư mục làm việc của đồng bộ kênh (bản đang nén, file hỏng đã cách ly) không phải
     # clip của kho — giống `liet_ke_media(..., bo_thu_muc_lam_viec=True)` khi tạo vân tay.
     bo_qua = {THU_MUC_TAM.lower(), THU_MUC_HONG.lower()}
+    def nem(e: OSError) -> None:
+        raise e  # `os.walk` mặc định NUỐT lỗi thư mục con → bảng thiếu clip mà vẫn «thành công» (audit tổng 11/11)
+
     try:
-        for goc, thu_muc_con, ten_files in os.walk(thu_muc):
+        for goc, thu_muc_con, ten_files in os.walk(thu_muc, onerror=nem):
             thu_muc_con[:] = [d for d in thu_muc_con if d.lower() not in bo_qua]
             for f in ten_files:
                 thap = f.lower()

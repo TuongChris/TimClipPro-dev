@@ -157,7 +157,8 @@ def ly_do_noi_dung_nhay_cam(du_lieu: bytes) -> str:
 
     Chỉ trả TÊN LOẠI, không bao giờ trả đoạn nội dung khớp.
     """
-    van_ban = du_lieu[:GIOI_HAN_QUET_NOI_DUNG].decode("utf-8", errors="replace")
+    # UTF-16 (PowerShell 5.1 `>`/Out-File) xen byte 0 giữa mọi ký tự → mẫu không khớp; bỏ đi như hook pre-push.
+    van_ban = du_lieu[:GIOI_HAN_QUET_NOI_DUNG].replace(b"\x00", b"").decode("utf-8", errors="replace")
     for ten, mau in MAU_NOI_DUNG_NHAY_CAM:
         if mau.search(van_ban):
             return ten

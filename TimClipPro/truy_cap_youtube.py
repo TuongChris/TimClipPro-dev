@@ -455,6 +455,9 @@ _RE_COOKIE_BANG = re.compile(r"\b(" + _TEN_COOKIE_DANG_NHAP + r")(\s*=\s*)" + _K
                              + r"([^\s;,'\"]+)")
 _RE_COOKIE_CACH = re.compile(r"\b(" + _TEN_COOKIE_DANG_NHAP + r")(\s+)" + _KHONG_LAI
                              + r"([A-Za-z0-9_\-./+=%]{8,})")
+# Tên:mật khẩu trong URL (`http://tên:mật_khẩu@máy:cổng` — file proxy Twitch D-44, proxy SOCKS): câu lỗi mạng của yt-dlp có
+# thể chép nguyên URL proxy. Giữ scheme + máy để chẩn đoán, che phần tên:mật khẩu (audit tổng 11/11).
+_RE_URL_MAT_KHAU = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)" + _KHONG_LAI + r"[^\s/@:'\"<>]+:[^\s/@\"<>]*@")
 
 
 def che_bi_mat(van_ban: Any) -> str:
@@ -473,6 +476,7 @@ def che_bi_mat(van_ban: Any) -> str:
     s = _RE_DONG_COOKIE_DAU_CACH.sub("[đã ẩn: dòng cookie]", s)
     s = _RE_HEADER.sub(lambda m: m.group(1) + ": " + AN, s)
     s = _RE_BEARER.sub(lambda m: m.group(1) + m.group(2) + AN, s)
+    s = _RE_URL_MAT_KHAU.sub(lambda m: m.group(1) + AN + "@", s)
     s = _RE_QUERY.sub(lambda m: m.group(1) + AN, s)
     s = _RE_KHOA_GIA_TRI.sub(lambda m: m.group(1) + m.group(2) + AN, s)
     s = _RE_COOKIE_BANG.sub(lambda m: m.group(1) + m.group(2) + AN, s)
@@ -1143,6 +1147,9 @@ class PhienYouTube:
                                 "attempt=%d wait_s=%.1f", thao_tac, video_id, f.category, lan, cho)
                     if self._cho(cho, cancel_event):
                         raise (loi_huy or DaHuyTruyCap)() from None
+                    # Thao tác khác của CÙNG phiên (đồng bộ kênh chạy 2 luồng) có thể đã mở cầu dao trong lúc chờ: hỏi lại
+                    # trước request kế, không gửi thêm vào đúng bức tường đó (audit tổng 11/11).
+                    self.kiem_truoc(thao_tac, video_id)
                     continue
                 self._ghi_that_bai(f)
                 loi = LoiTruyCapYouTube(f)

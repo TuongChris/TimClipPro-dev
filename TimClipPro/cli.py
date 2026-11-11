@@ -121,8 +121,8 @@ def _lenh_dich_va_gui(a) -> None:
     print(f"===> Lượt này đã gửi {tt[outbox.SENT] - da_gui_truoc} việc. Hàng đợi còn: chờ {cho}, "
           f"bị chặn {tt[outbox.BLOCKED_CONFIG] + tt[outbox.BLOCKED_REPORT]}, "
           f"không rõ {tt[outbox.UNKNOWN]}.")
-    if tt[outbox.BLOCKED_CONFIG] or tt[outbox.UNKNOWN]:
-        print("     Còn việc CẦN XỬ LÝ (bị chặn vì cấu hình / không rõ đã gửi) — xem mục «📤 Gửi Google "
+    if tt[outbox.BLOCKED_CONFIG] or tt[outbox.BLOCKED_REPORT] or tt[outbox.UNKNOWN]:
+        print("     Còn việc CẦN XỬ LÝ (bị chặn vì cấu hình / báo cáo lỗi / không rõ đã gửi) — xem mục «📤 Gửi Google "
               "Sheets» trong ứng dụng; tool không tự gửi lại việc không rõ.")
         raise SystemExit(1)
     raise SystemExit(0)

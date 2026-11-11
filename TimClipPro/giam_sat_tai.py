@@ -227,6 +227,15 @@ class GiamSatTai:
             return 0
         return tong
 
+    @staticmethod
+    def _bao(ham: Callable, *tham_so: object) -> None:
+        """Gọi callback hiển thị. Lỗi của nó chỉ ghi log: ném ra thì mỗi nhịp dừng TRƯỚC bước kiểm Dừng/đứng hình
+        và ffmpeg không bao giờ bị giết (audit tổng 11/11)."""
+        try:
+            ham(*tham_so)
+        except Exception:  # noqa: BLE001
+            LOGGER.exception("event=download.monitor_callback_failed")
+
     def tick(self, bay_gio: float) -> None:
         """Một chu kỳ giám sát (tách ra để test gọi trực tiếp, không cần luồng)."""
         so = doc_tien_do_ffmpeg(self.file_tien_do) if self.file_tien_do else {}
@@ -254,10 +263,10 @@ class GiamSatTai:
                 self.audio_cuoi = max(self.audio_cuoi, audio)
             self.luc_tien_trien = bay_gio
             if self.khi_so_lieu is not None:
-                self.khi_so_lieu({"byte_dau_ra": int(self.byte_cuoi),
-                                  "audio_da_nhan_s": audio, "toc_do_x": so.get("toc_do_x")})
+                self._bao(self.khi_so_lieu, {"byte_dau_ra": int(self.byte_cuoi),
+                                             "audio_da_nhan_s": audio, "toc_do_x": so.get("toc_do_x")})
         elif ffmpeg and self.khi_nhip is not None:
-            self.khi_nhip()
+            self._bao(self.khi_nhip)
         if not ffmpeg:
             return
         if self.cancel_event is not None and self.cancel_event.is_set():

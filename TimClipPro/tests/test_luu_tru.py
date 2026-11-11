@@ -235,3 +235,43 @@ def test_thieu_ram_khi_doc_khong_bi_coi_la_file_hong(tmp_path, monkeypatch):
     with pytest.raises(LoiDuLieu, match="file giữ nguyên"):
         doc_json_an_toan(str(path))
     assert not list(tmp_path.glob("*.hong.*"))
+
+
+def test_phuc_hoi_bi_ngat_giua_chung_lan_doc_sau_van_lay_ban_sao(tmp_path, monkeypatch):
+    """Audit tổng 11/11: phục hồi từ .bak từng ĐỔI TÊN file chính hỏng đi rồi mới ghi bản phục hồi — ghi lỗi (đầy đĩa,
+    tắt máy) thì lần đọc sau thấy «chưa có file» và trả MẶC ĐỊNH: khos.json trông như mất hết kho, lần lưu sau đè luôn."""
+    path = tmp_path / "du_lieu.json"
+    ghi_json_an_toan(str(path), {"lan": 1})
+    ghi_json_an_toan(str(path), {"lan": 2})
+    path.write_text("{hỏng", encoding="utf-8")
+    ghi_that = luu_tru.ghi_json_an_toan
+
+    def ghi_hong(*a, **k):
+        raise OSError("đĩa đầy")
+
+    monkeypatch.setattr(luu_tru, "ghi_json_an_toan", ghi_hong)
+    with pytest.raises(OSError):
+        doc_json_an_toan(str(path), {"mac_dinh": True})
+    monkeypatch.setattr(luu_tru, "ghi_json_an_toan", ghi_that)
+    assert doc_json_an_toan(str(path), {"mac_dinh": True}) == {"lan": 1}
+
+
+def test_ban_sao_tam_thoi_khong_doc_duoc_thi_giu_nguyen_file_chinh(tmp_path, monkeypatch):
+    """Soát bản sửa 11/11 (Codex): file chính hỏng, .bak đang bị khoá (diệt virus) → nhánh «cả hai hỏng» đổi tên file
+    chính đi; mở khoá xong, lần đọc sau vẫn trả MẶC ĐỊNH."""
+    path = tmp_path / "du_lieu.json"
+    ghi_json_an_toan(str(path), {"lan": 1})
+    ghi_json_an_toan(str(path), {"lan": 2})
+    path.write_text("{hỏng", encoding="utf-8")
+    doc_that = luu_tru._doc_json
+
+    def doc(duong):
+        if str(duong).endswith(".bak"):
+            raise PermissionError(13, "file đang bị khoá", str(duong))
+        return doc_that(duong)
+
+    monkeypatch.setattr(luu_tru, "_doc_json", doc)
+    with pytest.raises(LoiDuLieu):
+        doc_json_an_toan(str(path), {"mac_dinh": True})
+    monkeypatch.setattr(luu_tru, "_doc_json", doc_that)
+    assert doc_json_an_toan(str(path), {"mac_dinh": True}) == {"lan": 1}

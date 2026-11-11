@@ -397,23 +397,23 @@ def _ve_ho_so(eng) -> None:
             ten_moi = st.text_input("Đổi tên", value=d.ten, key=f"hs_ten_moi_{d.id}")
             c1, c2, c3, c4 = st.columns(4)
             with c1:
-                if st.button("Lưu tên (revision mới)", key="hs_doi_ten") and ten_moi != d.ten:
+                if st.button("Lưu tên (revision mới)", key=f"hs_doi_ten_{d.id}") and ten_moi != d.ten:
                     if _thu(sd.sua_dich, db, d.id, ten=ten_moi):
                         st.rerun()
             with c2:
                 if d.trang_thai == sd.TT_HOAT_DONG:
-                    if st.button("⏸ Tạm dừng gửi", key="hs_tam_dung"):
+                    if st.button("⏸ Tạm dừng gửi", key=f"hs_tam_dung_{d.id}"):
                         if _thu(sd.doi_trang_thai, db, d.id, sd.TT_TAM_DUNG):
                             st.rerun()
-                elif st.button("▶ Bật lại", key="hs_bat"):
+                elif st.button("▶ Bật lại", key=f"hs_bat_{d.id}"):
                     if _thu(sd.doi_trang_thai, db, d.id, sd.TT_HOAT_DONG):
                         st.rerun()
             with c3:
-                if d.trang_thai != sd.TT_LUU_TRU and st.button("🗄 Lưu trữ", key="hs_luu_tru"):
+                if d.trang_thai != sd.TT_LUU_TRU and st.button("🗄 Lưu trữ", key=f"hs_luu_tru_{d.id}"):
                     if _thu(sd.doi_trang_thai, db, d.id, sd.TT_LUU_TRU):
                         st.rerun()
             with c4:
-                if st.button("🗑 Xoá (chỉ khi chưa có việc gửi)", key="hs_xoa"):
+                if st.button("🗑 Xoá (chỉ khi chưa có việc gửi)", key=f"hs_xoa_{d.id}"):
                     if _thu(sd.xoa_dich, db, d.id):
                         st.rerun()
             st.caption("Sửa = revision MỚI: lượt quét đang chạy và việc đã xếp hàng vẫn gửi theo đích cũ đã "
@@ -427,14 +427,14 @@ def _ve_ho_so(eng) -> None:
                         index=khoa_ds.index(d.xac_thuc_ref) if d.xac_thuc_ref in khoa_ds else 0,
                         key=f"hs_khoa_moi_{d.id}")
                 with k2:
-                    if st.button("Lưu khoá (revision mới)", key="hs_luu_khoa") and khoa_moi != d.xac_thuc_ref:
+                    if st.button("Lưu khoá (revision mới)", key=f"hs_luu_khoa_{d.id}") and khoa_moi != d.xac_thuc_ref:
                         if _thu(sd.sua_dich, db, d.id, xac_thuc_ref=khoa_moi):
                             st.rerun()
             link_moi = st.text_input("Link Google Sheet mới (để trống = giữ bảng/tab hiện tại)",
                                      key=f"hs_link_moi_{d.id}")
             tab_moi = st.text_input("Tên tab (đối chiếu ở lần gửi đầu của revision mới)",
                                     value=d.worksheet_ten, key=f"hs_tab_moi_{d.id}")
-            if st.button("Lưu link/tab (revision mới)", key="hs_luu_dich"):
+            if st.button("Lưu link/tab (revision mới)", key=f"hs_luu_dich_{d.id}"):
                 try:
                     sid, gid = (sd.phan_tich_link(link_moi) if link_moi.strip()
                                 else (d.spreadsheet_id, d.worksheet_id))
@@ -444,7 +444,7 @@ def _ve_ho_so(eng) -> None:
                     if _thu(sd.sua_dich, db, d.id, spreadsheet_id=sid, worksheet_id=gid,
                             worksheet_ten=tab_moi.strip()):
                         st.rerun()
-            if st.button("🔎 Kiểm cấu hình (chỉ đọc — có gọi Google)", key="hs_kiem"):
+            if st.button("🔎 Kiểm cấu hình (chỉ đọc — có gọi Google)", key=f"hs_kiem_{d.id}"):
                 if d.trang_thai == sd.TT_LUU_TRU:
                     st.warning("Hồ sơ đã lưu trữ.")
                 else:

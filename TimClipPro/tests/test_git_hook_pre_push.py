@@ -118,3 +118,48 @@ def test_chan_tao_moi_integration_current(may, tmp_path):
     r = _git(may, "-c", f"core.hooksPath={os.path.join(may, '.git', 'hooks')}", "push", "rong",
              "HEAD:refs/heads/integration/current", ok=False)
     assert r.returncode != 0 and "CHẶN tạo mới integration/current" in r.stdout + r.stderr
+
+
+def test_integration_chi_theo_dau_nhanh_viec_dung_quy_uoc(may, tmp_path):
+    """Audit tổng 11/11: đầu của nhánh NGOÀI quy ước (feature/thu-nghiem — chính hook không cho đẩy) từng được tính là
+    «đầu một nhánh việc» khi fast-forward integration/current."""
+    rong = str(tmp_path / "hooks_rong")
+    os.makedirs(rong)
+    _git(may, "switch", "-q", "-c", "thu")
+    dau = _commit(may, "x.txt")
+    _git(may, "-c", f"core.hooksPath={rong}", "push", "-q", "private", f"{dau}:refs/heads/feature/thu-nghiem")
+    _git(may, "fetch", "-q", "private")
+    rc, o = _day(may, f"{dau}:refs/heads/integration/current")
+    assert rc != 0 and "không phải ĐẦU một nhánh việc" in o
+
+
+@pytest.mark.parametrize("ten, chan", [(".env", True), ("cau_hinh/.env.production", True), (".env.example", False)])
+def test_chan_file_env(may, ten, chan):
+    """Audit tổng 11/11: repo CÔNG KHAI — file .env lỡ ``git add -f`` (mật khẩu dạng TEN=gia_tri, không mẫu nào bắt)."""
+    _git(may, "switch", "-q", "-c", "feature/pc2/env")
+    duong = os.path.join(may, *ten.split("/"))
+    os.makedirs(os.path.dirname(duong), exist_ok=True)
+    with open(duong, "w", encoding="utf-8") as f:
+        f.write("TEN=gia-tri\n")
+    _git(may, "add", "-f", ten)
+    _git(may, "commit", "-q", "-m", "env")
+    rc, o = _day(may, "feature/pc2/env:feature/pc2/env")
+    if chan:
+        assert rc != 0 and "file .env" in o, o
+    else:
+        assert rc == 0, o
+
+
+def test_quet_noi_dung_loi_thi_chan_khong_coi_la_sach(may):
+    """Audit tổng 11/11: ``git log -p`` hỏng giữa chừng (đối tượng thiếu/hỏng) → awk chỉ thấy phần đã in, hook coi là
+    «sạch» và cho đẩy."""
+    import stat
+
+    _git(may, "switch", "-q", "-c", "feature/pc2/thieu")
+    _commit(may, "mat_blob_rieng.txt")
+    blob = _git(may, "rev-parse", "HEAD:mat_blob_rieng.txt").stdout.strip()
+    duong = os.path.join(may, ".git", "objects", blob[:2], blob[2:])
+    os.chmod(duong, stat.S_IWRITE)
+    os.remove(duong)
+    rc, o = _day(may, "feature/pc2/thieu:feature/pc2/thieu")
+    assert rc != 0 and "không đọc được nội dung để quét" in o, o

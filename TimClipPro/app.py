@@ -1846,7 +1846,8 @@ with tab1:
         with n2:
             st.write("")
             st.write("")
-            if st.button("Tạo kho", width="stretch", disabled=not ten_moi):
+            # Tạo kho = chuyển kho đang dùng của Engine này; tác vụ đang chạy (vá metadata) đọc kho từ đó (audit tổng 11/11).
+            if st.button("Tạo kho", width="stretch", disabled=not ten_moi or job["running"]):
                 try:
                     eng.add_kho(ten_moi)
                     st.rerun()

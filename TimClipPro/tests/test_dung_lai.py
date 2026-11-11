@@ -98,12 +98,10 @@ def test_dung_giua_chung_van_xuat_ket_qua(engine, monkeypatch, tmp_path):
     da_xuat = []
 
     class DungSauVideoDau:
-        def __init__(self):
-            self.so_lan = 0
-
-        def can_dung(self):
-            self.so_lan += 1
-            return self.so_lan >= 2
+        @staticmethod
+        def can_dung():
+            # Theo việc đã làm, không theo số lần hỏi: Watch hỏi Dừng cả lúc liệt kê kênh (audit tổng 11/11).
+            return len(da_quet) >= 1
 
     monkeypatch.setattr(engine, "list_jobs", lambda limit: [])
     monkeypatch.setattr(
@@ -409,3 +407,27 @@ def test_cli_watch_dung_gui_luc_dang_nap_engine_van_dung_luot(tmp_path, monkeypa
     cli.main()
 
     assert thay["can_dung"] is True
+
+
+def test_dung_luc_liet_ke_kenh_khong_hoi_cac_kenh_con_lai(engine, monkeypatch):
+    """Audit tổng 11/11: Dừng từng chỉ được hỏi ở vòng quét — Watch liệt kê HẾT các kênh còn lại (mỗi kênh vài giây
+    tới vài chục giây mạng) rồi mới dừng."""
+    da_liet_ke = []
+    yeu_cau = threading.Event()
+
+    class DungKhiDaBam:
+        @staticmethod
+        def can_dung():
+            return yeu_cau.is_set()
+
+    def lister(url, limit):
+        da_liet_ke.append(url)
+        yeu_cau.set()  # bấm Dừng trong lúc đang liệt kê kênh đầu
+        return [SimpleNamespace(id="x1", title="Video", url="u1")]
+
+    monkeypatch.setattr(engine, "list_jobs", lambda limit: [])
+    monkeypatch.setattr(engine, "scan_youtube", lambda *a, **k: pytest.fail("Không được quét"))
+    bao_cao = chay_giam_sat(engine, WatchList(muc=[MucTheoDoi("kenh", f"kenh-{i}") for i in range(3)]),
+                            lister=lister, dung_lai=DungKhiDaBam())
+    assert da_liet_ke == ["kenh-0"]
+    assert bao_cao.quet_moi == 0

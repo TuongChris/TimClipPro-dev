@@ -432,7 +432,8 @@ def doc_anh_chup_da_luu(chinh_sach: Any, du_lieu: Any) -> "BaoCaoV2 | LoiBaoCaoV
             ten = re.sub(r"[^A-Za-z0-9_.]", "", str(loi.get("ngoai_le") or ""))[:80]
             return LoiBaoCaoV2(LOI_TAO, ngoai_le=ten)
         return LoiBaoCaoV2(LOI_HONG)
-    if not _TRUONG_ANH_CHUP <= d.keys():
+    if not _TRUONG_ANH_CHUP <= d.keys() or not isinstance(d.get("doan"), list):
+        # «doan»: null → bộ rỗng = báo «không tìm thấy» cho một lượt có kết quả (audit tổng 11/11).
         return LoiBaoCaoV2(LOI_HONG)
     try:
         return BaoCaoV2.from_dict(d)

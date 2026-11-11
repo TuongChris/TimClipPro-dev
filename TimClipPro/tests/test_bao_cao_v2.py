@@ -390,3 +390,13 @@ def test_so_thuc_ket_qua_khong_bi_lam_tron_trong_anh_chup():
     d = bc.doan[0]
     assert d.start_s == 915.5 and d.vung_khop_s == 971.0
     assert math.isclose(d.clip_offset_s, 55.5) and d.hashes == 20000
+
+
+def test_anh_chup_doan_null_la_hong_khong_phai_khong_tim_thay():
+    """Audit tổng 11/11: «doan»: null (ảnh chụp hỏng) từng thành bộ rỗng → báo «không tìm thấy clip nào» cho một lượt
+    CÓ kết quả. Ảnh chụp hỏng phải là ``LoiBaoCaoV2(LOI_HONG)`` (P1-02)."""
+    d = _bc().to_dict()
+    assert d["doan"]  # tiền đề: ảnh chụp có kết quả
+    d["doan"] = None
+    lai = v2.doc_anh_chup_da_luu(v2.CHINH_SACH_V2, json.dumps(d, ensure_ascii=False))
+    assert isinstance(lai, v2.LoiBaoCaoV2) and lai.loai == v2.LOI_HONG

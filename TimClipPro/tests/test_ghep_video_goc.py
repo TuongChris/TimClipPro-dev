@@ -289,6 +289,7 @@ def test_cac_cho_lech_bao_tung_thong_so():
         "tan_so_tieng": "44100",
         "kenh_tieng": 2,
         "do_dai": 10.0,
+        "nhip_hinh": 15360,
     }
     b = {**a, "hinh_giay": "60/1", "do_dai": 3.0}
     assert gv.cac_cho_lech([("A", a), ("B", dict(a)), ("C", b)]) == [
@@ -556,3 +557,34 @@ def test_ban_chinh_am_con_tu_luot_hong_truoc_khong_bi_dung_nham(nguon, tmp_path,
     assert kq[-1]["trang_thai"] == "xong", kq[-1]
     for giay, hz in ((0.1, 440), (2.1, 880)):
         assert _tan_so_tai(kq[-1]["duong_dan"], giay) == pytest.approx(hz, abs=25), giay
+
+
+def _tao_nhip(path, nhip, tan_so):
+    """Video H.264/AAC 2 giây, CÙNG mọi thông số, chỉ khác nhịp thời gian hình (``-video_track_timescale``)."""
+    subprocess.run(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i",
+         "testsrc=size=320x240:rate=30:duration=2", "-f", "lavfi", "-i",
+         f"sine=frequency={tan_so}:sample_rate=44100:duration=2", "-c:v", "libx264", "-preset", "ultrafast",
+         "-g", "30", "-pix_fmt", "yuv420p", "-c:a", "aac", "-ac", "2", "-shortest",
+         "-video_track_timescale", str(nhip), str(path)],
+        check=True,
+    )
+    return str(path)
+
+
+@can_ffmpeg
+@pytest.mark.parametrize("nhip_1, nhip_2", [(15360, 90000), (90000, 15360)])
+def test_hai_file_lech_nhip_thoi_gian_van_ghep_dung(tmp_path, nhip_1, nhip_2):
+    """Audit tổng 11/11 (đo thật): hai MP4 H.264 giống mọi thông số trừ nhịp thời gian (1/15360 và 1/90000 — video
+    điện thoại với video tải từ YouTube) nối -c copy ra file 23 giây, hoặc hình dồn vào 2 giây mà độ dài file vẫn
+    đúng 4 giây (không cảnh báo)."""
+    a = _tao_nhip(tmp_path / "a.mp4", nhip_1, 440)
+    b = _tao_nhip(tmp_path / "b.mp4", nhip_2, 1320)
+    kq = gv.ghep([a, b], str(tmp_path / "ra"), ten_file="nhip")
+    assert kq[-1]["trang_thai"] == "xong", kq[-1]
+    ra = kq[-1]["duong_dan"]
+    d = gv.doc_ffprobe(ra)
+    hinh = next(s for s in d["streams"] if s["codec_type"] == "video")
+    assert float(d["format"]["duration"]) == pytest.approx(4.0, abs=0.2)
+    assert float(hinh["duration"]) == pytest.approx(4.0, abs=0.2)
+    assert _tan_so_tai(ra, 3.0) == pytest.approx(1320, abs=25)

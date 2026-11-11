@@ -977,8 +977,15 @@ def liet_ke_media(thumuc: str, bo_thu_muc_lam_viec: bool = False) -> list:
     """
     bo_qua = ({channel.THU_MUC_TAM.lower(), channel.THU_MUC_HONG.lower()}
               if bo_thu_muc_lam_viec else set())
+
+    def loi_duyet(e: OSError) -> None:
+        # Tạo vân tay: `os.walk` mặc định lặng lẽ bỏ thư mục con không đọc được → «Tạo lại kho» coi clip trong đó là
+        # đã rời nguồn và XOÁ vân tay của chúng (audit tổng 11/11). Dừng, nói rõ thư mục nào.
+        raise RuntimeError(f"Không đọc được thư mục «{e.filename}» ({e.strerror}) — dừng để kho vân tay không "
+                           "thiếu clip. Kiểm tra quyền/ổ đĩa rồi chạy lại.") from e
+
     ds = []
-    for goc, cac_tm, files in os.walk(thumuc):
+    for goc, cac_tm, files in os.walk(thumuc, onerror=loi_duyet if bo_thu_muc_lam_viec else None):
         cac_tm[:] = [d for d in cac_tm if d.lower() not in bo_qua]
         for f in files:
             if os.path.splitext(f)[1].lower() in MEDIA_EXTS:
