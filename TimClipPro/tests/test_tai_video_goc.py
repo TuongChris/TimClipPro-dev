@@ -365,6 +365,12 @@ def test_tab_thumbnail_va_ca_kenh_goi_dung_ham(tmp_path, monkeypatch):
     at.selectbox(key="cl_kenh").select("720p").run()
     at.button(key="bat_dau_tai_kenh").click().run()
     cho_xong()
+    # Thumbnail cả kênh (11/11): mặc định 0 = cả kênh.
+    next(t for t in at.text_input if t.label == "Link kênh YouTube cần lấy thumbnail").input(
+        "https://www.youtube.com/@KenhAnh"
+    ).run()
+    at.button(key="bat_dau_tai_anh_kenh").click().run()
+    cho_xong()
     assert goi == [
         ("nhieu", ([URL1], thu_muc), {"thumbnail": True}),
         (
@@ -372,6 +378,7 @@ def test_tab_thumbnail_va_ca_kenh_goi_dung_ham(tmp_path, monkeypatch):
             ("https://www.youtube.com/@Kenh", thu_muc),
             {"gioi_han": 30, "chat_luong": "720p"},
         ),
+        ("kenh", ("https://www.youtube.com/@KenhAnh", thu_muc), {"thumbnail": True, "gioi_han": None}),
     ]
 
 
@@ -830,3 +837,30 @@ def test_twitch_da_co_trong_thu_muc_thi_bo_qua(gia, tmp_path):
 def test_twitch_lap_lai_trong_luot_tai_mot_lan(gia, tmp_path):
     kq = tv.tai_nhieu([TWITCH, TWITCH.replace("www.", "")], str(tmp_path))
     assert [k["trang_thai"] for k in kq] == ["xong", "bo_qua"] and len(gia.goi) == 1
+
+
+
+# ---- thumbnail cả kênh (11/11)
+def test_ma_da_co_anh_tach_rieng_video(tmp_path):
+    (tmp_path / "A [abcdefghij1].jpg").write_bytes(b"a")
+    (tmp_path / "B [abcdefghij2].mp4").write_bytes(b"v")
+    (tmp_path / "C [abcdefghij3].webp").write_bytes(b"w")  # ảnh gốc chưa đổi sang jpg: chưa tính
+    assert tv.ma_da_co(str(tmp_path), anh=True) == {"abcdefghij1"}
+    assert tv.ma_da_co(str(tmp_path)) == {"abcdefghij2"}
+
+
+def test_thumbnail_ca_kenh_bam_lai_lay_tiep_phan_thieu(gia, tmp_path, monkeypatch):
+    """Kênh lớn bị YouTube chặn giữa chừng: bấm lại chỉ lấy ảnh còn thiếu; có VIDEO trùng mã không có nghĩa là có ảnh."""
+    import channel
+
+    def liet_ke(url, limit=None, **kw):
+        return [channel.VideoInfo(id=m, title=m, upload_date="", duration=0.0, url=f"https://www.youtube.com/watch?v={m}")
+                for m in ("abcdefghij1", "abcdefghij2", "abcdefghij3")]
+
+    monkeypatch.setattr(channel.ChannelSync, "list_channel", staticmethod(liet_ke))
+    (tmp_path / "Cũ [abcdefghij1].jpg").write_bytes(b"cu")
+    (tmp_path / "Video [abcdefghij2].mp4").write_bytes(b"video")
+    kq = tv.tai_kenh("https://www.youtube.com/@Kenh", str(tmp_path), thumbnail=True)
+    assert [k["trang_thai"] for k in kq] == ["bo_qua", "xong", "xong"]
+    assert all(k["duong_dan"].endswith(".jpg") for k in kq[1:])
+    assert all(o.get("writethumbnail") for _u, o in gia.goi) and len(gia.goi) == 2

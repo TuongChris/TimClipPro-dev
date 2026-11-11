@@ -1539,6 +1539,19 @@ with tab_anh:
     if st.button(f"🖼️ Tải {len(_ds_anh)} thumbnail" if _ds_anh else "🖼️ Tải thumbnail", type="primary",
                  disabled=not (_ds_anh and _thu_muc_anh) or _chua_tai_duoc(), key="bat_dau_tai_anh"):
         _bat_dau_tai(tai_video_goc.tai_nhieu, _ds_anh, _thu_muc_anh, thumbnail=True)
+    st.divider()
+    st.markdown("**Hoặc lấy thumbnail của cả kênh**")
+    url_kenh_anh = st.text_input("Link kênh YouTube cần lấy thumbnail", key="kenh_anh",
+                                 placeholder="https://www.youtube.com/@TenKenh")
+    _so_kenh_anh = st.number_input("Số thumbnail mới nhất (0 = cả kênh)", min_value=0, value=0, step=10,
+                                   key="so_kenh_anh")
+    st.caption("Lấy thumbnail các video ở tab Videos của kênh (không lấy Shorts/Live), lưu vào thư mục ở trên — mỗi video "
+               "khoảng 2–4 giây (kênh 1.000 video ~1 giờ). Ảnh đã có trong thư mục (theo [mã video]) được bỏ qua: "
+               "YouTube chặn giữa chừng thì bấm lại sau là lấy tiếp phần còn thiếu.")
+    if st.button("🖼️ Tải thumbnail của kênh", type="primary", key="bat_dau_tai_anh_kenh",
+                 disabled=not (url_kenh_anh.strip() and _thu_muc_anh) or _chua_tai_duoc()):
+        _bat_dau_tai(tai_video_goc.tai_kenh, url_kenh_anh.strip(), _thu_muc_anh, gioi_han=int(_so_kenh_anh) or None,
+                     thumbnail=True)
 
 with tab_kenh:
     st.subheader("Tải video gốc của cả kênh")

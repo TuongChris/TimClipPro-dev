@@ -118,9 +118,9 @@ def ma_link(url: str) -> str:
     return "v" + video if video.isdigit() else ""
 
 
-def ma_da_co(thu_muc: str, chi_tieng: bool = False) -> set:
-    """Mã video đã có file trong ``thu_muc``: video = «[mã].đuôi», chỉ-tiếng = «[mã].audio.đuôi» (ảnh không tính).
-    Hai loại tách riêng: có bản chỉ-tiếng không có nghĩa là đã có video, và ngược lại."""
+def ma_da_co(thu_muc: str, chi_tieng: bool = False, anh: bool = False) -> set:
+    """Mã video đã có file trong ``thu_muc``: video = «[mã].đuôi», chỉ-tiếng = «[mã].audio.đuôi», ``anh`` = thumbnail
+    «[mã].jpg». Các loại tách riêng: có video không có nghĩa là đã có thumbnail, và ngược lại."""
     mau = _RE_MA_CUOI_TEN_TIENG if chi_tieng else _RE_MA_CUOI_TEN
     try:
         ten = os.listdir(thu_muc)
@@ -129,7 +129,7 @@ def ma_da_co(thu_muc: str, chi_tieng: bool = False) -> set:
     return {
         m.group(1)
         for t in ten
-        if not t.lower().endswith(_DUOI_ANH) and (m := mau.search(t))
+        if (t.lower().endswith(".jpg") if anh else not t.lower().endswith(_DUOI_ANH)) and (m := mau.search(t))
     }
 
 
@@ -275,7 +275,7 @@ def tai_nhieu(
     n = len(links)
     ket_qua: list = []
     chi_tieng = not thumbnail and CHAT_LUONG[chat_luong] == 0
-    da_co = ma_da_co(thu_muc, chi_tieng) if bo_qua_da_co else set()
+    da_co = ma_da_co(thu_muc, chi_tieng, anh=thumbnail) if bo_qua_da_co else set()
     da_tai: set = set()
     ten_mau = (
         "%(title).150B [%(id)s].audio.%(ext)s"
@@ -491,7 +491,8 @@ def tai_kenh(
     progress: Optional[Callable[[float, str], None]] = None,
     **kw,
 ) -> list:
-    """Tải video ở tab Videos của kênh (``gioi_han`` video mới nhất; rỗng/0 = cả kênh) vào ``thu_muc``.
+    """Tải video (hoặc chỉ thumbnail: ``thumbnail=True`` trong ``kw``) ở tab Videos của kênh (``gioi_han`` video mới
+    nhất; rỗng/0 = cả kênh) vào ``thu_muc``.
 
     Video đã có file trong thư mục thì bỏ qua: bấm lại là tải tiếp phần còn thiếu. ``kw`` chuyển cho :func:`tai_nhieu`.
     Kênh bị chặn/không đọc được thì ném lỗi đã phân loại — không coi là «kênh không có video»."""

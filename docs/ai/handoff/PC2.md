@@ -49,6 +49,9 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 9. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-11-11 — thumbnail cả kênh (D-45, nhánh feature/pc2/thumbnail-kenh)
+- Tab «🖼️ Tải thumbnail» thêm link kênh + số mới nhất → `tai_kenh(thumbnail=True)`; ảnh «[mã].jpg» đã có thì bỏ qua.
+- Test giả (AppTest + bỏ qua phần đã có); chưa thử kênh YouTube thật (người dùng thử trên DEV).
 ### 2026-11-11 — Twitch 1440p (D-44, nhánh feature/pc2/twitch-1440p)
 - Tab Tải đã tải được Twitch (720p60, thật 5,2 GB). 1440p khoá: AUTHZ_GEO + AUTHZ_NOT_LOGGED_IN → mục «🟣 Twitch»: file proxy
   (Windscribe Free, Proxy Gateway, Split Tunneling Inclusive rỗng) + cookie twitch.tv; chỉ bước trích qua proxy, tải thẳng.
@@ -68,8 +71,4 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 ### 2026-11-09 — tải theo link 4 kết nối song song (D-40, nhánh feature/pc2/tai-song-song)
 - Người dùng thấy ghép chậm: đo thật một kết nối 0,78–25 MB/s; 4 kết nối ~78 MB/s; tool thật tải 346 MB trong 22,5 s. Gộp `5a2e79a`, DEV 09/11 21:24 (sao lưu `data_20261109_212411`).
 - Lùi một kết nối khi thiếu định dạng; Dừng giữa chừng để lại .part đang mở → sửa (test đỏ + thử thật). Bằng chứng `C:\Dev\pc2_test_runs\2026-11-09_tai_song_song`.
-### 2026-11-09 — tab «🎞️ Ghép video gốc» (D-39, nhánh feature/pc2/ghep-video-goc)
-- Tải H.264 ≤ 1080p + AAC rồi nối `-c copy` theo thứ tự link; `<tên>.moc.csv` + mốc chương. Video lệch thông số: tự nén lại
-  cho khớp video 1 (D-41, nhánh feature/pc2/ghep-tu-chuyen; thử thật 2 video của người dùng 29,97 + 60: mốc lệch 0 ms; gộp `bc7c509`, DEV 09/11 22:01). Cảnh báo «QT chapter track not found» (chương > ~190 s bị FFmpeg 9 bỏ khỏi track chương QuickTime): `-movie_timescale` = tần số tiếng, nhánh fix/pc2/chuong-quicktime, gộp `25be505`, DEV 22:55.
-- Test: video tổng hợp FFmpeg thật, tiếng bíp riêng mỗi phần — mốc CSV khớp tiếng thật ±0,05 s. Gộp `ee8e6cd`, DEV 09/11 20:36 (sao lưu `data_20261109_203615`); chưa thử YouTube thật.
-- Mục cũ hơn (2026-11-09 tiêu đề kênh D-38 + audit 09/11; 2026-11-08 tải video gốc D-37 + review/audit 08/11; 2026-11-07 Codex bước 2 audit 14 + 18; 2026-11-07 Codex review PR #27–#29 D-36; 2026-11-07 đồng bộ nén song song D-35; 2026-11-07 audit số 15, 19, 20; 2026-11-07 kho video dài D-34; 2026-11-07 dựng kho nhường ổ cứng D-33; 2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
+- Mục cũ hơn (2026-11-09 ghép video gốc D-39/D-41 + chương QuickTime; 2026-11-09 tiêu đề kênh D-38 + audit 09/11; 2026-11-08 tải video gốc D-37 + review/audit 08/11; 2026-11-07 Codex bước 2 audit 14 + 18; 2026-11-07 Codex review PR #27–#29 D-36; 2026-11-07 đồng bộ nén song song D-35; 2026-11-07 audit số 15, 19, 20; 2026-11-07 kho video dài D-34; 2026-11-07 dựng kho nhường ổ cứng D-33; 2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.

@@ -15,6 +15,12 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-45 Tab thumbnail: lấy thumbnail cả kênh (người dùng, 2026-11-11)
+Ô «Link kênh YouTube cần lấy thumbnail» + «Số thumbnail mới nhất (0 = cả kênh)» trong tab «🖼️ Tải thumbnail» → `tai_kenh(
+thumbnail=True)`: liệt kê tab Videos rồi lấy ảnh TỪNG video qua đường mạng chung (cầu dao, cookie, phân loại lỗi) — ~2–4 s
+mỗi video. Không tải ảnh thẳng từ i.ytimg.com (nhanh hơn nhưng đi ngoài `ytdlp_chung`/`PhienYouTube`). «Đã có» của ảnh
+tính riêng (`ma_da_co(anh=True)`: «[mã].jpg»): bị chặn giữa chừng thì bấm lại lấy tiếp.
+
 ## D-44 Twitch 1440p: danh sách chất lượng qua proxy + đăng nhập, video tải thẳng (người dùng, 2026-11-11)
 Tab «Tải video gốc» tải được Twitch từ trước (yt-dlp), nhưng chỉ tới 720p60. Danh sách ẩn «unavailable-media» của usher
 ghi lý do khoá 1440p: từ VN `AUTHZ_GEO` + `AUTHZ_NOT_LOGGED_IN`; qua proxy Mỹ chỉ còn `AUTHZ_NOT_LOGGED_IN`. Người dùng chọn
