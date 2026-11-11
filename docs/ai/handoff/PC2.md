@@ -55,8 +55,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   đọc được, không mất dòng output tiến trình con, ghép lệch nhịp thời gian (đo thật 2+2 s ra 23 s), hook .env/fail-closed/namespace.
 - Phân loại đủ (cả cái KHÔNG sửa + lý do): `C:\Dev\pc2_test_runs\2026-11-11_audit_tong\PHAN_LOAI.md`. Nhanh 3724 = 3720/4/0, chậm 24/24.
   Gộp `2450682`, DEV 11/11 23:57 (sao lưu `data_20261111_235553`). Hook mới đã cài trên PC2; PC1 cài lại.
-- 12/11: 6 lỗi Apps Script sửa (nhánh fix/pc2/apps-script-1111, `3591852`, test Google Sheet GIẢ bằng Node, `gop_toan_bo.py`
-  sinh TOAN_BO). NGƯỜI DÙNG cần dán lại `TOAN_BO_AppsScript.gs` vào Sheet; app/DEV không đổi.
+- 12/11: 6 lỗi Apps Script (`3591852`, test Sheet GIẢ bằng Node); NGƯỜI DÙNG dán lại `TOAN_BO_AppsScript.gs` vào Sheet.
 ### 2026-11-11 — cắt / chỉnh âm / ghép video trong máy (D-46, nhánh feature/pc2/video-trong-may)
 - Tab «🛠️ Video trong máy» (`video_trong_may.py`) + tab Ghép nhận đường dẫn file; file gốc không bao giờ bị sửa (so băm).
 - Thử thật offline 2 video 1080p 90 s (30 + 60 hình/giây): cắt+âm 10 s, chỉ âm 4,8 s, ghép 3 phần 15,8 s; gốc không đổi. Nhanh 3688 = 3684/4/0, chậm 24/24. Gộp `878a7ce`, DEV 16:25.
