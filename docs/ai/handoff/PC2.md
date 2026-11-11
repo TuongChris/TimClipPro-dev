@@ -53,6 +53,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 - Tab Tải đã tải được Twitch (720p60, thật 5,2 GB). 1440p khoá: AUTHZ_GEO + AUTHZ_NOT_LOGGED_IN → mục «🟣 Twitch»: file proxy
   (Windscribe Free, Proxy Gateway, Split Tunneling Inclusive rỗng) + cookie twitch.tv; chỉ bước trích qua proxy, tải thẳng.
 - Thử thật bằng mã mới: 2560×1440p60, 12,8 GB, tải ~8 phút + chỉnh âm lượng 13 phút; máy vẫn ra VN. File thử `D:\pc2_thu_twitch`.
+- Review 11/11 sửa 2 (file lạ làm đứt lượt, link kênh lặng lẽ 720p). Gộp `edeb2e2`, DEV 11/11 12:48 (sao lưu `data_20261111_124831`).
 ### 2026-11-10 — âm lượng về mức YouTube (D-43, nhánh feature/pc2/am-luong-youtube)
 - Video Joe tải về -28,5 LUFS vì YouTube phát bằng «Âm lượng ổn định». Ô tick (sẵn) ở tab Tải + Ghép → `am_luong.chuan_hoa`.
 - Thử 3 phút Joe thật: -28,0 → -14,4 LUFS, đỉnh -0,8 dB, hình trùng MD5, 9,8 s. Ghép: mốc vẫn khớp tiếng thật. Gộp `4742c6a`, DEV 10/11 21:30.
