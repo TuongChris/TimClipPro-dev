@@ -849,18 +849,95 @@ def test_ma_da_co_anh_tach_rieng_video(tmp_path):
     assert tv.ma_da_co(str(tmp_path)) == {"abcdefghij2"}
 
 
-def test_thumbnail_ca_kenh_bam_lai_lay_tiep_phan_thieu(gia, tmp_path, monkeypatch):
-    """Kênh lớn bị YouTube chặn giữa chừng: bấm lại chỉ lấy ảnh còn thiếu; có VIDEO trùng mã không có nghĩa là có ảnh."""
+class _YdlAnh:
+    """``yt_dlp.YoutubeDL`` giả cho thumbnail cả kênh: chỉ ``urlopen`` ảnh i.ytimg.com + ``prepare_filename``; trích thông
+    tin video (đường chậm) là lỗi."""
+
+    mo: list = []
+    thieu: set = set()  # (mã, loại) trả 404
+
+    def __init__(self, opts):
+        self.opts = opts
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def extract_info(self, *a, **k):
+        raise AssertionError("thumbnail cả kênh không được trích thông tin từng video")
+
+    def prepare_filename(self, info, outtmpl=None):
+        from yt_dlp.utils import sanitize_filename
+
+        return os.path.join(os.path.dirname(self.opts["outtmpl"]),
+                            f"{sanitize_filename(info['title'])} [{info['id']}].{info['ext']}")
+
+    def urlopen(self, url):
+        import io
+
+        from yt_dlp.networking.common import Response
+        from yt_dlp.networking.exceptions import HTTPError
+
+        _YdlAnh.mo.append(url)
+        ma, loai = url.split("/vi/")[1].split("/")
+        if (ma, loai.split(".")[0]) in _YdlAnh.thieu:
+            raise HTTPError(Response(io.BytesIO(b""), url, {}, status=404))
+        return io.BytesIO(f"{ma}:{loai}".encode())
+
+
+@pytest.fixture
+def ydl_anh(monkeypatch):
     import channel
 
+    _YdlAnh.mo, _YdlAnh.thieu = [], set()
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", _YdlAnh)
+
     def liet_ke(url, limit=None, **kw):
-        return [channel.VideoInfo(id=m, title=m, upload_date="", duration=0.0, url=f"https://www.youtube.com/watch?v={m}")
-                for m in ("abcdefghij1", "abcdefghij2", "abcdefghij3")]
+        return [channel.VideoInfo(id=m, title=t, upload_date="", duration=0.0, url=f"https://www.youtube.com/watch?v={m}")
+                for m, t in (("abcdefghij1", "Một"), ("abcdefghij2", "Hai?"), ("abcdefghij3", "Ba"))]
 
     monkeypatch.setattr(channel.ChannelSync, "list_channel", staticmethod(liet_ke))
+    return _YdlAnh
+
+
+def test_thumbnail_ca_kenh_tai_thang_anh_khong_trich_tung_video(ydl_anh, tmp_path):
+    """11/11: lấy thumbnail cả kênh bằng địa chỉ ảnh cố định (i.ytimg.com) — 8 s/ảnh → dưới 1 s. Thiếu bản 1280×720 thì
+    lùi 640×480; ảnh đã có bỏ qua (có VIDEO trùng mã không tính là có ảnh); tên file như đường cũ (tiêu đề [mã].jpg)."""
     (tmp_path / "Cũ [abcdefghij1].jpg").write_bytes(b"cu")
     (tmp_path / "Video [abcdefghij2].mp4").write_bytes(b"video")
+    ydl_anh.thieu = {("abcdefghij3", "maxresdefault")}
     kq = tv.tai_kenh("https://www.youtube.com/@Kenh", str(tmp_path), thumbnail=True)
     assert [k["trang_thai"] for k in kq] == ["bo_qua", "xong", "xong"]
-    assert all(k["duong_dan"].endswith(".jpg") for k in kq[1:])
-    assert all(o.get("writethumbnail") for _u, o in gia.goi) and len(gia.goi) == 2
+    assert kq[1]["duong_dan"] == str(tmp_path / "Hai？ [abcdefghij2].jpg")  # «?» đổi như yt-dlp
+    assert (tmp_path / "Hai？ [abcdefghij2].jpg").read_bytes() == b"abcdefghij2:maxresdefault.jpg"
+    assert (tmp_path / "Ba [abcdefghij3].jpg").read_bytes() == b"abcdefghij3:sddefault.jpg"
+    assert kq[1]["chat_luong"] == "ảnh JPG 1280×720" and kq[2]["chat_luong"] == "ảnh JPG 640×480"
+    assert kq[1]["tieu_de"] == "Hai?"
+    assert all(u.startswith("https://i.ytimg.com/vi/") for u in ydl_anh.mo) and len(ydl_anh.mo) == 3
+    assert not [f for f in os.listdir(tmp_path) if f.endswith(".part")]
+
+
+def test_thumbnail_ca_kenh_dung_giua_chung(ydl_anh, tmp_path):
+    dung = {"co": False}
+    goc = _YdlAnh.urlopen
+
+    def mo_roi_dung(self, url):
+        dung["co"] = True  # bấm Dừng ngay sau ảnh đầu
+        return goc(self, url)
+
+    _YdlAnh.urlopen = mo_roi_dung
+    try:
+        kq = tv.tai_kenh("https://www.youtube.com/@Kenh", str(tmp_path), thumbnail=True, cancel_check=lambda: dung["co"])
+    finally:
+        _YdlAnh.urlopen = goc
+    assert [k["trang_thai"] for k in kq] == ["xong", "bo_qua", "bo_qua"]
+    assert sorted(os.listdir(tmp_path)) == ["Một [abcdefghij1].jpg"]
+
+
+def test_thumbnail_ca_kenh_khong_co_anh_nao(ydl_anh, tmp_path):
+    ydl_anh.thieu = {("abcdefghij1", t) for t in ("maxresdefault", "sddefault", "hqdefault")}
+    kq = tv.tai_kenh("https://www.youtube.com/@Kenh", str(tmp_path), thumbnail=True)
+    assert kq[0]["trang_thai"] == "loi" and "thumbnail" in kq[0]["ghi_chu"]
+    assert [k["trang_thai"] for k in kq[1:]] == ["xong", "xong"]

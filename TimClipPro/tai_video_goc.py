@@ -507,6 +507,8 @@ def tai_kenh(
     )
     if not ds:
         raise RuntimeError("Kênh không có video nào ở tab Videos.")
+    if kw.pop("thumbnail", False):
+        return _tai_anh_kenh(ds, thu_muc, cau_hinh_mang, phien=phien, progress=progress, **kw)
     return tai_nhieu(
         [v.url for v in ds],
         thu_muc,
@@ -520,6 +522,99 @@ def tai_kenh(
 
 
 COT_TIEU_DE = ("STT", "Tiêu đề", "Link", "Thời lượng")
+
+
+# Thumbnail theo địa chỉ cố định của YouTube, lớn → nhỏ (video cũ không có bản 1280×720).
+_ANH_YTIMG = (("maxresdefault", "1280×720"), ("sddefault", "640×480"), ("hqdefault", "480×360"))
+
+
+def _lay_anh_ytimg(ydl, ma: str) -> Optional[tuple]:
+    """(byte ảnh, kích thước) bản lớn nhất YouTube có cho video ``ma``; không có bản nào → ``None``."""
+    from yt_dlp.networking.exceptions import HTTPError
+
+    for loai, co in _ANH_YTIMG:
+        try:
+            with contextlib.closing(ydl.urlopen(f"https://i.ytimg.com/vi/{ma}/{loai}.jpg")) as r:
+                return r.read(), co
+        except HTTPError as e:
+            if e.status != 404:
+                raise
+    return None
+
+
+def _tai_anh_kenh(
+    ds: list,
+    thu_muc: str,
+    cau_hinh_mang: Optional[CauHinhMang] = None,
+    *,
+    phien: PhienYouTube,
+    progress: Optional[Callable[[float, str], None]] = None,
+    cancel_check: Optional[Callable[[], bool]] = None,
+    **_kw,
+) -> list:
+    """Thumbnail cả kênh (D-45): ảnh tải THẲNG theo địa chỉ cố định ``i.ytimg.com/vi/<mã>/…`` bằng ``YoutubeDL.urlopen``
+    (timeout/proxy chung) trong ``PhienYouTube.chay`` (cầu dao, phân loại lỗi) — không trích thông tin từng video như tải
+    theo link (đo thật 11/11: ~8 s/ảnh vì giãn nhịp + giải JavaScript). Tên file như đường tải theo link («tiêu đề
+    [mã].jpg»); ảnh đã có thì bỏ qua. Trả list dict như :func:`tai_nhieu`."""
+    import yt_dlp
+
+    thu_muc = os.path.abspath(str(thu_muc or "").strip().strip('"'))
+    os.makedirs(thu_muc, exist_ok=True)
+    bao = progress or (lambda _p, _m: None)
+    huy = cancel_check or (lambda: False)
+    da_co = ma_da_co(thu_muc, anh=True)
+    n = len(ds)
+    ket_qua: list = []
+    # Ảnh tĩnh không cần đăng nhập: bỏ cookie (khỏi điều kiện Node/EJS của cookie); timeout + proxy giữ nguyên.
+    opts = (cau_hinh_mang or CauHinhMang()).bo_cookie().tuy_chon(
+        "download", outtmpl=os.path.join(thu_muc, "%(title).150B [%(id)s].%(ext)s")
+    )
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        for i, v in enumerate(ds):
+            kq = KetQuaTaiVideo(url=v.url, trang_thai="loi", tieu_de=str(v.title or ""))
+            ket_qua.append(kq)
+            if huy():
+                kq.trang_thai, kq.ghi_chu = "bo_qua", "Đã dừng theo yêu cầu trước khi tải ảnh này."
+                continue
+            if phien.mo:
+                kq.trang_thai, kq.ghi_chu = "bo_qua", phien.thong_bao_dung()
+                continue
+            if v.id in da_co:
+                kq.trang_thai, kq.ghi_chu = "bo_qua", "Đã có trong thư mục."
+                continue
+            bao(i / n, f"Ảnh {i + 1}/{n}: đang tải thumbnail...")
+            phan = ""
+            try:
+                phien.dem_yeu_cau("download")
+                anh = phien.chay(
+                    "download",
+                    lambda v=v: _lay_anh_ytimg(ydl, v.id),
+                    video_id=v.id,
+                    cancel_event=_CoHuyTuHam(huy),
+                    loi_huy=DaHuyTaiVideo,
+                    bo_qua=(DaHuyTaiVideo,),
+                )
+                if anh is None:
+                    kq.ghi_chu = "YouTube không có ảnh thumbnail cho video này."
+                    continue
+                ten = ydl.prepare_filename({"id": v.id, "title": v.title or v.id, "ext": "jpg"})
+                dich = _ten_trong(thu_muc, os.path.basename(ten))
+                phan = dich + ".part"
+                with open(phan, "wb") as f:
+                    f.write(anh[0])
+                os.replace(phan, dich)
+                kq.trang_thai, kq.duong_dan, kq.chat_luong = "xong", dich, f"ảnh JPG {anh[1]}"
+            except DaHuyTaiVideo:
+                kq.trang_thai, kq.ghi_chu = "bo_qua", "Đã dừng theo yêu cầu."
+            except Exception as e:  # noqa: BLE001 — một ảnh lỗi không làm đứt cả lô
+                f = phan_loai_loi(e, thao_tac="download", video_id=v.id)
+                kq.ghi_chu = che_bi_mat(f.human_message_vi or tom_tat_ky_thuat(e))
+            finally:
+                if phan and os.path.exists(phan):
+                    with contextlib.suppress(OSError):
+                        os.remove(phan)
+    bao(1.0, "Xong.")
+    return [asdict(k) for k in ket_qua]
 
 
 def tieu_de_kenh(url_kenh: str, cau_hinh_mang: Optional[CauHinhMang] = None, *,

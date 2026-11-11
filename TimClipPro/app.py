@@ -1545,9 +1545,9 @@ with tab_anh:
                                  placeholder="https://www.youtube.com/@TenKenh")
     _so_kenh_anh = st.number_input("Số thumbnail mới nhất (0 = cả kênh)", min_value=0, value=0, step=10,
                                    key="so_kenh_anh")
-    st.caption("Lấy thumbnail các video ở tab Videos của kênh (không lấy Shorts/Live), lưu vào thư mục ở trên — mỗi video "
-               "khoảng 2–4 giây (kênh 1.000 video ~1 giờ). Ảnh đã có trong thư mục (theo [mã video]) được bỏ qua: "
-               "YouTube chặn giữa chừng thì bấm lại sau là lấy tiếp phần còn thiếu.")
+    st.caption("Lấy thumbnail các video ở tab Videos của kênh (không lấy Shorts/Live), lưu vào thư mục ở trên — tải thẳng "
+               "ảnh lớn nhất YouTube có (1280×720; video cũ 640×480), không phải hỏi từng video nên nhanh. Ảnh đã có trong "
+               "thư mục (theo [mã video]) được bỏ qua: YouTube chặn giữa chừng thì bấm lại sau là lấy tiếp phần còn thiếu.")
     if st.button("🖼️ Tải thumbnail của kênh", type="primary", key="bat_dau_tai_anh_kenh",
                  disabled=not (url_kenh_anh.strip() and _thu_muc_anh) or _chua_tai_duoc()):
         _bat_dau_tai(tai_video_goc.tai_kenh, url_kenh_anh.strip(), _thu_muc_anh, gioi_han=int(_so_kenh_anh) or None,

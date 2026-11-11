@@ -17,8 +17,9 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 
 ## D-45 Tab thumbnail: lấy thumbnail cả kênh (người dùng, 2026-11-11)
 Ô «Link kênh YouTube cần lấy thumbnail» + «Số thumbnail mới nhất (0 = cả kênh)» trong tab «🖼️ Tải thumbnail» → `tai_kenh(
-thumbnail=True)`: liệt kê tab Videos rồi lấy ảnh TỪNG video qua đường mạng chung (cầu dao, cookie, phân loại lỗi) — ~2–4 s
-mỗi video. Không tải ảnh thẳng từ i.ytimg.com (nhanh hơn nhưng đi ngoài `ytdlp_chung`/`PhienYouTube`). «Đã có» của ảnh
+thumbnail=True)`: liệt kê tab Videos rồi tải THẲNG ảnh theo địa chỉ cố định `i.ytimg.com/vi/<mã>/maxresdefault.jpg` (lùi
+sddefault → hqdefault khi 404) bằng `YoutubeDL.urlopen` trong `PhienYouTube.chay` (bỏ cookie, giữ timeout/proxy, cầu dao,
+phân loại lỗi). Bản đầu trích thông tin từng video: đo thật 8 s/ảnh (giãn nhịp + giải JS); tải thẳng 0,17 s/ảnh, cùng tên file. «Đã có» của ảnh
 tính riêng (`ma_da_co(anh=True)`: «[mã].jpg»): bị chặn giữa chừng thì bấm lại lấy tiếp.
 
 ## D-44 Twitch 1440p: danh sách chất lượng qua proxy + đăng nhập, video tải thẳng (người dùng, 2026-11-11)
