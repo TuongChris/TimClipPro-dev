@@ -80,9 +80,11 @@ TUY_CHON_THUMBNAIL = {
     ],
 }
 _DUOI_ANH = (".jpg", ".jpeg", ".png", ".webp")
-_RE_MA_CUOI_TEN = re.compile(r"\[([A-Za-z0-9_-]{11})\]\.[^.]+$")
+# Mã ở tên file: YouTube 11 ký tự, hoặc VOD Twitch «v<số>» (yt-dlp đặt [id] như vậy) — xem :func:`ma_link`.
+_RE_MA_CUOI_TEN = re.compile(r"\[([A-Za-z0-9_-]{11}|v\d+)\]\.[^.]+$")
 # File chỉ-tiếng mang thêm «.audio» trước đuôi: «đã có» của video và của chỉ-tiếng không lẫn nhau.
-_RE_MA_CUOI_TEN_TIENG = re.compile(r"\[([A-Za-z0-9_-]{11})\]\.audio\.[^.]+$")
+_RE_MA_CUOI_TEN_TIENG = re.compile(r"\[([A-Za-z0-9_-]{11}|v\d+)\]\.audio\.[^.]+$")
+_RE_MA_TWITCH = re.compile(r"^/(?:videos|[^/]+/v(?:ideo)?)/(\d+)/?$")
 # Dưới mức trống này thì không tải video kế: một lượt tải cả kênh qua đêm không được làm đầy ổ.
 TRONG_TOI_THIEU_BYTE = 5 * 10**9
 
@@ -100,6 +102,20 @@ def tuy_chon_dinh_dang(chat_luong: str = CHAT_LUONG_MAC_DINH) -> dict:
         "format": f"bv*[height<={cao}]+ba/b[height<={cao}]",
         "merge_output_format": VO_GHEP,
     }
+
+
+def ma_link(url: str) -> str:
+    """Mã video của link để nhận «đã có»/«trùng» — CÙNG mã yt-dlp ghi trong «[mã]» ở tên file: YouTube 11 ký tự, VOD
+    Twitch «v<số>». Không nhận ra (clip Twitch, trang khác) → rỗng: link đó luôn được tải như mới."""
+    ma = ma_tu_url(url)
+    if ma or not la_link_twitch(url):
+        return ma
+    p = urllib.parse.urlsplit(str(url))
+    m = _RE_MA_TWITCH.match(p.path)
+    if m:
+        return "v" + m.group(1)
+    video = (urllib.parse.parse_qs(p.query).get("video") or [""])[0].lstrip("v")
+    return "v" + video if video.isdigit() else ""
 
 
 def ma_da_co(thu_muc: str, chi_tieng: bool = False) -> set:
@@ -283,10 +299,11 @@ def tai_nhieu(
         if ly_do:
             kq.ghi_chu = ly_do
             continue
-        if ma_tu_url(url) in da_co:
+        ma = ma_link(url)
+        if ma and ma in da_co:
             kq.trang_thai, kq.ghi_chu = "bo_qua", "Đã có trong thư mục."
             continue
-        if ma_tu_url(url) in da_tai:
+        if ma and ma in da_tai:
             # Danh sách phát lặp cùng video, hay hai dạng link của một video: tải một lần là đủ.
             kq.trang_thai, kq.ghi_chu = (
                 "bo_qua",
@@ -412,15 +429,16 @@ def tai_nhieu(
                 bao(min((i + 0.97) / n, 1.0), f"{dau}: đang chỉnh âm lượng về mức YouTube...")
                 try:
                     ghi_am = am_luong.chuan_hoa(xong[0], huy=huy)
-                except am_luong.DaHuyChinhAmLuong as e:
-                    raise DaHuyTaiVideo(str(e)) from e
+                except am_luong.DaHuyChinhAmLuong:
+                    # Video ĐÃ tải xong (có khi hàng chục GB): giữ với âm lượng gốc; link sau tự bỏ qua vì cờ Dừng còn bật.
+                    ghi_am = "Đã dừng lúc chỉnh âm lượng — giữ âm lượng gốc."
                 except RuntimeError as e:
                     ghi_am = f"Chưa chỉnh được âm lượng ({e}) — giữ âm lượng gốc."
             dich = _ten_trong(thu_muc, os.path.basename(xong[0]))
             os.rename(xong[0], dich)
             kq.trang_thai, kq.duong_dan = "xong", dich
-            if ma_tu_url(url):
-                da_tai.add(ma_tu_url(url))
+            if ma:
+                da_tai.add(ma)
             kq.tieu_de = str((info or {}).get("title") or "")
             kq.chat_luong = "ảnh JPG" if thumbnail else mo_ta_chat_luong(info or {})
             if cau_hinh.co_cookie and (

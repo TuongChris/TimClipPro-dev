@@ -366,3 +366,22 @@ def test_cat_chuan_hoa_am_luong(tmp_path, monkeypatch):
     r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", k["duong_dan"], "-vn", "-af", "ebur128", "-f",
                         "null", "-"], capture_output=True, text=True, encoding="utf-8", errors="replace")
     assert float(re.findall(r"I:\s+(-?[\d.]+) LUFS", r.stderr)[-1]) == pytest.approx(-14, abs=1.0)
+
+
+
+@can_ffmpeg
+def test_cat_lai_video_twitch_khong_tai_lai(tmp_path, monkeypatch):
+    """Audit 11/11: video Twitch đã tải còn trong thư mục tạm (lượt trước mốc sai) → bấm lại cắt từ file đó, không tải lại."""
+    tw = "https://www.twitch.tv/videos/12345678901"
+    tam = tmp_path / "ra" / cv.THU_MUC_TAM / f"cl_{tv.CHAT_LUONG[tv.CHAT_LUONG_MAC_DINH]}"
+    tam.mkdir(parents=True)
+    _tao(tam / "Phat lai [v12345678901].mp4")
+
+    def tai_nhieu(links, thu_muc, cau_hinh_mang=None, **kw):  # như tai_nhieu thật với bo_qua_da_co: «Đã có»
+        return [{"url": tw, "trang_thai": "bo_qua", "duong_dan": "", "tieu_de": "", "chat_luong": "",
+                 "ghi_chu": "Đã có trong thư mục."}]
+
+    monkeypatch.setattr(tv, "tai_nhieu", tai_nhieu)
+    k = cv.tai_doan([tw], str(tmp_path / "ra"), tu_s=1, den_s=3)[0]
+    assert k["trang_thai"] == "xong", k
+    assert "[v12345678901]" in k["duong_dan"]

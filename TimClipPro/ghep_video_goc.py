@@ -281,7 +281,7 @@ def ghep(
             co_san.setdefault(m.group(1), os.path.join(tam, f))
     phan, ten_theo_ma = [], {}
     for k in ket_qua[:-1]:
-        ma = tv.ma_tu_url(k["url"]) or ""
+        ma = tv.ma_link(k["url"])
         duong = k["duong_dan"] if k["trang_thai"] == "xong" else co_san.get(ma)
         if k["trang_thai"] == "loi" or not duong or not os.path.isfile(duong):
             return that_bai("Chưa ghép: có video chưa tải được (xem các dòng ở trên).")

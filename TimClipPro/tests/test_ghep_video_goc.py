@@ -83,7 +83,7 @@ def _gia_tai(monkeypatch, nguon, loi=(), lech=""):
         os.makedirs(thu_muc, exist_ok=True)
         ra = []
         for url in links:
-            ma = tv.ma_tu_url(url) or url.rsplit("/", 1)[-1]  # link không phải YouTube: không có mã 11 ký tự
+            ma = tv.ma_link(url) or url.rsplit("/", 1)[-1]  # như yt-dlp: [mã YouTube] / [v<số> Twitch] / mã riêng
             dich = os.path.join(thu_muc, f"x [{ma}].mp4")
             if url in loi:
                 ra.append(
@@ -480,3 +480,15 @@ def test_ghep_chuan_hoa_am_luong_tung_video_moc_van_dung(nguon, tmp_path, monkey
     assert bat_dau == pytest.approx([0, 2, 5], abs=0.05)
     for giay, hz in zip(bat_dau, (440, 880, 1320)):
         assert _tan_so_tai(cuoi["duong_dan"], giay + 0.1) == pytest.approx(hz, abs=25), giay
+
+
+
+@can_ffmpeg
+def test_ghep_link_twitch_lap_lai(nguon, tmp_path, monkeypatch):
+    """Audit 11/11: link Twitch lặp lại — lần sau «trùng», ghép phải tìm được file [v<số>] của lần đầu."""
+    tw = "https://www.twitch.tv/videos/12345678901"
+    _gia_tai(monkeypatch, {tw: nguon[URL[0]], URL[1]: nguon[URL[1]]})
+    kq = gv.ghep([tw, URL[1], tw], str(tmp_path), ten_file="tw")
+    assert kq[-1]["trang_thai"] == "xong", kq[-1]
+    with open(tmp_path / "tw.moc.csv", encoding="utf-8-sig") as f:
+        assert [d["Tiêu đề"] for d in csv.DictReader(f)] == ["Tập 1: Mở đầu", "Tập 2 = «bí ẩn»; #1", "Tập 1: Mở đầu"]

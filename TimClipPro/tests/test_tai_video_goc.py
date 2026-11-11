@@ -781,13 +781,52 @@ def test_chinh_am_luong_hong_van_giu_video_da_tai(gia, tmp_path, monkeypatch):
     assert os.path.isfile(kq[0]["duong_dan"])
 
 
-def test_dung_luc_chinh_am_luong_la_dung_ca_luot(gia, tmp_path, monkeypatch):
+def test_dung_luc_chinh_am_luong_giu_video_da_tai(gia, tmp_path, monkeypatch):
+    """Audit 11/11: Dừng lúc chỉnh âm lượng KHÔNG vứt video đã tải xong (có thể 13 GB) — giữ âm lượng gốc, link sau bỏ qua."""
     import am_luong
 
-    def dung(path, **kw):
+    dung = {"co": False}
+
+    def chuan_hoa(path, **kw):
+        dung["co"] = True  # người dùng bấm Dừng giữa lúc chỉnh
         raise am_luong.DaHuyChinhAmLuong("dừng")
 
-    monkeypatch.setattr(am_luong, "chuan_hoa", dung)
-    kq = tv.tai_nhieu([URL1], str(tmp_path), chuan_hoa_am=True)
-    assert kq[0]["trang_thai"] == "bo_qua"
-    assert os.listdir(tmp_path) == []
+    monkeypatch.setattr(am_luong, "chuan_hoa", chuan_hoa)
+    kq = tv.tai_nhieu([URL1, URL2], str(tmp_path), chuan_hoa_am=True, cancel_check=lambda: dung["co"])
+    assert kq[0]["trang_thai"] == "xong" and os.path.isfile(kq[0]["duong_dan"])
+    assert "giữ âm lượng gốc" in kq[0]["ghi_chu"]
+    assert kq[1]["trang_thai"] == "bo_qua"
+    assert not (tmp_path / tv.THU_MUC_TAM).exists()
+
+
+
+# ---- audit 11/11 (2): mã video Twitch để nhận «đã có»/«trùng»
+TWITCH = "https://www.twitch.tv/videos/12345678901"
+
+
+@pytest.mark.parametrize("url, ma", [
+    (URL1, "abcdefghij1"),
+    (TWITCH, "v12345678901"),
+    ("https://twitch.tv/videos/987", "v987"),
+    ("https://www.twitch.tv/tenkenh/v/555", "v555"),
+    ("https://www.twitch.tv/tenkenh/video/556", "v556"),
+    ("https://player.twitch.tv/?video=v557&parent=x", "v557"),
+    ("https://www.twitch.tv/tenkenh/videos", ""),
+    ("https://clips.twitch.tv/TenClip", ""),
+    ("https://evil.com/twitch.tv/videos/1", ""),
+    ("https://vimeo.com/123", ""),
+])
+def test_ma_link(url, ma):
+    assert tv.ma_link(url) == ma
+
+
+def test_twitch_da_co_trong_thu_muc_thi_bo_qua(gia, tmp_path):
+    (tmp_path / "Phat lai [v12345678901].mp4").write_bytes(b"cu")
+    kq = tv.tai_nhieu([TWITCH], str(tmp_path), bo_qua_da_co=True)
+    assert kq[0]["trang_thai"] == "bo_qua" and gia.goi == []
+    assert tv.ma_da_co(str(tmp_path)) == {"v12345678901"}
+
+
+def test_twitch_lap_lai_trong_luot_tai_mot_lan(gia, tmp_path):
+    kq = tv.tai_nhieu([TWITCH, TWITCH.replace("www.", "")], str(tmp_path))
+    assert [k["trang_thai"] for k in kq] == ["xong", "bo_qua"] and len(gia.goi) == 1

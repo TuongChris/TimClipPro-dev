@@ -181,7 +181,7 @@ def tai_doan(
         nguon = (
             k["duong_dan"]
             if k["trang_thai"] == "xong"
-            else co_san.get(tv.ma_tu_url(k["url"]) or "")
+            else co_san.get(tv.ma_link(k["url"]) or "")
         )
         if k["trang_thai"] == "loi" or not nguon or not os.path.isfile(nguon):
             continue
