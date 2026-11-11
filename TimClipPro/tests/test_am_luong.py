@@ -151,3 +151,31 @@ def test_ffmpeg_loi_thi_bao_loi_va_giu_file(tmp_path):
     with pytest.raises(RuntimeError):
         al.chuan_hoa(str(f))
     assert f.read_bytes() == b"khong phai video"
+
+
+def _tao_mac_dinh(path, co_hinh):
+    """File thử với bộ nén MẶC ĐỊNH của FFmpeg cho đuôi đó (MP3 → mp3, FLAC → flac, WAV → pcm, MPG → mp2)."""
+    hinh = ["-f", "lavfi", "-i", "testsrc=size=160x120:rate=25:duration=8"] if co_hinh else []
+    subprocess.run(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *hinh, "-f", "lavfi", "-i",
+         "aevalsrc=0.01*sin(2*PI*440*t)*(0.6+0.4*sin(2*PI*0.5*t)):s=44100:d=8", "-shortest", str(path)],
+        check=True,
+    )
+    return str(path)
+
+
+@can_ffmpeg
+@pytest.mark.parametrize(
+    "duoi, co_hinh, ma",
+    [(".mp3", False, "mp3"), (".flac", False, "flac"), (".wav", False, "pcm_s16le"), (".mpg", True, "mp2")],
+)
+def test_vo_khong_nhan_aac_van_chinh_duoc_ra_file_moi(tmp_path, duoi, co_hinh, ma):
+    """Audit 11/11 (2): vỏ MP3/FLAC/MPG không chứa được AAC — FFmpeg «Nothing was written»; WAV chứa AAC thì nhiều phần
+    mềm không mở. Chỉnh âm ra file mới (tab «Video trong máy») phải giữ bộ nén hợp với đuôi file."""
+    f = _tao_mac_dinh(tmp_path / f"nho{duoi}", co_hinh)
+    truoc = open(f, "rb").read()
+    dich = str(tmp_path / f"ra{duoi}")
+    assert "→ -14 LUFS" in al.chuan_hoa(f, dich=dich)
+    assert _lufs(dich) == pytest.approx(al.MUC_LUFS, abs=1.0)
+    assert [s["codec_name"] for s in al.doc_ffprobe(dich)["streams"] if s["codec_type"] == "audio"] == [ma]
+    assert open(f, "rb").read() == truoc

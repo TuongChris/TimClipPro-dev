@@ -523,3 +523,36 @@ def test_ghep_duong_dan_khong_co_bao_ro(tmp_path, monkeypatch):
     kq = gv.ghep(["D:\\khong\\co.mp4", URL[0]], str(tmp_path), ten_file="x")
     assert kq[0]["trang_thai"] == "loi" and "Không tìm thấy file" in kq[0]["ghi_chu"]
     assert kq[-1]["trang_thai"] == "loi"
+
+
+@can_ffmpeg
+def test_hai_file_may_trung_ten_khac_thu_muc_khong_lan_ban_chuyen(nguon, tmp_path, monkeypatch):
+    """Audit 11/11 (2): bản nén lại cho khớp đặt tên theo TÊN file — «Tap1\\intro.mp4» và «Tap2\\intro.mp4» (cùng lệch
+    video 1) ra cùng một bản, video thứ hai bị thay bằng video thứ nhất, không cảnh báo."""
+    (tmp_path / "Tap1").mkdir()
+    (tmp_path / "Tap2").mkdir()
+    a = shutil.copy(nguon["lech"][1], tmp_path / "Tap1" / "intro.mp4")  # 640x360, 440 Hz
+    b = _tao(tmp_path / "Tap2" / "intro.mp4", 2, 1320, kich_thuoc="640x360")
+    _gia_tai(monkeypatch, {URL[1]: nguon[URL[1]]})  # video 1: 320x240, 880 Hz
+    kq = gv.ghep([URL[1], str(a), str(b)], str(tmp_path / "ra"), ten_file="trung")
+    assert kq[-1]["trang_thai"] == "xong", kq[-1]
+    for giay, hz in ((0.1, 880), (3.1, 440), (5.1, 1320)):
+        assert _tan_so_tai(kq[-1]["duong_dan"], giay) == pytest.approx(hz, abs=25), giay
+
+
+@can_ffmpeg
+def test_ban_chinh_am_con_tu_luot_hong_truoc_khong_bi_dung_nham(nguon, tmp_path, monkeypatch):
+    """Audit 11/11 (2): «_ghep_tam\\am\\1_intro.mp4» còn lại từ lượt ghép hỏng trước; lượt này file đã đủ to (chuan_hoa
+    không tạo bản mới) → tool từng lấy bản CŨ (video khác) để ghép."""
+    (tmp_path / "may").mkdir()
+    intro = shutil.copy(nguon[URL[0]][1], tmp_path / "may" / "intro.mp4")  # 440 Hz
+    ra = tmp_path / "ra"
+    cu = ra / gv.THU_MUC_PHAN / gv.THU_MUC_AM
+    cu.mkdir(parents=True)
+    shutil.copy(nguon[URL[2]][1], cu / "1_intro.mp4")  # 1320 Hz — bản của file KHÁC ở lượt trước
+    monkeypatch.setattr(gv, "chuan_hoa", lambda *a, **k: "Âm lượng đã ở mức YouTube — giữ nguyên.")
+    _gia_tai(monkeypatch, {URL[1]: nguon[URL[1]]})
+    kq = gv.ghep([str(intro), URL[1]], str(ra), ten_file="cu", chuan_hoa_am=True)
+    assert kq[-1]["trang_thai"] == "xong", kq[-1]
+    for giay, hz in ((0.1, 440), (2.1, 880)):
+        assert _tan_so_tai(kq[-1]["duong_dan"], giay) == pytest.approx(hz, abs=25), giay

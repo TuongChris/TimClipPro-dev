@@ -21,7 +21,18 @@ MUC_LUFS = -14.0  # mức YouTube chuẩn hoá về
 TRAN_DINH_DBTP = -1.0
 DUNG_SAI_LU = 1.0
 _LOC = f"loudnorm=I={MUC_LUFS:g}:TP={TRAN_DINH_DBTP:g}:LRA=20"
-_DUOI_OPUS = (".webm", ".opus", ".ogg")  # vỏ chỉ nhận opus/vorbis
+_OPUS = ["libopus", "-b:a", "160k"]
+# Vỏ KHÔNG nhận AAC (audit 11/11: MP3/FLAC/MPG thì FFmpeg «Nothing was written»; WAV chứa AAC nhiều phần mềm không mở).
+_MA_THEO_DUOI = {
+    ".webm": _OPUS,
+    ".opus": _OPUS,
+    ".ogg": _OPUS,
+    ".mp3": ["libmp3lame", "-b:a", "192k"],
+    ".flac": ["flac"],
+    ".wav": ["pcm_s16le"],
+    ".mpg": ["mp2", "-b:a", "192k"],
+    ".mpeg": ["mp2", "-b:a", "192k"],
+}
 
 
 class DaHuyChinhAmLuong(RuntimeError):
@@ -114,11 +125,7 @@ def chuan_hoa(
         {},
     )
     goc, duoi = os.path.splitext(dich or path)
-    ma = (
-        ["libopus", "-b:a", "160k"]
-        if duoi.lower() in _DUOI_OPUS
-        else ["aac", "-b:a", "192k"]
-    )
+    ma = _MA_THEO_DUOI.get(duoi.lower(), ["aac", "-b:a", "192k"])
     dang = f"{goc}.dang_am{duoi}"
     loc = (
         f"{_LOC}:measured_I={do['input_i']}:measured_TP={do['input_tp']}:measured_LRA={do['input_lra']}"

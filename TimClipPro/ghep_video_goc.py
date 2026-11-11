@@ -16,6 +16,7 @@ Dùng để có video dài mà ĐÁP ÁN đã biết: video gốc nào bắt đ�
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import hashlib
 import io
@@ -118,8 +119,12 @@ _PROFILE_X264 = {"High": "high", "Main": "main", "Constrained Baseline": "baseli
 
 
 def _ten_khop(nguon: str, chuan: dict) -> str:
-    """Tên bản chuyển: theo file nguồn + thông số đích — ghép lại cùng danh sách thì dùng lại, không nén lại lần nữa."""
-    khoa = os.path.basename(nguon) + json.dumps({k: chuan[k] for k in THONG_SO}, sort_keys=True)
+    """Tên bản chuyển: theo file nguồn + thông số đích — ghép lại cùng danh sách thì dùng lại, không nén lại lần nữa.
+    Đường dẫn ĐẦY ĐỦ + cỡ + giờ sửa (audit 11/11): file trong máy cùng tên khác thư mục, hay sửa file rồi ghép lại, không
+    được dùng chung bản chuyển."""
+    st = os.stat(nguon)
+    khoa = (os.path.normcase(os.path.abspath(nguon)) + f"|{st.st_size}|{st.st_mtime_ns}"
+            + json.dumps({k: chuan[k] for k in THONG_SO}, sort_keys=True))
     return hashlib.sha1(khoa.encode("utf-8")).hexdigest()[:16] + ".mp4"
 
 
@@ -336,6 +341,9 @@ def ghep(
                    else os.path.join(tam, THU_MUC_AM, f"{so}_{os.path.basename(duong)}"))
             if ban:
                 os.makedirs(os.path.dirname(ban), exist_ok=True)
+                # Bản cũ của lượt hỏng trước (có thể của file KHÁC): file đã đủ to thì chuan_hoa không ghi đè nó.
+                with contextlib.suppress(FileNotFoundError):
+                    os.remove(ban)
             try:
                 chuan_hoa(duong, huy=huy, dich=ban)
             except DaHuyChinhAmLuong:
