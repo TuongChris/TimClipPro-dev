@@ -83,6 +83,13 @@ function danhDauLinkDaQuetChoBang_(ss, dangKy, tapDaQuetCache, cauTruc) {
   if (lastRow < 2 || lastCol < 1) return thongKe;
 
   const tapDaQuet = layTapDaQuetCoCache_(ss, dangKy, tapDaQuetCache, cauTruc);
+  if (tapDaQuet === null) {
+    // Không đọc được cột đối chiếu bên KetQuaQuet (cột bị đổi tên/xoá, sheet mất): GIỮ NGUYÊN màu đang có — tô hết về
+    // «chưa quét» là báo sai im lặng (audit 11/11). Lý do hiện ở bảng Tổng quan và thông báo «Cập nhật ngay».
+    thongKe.loi = 'Không đọc được cột "' + dangKy.ketQuaHeader + '" trong sheet "' +
+      KET_QUA_JSON_CONFIG.SOURCE_SHEET_NAME + '" (cột bị đổi tên hoặc xoá?) — giữ nguyên màu đang có.';
+    return thongKe;
+  }
 
   const numRows = lastRow - 1;
   const range = sheet.getRange(2, 1, numRows, lastCol);
@@ -128,24 +135,25 @@ function danhDauLinkDaQuetChoBang_(ss, dangKy, tapDaQuetCache, cauTruc) {
  */
 function layTapDaQuetCoCache_(ss, dangKy, cache, cauTruc) {
   const cacheKey = dangKy.ketQuaHeader + '|' + dangKy.khoaSoSanh;
-  if (cache[cacheKey]) return cache[cacheKey];
+  if (cacheKey in cache) return cache[cacheKey];
   const set = xayDungTapKhoaTuKetQuaQuet_(ss, dangKy.ketQuaHeader, dangKy.khoaSoSanh, cauTruc);
   cache[cacheKey] = set;
   return set;
 }
 
+// Trả null khi KHÔNG đọc được cột đối chiếu (sheet mất, cột bị đổi tên/xoá) — khác tập rỗng (chưa quét video nào).
 function xayDungTapKhoaTuKetQuaQuet_(ss, tenTieuDe, loaiKhoa, cauTruc) {
   const set = new Set();
   const ct = cauTruc || layCauTrucKetQuaQuet_(ss);
-  if (!ct.tonTai) return set;
+  if (!ct.tonTai) return null;
 
   const sheet = ct.sheet;
   const lastRow = sheet.getLastRow();
   if (lastRow < ct.hangDauDuLieu || ct.soCot < 1) return set;
 
   const colIndex = ct.columnMap[chuanHoaTieuDe_(tenTieuDe)];
-  if (colIndex === undefined) return set;
-  if (colIndex + 1 > ct.soCot) return set; // cột nằm ngoài vùng đang có dữ liệu
+  if (colIndex === undefined) return null;
+  if (colIndex + 1 > ct.soCot) return null; // cột nằm ngoài vùng đang có dữ liệu
 
   const numRows = lastRow - ct.hangDauDuLieu + 1;
   const values = sheet

@@ -75,7 +75,17 @@ Dán từng file vào đúng tệp tương ứng:
 | `File07_TongQuan_TienIchBoSung.gs` | File 07 | đếm đúng số dòng, cảnh báo trên bảng Tổng quan |
 
 `TOAN_BO_AppsScript.gs` được **sinh ra từ 7 tệp trên**, không sửa tay. Đổi gì thì
-sửa ở tệp gốc rồi gộp lại, để hai bên không lệch nhau.
+sửa ở tệp gốc rồi chạy `python gop_toan_bo.py` (phần đầu — hướng dẫn cài, «bản này
+sửa gì» — giữ nguyên từ bản gộp). Test `tests/test_apps_script_sua_1111.py` kiểm hai
+bên không lệch và chạy các hàm trên một Google Sheet GIẢ bằng Node (`tests/apps_script_gia.js`).
+
+### Bản 12/11/2026 — 6 lỗi (audit tổng)
+
+Chuẩn hoá «Trạng thái» xoá công thức + lỗi trên trang < 5001 hàng; mở/xuất Ket_Qua_Json
+ghi đè hàng 1 khi đã xoá hàng tiêu đề; Ket_Qua_Json đầy 1000 hàng thì xuất lỗi; cột
+«Link video vi phạm» đổi tên làm mọi link đã quét bị tô trắng (nay giữ màu + báo lý do);
+thời lượng > 24 giờ dạng số hiện «18:00:00» cho 66 giờ; hai tab cùng khôi phục tiêu đề
+chèn hai hàng. **Cần dán lại `TOAN_BO_AppsScript.gs` vào Sheet** (Cách 1 ở trên).
 
 ---
 

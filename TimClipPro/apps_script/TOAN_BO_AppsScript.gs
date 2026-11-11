@@ -49,6 +49,17 @@
  * ❹ THÊM MENU «🩹 Khôi phục hàng tiêu đề cho KetQuaQuet» để chèn lại hàng
  *   tiêu đề vĩnh viễn. Chỉ chèn thêm MỘT hàng, không xoá/sửa dữ liệu nào.
  *
+ * ❺ BẢN 12/11/2026 SỬA 6 LỖI:
+ *     • «Chuẩn hoá cột Trạng thái» không còn xoá công thức trong cột đó, và
+ *       không còn báo lỗi trên trang chưa tới 5001 hàng.
+ *     • «Mở bảng Ket_Qua_Json» / xuất hàng không còn ghi đè hàng 1 khi bạn đã
+ *       xoá hàng tiêu đề — chèn hàng tiêu đề mới lên trên.
+ *     • Ket_Qua_Json đầy hàng (mặc định 1000) vẫn xuất tiếp được — tự thêm hàng.
+ *     • Cột «Link video vi phạm» bị đổi tên/xoá: KHÔNG tô lại link đã quét
+ *       thành trắng nữa; lý do hiện ở bảng Tổng quan và thông báo «Cập nhật ngay».
+ *     • Thời lượng trên 24 giờ dạng số xuất đúng (66:00:00, không còn 18:00:00).
+ *     • Khôi phục hàng tiêu đề ở hai tab cùng lúc không chèn hai hàng tiêu đề.
+ *
  * ----------------------------------------------------------------------------
  * MỤC LỤC (dùng Ctrl+F để nhảy tới)
  * ----------------------------------------------------------------------------
@@ -582,9 +593,15 @@ function chuanHoaChuoiNgayGio_(text, preferDayFirst, includeTime) {
  */
 function dinhDangThoiLuong_(rawValue, displayValue) {
   const displayText = String(displayValue || '').trim();
+  const durationMatch = displayText.match(/^(\d+):(\d{1,2}):(\d{1,2})$/);
+
+  // Ô SỐ (thời lượng của Sheets tính bằng NGÀY) mà định dạng giờ "hh:mm:ss" thì chữ hiển thị quay vòng sau 24 giờ:
+  // 66 giờ hiện "18:00:00". Tính từ GIÁ TRỊ, không tin chữ hiển thị (audit 11/11).
+  if (durationMatch && typeof rawValue === 'number' && isFinite(rawValue)) {
+    return dinhDangSoNgayThanhThoiLuong_(rawValue);
+  }
 
   if (displayText) {
-    const durationMatch = displayText.match(/^(\d+):(\d{1,2}):(\d{1,2})$/);
     if (durationMatch) {
       return (
         Number(durationMatch[1]) + ':' +
@@ -598,14 +615,27 @@ function dinhDangThoiLuong_(rawValue, displayValue) {
   }
 
   if (typeof rawValue === 'number' && isFinite(rawValue)) {
-    const totalSeconds = Math.max(0, Math.round(rawValue * 24 * 60 * 60));
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    return hours + ':' + padSo_(minutes, 2) + ':' + padSo_(seconds, 2);
+    return dinhDangSoNgayThanhThoiLuong_(rawValue);
   }
 
   return displayText;
+}
+
+function dinhDangSoNgayThanhThoiLuong_(soNgay) {
+  const totalSeconds = Math.max(0, Math.round(soNgay * 24 * 60 * 60));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return hours + ':' + padSo_(minutes, 2) + ':' + padSo_(seconds, 2);
+}
+
+/**
+ * Lưới trang tính phải có ít nhất tới hàng `hangCuoi` trước khi ghi: getRange ra ngoài lưới làm script lỗi ("outside
+ * the dimensions of the sheet") — trang mới chỉ có 1000 hàng (audit 11/11). Chèn thêm hàng TRỐNG ở cuối.
+ */
+function damBaoSoHang_(sheet, hangCuoi) {
+  const thieu = hangCuoi - sheet.getMaxRows();
+  if (thieu > 0) sheet.insertRowsAfter(sheet.getMaxRows(), thieu);
 }
 
 function padSo_(number, length) {
@@ -724,6 +754,18 @@ function khoiPhucHangTieuDeKetQuaQuet() {
       ui.ButtonSet.YES_NO
     );
     if (traLoi !== ui.Button.YES) return;
+
+    // Hộp thoại có thể mở rất lâu; trong lúc đó một lần khôi phục khác (tab khác) có thể đã chèn xong hàng tiêu đề.
+    // Đọc lại ngay trước khi chèn — chèn hai lần là thêm một hàng tiêu đề bị đọc như dữ liệu quét (audit 11/11).
+    const sauXacNhan = layCauTrucKetQuaQuet_(ss);
+    if (!sauXacNhan.tonTai || !sauXacNhan.dungDuPhong) {
+      ui.alert(
+        'Không cần khôi phục ✅',
+        'Hàng tiêu đề vừa được khôi phục ở nơi khác — không chèn thêm.',
+        ui.ButtonSet.OK
+      );
+      return;
+    }
 
     sheet.insertRowBefore(1);
 
@@ -896,6 +938,7 @@ function xuatHangDaChonSangKetQuaJson() {
     outputRows.forEach(function (row, index) {
       row[0] = outputStartRow - 1 + index;
     });
+    damBaoSoHang_(outputSheet, outputStartRow + outputRows.length - 1);
 
     outputSheet
       .getRange(outputStartRow, 1, outputRows.length, KET_QUA_JSON_CONFIG.OUTPUT_HEADERS.length)
@@ -1095,7 +1138,19 @@ function layHoacTaoSheetKetQua_(spreadsheet) {
     outputSheet = spreadsheet.insertSheet(KET_QUA_JSON_CONFIG.OUTPUT_SHEET_NAME);
   }
 
-  const headerRange = outputSheet.getRange(1, 1, 1, KET_QUA_JSON_CONFIG.OUTPUT_HEADERS.length);
+  // Hàng 1 đang là DỮ LIỆU (bạn đã xoá hàng tiêu đề): chèn hàng tiêu đề MỚI lên trên thay vì ghi đè báo cáo đầu tiên
+  // (audit 11/11). Coi là tiêu đề khi trống hoặc trùng ít nhất SO_COT_TOI_THIEU_DE_COI_LA_TIEU_DE tên cột.
+  const tieuDe = KET_QUA_JSON_CONFIG.OUTPUT_HEADERS;
+  const hang1 = outputSheet.getRange(1, 1, 1, tieuDe.length).getDisplayValues()[0];
+  const hang1Trong = hang1.every(function (x) { return String(x || '').trim() === ''; });
+  const soTenTrung = hang1.filter(function (x, i) {
+    return chuanHoaTieuDe_(x) === chuanHoaTieuDe_(tieuDe[i]);
+  }).length;
+  if (!hang1Trong && soTenTrung < SO_COT_TOI_THIEU_DE_COI_LA_TIEU_DE) {
+    outputSheet.insertRowBefore(1);
+  }
+
+  const headerRange = outputSheet.getRange(1, 1, 1, tieuDe.length);
   headerRange
     .setValues([KET_QUA_JSON_CONFIG.OUTPUT_HEADERS])
     .setBackground('#1F4E78')
@@ -1214,6 +1269,13 @@ function danhDauLinkDaQuetChoBang_(ss, dangKy, tapDaQuetCache, cauTruc) {
   if (lastRow < 2 || lastCol < 1) return thongKe;
 
   const tapDaQuet = layTapDaQuetCoCache_(ss, dangKy, tapDaQuetCache, cauTruc);
+  if (tapDaQuet === null) {
+    // Không đọc được cột đối chiếu bên KetQuaQuet (cột bị đổi tên/xoá, sheet mất): GIỮ NGUYÊN màu đang có — tô hết về
+    // «chưa quét» là báo sai im lặng (audit 11/11). Lý do hiện ở bảng Tổng quan và thông báo «Cập nhật ngay».
+    thongKe.loi = 'Không đọc được cột "' + dangKy.ketQuaHeader + '" trong sheet "' +
+      KET_QUA_JSON_CONFIG.SOURCE_SHEET_NAME + '" (cột bị đổi tên hoặc xoá?) — giữ nguyên màu đang có.';
+    return thongKe;
+  }
 
   const numRows = lastRow - 1;
   const range = sheet.getRange(2, 1, numRows, lastCol);
@@ -1259,24 +1321,25 @@ function danhDauLinkDaQuetChoBang_(ss, dangKy, tapDaQuetCache, cauTruc) {
  */
 function layTapDaQuetCoCache_(ss, dangKy, cache, cauTruc) {
   const cacheKey = dangKy.ketQuaHeader + '|' + dangKy.khoaSoSanh;
-  if (cache[cacheKey]) return cache[cacheKey];
+  if (cacheKey in cache) return cache[cacheKey];
   const set = xayDungTapKhoaTuKetQuaQuet_(ss, dangKy.ketQuaHeader, dangKy.khoaSoSanh, cauTruc);
   cache[cacheKey] = set;
   return set;
 }
 
+// Trả null khi KHÔNG đọc được cột đối chiếu (sheet mất, cột bị đổi tên/xoá) — khác tập rỗng (chưa quét video nào).
 function xayDungTapKhoaTuKetQuaQuet_(ss, tenTieuDe, loaiKhoa, cauTruc) {
   const set = new Set();
   const ct = cauTruc || layCauTrucKetQuaQuet_(ss);
-  if (!ct.tonTai) return set;
+  if (!ct.tonTai) return null;
 
   const sheet = ct.sheet;
   const lastRow = sheet.getLastRow();
   if (lastRow < ct.hangDauDuLieu || ct.soCot < 1) return set;
 
   const colIndex = ct.columnMap[chuanHoaTieuDe_(tenTieuDe)];
-  if (colIndex === undefined) return set;
-  if (colIndex + 1 > ct.soCot) return set; // cột nằm ngoài vùng đang có dữ liệu
+  if (colIndex === undefined) return null;
+  if (colIndex + 1 > ct.soCot) return null; // cột nằm ngoài vùng đang có dữ liệu
 
   const numRows = lastRow - ct.hangDauDuLieu + 1;
   const values = sheet
@@ -1662,9 +1725,9 @@ function chayCapNhatNgay() {
 
     const dongDaFit = thongKeChieuCao.reduce(function (sum, s) { return sum + s.soDongDaFit; }, 0);
     const tomTat = thongKeDanhDau.theoBang.map(function (s) {
-      return s.tonTai
-        ? ('  • ' + s.sheetName + ': ' + s.daQuet + '/' + s.tongLink + ' link đã quét')
-        : ('  • ' + s.sheetName + ': không tìm thấy sheet này');
+      if (!s.tonTai) return '  • ' + s.sheetName + ': không tìm thấy sheet này';
+      if (s.loi) return '  • ' + s.sheetName + ': ⚠️ ' + s.loi;
+      return '  • ' + s.sheetName + ': ' + s.daQuet + '/' + s.tongLink + ' link đã quét';
     }).join('\n');
 
     SpreadsheetApp.getActiveSpreadsheet().toast(
@@ -1785,6 +1848,8 @@ function capNhatTongQuan_(thongKeDanhDau, thongKeChieuCao) {
     hang.push(['— BẢNG "' + s.sheetName + '" —', '']);
     if (!s.tonTai) {
       hang.push(['(Không tìm thấy sheet này)', '']);
+    } else if (s.loi) {
+      hang.push(['⚠️ Chưa đánh dấu được', s.loi]);
     } else {
       hang.push(['Tổng số link nhận diện được', s.tongLink]);
       hang.push(['Đã quét (khớp với KetQuaQuet)', s.daQuet]);
@@ -1914,7 +1979,13 @@ function thietLapChuanHoaTrangThai() {
     const soDong = lastRow - cauTruc.hangDauDuLieu + 1;
     const range = sheet.getRange(cauTruc.hangDauDuLieu, colIndex + 1, soDong, 1);
     const values = range.getValues();
+    // Ô CÔNG THỨC giữ nguyên công thức: ghi lại giá trị đã tính là xoá mất công thức (audit 11/11).
+    const congThuc = range.getFormulas();
     for (let i = 0; i < values.length; i++) {
+      if (congThuc[i][0]) {
+        values[i][0] = congThuc[i][0];
+        continue;
+      }
       const v = String(values[i][0] || '').trim();
       if (!v) continue;
       const chuan = chuanHoaKhoaVanBan_(v);
@@ -1923,7 +1994,7 @@ function thietLapChuanHoaTrangThai() {
         soDaSua++;
       }
     }
-    range.setValues(values);
+    if (soDaSua > 0) range.setValues(values);
   }
 
   const ruleValidation = SpreadsheetApp.newDataValidation()
@@ -1932,6 +2003,7 @@ function thietLapChuanHoaTrangThai() {
     .setHelpText('Chọn 1 trạng thái trong danh sách để tránh gõ sai/không đồng nhất.')
     .build();
 
+  damBaoSoHang_(sheet, cauTruc.hangDauDuLieu + SO_HANG_AP_DUNG_VALIDATION_TRANG_THAI - 1);
   sheet.getRange(cauTruc.hangDauDuLieu, colIndex + 1, SO_HANG_AP_DUNG_VALIDATION_TRANG_THAI, 1)
     .setDataValidation(ruleValidation);
 

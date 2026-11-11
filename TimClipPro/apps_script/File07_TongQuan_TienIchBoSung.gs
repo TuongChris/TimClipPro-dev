@@ -49,6 +49,8 @@ function capNhatTongQuan_(thongKeDanhDau, thongKeChieuCao) {
     hang.push(['— BẢNG "' + s.sheetName + '" —', '']);
     if (!s.tonTai) {
       hang.push(['(Không tìm thấy sheet này)', '']);
+    } else if (s.loi) {
+      hang.push(['⚠️ Chưa đánh dấu được', s.loi]);
     } else {
       hang.push(['Tổng số link nhận diện được', s.tongLink]);
       hang.push(['Đã quét (khớp với KetQuaQuet)', s.daQuet]);
@@ -178,7 +180,13 @@ function thietLapChuanHoaTrangThai() {
     const soDong = lastRow - cauTruc.hangDauDuLieu + 1;
     const range = sheet.getRange(cauTruc.hangDauDuLieu, colIndex + 1, soDong, 1);
     const values = range.getValues();
+    // Ô CÔNG THỨC giữ nguyên công thức: ghi lại giá trị đã tính là xoá mất công thức (audit 11/11).
+    const congThuc = range.getFormulas();
     for (let i = 0; i < values.length; i++) {
+      if (congThuc[i][0]) {
+        values[i][0] = congThuc[i][0];
+        continue;
+      }
       const v = String(values[i][0] || '').trim();
       if (!v) continue;
       const chuan = chuanHoaKhoaVanBan_(v);
@@ -187,7 +195,7 @@ function thietLapChuanHoaTrangThai() {
         soDaSua++;
       }
     }
-    range.setValues(values);
+    if (soDaSua > 0) range.setValues(values);
   }
 
   const ruleValidation = SpreadsheetApp.newDataValidation()
@@ -196,6 +204,7 @@ function thietLapChuanHoaTrangThai() {
     .setHelpText('Chọn 1 trạng thái trong danh sách để tránh gõ sai/không đồng nhất.')
     .build();
 
+  damBaoSoHang_(sheet, cauTruc.hangDauDuLieu + SO_HANG_AP_DUNG_VALIDATION_TRANG_THAI - 1);
   sheet.getRange(cauTruc.hangDauDuLieu, colIndex + 1, SO_HANG_AP_DUNG_VALIDATION_TRANG_THAI, 1)
     .setDataValidation(ruleValidation);
 

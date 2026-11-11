@@ -178,9 +178,9 @@ function chayCapNhatNgay() {
 
     const dongDaFit = thongKeChieuCao.reduce(function (sum, s) { return sum + s.soDongDaFit; }, 0);
     const tomTat = thongKeDanhDau.theoBang.map(function (s) {
-      return s.tonTai
-        ? ('  • ' + s.sheetName + ': ' + s.daQuet + '/' + s.tongLink + ' link đã quét')
-        : ('  • ' + s.sheetName + ': không tìm thấy sheet này');
+      if (!s.tonTai) return '  • ' + s.sheetName + ': không tìm thấy sheet này';
+      if (s.loi) return '  • ' + s.sheetName + ': ⚠️ ' + s.loi;
+      return '  • ' + s.sheetName + ': ' + s.daQuet + '/' + s.tongLink + ' link đã quét';
     }).join('\n');
 
     SpreadsheetApp.getActiveSpreadsheet().toast(

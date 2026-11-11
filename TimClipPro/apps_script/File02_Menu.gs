@@ -87,6 +87,18 @@ function khoiPhucHangTieuDeKetQuaQuet() {
     );
     if (traLoi !== ui.Button.YES) return;
 
+    // Hộp thoại có thể mở rất lâu; trong lúc đó một lần khôi phục khác (tab khác) có thể đã chèn xong hàng tiêu đề.
+    // Đọc lại ngay trước khi chèn — chèn hai lần là thêm một hàng tiêu đề bị đọc như dữ liệu quét (audit 11/11).
+    const sauXacNhan = layCauTrucKetQuaQuet_(ss);
+    if (!sauXacNhan.tonTai || !sauXacNhan.dungDuPhong) {
+      ui.alert(
+        'Không cần khôi phục ✅',
+        'Hàng tiêu đề vừa được khôi phục ở nơi khác — không chèn thêm.',
+        ui.ButtonSet.OK
+      );
+      return;
+    }
+
     sheet.insertRowBefore(1);
 
     const hangTieuDe = KETQUAQUET_COT_MAC_DINH.slice();

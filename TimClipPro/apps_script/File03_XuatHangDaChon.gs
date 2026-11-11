@@ -129,6 +129,7 @@ function xuatHangDaChonSangKetQuaJson() {
     outputRows.forEach(function (row, index) {
       row[0] = outputStartRow - 1 + index;
     });
+    damBaoSoHang_(outputSheet, outputStartRow + outputRows.length - 1);
 
     outputSheet
       .getRange(outputStartRow, 1, outputRows.length, KET_QUA_JSON_CONFIG.OUTPUT_HEADERS.length)
@@ -328,7 +329,19 @@ function layHoacTaoSheetKetQua_(spreadsheet) {
     outputSheet = spreadsheet.insertSheet(KET_QUA_JSON_CONFIG.OUTPUT_SHEET_NAME);
   }
 
-  const headerRange = outputSheet.getRange(1, 1, 1, KET_QUA_JSON_CONFIG.OUTPUT_HEADERS.length);
+  // Hàng 1 đang là DỮ LIỆU (bạn đã xoá hàng tiêu đề): chèn hàng tiêu đề MỚI lên trên thay vì ghi đè báo cáo đầu tiên
+  // (audit 11/11). Coi là tiêu đề khi trống hoặc trùng ít nhất SO_COT_TOI_THIEU_DE_COI_LA_TIEU_DE tên cột.
+  const tieuDe = KET_QUA_JSON_CONFIG.OUTPUT_HEADERS;
+  const hang1 = outputSheet.getRange(1, 1, 1, tieuDe.length).getDisplayValues()[0];
+  const hang1Trong = hang1.every(function (x) { return String(x || '').trim() === ''; });
+  const soTenTrung = hang1.filter(function (x, i) {
+    return chuanHoaTieuDe_(x) === chuanHoaTieuDe_(tieuDe[i]);
+  }).length;
+  if (!hang1Trong && soTenTrung < SO_COT_TOI_THIEU_DE_COI_LA_TIEU_DE) {
+    outputSheet.insertRowBefore(1);
+  }
+
+  const headerRange = outputSheet.getRange(1, 1, 1, tieuDe.length);
   headerRange
     .setValues([KET_QUA_JSON_CONFIG.OUTPUT_HEADERS])
     .setBackground('#1F4E78')

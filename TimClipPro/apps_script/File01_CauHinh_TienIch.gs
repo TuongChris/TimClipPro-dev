@@ -510,9 +510,15 @@ function chuanHoaChuoiNgayGio_(text, preferDayFirst, includeTime) {
  */
 function dinhDangThoiLuong_(rawValue, displayValue) {
   const displayText = String(displayValue || '').trim();
+  const durationMatch = displayText.match(/^(\d+):(\d{1,2}):(\d{1,2})$/);
+
+  // Ô SỐ (thời lượng của Sheets tính bằng NGÀY) mà định dạng giờ "hh:mm:ss" thì chữ hiển thị quay vòng sau 24 giờ:
+  // 66 giờ hiện "18:00:00". Tính từ GIÁ TRỊ, không tin chữ hiển thị (audit 11/11).
+  if (durationMatch && typeof rawValue === 'number' && isFinite(rawValue)) {
+    return dinhDangSoNgayThanhThoiLuong_(rawValue);
+  }
 
   if (displayText) {
-    const durationMatch = displayText.match(/^(\d+):(\d{1,2}):(\d{1,2})$/);
     if (durationMatch) {
       return (
         Number(durationMatch[1]) + ':' +
@@ -526,14 +532,27 @@ function dinhDangThoiLuong_(rawValue, displayValue) {
   }
 
   if (typeof rawValue === 'number' && isFinite(rawValue)) {
-    const totalSeconds = Math.max(0, Math.round(rawValue * 24 * 60 * 60));
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    return hours + ':' + padSo_(minutes, 2) + ':' + padSo_(seconds, 2);
+    return dinhDangSoNgayThanhThoiLuong_(rawValue);
   }
 
   return displayText;
+}
+
+function dinhDangSoNgayThanhThoiLuong_(soNgay) {
+  const totalSeconds = Math.max(0, Math.round(soNgay * 24 * 60 * 60));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return hours + ':' + padSo_(minutes, 2) + ':' + padSo_(seconds, 2);
+}
+
+/**
+ * Lưới trang tính phải có ít nhất tới hàng `hangCuoi` trước khi ghi: getRange ra ngoài lưới làm script lỗi ("outside
+ * the dimensions of the sheet") — trang mới chỉ có 1000 hàng (audit 11/11). Chèn thêm hàng TRỐNG ở cuối.
+ */
+function damBaoSoHang_(sheet, hangCuoi) {
+  const thieu = hangCuoi - sheet.getMaxRows();
+  if (thieu > 0) sheet.insertRowsAfter(sheet.getMaxRows(), thieu);
 }
 
 function padSo_(number, length) {
