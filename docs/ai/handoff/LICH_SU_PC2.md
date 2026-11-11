@@ -3,6 +3,9 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-11-09 — tải theo link 4 kết nối song song (D-40, nhánh feature/pc2/tai-song-song)
+- Người dùng thấy ghép chậm: đo thật một kết nối 0,78–25 MB/s; 4 kết nối ~78 MB/s; tool thật tải 346 MB trong 22,5 s. Gộp `5a2e79a`, DEV 09/11 21:24 (sao lưu `data_20261109_212411`).
+- Lùi một kết nối khi thiếu định dạng; Dừng giữa chừng để lại .part đang mở → sửa (test đỏ + thử thật). Bằng chứng `C:\Dev\pc2_test_runs\2026-11-09_tai_song_song`.
 ### 2026-11-09 — tab «🎞️ Ghép video gốc» (D-39, nhánh feature/pc2/ghep-video-goc)
 - Tải H.264 ≤ 1080p + AAC rồi nối `-c copy` theo thứ tự link; `<tên>.moc.csv` + mốc chương. Video lệch thông số: tự nén lại
   cho khớp video 1 (D-41, nhánh feature/pc2/ghep-tu-chuyen; thử thật 2 video của người dùng 29,97 + 60: mốc lệch 0 ms; gộp `bc7c509`, DEV 09/11 22:01). Cảnh báo «QT chapter track not found» (chương > ~190 s bị FFmpeg 9 bỏ khỏi track chương QuickTime): `-movie_timescale` = tần số tiếng, nhánh fix/pc2/chuong-quicktime, gộp `25be505`, DEV 22:55.

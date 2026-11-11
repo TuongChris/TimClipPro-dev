@@ -68,9 +68,11 @@ def chuan_hoa(
     *,
     huy: Optional[Callable[[], bool]] = None,
     khi_tien_do: Optional[Callable[[dict], None]] = None,
+    dich: Optional[str] = None,
 ) -> str:
-    """Chuẩn hoá âm lượng ``path`` TẠI CHỖ (ghi file tạm rồi mới thay). Trả câu ghi chú; ffmpeg hỏng → ``RuntimeError``,
-    bị Dừng → :class:`DaHuyChinhAmLuong` — cả hai đều giữ nguyên file gốc."""
+    """Chuẩn hoá âm lượng ``path`` TẠI CHỖ (ghi file tạm rồi mới thay) — hoặc ra file ``dich`` mới, ``path`` không đổi
+    (video trong máy, D-46). Trả câu ghi chú; không cần chỉnh (im lặng / đã ở mức) thì KHÔNG tạo ``dich``. ffmpeg hỏng →
+    ``RuntimeError``, bị Dừng → :class:`DaHuyChinhAmLuong` — cả hai đều giữ nguyên file gốc."""
     huy = huy or (lambda: False)
     r = _chay(
         [
@@ -111,7 +113,7 @@ def chuan_hoa(
         ),
         {},
     )
-    goc, duoi = os.path.splitext(path)
+    goc, duoi = os.path.splitext(dich or path)
     ma = (
         ["libopus", "-b:a", "160k"]
         if duoi.lower() in _DUOI_OPUS
@@ -151,7 +153,7 @@ def chuan_hoa(
             raise RuntimeError(
                 f"FFmpeg chỉnh âm lượng lỗi: {(r.stderr or r.ly_do or '').strip()[-200:]}"
             )
-        os.replace(dang, path)
+        os.replace(dang, dich or path)
     finally:
         if os.path.exists(dang):
             os.remove(dang)

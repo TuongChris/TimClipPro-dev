@@ -67,6 +67,7 @@ import channel
 import cat_video_goc
 import ghep_video_goc
 import tai_video_goc
+import video_trong_may
 from channel import ChannelSync
 from tien_do_dong_bo import SoDongBo
 from ui_tien_do_dong_bo import dong_hieu_suat, ve_tien_do_dong_bo
@@ -1340,8 +1341,9 @@ if not job["running"] and (job["results"] or job["error"]):
         r = job["results"]
         _r_tai = [k for k in r if not k.get("la_dong_ghep")]  # dòng «🎞️ Video ghép» không phải một video tải
         _dem = {t: sum(1 for k in _r_tai if k["trang_thai"] == t) for t in ("xong", "bo_qua", "loi")}
+        _viec = "xử lý" if _r_tai and all(k.get("la_file_may") for k in _r_tai) else "tải"  # tab «Video trong máy»
         (st.success if not (_dem["loi"] or any(k["trang_thai"] == "loi" for k in r)) else st.warning)(
-            f"Đã tải {_dem['xong']}/{len(_r_tai)} — bỏ qua {_dem['bo_qua']}, lỗi {_dem['loi']}.")
+            f"Đã {_viec} {_dem['xong']}/{len(_r_tai)} — bỏ qua {_dem['bo_qua']}, lỗi {_dem['loi']}.")
 
         def _dong_tai(k: dict) -> str:
             if k["trang_thai"] == "xong":
@@ -1428,9 +1430,9 @@ if not job["running"] and (job["results"] or job["error"]):
 #  Các tab chức năng
 # =====================================================================
 
-tab0, tab_tai, tab_anh, tab_kenh, tab_ghep, tab_td, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+tab0, tab_tai, tab_anh, tab_kenh, tab_ghep, tab_may, tab_td, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
     ["📥 Đồng bộ kênh gốc", "⬇️ Tải video gốc", "🖼️ Tải thumbnail", "📺 Tải cả kênh", "🎞️ Ghép video gốc",
-     "📝 Tiêu đề kênh", "🎬 Kho clip gốc", "📋 Danh sách video trong kho",
+     "🛠️ Video trong máy", "📝 Tiêu đề kênh", "🎬 Kho clip gốc", "📋 Danh sách video trong kho",
      "▶️ Quét YouTube", "📁 Quét file trong máy", "📜 Lịch sử", "📤 Gửi Google Sheets"])
 
 # ---------------------------------------------------------------- TẢI VIDEO GỐC / THUMBNAIL / CẢ KÊNH
@@ -1577,8 +1579,11 @@ with tab_ghep:
                "theo đúng thứ tự link; link lặp lại thì video lặp lại. Kèm file «.moc.csv» ghi video gốc nào bắt đầu ở "
                "giây nào (và mốc chương ngay trong video) — đem video dài đi quét rồi so với file mốc để đo độ chính xác. "
                "Ghép xong thì xoá các file lẻ.")
-    links_ghep = st.text_area("Link video cần ghép (mỗi dòng một link, theo thứ tự ghép)", height=140,
-                              placeholder="https://www.youtube.com/watch?v=...\nhttps://youtu.be/...")
+    links_ghep = st.text_area("Link video hoặc đường dẫn file trong máy cần ghép (mỗi dòng một, theo thứ tự ghép)",
+                              height=140,
+                              placeholder="https://www.youtube.com/watch?v=...\nD:\\Video\\intro.mp4\nhttps://youtu.be/...")
+    st.caption("Trộn được link YouTube với file có sẵn trong máy. File trong máy không bị sửa hay xoá (chỉnh âm lượng làm "
+               "trên bản sao tạm).")
     _thu_muc_ghep = _o_thu_muc_tai("Thư mục lưu video ghép", "ghep")
     _ten_ghep = st.text_input("Tên file video ghép (để trống = «Video ghép <ngày giờ>»)")
     _ds_ghep = ghep_video_goc.tach_link(links_ghep)
@@ -1589,6 +1594,44 @@ with tab_ghep:
     if st.button(f"🎞️ Tải và ghép {len(_ds_ghep)} video" if _ds_ghep else "🎞️ Tải và ghép", type="primary",
                  key="bat_dau_ghep_video", disabled=len(_ds_ghep) < 2 or not _thu_muc_ghep or _chua_tai_duoc()):
         _bat_dau_tai(ghep_video_goc.ghep, _ds_ghep, _thu_muc_ghep, ten_file=_ten_ghep, chuan_hoa_am=_am_ghep)
+
+with tab_may:
+    st.subheader("Cắt đoạn / chỉnh âm lượng video có sẵn trong máy")
+    st.caption("File gốc KHÔNG bị sửa, đổi tên hay xoá — kết quả ra file MỚI trong thư mục lưu (trùng tên thì thêm « (2)»). "
+               "Muốn GHÉP các file trong máy: dán đường dẫn file vào tab «🎞️ Ghép video gốc» (trộn được với link YouTube).")
+    may_vb = st.text_area("Đường dẫn video trong máy (mỗi dòng một file, hoặc một thư mục)", height=120, key="file_may",
+                          placeholder="D:\\Video\\phim.mp4\nD:\\Video\\ThuMuc")
+    _ds_may, _loi_may = video_trong_may.tach_file(may_vb)
+    for _l in _loi_may:
+        st.error(_l)
+    if _ds_may:
+        st.caption(f"{len(_ds_may)} file: " + ", ".join(os.path.basename(f) for f in _ds_may[:8])
+                   + (f"… (+{len(_ds_may) - 8})" if len(_ds_may) > 8 else ""))
+    _thu_muc_may = _o_thu_muc_tai("Thư mục lưu kết quả", "may")
+    c_tu_m, c_den_m = st.columns(2)
+    with c_tu_m:
+        _tu_may = st.text_input("Từ (cắt một đoạn — để trống = không cắt)", key="tu_may", placeholder="vd. 1:23")
+    with c_den_m:
+        _den_may = st.text_input("Đến (phút:giây hoặc giờ:phút:giây)", key="den_may", placeholder="vd. 2:45.5")
+    _tu_m = _den_m = None
+    _loi_doan_m = ""
+    try:
+        _tu_m, _den_m = cat_video_goc.doc_moc(_tu_may), cat_video_goc.doc_moc(_den_may)
+        if (_tu_m is None) != (_den_m is None):
+            _loi_doan_m = "Điền cả «Từ» lẫn «Đến» — hoặc để trống cả hai nếu chỉ chỉnh âm lượng."
+        elif _tu_m is not None and _den_m <= _tu_m:
+            _loi_doan_m = "Mốc «Đến» phải sau mốc «Từ»."
+    except ValueError as e:
+        _loi_doan_m = str(e)
+    if _loi_doan_m:
+        st.error(_loi_doan_m)
+    _am_may = st.checkbox(O_AM_LUONG, value=True, key="am_may", help=GIAI_THICH_AM_LUONG)
+    if _tu_m is None and not _am_may:
+        st.caption("Chọn ít nhất một việc: điền «Từ»/«Đến» để cắt, hoặc tick chỉnh âm lượng.")
+    if st.button(f"🛠️ Xử lý {len(_ds_may)} file" if _ds_may else "🛠️ Xử lý", type="primary", key="bat_dau_xu_ly_may",
+                 disabled=not (_ds_may and _thu_muc_may) or bool(_loi_doan_m) or (_tu_m is None and not _am_may)
+                 or _chua_tai_duoc()):
+        _bat_dau_tai(video_trong_may.xu_ly, _ds_may, _thu_muc_may, tu_s=_tu_m, den_s=_den_m, chuan_hoa_am=_am_may)
 
 with tab_td:
     st.subheader("Tải danh sách tiêu đề của kênh")

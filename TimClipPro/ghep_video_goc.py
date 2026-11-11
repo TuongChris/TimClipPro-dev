@@ -35,6 +35,19 @@ from ytdlp_chung import CauHinhMang
 
 THU_MUC_PHAN = ".timclip_ghep"
 THU_MUC_KHOP = "khop"  # trong THU_MUC_PHAN: bản đã chuyển cho khớp video 1 (dùng lại khi bấm ghép lại)
+THU_MUC_AM = "am"  # trong THU_MUC_PHAN: bản đã chỉnh âm lượng của FILE TRONG MÁY (file gốc không bị sửa — D-46)
+# Dòng trông như đường dẫn file Windows («D:\…», «\\máy\…»): không có file thì báo «không tìm thấy», không đem đi tải.
+_RE_DUONG_DAN = re.compile(r"^(?:[A-Za-z]:[\\/]|\\\\)")
+
+
+def _dong_file_may(duong: str) -> dict:
+    """Dòng kết quả cho một FILE có sẵn trong máy (không tải; ghép xong vẫn giữ nguyên — D-46)."""
+    if not os.path.isfile(duong):
+        return {"url": duong, "trang_thai": "loi", "duong_dan": "", "tieu_de": "", "chat_luong": "",
+                "ghi_chu": f"Không tìm thấy file trong máy: {duong}", "la_file_may": True}
+    return {"url": duong, "trang_thai": "xong", "duong_dan": os.path.abspath(duong),
+            "tieu_de": os.path.splitext(os.path.basename(duong))[0], "chat_luong": "file trong máy", "ghi_chu": "",
+            "la_file_may": True}
 # Thông số phải TRÙNG giữa các phần để nối bằng -c copy (tên hiển thị cho câu báo lệch).
 THONG_SO = {
     "ma_hinh": "mã hoá hình",
@@ -245,16 +258,36 @@ def ghep(
     huy = cancel_check or (lambda: False)
     thu_muc = os.path.abspath(str(thu_muc or "").strip().strip('"'))
     tam = os.path.join(thu_muc, THU_MUC_PHAN)
-    ket_qua = tv.tai_nhieu(
-        list(links),
-        tam,
-        cau_hinh_mang,
-        progress=lambda p, m: bao(0.7 * p, m),
-        cancel_check=huy,
-        bo_qua_da_co=True,
-        dinh_dang=tv.DINH_DANG_GHEP,
-        **kw,
+    # Dòng là FILE trong máy (D-46) thì dùng thẳng; còn lại mới tải. File không có → dừng TRƯỚC khi tải gì.
+    sach = [str(x).strip().strip('"').strip() for x in links]
+    la_may = [os.path.isfile(x) or bool(_RE_DUONG_DAN.match(x)) for x in sach]
+    dong_may = {i: _dong_file_may(x) for i, (x, m) in enumerate(zip(sach, la_may)) if m}
+    thieu = [d for d in dong_may.values() if d["trang_thai"] == "loi"]
+    if thieu:
+        ket_qua = [dong_may.get(i) or {"url": x, "trang_thai": "bo_qua", "duong_dan": "", "tieu_de": "", "chat_luong": "",
+                                       "ghi_chu": "Chưa tải: có file trong máy không tìm thấy."}
+                   for i, x in enumerate(sach)]
+        ket_qua.append({"url": "🎞️ Video ghép", "trang_thai": "loi", "duong_dan": "", "tieu_de": "", "chat_luong": "",
+                        "ghi_chu": "Chưa ghép: có file trong máy không tìm thấy (xem các dòng ở trên).",
+                        "la_dong_ghep": True})
+        return ket_qua
+    can_tai = [x for x, m in zip(links, la_may) if not m]
+    os.makedirs(tam, exist_ok=True)
+    da_tai = iter(
+        tv.tai_nhieu(
+            can_tai,
+            tam,
+            cau_hinh_mang,
+            progress=lambda p, m: bao(0.7 * p, m),
+            cancel_check=huy,
+            bo_qua_da_co=True,
+            dinh_dang=tv.DINH_DANG_GHEP,
+            **kw,
+        )
+        if can_tai
+        else []
     )
+    ket_qua = [dong_may[i] if i in dong_may else next(da_tai) for i in range(len(sach))]
     dong_ghep = {
         "url": "🎞️ Video ghép",
         "trang_thai": "loi",
@@ -294,14 +327,24 @@ def ghep(
     if chuan_hoa_am:
         # Từng video riêng (như YouTube), TRƯỚC khi kiểm thông số/nối; video đã ở mức thì giữ nguyên — bấm lại với file lẻ
         # còn giữ từ lượt trước không nén lại lần nữa.
+        thay: dict = {}
+        tam_tuyet_doi = os.path.abspath(tam) + os.sep
         for so, duong in enumerate(dict.fromkeys(d for *_x, d in phan), start=1):
             bao(0.70, f"Đang chỉnh âm lượng video {so} về mức YouTube...")
+            # File trong máy (ngoài thư mục tạm): chỉnh ra BẢN trong thư mục tạm, file gốc của người dùng không đổi.
+            ban = (None if os.path.abspath(duong).startswith(tam_tuyet_doi)
+                   else os.path.join(tam, THU_MUC_AM, f"{so}_{os.path.basename(duong)}"))
+            if ban:
+                os.makedirs(os.path.dirname(ban), exist_ok=True)
             try:
-                chuan_hoa(duong, huy=huy)
+                chuan_hoa(duong, huy=huy, dich=ban)
             except DaHuyChinhAmLuong:
                 return that_bai("Đã dừng theo yêu cầu trong lúc chỉnh âm lượng.")
             except RuntimeError as e:
                 ghi_am.append(f"Video {so}: chưa chỉnh được âm lượng ({e}).")
+            if ban and os.path.isfile(ban):
+                thay[duong] = ban
+        phan = [(ten, link, thay.get(d, d)) for ten, link, d in phan]
 
     bao(0.71, "Đang kiểm thông số các video...")
     try:
@@ -471,7 +514,9 @@ def ghep(
     else:
         shutil.rmtree(tam, ignore_errors=True)
         for k in ket_qua[:-1]:  # file lẻ vừa xoá: đừng để dòng từng link trỏ vào đó
-            if k["trang_thai"] in ("xong", "bo_qua"):
+            if k.get("la_file_may"):
+                k["ghi_chu"] = "Đã nối vào video ghép bên dưới; file trong máy giữ nguyên."
+            elif k["trang_thai"] in ("xong", "bo_qua"):
                 k.update(trang_thai="xong", duong_dan="", ghi_chu="Đã nối vào video ghép bên dưới; file lẻ đã xoá.")
     bao(1.0, "Xong.")
     return ket_qua

@@ -15,6 +15,13 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-46 Cắt / chỉnh âm / ghép video ĐÃ CÓ trong máy (người dùng, 2026-11-11)
+Tab mới «🛠️ Video trong máy»: đường dẫn file (hoặc thư mục — chỉ file media ngay trong đó, không vào thư mục con) +
+«Từ/Đến» + ô âm lượng → `video_trong_may.xu_ly`. Ghép: tab «🎞️ Ghép» nhận cả đường dẫn file, trộn với link. Bất biến: file
+GỐC không bao giờ bị sửa/đổi tên/xoá — cắt ra file mới (`cat_video_goc.cat_mot`, tách từ `tai_doan`, dùng chung), chỉnh âm
+ra file mới (`am_luong.chuan_hoa(dich=…)`; đã ở mức thì không tạo bản sao), ghép chỉnh âm trên bản trong thư mục tạm và
+không xoá file trong máy. Đường dẫn không có → dừng trước khi tải gì.
+
 ## D-45 Tab thumbnail: lấy thumbnail cả kênh (người dùng, 2026-11-11)
 Ô «Link kênh YouTube cần lấy thumbnail» + «Số thumbnail mới nhất (0 = cả kênh)» trong tab «🖼️ Tải thumbnail» → `tai_kenh(
 thumbnail=True)`: liệt kê tab Videos rồi tải THẲNG ảnh theo địa chỉ cố định `i.ytimg.com/vi/<mã>/maxresdefault.jpg` (lùi

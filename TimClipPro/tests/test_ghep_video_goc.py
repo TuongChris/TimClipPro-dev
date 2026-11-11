@@ -349,7 +349,7 @@ def test_tab_ghep_video_goi_dung_ham(tmp_path, monkeypatch):
     at = AppTest.from_file(
         str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=120
     ).run()
-    next(t for t in at.text_area if t.label.startswith("Link video cần ghép")).input(
+    next(t for t in at.text_area if t.label.startswith("Link video hoặc đường dẫn file trong máy cần ghép")).input(
         f"{URL[0]}\n{URL[1]}"
     ).run()
     next(t for t in at.text_input if t.label == "Thư mục lưu video ghép").input(
@@ -492,3 +492,34 @@ def test_ghep_link_twitch_lap_lai(nguon, tmp_path, monkeypatch):
     assert kq[-1]["trang_thai"] == "xong", kq[-1]
     with open(tmp_path / "tw.moc.csv", encoding="utf-8-sig") as f:
         assert [d["Tiêu đề"] for d in csv.DictReader(f)] == ["Tập 1: Mở đầu", "Tập 2 = «bí ẩn»; #1", "Tập 1: Mở đầu"]
+
+
+# ---------------------------------------------------------------- D-46: ghép cả file có sẵn trong máy
+@can_ffmpeg
+@pytest.mark.parametrize("chuan_hoa_am", [False, True])
+def test_ghep_file_trong_may_tron_link_giu_nguyen_file_goc(nguon, tmp_path, monkeypatch, chuan_hoa_am):
+    import hashlib
+
+    may = tmp_path / "may"
+    may.mkdir()
+    intro = shutil.copy(nguon[URL[1]][1], may / "Intro của tôi.mp4")
+    bam = hashlib.sha256(open(intro, "rb").read()).hexdigest()
+    _gia_tai(monkeypatch, {URL[0]: nguon[URL[0]]})
+    kq = gv.ghep([f'"{intro}"', URL[0], str(intro)], str(tmp_path / "ra"), ten_file="tron", chuan_hoa_am=chuan_hoa_am)
+    assert kq[-1]["trang_thai"] == "xong", kq[-1]
+    assert hashlib.sha256(open(intro, "rb").read()).hexdigest() == bam  # file gốc không bị chỉnh âm/xoá
+    assert [k["la_file_may"] for k in kq[:-1] if "la_file_may" in k] == [True, True]
+    assert kq[0]["duong_dan"] == str(intro) and "giữ nguyên" in kq[0]["ghi_chu"]
+    with open(tmp_path / "ra" / "tron.moc.csv", encoding="utf-8-sig") as f:
+        dong = list(csv.DictReader(f))
+    assert [d["Tiêu đề"] for d in dong] == ["Intro của tôi", "Tập 1: Mở đầu", "Intro của tôi"]
+    assert [float(d["Bắt đầu (giây)"]) for d in dong] == pytest.approx([0, 3, 5], abs=0.05)
+    for giay, hz in ((0.1, 880), (3.1, 440), (5.1, 880)):
+        assert _tan_so_tai(kq[-1]["duong_dan"], giay) == pytest.approx(hz, abs=25), giay
+
+
+def test_ghep_duong_dan_khong_co_bao_ro(tmp_path, monkeypatch):
+    _gia_tai(monkeypatch, {})
+    kq = gv.ghep(["D:\\khong\\co.mp4", URL[0]], str(tmp_path), ten_file="x")
+    assert kq[0]["trang_thai"] == "loi" and "Không tìm thấy file" in kq[0]["ghi_chu"]
+    assert kq[-1]["trang_thai"] == "loi"
