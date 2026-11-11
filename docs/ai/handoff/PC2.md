@@ -49,6 +49,12 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 9. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-11-11 — audit tổng toàn dự án (Codex GPT-6 Astra chỉ nhận chữ, nhánh fix/pc2/audit-tong-1111)
+- 27 lượt Codex (12 vùng × 2 góc nhìn + Apps Script + mã chết + soát bản sửa), ~78 phát hiện; Claude đọc lại mã từng cái → 20 lỗi
+  thật sửa kèm 30 test đỏ→xanh: che mật khẩu proxy trong log, phục hồi JSON không mất file chính, dựng kho DỪNG khi thư mục con không
+  đọc được, không mất dòng output tiến trình con, ghép lệch nhịp thời gian (đo thật 2+2 s ra 23 s), hook .env/fail-closed/namespace.
+- Phân loại đủ (cả cái KHÔNG sửa + lý do): `C:\Dev\pc2_test_runs\2026-11-11_audit_tong\PHAN_LOAI.md`. Nhanh 3724 = 3720/4/0, chậm 24/24.
+  Gộp `2450682`, DEV 11/11 23:57 (sao lưu `data_20261111_235553`). Hook mới đã cài trên PC2; PC1 cài lại.
 ### 2026-11-11 — cắt / chỉnh âm / ghép video trong máy (D-46, nhánh feature/pc2/video-trong-may)
 - Tab «🛠️ Video trong máy» (`video_trong_may.py`) + tab Ghép nhận đường dẫn file; file gốc không bao giờ bị sửa (so băm).
 - Thử thật offline 2 video 1080p 90 s (30 + 60 hình/giây): cắt+âm 10 s, chỉ âm 4,8 s, ghép 3 phần 15,8 s; gốc không đổi. Nhanh 3688 = 3684/4/0, chậm 24/24. Gộp `878a7ce`, DEV 16:25.
@@ -70,7 +76,4 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 - 11 sửa kèm test đỏ: file đáp án `.moc.csv` bị ghi đè, cắt từ bản cũ khác chất lượng, tải song song mất định dạng thiếu dung
   lượng + gọi YouTube gấp đôi (nay `dashy,duplicate` ghép cặp theo URL), ffprobe hỏng mất kết quả, đoạn cắt lỗi đổi tên `.loi`…
 - Thử thật (video Marvin): chọn `137-dashy` + `140-dashy-11` (video nhiều ngôn ngữ tiếng đánh số lại mã), tải 23,4 s, Dừng sạch. Gộp `07ae606`, DEV 10/11 08:52.
-### 2026-11-09 — tải theo link chỉ lấy một đoạn (D-42, nhánh feature/pc2/cat-doan-video)
-- Ô «Từ»/«Đến» ở tab «⬇️ Tải video gốc»: tải trọn rồi cắt nén lại, đúng từng khung hình; xoá video trọn khi đoạn ra đúng độ dài.
-- Thử file thật 1080p: đoạn 30 s cắt 4,7 s, 899 khung = lý thuyết, tiếng đầu đoạn lệch 0 ms. Gộp `473ac5d`, DEV 23:44. Chưa thử YouTube thật.
-- Mục cũ hơn (2026-11-09 tải 4 kết nối D-40; 2026-11-09 ghép video gốc D-39/D-41 + chương QuickTime; 2026-11-09 tiêu đề kênh D-38 + audit 09/11; 2026-11-08 tải video gốc D-37 + review/audit 08/11; 2026-11-07 Codex bước 2 audit 14 + 18; 2026-11-07 Codex review PR #27–#29 D-36; 2026-11-07 đồng bộ nén song song D-35; 2026-11-07 audit số 15, 19, 20; 2026-11-07 kho video dài D-34; 2026-11-07 dựng kho nhường ổ cứng D-33; 2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
+- Mục cũ hơn (2026-11-09 cắt đoạn D-42; 2026-11-09 tải 4 kết nối D-40; 2026-11-09 ghép video gốc D-39/D-41 + chương QuickTime; 2026-11-09 tiêu đề kênh D-38 + audit 09/11; 2026-11-08 tải video gốc D-37 + review/audit 08/11; 2026-11-07 Codex bước 2 audit 14 + 18; 2026-11-07 Codex review PR #27–#29 D-36; 2026-11-07 đồng bộ nén song song D-35; 2026-11-07 audit số 15, 19, 20; 2026-11-07 kho video dài D-34; 2026-11-07 dựng kho nhường ổ cứng D-33; 2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
