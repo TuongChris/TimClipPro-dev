@@ -1374,3 +1374,109 @@ def thu_tung_client(
         "Không tải được audio. Đã thử: " + ", ".join(da_thu)
         + f". {nhan}: " + che_bi_mat(go_ma_mau(loi_dai_dien))
     ) from loi_dai_dien
+
+
+# ---------------------------------------------------------------- Twitch 1440p (D-44)
+# Twitch khoá bản 1440p bằng HAI lớp, ghi rõ trong danh sách «unavailable-media» của usher (đo thật 11/11): AUTHZ_GEO (xem
+# từ Việt Nam) + AUTHZ_NOT_LOGGED_IN. Proxy ở nước được mở (Windscribe Proxy Gateway) gỡ lớp vùng, cookie twitch.tv có
+# ``auth-token`` gỡ lớp đăng nhập. CHỈ bước xin danh sách (vài KB) đi qua proxy: khúc video tải thẳng từ CDN không bị
+# chặn — gói VPN miễn phí 10 GB/tháng không hao.
+class LoiMoKhoaTwitch(RuntimeError):
+    """Proxy/cookie Twitch ĐÃ cấu hình nhưng không dùng được — báo rõ, không lặng lẽ tải bản thấp hơn. Câu lỗi không bao giờ
+    chứa mật khẩu proxy hay giá trị cookie."""
+
+
+def la_link_twitch(url: Any) -> bool:
+    """Link thuộc twitch.tv (chính nó hoặc miền con) — không chỉ trùng đuôi chuỗi («eviltwitch.tv»)."""
+    import urllib.parse
+
+    try:
+        host = (urllib.parse.urlsplit(str(url)).hostname or "").lower()
+    except ValueError:
+        return False
+    return host == "twitch.tv" or host.endswith(".twitch.tv")
+
+
+def _bo_ngoac(duong: str) -> str:
+    return str(duong or "").strip().strip('"').strip()
+
+
+@dataclass(frozen=True)
+class MoKhoaTwitch:
+    """Hai ĐƯỜNG DẪN người dùng chọn (không bao giờ là nội dung): file một dòng địa chỉ proxy (có thể kèm mật khẩu) và
+    cookies.txt có phiên đăng nhập twitch.tv. Rỗng cả hai = tải Twitch như link thường."""
+
+    file_proxy: str = ""
+    file_cookie: str = ""
+
+    def co(self) -> bool:
+        return bool(_bo_ngoac(self.file_proxy) or _bo_ngoac(self.file_cookie))
+
+    def doc_proxy(self, cho_s: float = 5.0) -> str:
+        """Địa chỉ proxy đã kiểm: đúng dạng ``http(s)://`` / ``socks5(h)://`` + máy + cổng, và cổng đang nhận kết nối
+        (Windscribe tắt thì Proxy Gateway ngừng nghe). Không cấu hình → ``""``."""
+        import socket
+        import urllib.parse
+
+        duong = _bo_ngoac(self.file_proxy)
+        if not duong:
+            return ""
+        try:
+            with open(duong, encoding="utf-8-sig") as f:
+                dia_chi = f.read().strip()
+        except OSError as e:
+            raise LoiMoKhoaTwitch(f"Không đọc được file proxy Twitch ({type(e).__name__}): {duong}") from None
+        try:
+            p = urllib.parse.urlsplit(dia_chi)
+            may, cong = p.hostname, p.port
+        except ValueError:
+            may = cong = None
+        if p.scheme not in ("http", "https", "socks5", "socks5h") or not may or not cong:
+            raise LoiMoKhoaTwitch(
+                f"File proxy Twitch phải là MỘT dòng dạng http://tên:mật_khẩu@máy:cổng (hoặc socks5://…): {duong}"
+            )
+        try:
+            socket.create_connection((may, cong), timeout=cho_s).close()
+        except OSError:
+            raise LoiMoKhoaTwitch(
+                f"Không nối được proxy Twitch ({may}:{cong}) — bật Windscribe (nút nguồn ON, Proxy Gateway bật), hoặc xoá "
+                "ô «File proxy» để tải bản Twitch cho Việt Nam (thường tối đa 720p)."
+            ) from None
+        return dia_chi
+
+    def cookie_twitch(self) -> list:
+        """Cookie twitch.tv trong file (bỏ mọi miền khác — file xuất «tất cả» có cả cookie Google/YouTube). Phải có
+        ``auth-token`` (phiên đăng nhập). Không cấu hình → ``[]``."""
+        import http.cookiejar
+
+        duong = _bo_ngoac(self.file_cookie)
+        if not duong:
+            return []
+        hu = http.cookiejar.MozillaCookieJar(duong)
+        try:
+            hu.load(ignore_discard=True, ignore_expires=True)
+        except (OSError, http.cookiejar.LoadError) as e:
+            raise LoiMoKhoaTwitch(
+                f"Không đọc được file cookie Twitch ({type(e).__name__}) — xuất lại bằng «Get cookies.txt LOCALLY»: {duong}"
+            ) from None
+        ds = [c for c in hu if la_link_twitch("https://" + c.domain.lstrip(".") + "/")]
+        if not any(c.name == "auth-token" for c in ds):
+            raise LoiMoKhoaTwitch(
+                "File cookie Twitch không có phiên đăng nhập (auth-token) — đăng nhập twitch.tv trên trình duyệt rồi xuất "
+                f"lại cookie: {duong}"
+            )
+        return ds
+
+    @staticmethod
+    def trich_qua_proxy(opts: dict, url: str, proxy: str, cookie: list) -> dict:
+        """Bước 1: trích thông tin (CHƯA chọn định dạng, chưa tải) qua ``proxy`` với đúng ``cookie`` twitch.tv — không
+        cookie YouTube, không ghi lại file cookie nào. Bước 2 là ``YoutubeDL(opts).process_ie_result(kết quả)`` không proxy."""
+        import yt_dlp
+
+        rieng = _bo_cookie_khoi_tuy_chon(opts)
+        if proxy:
+            rieng["proxy"] = proxy
+        with yt_dlp.YoutubeDL(rieng) as ydl:
+            for c in cookie:
+                ydl.cookiejar.set_cookie(c)
+            return ydl.extract_info(url, download=False, process=False)

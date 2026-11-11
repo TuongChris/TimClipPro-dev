@@ -37,8 +37,11 @@ from ytdlp_chung import (
     PLAYER_CLIENTS_MAC_DINH,
     BoGhiYtdlp,
     CauHinhMang,
+    LoiMoKhoaTwitch,
+    MoKhoaTwitch,
     chay_kem_duong_lui_cookie,
     dung_ban_khuc,
+    la_link_twitch,
     tai_song_song,
     thu_tung_client,
 )
@@ -222,6 +225,7 @@ def tai_nhieu(
     bo_qua_da_co: bool = False,
     dinh_dang: Optional[dict] = None,
     chuan_hoa_am: bool = False,
+    mo_khoa_twitch: Optional[MoKhoaTwitch] = None,
 ) -> list:
     """Tải lần lượt từng link vào ``thu_muc``; trả list dict (:class:`KetQuaTaiVideo`) theo đúng thứ tự link.
 
@@ -233,6 +237,7 @@ def tai_nhieu(
     ``bo_qua_da_co``: video đã có file trong ``thu_muc`` (theo «[mã]» ở tên) thì bỏ qua — bấm lại là tải tiếp phần thiếu.
     ``dinh_dang``: tuỳ chọn định dạng yt-dlp thay cho ``chat_luong`` (vd. :data:`DINH_DANG_GHEP`).
     ``chuan_hoa_am``: đưa âm lượng file vừa tải về mức YouTube (:func:`am_luong.chuan_hoa`, D-43).
+    ``mo_khoa_twitch``: link Twitch xin danh sách chất lượng qua proxy + cookie twitch.tv rồi tải thẳng (D-44).
     """
     import yt_dlp
 
@@ -295,6 +300,13 @@ def tai_nhieu(
                 "không tải tiếp để khỏi làm đầy ổ. Giải phóng chỗ rồi bấm lại."
             )
             continue
+        twitch = None  # (proxy, cookie) khi mở khoá bản cao của Twitch
+        if mo_khoa_twitch and mo_khoa_twitch.co() and la_link_twitch(url):
+            try:
+                twitch = (mo_khoa_twitch.doc_proxy(), mo_khoa_twitch.cookie_twitch())
+            except LoiMoKhoaTwitch as e:
+                kq.ghi_chu = str(e)
+                continue
         tam = os.path.join(thu_muc, THU_MUC_TAM, uuid.uuid4().hex[:12])
         os.makedirs(tam, exist_ok=True)
         dau = f"Video {i + 1}/{n}"
@@ -329,16 +341,17 @@ def tai_nhieu(
         bo_ghi = BoGhiYtdlp(phien)
         vo_danh: list = []  # client không-cookie đã cứu video này sau khi mọi client có cookie bị 403
 
-        def chay(rieng: dict, url=url, tam=tam):
+        def chay(rieng: dict, url=url, tam=tam, twitch=twitch):
             # Mỗi lần thử (client khác, thử lại khi đứt mạng) bắt đầu từ thư mục rỗng: luồng dở của lần trước có thể
             # là định dạng khác, để lại thì ghép nhầm hoặc thành hai file (xem ChannelSync._tai_thu_tung_client).
             for f in os.listdir(tam):
                 with contextlib.suppress(OSError):
                     os.remove(os.path.join(tam, f))
             phien.dem_yeu_cau("download")
+            ie = MoKhoaTwitch.trich_qua_proxy(rieng, url, *twitch) if twitch else None
             with yt_dlp.YoutubeDL(rieng) as ydl:
                 dung_ban_khuc(ydl)
-                return ydl.extract_info(url, download=True)
+                return ydl.process_ie_result(ie, download=True) if ie else ydl.extract_info(url, download=True)
 
         def tai_voi(ch: CauHinhMang, tam=tam, hook=hook, chay=chay, bo_ghi=bo_ghi):
             return thu_tung_client(
@@ -419,7 +432,14 @@ def tai_nhieu(
                     "Tải KHÔNG đăng nhập: mọi cách có đăng nhập bị YouTube từ chối (HTTP 403), bản này tải bằng "
                     f"client «{vo_danh[-1]}» không cookie — chất lượng có thể thấp hơn."
                 )
-            kq.ghi_chu = " ".join(x for x in (kq.ghi_chu, ghi_am) if x)
+            ghi_tw = (
+                "Twitch: danh sách chất lượng lấy qua "
+                + " + ".join(x for x, co in (("proxy", twitch[0]), ("đăng nhập", twitch[1])) if co)
+                + ", video tải thẳng."
+                if twitch
+                else ""
+            )
+            kq.ghi_chu = " ".join(x for x in (kq.ghi_chu, ghi_tw, ghi_am) if x)
         except DaHuyTaiVideo:
             kq.trang_thai, kq.ghi_chu = (
                 "bo_qua",

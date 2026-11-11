@@ -11,6 +11,7 @@ import yt_dlp
 from yt_dlp.utils import DownloadError
 
 import tai_video_goc as tv
+import ytdlp_chung
 
 URL1 = "https://www.youtube.com/watch?v=abcdefghij1"
 URL2 = "https://youtu.be/abcdefghij2"
@@ -219,6 +220,7 @@ def test_tab_tai_video_chay_nen_va_hien_ket_qua(tmp_path, monkeypatch):
         cancel_check,
         chat_luong,
         chuan_hoa_am,
+        mo_khoa_twitch,
     ):
         goi.update(
             links=links,
@@ -227,6 +229,7 @@ def test_tab_tai_video_chay_nen_va_hien_ket_qua(tmp_path, monkeypatch):
             co_phien=phien is not None,
             chat_luong=chat_luong,
             chuan_hoa_am=chuan_hoa_am,
+            mo_khoa_twitch=mo_khoa_twitch,
         )
         progress(0.5, "Video 1/2: đang tải hình 50%")
         return [
@@ -263,6 +266,8 @@ def test_tab_tai_video_chay_nen_va_hien_ket_qua(tmp_path, monkeypatch):
     ).run()
     assert at.button(key="bat_dau_tai_video").label == "⬇️ Tải 2 video"
     at.selectbox(key="cl_tai").select("1080p").run()
+    next(t for t in at.text_input if t.label.startswith("File proxy")).input('"D:\\bi_mat\\proxy.txt"').run()
+    next(t for t in at.text_input if t.label.startswith("File cookie Twitch")).input("D:\\bi_mat\\tw.txt").run()
     at.button(key="bat_dau_tai_video").click().run()
     for _ in range(50):
         if goi and not at.session_state.job["running"]:
@@ -277,6 +282,8 @@ def test_tab_tai_video_chay_nen_va_hien_ket_qua(tmp_path, monkeypatch):
         "co_phien": True,
         "chat_luong": "1080p",
         "chuan_hoa_am": True,  # D-43: ô «Đưa âm lượng về mức YouTube» tick sẵn
+        # D-44: hai ĐƯỜNG DẪN Twitch đi nguyên vào tải (bỏ ngoặc ở MoKhoaTwitch).
+        "mo_khoa_twitch": ytdlp_chung.MoKhoaTwitch('"D:\\bi_mat\\proxy.txt"', "D:\\bi_mat\\tw.txt"),
     }
     chu = " ".join(e.value for e in [*at.markdown, *at.warning, *at.success])
     assert (

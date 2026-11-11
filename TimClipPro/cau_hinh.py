@@ -20,6 +20,9 @@ GIA_TRI_GIAO_DIEN_MAC_DINH = {
     "kho_dir": "",
     "thu_muc_quet_gan_nhat": "",
     "thu_muc_tai_video": "",
+    # ĐƯỜNG DẪN (không phải nội dung) file proxy + file cookie Twitch (D-44).
+    "twitch_proxy_file": "",
+    "twitch_cookie_file": "",
 }
 
 

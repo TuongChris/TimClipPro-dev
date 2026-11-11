@@ -155,6 +155,8 @@ KHOA_RIENG_CUA_MAY = (
     "thu_muc_tai_video",       # thư mục lưu video gốc tải theo link
     "ytdlp_cookiefile",        # đường dẫn file cookie — xem giải thích ở trên
     "ytdlp_cookies_browser",   # trình duyệt lấy cookie — xem giải thích ở trên
+    "twitch_proxy_file",       # file proxy Twitch (D-44) — đường dẫn của máy nguồn
+    "twitch_cookie_file",      # file cookie Twitch (D-44) — tài khoản của máy nguồn
 )
 
 # CỐ Ý GIỮ LẠI, đừng "dọn dẹp" thêm vào danh sách trên:

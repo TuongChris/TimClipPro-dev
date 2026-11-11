@@ -15,6 +15,16 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-44 Twitch 1440p: danh sách chất lượng qua proxy + đăng nhập, video tải thẳng (người dùng, 2026-11-11)
+Tab «Tải video gốc» tải được Twitch từ trước (yt-dlp), nhưng chỉ tới 720p60. Danh sách ẩn «unavailable-media» của usher
+ghi lý do khoá 1440p: từ VN `AUTHZ_GEO` + `AUTHZ_NOT_LOGGED_IN`; qua proxy Mỹ chỉ còn `AUTHZ_NOT_LOGGED_IN`. Người dùng chọn
+cách miễn phí: Windscribe Free (10 GB/tháng) bật Proxy Gateway + Split Tunneling Inclusive rỗng (máy vẫn đi VN). Mục gập
+«🟣 Twitch» ở tab Tải: hai ĐƯỜNG DẪN (file một dòng proxy, cookies.txt có `auth-token`), nhớ qua «Lưu cấu hình», là khoá
+riêng của máy khi đóng gói. CHỈ link twitch.tv: bước trích (`extract_info(process=False)`) qua proxy + đúng cookie
+twitch.tv (bỏ cookie YouTube và mọi miền khác), bước tải `process_ie_result` THẲNG — khúc CDN không chặn VN, hạn mức VPN
+không hao. Proxy tắt/file sai → báo lỗi rõ, không lặng lẽ tải 720p; câu lỗi không chứa mật khẩu/cookie. Ghép (≤ 1080p)
+không cần. Mã: `ytdlp_chung.MoKhoaTwitch`.
+
 ## D-43 Đưa âm lượng video tải về mức YouTube (người dùng, 2026-11-10)
 Đo thật: video Joe Bartolozzi tải về -28,5 LUFS, SSS/TikTok -14; xem trên YouTube nghe to nhờ «Âm lượng ổn định» (người
 dùng tắt đi thì nhỏ y như file tải). Ô tick «🔊 Đưa âm lượng về mức YouTube (-14 LUFS)» (tick sẵn) ở tab Tải video gốc

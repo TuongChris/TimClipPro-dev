@@ -1504,6 +1504,19 @@ with tab_tai:
                    f"({_den_s - _tu_s:g} giây; đúng từng khung hình vì nén lại đoạn cắt). Cắt xong thì xoá video trọn.")
     st.caption("Link kênh/danh sách phát bị bỏ qua — tải cả kênh dùng tab «📺 Tải cả kênh».")
     _am_tai = st.checkbox(O_AM_LUONG, value=True, key="am_tai", help=GIAI_THICH_AM_LUONG)
+    with st.expander("🟣 Twitch: mở khoá bản 1440p (tuỳ chọn)"):
+        st.caption("Twitch chỉ cho bản 1440p khi xem từ nước được mở VÀ có đăng nhập. Điền hai file dưới đây thì với link "
+                   "Twitch, tool xin danh sách chất lượng qua proxy (Windscribe, nút nguồn ON + Proxy Gateway bật) kèm cookie "
+                   "twitch.tv; video vẫn tải thẳng bằng mạng thường. Để trống = bản Twitch cho Việt Nam (thường tối đa 720p). "
+                   "Link YouTube không bị ảnh hưởng.")
+        st.session_state.twitch_proxy_file = st.text_input(
+            "File proxy (một dòng http://tên:mật_khẩu@máy:cổng)", st.session_state.twitch_proxy_file,
+            placeholder=r"vd. C:\...\secrets\proxy_twitch.txt")
+        st.session_state.twitch_cookie_file = st.text_input(
+            "File cookie Twitch (cookies.txt có đăng nhập twitch.tv)", st.session_state.twitch_cookie_file,
+            placeholder=r"vd. C:\...\secrets\twitch_cookies.txt")
+        st.caption("Hai đường dẫn được nhớ khi bấm «💾 Lưu cấu hình» ở thanh bên. Nội dung file không được lưu vào cấu hình.")
+    _mo_khoa_tw = ytdlp_chung.MoKhoaTwitch(st.session_state.twitch_proxy_file, st.session_state.twitch_cookie_file)
     _co_doan = _tu_s is not None and not _loi_doan
     _nhan_tai = "✂️ Tải và cắt" if _co_doan else "⬇️ Tải"
     if st.button(f"{_nhan_tai} {len(_ds_link)} video" if _ds_link else f"{_nhan_tai} video", type="primary",
@@ -1511,9 +1524,10 @@ with tab_tai:
                  key="bat_dau_tai_video"):
         if _co_doan:
             _bat_dau_tai(cat_video_goc.tai_doan, _ds_link, _thu_muc_tai, tu_s=_tu_s, den_s=_den_s, chat_luong=_cl_tai,
-                         chuan_hoa_am=_am_tai)
+                         chuan_hoa_am=_am_tai, mo_khoa_twitch=_mo_khoa_tw)
         else:
-            _bat_dau_tai(tai_video_goc.tai_nhieu, _ds_link, _thu_muc_tai, chat_luong=_cl_tai, chuan_hoa_am=_am_tai)
+            _bat_dau_tai(tai_video_goc.tai_nhieu, _ds_link, _thu_muc_tai, chat_luong=_cl_tai, chuan_hoa_am=_am_tai,
+                         mo_khoa_twitch=_mo_khoa_tw)
 
 with tab_anh:
     st.subheader("Tải thumbnail của video YouTube")
