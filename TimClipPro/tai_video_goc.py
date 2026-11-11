@@ -368,7 +368,7 @@ def tai_nhieu(
                     continuedl=False,
                     progress_hooks=[hook],
                 ),
-                bo_qua=(DaHuyTaiVideo,),
+                bo_qua=(DaHuyTaiVideo, LoiMoKhoaTwitch),
                 khi_that_bai=lambda _ten, _loi: phien.ghi_doi_client(),
                 dung_ngay=phien.nen_dung_doi_client,
                 khi_lui_khong_cookie=lambda ten, _loi: (
@@ -385,13 +385,13 @@ def tai_nhieu(
                     tai_voi,
                     khi_bo_cookie=phien.ghi_lui_cookie,
                     bo_ghi=bo_ghi,
-                    bo_qua=(DaHuyTaiVideo,),
+                    bo_qua=(DaHuyTaiVideo, LoiMoKhoaTwitch),
                     phien=phien,
                 ),
                 video_id=ma_tu_url(url),
                 cancel_event=_CoHuyTuHam(huy),
                 loi_huy=DaHuyTaiVideo,
-                bo_qua=(DaHuyTaiVideo,),
+                bo_qua=(DaHuyTaiVideo, LoiMoKhoaTwitch),
             )
             xong = _file_xong(tam)
             if thumbnail:
@@ -440,6 +440,8 @@ def tai_nhieu(
                 else ""
             )
             kq.ghi_chu = " ".join(x for x in (kq.ghi_chu, ghi_tw, ghi_am) if x)
+        except LoiMoKhoaTwitch as e:  # đi thẳng ra (bo_qua): không thử client khác, không phân loại như lỗi YouTube
+            kq.ghi_chu = str(e)
         except DaHuyTaiVideo:
             kq.trang_thai, kq.ghi_chu = (
                 "bo_qua",

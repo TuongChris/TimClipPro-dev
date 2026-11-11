@@ -1424,17 +1424,20 @@ class MoKhoaTwitch:
         try:
             with open(duong, encoding="utf-8-sig") as f:
                 dia_chi = f.read().strip()
-        except OSError as e:
-            raise LoiMoKhoaTwitch(f"Không đọc được file proxy Twitch ({type(e).__name__}): {duong}") from None
+        except (OSError, UnicodeError) as e:  # UnicodeError: Notepad lưu kiểu «Unicode» (UTF-16)
+            raise LoiMoKhoaTwitch(
+                f"Không đọc được file proxy Twitch ({type(e).__name__}) — lưu lại dạng UTF-8: {duong}"
+            ) from None
         try:
             p = urllib.parse.urlsplit(dia_chi)
-            may, cong = p.hostname, p.port
-        except ValueError:
-            may = cong = None
-        if p.scheme not in ("http", "https", "socks5", "socks5h") or not may or not cong:
+            hop_le = p.scheme in ("http", "https", "socks5", "socks5h") and bool(p.hostname) and bool(p.port)
+        except ValueError:  # «http://[1.2.3.4:80», cổng không phải số / ngoài 0–65535
+            hop_le = False
+        if not hop_le:
             raise LoiMoKhoaTwitch(
                 f"File proxy Twitch phải là MỘT dòng dạng http://tên:mật_khẩu@máy:cổng (hoặc socks5://…): {duong}"
             )
+        may, cong = p.hostname, p.port
         try:
             socket.create_connection((may, cong), timeout=cho_s).close()
         except OSError:
@@ -1455,7 +1458,7 @@ class MoKhoaTwitch:
         hu = http.cookiejar.MozillaCookieJar(duong)
         try:
             hu.load(ignore_discard=True, ignore_expires=True)
-        except (OSError, http.cookiejar.LoadError) as e:
+        except (OSError, http.cookiejar.LoadError, UnicodeError) as e:
             raise LoiMoKhoaTwitch(
                 f"Không đọc được file cookie Twitch ({type(e).__name__}) — xuất lại bằng «Get cookies.txt LOCALLY»: {duong}"
             ) from None
@@ -1479,4 +1482,11 @@ class MoKhoaTwitch:
         with yt_dlp.YoutubeDL(rieng) as ydl:
             for c in cookie:
                 ydl.cookiejar.set_cookie(c)
-            return ydl.extract_info(url, download=False, process=False)
+            ie = ydl.extract_info(url, download=False, process=False)
+        # Link kênh/danh sách: các mục là url_transparent — bước 2 (không proxy) sẽ trích LẠI từng video và lặng lẽ ra bản
+        # thấp. Chỉ nhận một video đã trích xong.
+        if (ie or {}).get("_type", "video") != "video":
+            raise LoiMoKhoaTwitch(
+                "Đây là link kênh/danh sách Twitch — dán link của từng video (twitch.tv/videos/… hoặc link clip)."
+            )
+        return ie

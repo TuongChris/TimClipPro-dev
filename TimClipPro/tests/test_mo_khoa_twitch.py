@@ -176,6 +176,8 @@ class YdlGia:
     def extract_info(self, url, download=True, process=True):
         self.goi.append(("extract_info", download, process))
         if not download:
+            if "/videos/" not in url:  # link kênh/danh sách: yt-dlp trả danh sách các mục url_transparent
+                return {"_type": "playlist", "id": "kenh", "entries": iter([{"_type": "url_transparent", "url": TWITCH}])}
             return {
                 "id": url[-11:],
                 "title": "Phat lai",
@@ -259,3 +261,38 @@ def test_twitch_proxy_tat_bao_loi_khong_tai_lang_le(gia, tmp_path):
     )
     assert kq[1]["trang_thai"] == "xong"  # link khác vẫn tải
     assert len(gia.doi_tuong) == 1  # không có lượt tải Twitch nào (kể cả bản thấp)
+
+
+# ---------------------------------------------------------------- review 11/11
+@pytest.mark.parametrize("ghi", [
+    lambda p: p.write_text("http://windscribe:x@127.0.0.1:1", encoding="utf-16"),  # Notepad «Unicode»
+    lambda p: p.write_text("http://[1.2.3.4:80", encoding="utf-8"),               # urlsplit ném ValueError
+    lambda p: p.write_bytes(b"\x81\xff http://a:b@127.0.0.1:1"),                  # không giải mã được
+])
+def test_file_proxy_la_khong_lam_vo(tmp_path, ghi):
+    f = tmp_path / "p.txt"
+    ghi(f)
+    with pytest.raises(yc.LoiMoKhoaTwitch, match="proxy"):
+        yc.MoKhoaTwitch(file_proxy=str(f)).doc_proxy()
+
+
+def test_file_cookie_byte_la_khong_lam_vo(tmp_path):
+    f = tmp_path / "c.txt"
+    f.write_bytes(b"# Netscape HTTP Cookie File\n.twitch.tv\tTRUE\t/\tTRUE\t4102444800\tx\t\x81\x8d\xff\n")
+    with pytest.raises(yc.LoiMoKhoaTwitch, match="cookie Twitch"):
+        yc.MoKhoaTwitch(file_cookie=str(f)).cookie_twitch()
+
+
+def test_file_proxy_hong_khong_dung_ca_lo(gia, tmp_path):
+    f = tmp_path / "p.txt"
+    f.write_text("http://[1.2.3.4:80", encoding="utf-8")
+    kq = tv.tai_nhieu([TWITCH, YOUTUBE], str(tmp_path / "ra"), mo_khoa_twitch=yc.MoKhoaTwitch(file_proxy=str(f)))
+    assert kq[0]["trang_thai"] == "loi" and "proxy" in kq[0]["ghi_chu"]
+    assert kq[1]["trang_thai"] == "xong"
+
+
+def test_link_kenh_twitch_khong_lang_le_tai_ban_thap(gia, tmp_path, proxy_nghe):
+    kq = tv.tai_nhieu(["https://www.twitch.tv/tenkenh/clips"], str(tmp_path / "ra"),
+                      mo_khoa_twitch=_mo_khoa(tmp_path, proxy_nghe))
+    assert kq[0]["trang_thai"] == "loi" and "từng video" in kq[0]["ghi_chu"]
+    assert len(gia.doi_tuong) == 1 and gia.doi_tuong[0].goi == [("extract_info", False, False)]  # một lần, không thử lại
