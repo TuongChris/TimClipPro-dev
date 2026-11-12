@@ -293,6 +293,42 @@ def test_tab_tai_video_chay_nen_va_hien_ket_qua(tmp_path, monkeypatch):
     )
 
 
+def test_tab_tai_chon_chi_audio(tmp_path, monkeypatch):
+    """12/11: «Chỉ tiếng» từng nằm khuất cuối ô «Chất lượng tối đa» (người dùng không thấy). Nay chọn «Chỉ audio» ngay
+    đầu tab: ô chất lượng ẩn, nút ghi rõ «Tải audio», tải gọi ``chat_luong="Chỉ tiếng"``."""
+    import time
+    from pathlib import Path
+
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    goi = {}
+
+    def tai_gia(links, thu_muc, cau_hinh_mang, *, progress, chat_luong, **kw):
+        goi.update(links=links, chat_luong=chat_luong)
+        return [{"url": URL1, "trang_thai": "xong", "duong_dan": thu_muc + "/a [abcdefghij1].audio.m4a",
+                 "tieu_de": "A", "chat_luong": "mp4a", "ghi_chu": ""}]
+
+    monkeypatch.setattr(tv, "tai_nhieu", tai_gia)
+    at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=120).run()
+    assert not at.exception
+    assert "Chỉ tiếng" not in at.selectbox(key="cl_tai").options  # ô chất lượng chỉ còn mức HÌNH
+    at.radio(key="loai_tai").set_value(tv.LOAI_TAI[1]).run()
+    assert not [s for s in at.selectbox if s.key == "cl_tai"]
+    next(t for t in at.text_area if t.label.startswith("Link video")).input(URL1).run()
+    next(t for t in at.text_input if t.label.startswith("Thư mục lưu")).input(str(tmp_path / "nhac")).run()
+    assert at.button(key="bat_dau_tai_video").label == "🎵 Tải audio 1 video"
+    at.button(key="bat_dau_tai_video").click().run()
+    for _ in range(50):
+        if goi and not at.session_state.job["running"]:
+            break
+        time.sleep(0.1)
+    at.run()
+    assert not at.exception
+    assert goi == {"links": [URL1], "chat_luong": "Chỉ tiếng"}
+
+
 def test_tab_thumbnail_va_ca_kenh_goi_dung_ham(tmp_path, monkeypatch):
     """AppTest: tab thumbnail gọi ``tai_nhieu(thumbnail=True)``; tab cả kênh gọi ``tai_kenh`` với số video + chất lượng."""
     import time
@@ -388,12 +424,44 @@ def test_tab_thumbnail_va_ca_kenh_goi_dung_ham(tmp_path, monkeypatch):
         ("Cao nhất", "bv*+ba/b", "mp4/mkv"),
         ("1080p", "bv*[height<=1080]+ba/b[height<=1080]", "mp4/mkv"),
         ("4K (2160p)", "bv*[height<=2160]+ba/b[height<=2160]", "mp4/mkv"),
-        ("Chỉ tiếng", "ba/b", None),
+        ("Chỉ tiếng", "ba[ext=m4a]/ba/b", None),
     ],
 )
 def test_tuy_chon_dinh_dang_theo_chat_luong(muc, dinh_dang, ghep):
     tc = tv.tuy_chon_dinh_dang(muc)
     assert tc["format"] == dinh_dang and tc.get("merge_output_format") == ghep
+
+
+def test_chi_tieng_luon_ra_file_m4a():
+    """12/11: «Chỉ tiếng» từng ra «.audio.webm» (Opus) — Premiere/CapCut/điện thoại không mở. Nay ưu tiên luồng M4A sẵn
+    có (không nén lại); chỉ khi video không có thì FFmpeg đổi sang M4A — kể cả khi trang chỉ có luồng hình + tiếng."""
+    assert tv.tuy_chon_dinh_dang("Chỉ tiếng")["postprocessors"] == [
+        {"key": "FFmpegExtractAudio", "preferredcodec": "m4a"}
+    ]
+    assert "postprocessors" not in tv.tuy_chon_dinh_dang("1080p")
+
+
+def test_chi_tieng_yt_dlp_that_doi_webm_sang_m4a(tmp_path):
+    """yt-dlp THẬT (link file:// trong máy, không mạng) + FFmpeg thật: file chỉ-tiếng Opus/WebM ra «… [mã].audio.m4a»
+    chứa đúng một luồng AAC, không còn file .webm."""
+    import json
+    import subprocess
+
+    if not tv.shutil.which("ffmpeg"):
+        pytest.skip("cần FFmpeg")
+    nguon = tmp_path / "abcdefghij1.webm"
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=2", "-c:a", "libopus",
+                    str(nguon)], check=True)
+    ra = tmp_path / "ra"
+    opts = {"quiet": True, "no_warnings": True, "enable_file_urls": True,
+            "outtmpl": str(ra / "%(title).150B [%(id)s].audio.%(ext)s"), **tv.tuy_chon_dinh_dang("Chỉ tiếng")}
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        ydl.extract_info(nguon.as_uri(), download=True)
+    (f,) = os.listdir(ra)
+    assert f.endswith("[abcdefghij1].audio.m4a")
+    dong = subprocess.run(["ffprobe", "-v", "error", "-show_streams", "-of", "json", str(ra / f)],
+                          capture_output=True, text=True, check=True).stdout
+    assert [s["codec_name"] for s in json.loads(dong)["streams"]] == ["aac"]
 
 
 def test_chat_luong_sai_bao_loi_truoc_khi_tai(gia, tmp_path):
@@ -410,7 +478,8 @@ def test_chat_luong_chon_di_toi_yt_dlp(gia, tmp_path):
 def test_thumbnail_luu_jpg_khong_tai_video(gia, tmp_path):
     kq = tv.tai_nhieu([URL1], str(tmp_path), thumbnail=True)
     assert kq[0]["trang_thai"] == "xong" and kq[0]["chat_luong"] == "ảnh JPG"
-    assert os.listdir(tmp_path) == ["Tiêu đề abcdefghij1 [abcdefghij1].jpg"]
+    # 12/11: tên ảnh = MÃ video (người dùng yêu cầu: không còn tiêu đề có dấu cách).
+    assert os.listdir(tmp_path) == ["abcdefghij1.jpg"]
     opts = gia.goi[0][1]
     assert opts["skip_download"] is True and opts["writethumbnail"] is True
     assert opts["postprocessors"] == [
@@ -425,6 +494,14 @@ def test_bo_qua_video_da_co_nhung_khong_tinh_anh_thumbnail(gia, tmp_path):
     kq = tv.tai_nhieu([URL1, URL2], str(tmp_path), bo_qua_da_co=True)
     assert [k["trang_thai"] for k in kq] == ["bo_qua", "xong"]
     assert [u for u, _ in gia.goi] == [URL2]
+
+
+def test_thumbnail_da_co_ten_cu_hoac_ten_ma_deu_bo_qua(gia, tmp_path):
+    """Thư mục có ảnh tên kiểu cũ («tiêu đề [mã].jpg») hay kiểu mới («mã.jpg»): đều là đã có, không tải lại."""
+    (tmp_path / "Ảnh cũ [abcdefghij1].jpg").write_bytes(b"anh")
+    (tmp_path / "abcdefghij2.jpg").write_bytes(b"anh")
+    kq = tv.tai_nhieu([URL1, URL2], str(tmp_path), thumbnail=True, bo_qua_da_co=True)
+    assert [k["trang_thai"] for k in kq] == ["bo_qua", "bo_qua"] and gia.goi == []
 
 
 def test_tai_kenh_lay_danh_sach_roi_bo_qua_video_da_co(gia, tmp_path, monkeypatch):
@@ -845,7 +922,10 @@ def test_ma_da_co_anh_tach_rieng_video(tmp_path):
     (tmp_path / "A [abcdefghij1].jpg").write_bytes(b"a")
     (tmp_path / "B [abcdefghij2].mp4").write_bytes(b"v")
     (tmp_path / "C [abcdefghij3].webp").write_bytes(b"w")  # ảnh gốc chưa đổi sang jpg: chưa tính
-    assert tv.ma_da_co(str(tmp_path), anh=True) == {"abcdefghij1"}
+    (tmp_path / "abcdefghij4.JPG").write_bytes(b"a")  # tên ảnh kiểu mới (12/11) = mã
+    (tmp_path / "v123456.jpg").write_bytes(b"a")  # VOD Twitch
+    (tmp_path / "abcdefghij5.mp4").write_bytes(b"v")  # không phải ảnh
+    assert tv.ma_da_co(str(tmp_path), anh=True) == {"abcdefghij1", "abcdefghij4", "v123456"}
     assert tv.ma_da_co(str(tmp_path)) == {"abcdefghij2"}
 
 
@@ -871,8 +951,9 @@ class _YdlAnh:
     def prepare_filename(self, info, outtmpl=None):
         from yt_dlp.utils import sanitize_filename
 
+        ten = os.path.basename(self.opts["outtmpl"]).replace("%(title).150B", sanitize_filename(info["title"]))
         return os.path.join(os.path.dirname(self.opts["outtmpl"]),
-                            f"{sanitize_filename(info['title'])} [{info['id']}].{info['ext']}")
+                            ten.replace("%(id)s", info["id"]).replace("%(ext)s", info["ext"]))
 
     def urlopen(self, url):
         import io
@@ -904,15 +985,15 @@ def ydl_anh(monkeypatch):
 
 def test_thumbnail_ca_kenh_tai_thang_anh_khong_trich_tung_video(ydl_anh, tmp_path):
     """11/11: lấy thumbnail cả kênh bằng địa chỉ ảnh cố định (i.ytimg.com) — 8 s/ảnh → dưới 1 s. Thiếu bản 1280×720 thì
-    lùi 640×480; ảnh đã có bỏ qua (có VIDEO trùng mã không tính là có ảnh); tên file như đường cũ (tiêu đề [mã].jpg)."""
+    lùi 640×480; ảnh đã có bỏ qua (có VIDEO trùng mã không tính là có ảnh); tên file = mã video (12/11)."""
     (tmp_path / "Cũ [abcdefghij1].jpg").write_bytes(b"cu")
     (tmp_path / "Video [abcdefghij2].mp4").write_bytes(b"video")
     ydl_anh.thieu = {("abcdefghij3", "maxresdefault")}
     kq = tv.tai_kenh("https://www.youtube.com/@Kenh", str(tmp_path), thumbnail=True)
     assert [k["trang_thai"] for k in kq] == ["bo_qua", "xong", "xong"]
-    assert kq[1]["duong_dan"] == str(tmp_path / "Hai？ [abcdefghij2].jpg")  # «?» đổi như yt-dlp
-    assert (tmp_path / "Hai？ [abcdefghij2].jpg").read_bytes() == b"abcdefghij2:maxresdefault.jpg"
-    assert (tmp_path / "Ba [abcdefghij3].jpg").read_bytes() == b"abcdefghij3:sddefault.jpg"
+    assert kq[1]["duong_dan"] == str(tmp_path / "abcdefghij2.jpg")
+    assert (tmp_path / "abcdefghij2.jpg").read_bytes() == b"abcdefghij2:maxresdefault.jpg"
+    assert (tmp_path / "abcdefghij3.jpg").read_bytes() == b"abcdefghij3:sddefault.jpg"
     assert kq[1]["chat_luong"] == "ảnh JPG 1280×720" and kq[2]["chat_luong"] == "ảnh JPG 640×480"
     assert kq[1]["tieu_de"] == "Hai?"
     assert all(u.startswith("https://i.ytimg.com/vi/") for u in ydl_anh.mo) and len(ydl_anh.mo) == 3
@@ -933,7 +1014,7 @@ def test_thumbnail_ca_kenh_dung_giua_chung(ydl_anh, tmp_path):
     finally:
         _YdlAnh.urlopen = goc
     assert [k["trang_thai"] for k in kq] == ["xong", "bo_qua", "bo_qua"]
-    assert sorted(os.listdir(tmp_path)) == ["Một [abcdefghij1].jpg"]
+    assert sorted(os.listdir(tmp_path)) == ["abcdefghij1.jpg"]
 
 
 def test_thumbnail_ca_kenh_khong_co_anh_nao(ydl_anh, tmp_path):

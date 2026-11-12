@@ -15,6 +15,13 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-47 Thumbnail tên = mã video; «Chỉ audio» rõ ràng, ra M4A (người dùng, 2026-11-12) — thay một phần D-45, D-37
+Thumbnail (tải theo link + cả kênh) lưu «<mã>.jpg» (vd. `RMpCKfipD-Y.jpg`) thay «tiêu đề [mã].jpg» — người dùng muốn tên
+không dấu cách; «đã có» nhận cả hai kiểu tên (`ma_da_co(anh=True)`). Tab «⬇️ Tải video gốc» có lựa chọn đầu tab «🎬 Video /
+🎵 Chỉ audio» (mức «Chỉ tiếng» trước đó nằm khuất cuối ô chất lượng); chỉ-tiếng = `ba[ext=m4a]/ba/b` + `FFmpegExtractAudio`
+m4a → luôn ra «tiêu đề [mã].audio.m4a» (Opus/WebM cũ Premiere/CapCut không mở; M4A của YouTube có sẵn nên không nén lại).
+Tab «Tải cả kênh» và cắt đoạn dùng chung mức này. Video giữ tên cũ.
+
 ## D-46 Cắt / chỉnh âm / ghép video ĐÃ CÓ trong máy (người dùng, 2026-11-11)
 Tab mới «🛠️ Video trong máy»: đường dẫn file (hoặc thư mục — chỉ file media ngay trong đó, không vào thư mục con) +
 «Từ/Đến» + ô âm lượng → `video_trong_may.xu_ly`. Ghép: tab «🎞️ Ghép» nhận cả đường dẫn file, trộn với link. Bất biến: file

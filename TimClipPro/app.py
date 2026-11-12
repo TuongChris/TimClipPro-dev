@@ -1475,14 +1475,17 @@ def _chua_tai_duoc() -> bool:
 
 
 with tab_tai:
-    st.subheader("Tải video gốc theo link")
-    st.caption("Tải file video (hình + tiếng) — không nén, không đưa vào kho vân tay. Bản 4K thường ra file .mkv (mở bằng "
-               "VLC hoặc ứng dụng Phim & TV của Windows); bản thấp hơn ra .mp4.")
+    st.subheader("Tải video / audio gốc theo link")
+    st.caption("Tải file video (hình + tiếng) hoặc chỉ audio — không đưa vào kho vân tay. Bản 4K thường ra file .mkv (mở "
+               "bằng VLC hoặc ứng dụng Phim & TV của Windows); bản thấp hơn ra .mp4; chỉ audio ra .m4a.")
+    _loai_tai = st.radio("Tải về", tai_video_goc.LOAI_TAI, horizontal=True, key="loai_tai")
+    _chi_audio = _loai_tai == tai_video_goc.LOAI_TAI[1]
     links_tai = st.text_area("Link video (mỗi dòng một link)", height=120,
                              placeholder="https://www.youtube.com/watch?v=...\nhttps://youtu.be/...")
     _thu_muc_tai = _o_thu_muc_tai("Thư mục lưu video", "tai")
-    _cl_tai = st.selectbox("Chất lượng tối đa", list(tai_video_goc.CHAT_LUONG), key="cl_tai",
-                           help="Video gốc thấp hơn mức chọn thì lấy bản cao nhất có. «Chỉ tiếng» ra file nhạc.")
+    _cl_tai = "Chỉ tiếng" if _chi_audio else st.selectbox(
+        "Chất lượng tối đa", [m for m in tai_video_goc.CHAT_LUONG if tai_video_goc.CHAT_LUONG[m] != 0], key="cl_tai",
+        help="Video gốc thấp hơn mức chọn thì lấy bản cao nhất có.")
     _ds_link = tai_video_goc.tach_link(links_tai)
     c_tu, c_den = st.columns(2)
     with c_tu:
@@ -1520,7 +1523,7 @@ with tab_tai:
         st.caption("Hai đường dẫn được nhớ khi bấm «💾 Lưu cấu hình» ở thanh bên. Nội dung file không được lưu vào cấu hình.")
     _mo_khoa_tw = ytdlp_chung.MoKhoaTwitch(st.session_state.twitch_proxy_file, st.session_state.twitch_cookie_file)
     _co_doan = _tu_s is not None and not _loi_doan
-    _nhan_tai = "✂️ Tải và cắt" if _co_doan else "⬇️ Tải"
+    _nhan_tai = "✂️ Tải và cắt" if _co_doan else "🎵 Tải audio" if _chi_audio else "⬇️ Tải"
     if st.button(f"{_nhan_tai} {len(_ds_link)} video" if _ds_link else f"{_nhan_tai} video", type="primary",
                  disabled=not (_ds_link and _thu_muc_tai) or bool(_loi_doan) or _chua_tai_duoc(),
                  key="bat_dau_tai_video"):
@@ -1533,7 +1536,8 @@ with tab_tai:
 
 with tab_anh:
     st.subheader("Tải thumbnail của video YouTube")
-    st.caption("Lấy ảnh thumbnail lớn nhất YouTube có (thường 1280×720), lưu dạng .jpg, tên file = tiêu đề + [mã video].")
+    st.caption("Lấy ảnh thumbnail lớn nhất YouTube có (thường 1280×720), lưu dạng .jpg, tên file = mã video "
+               "(vd. RMpCKfipD-Y.jpg).")
     links_anh = st.text_area("Link video cần lấy thumbnail (mỗi dòng một link)", height=120,
                              placeholder="https://www.youtube.com/watch?v=...\nhttps://youtu.be/...")
     _thu_muc_anh = _o_thu_muc_tai("Thư mục lưu thumbnail", "anh")

@@ -63,6 +63,8 @@ CHAT_LUONG = {
     "Chỉ tiếng": 0,
 }
 CHAT_LUONG_MAC_DINH = "Cao nhất"
+# Lựa chọn đầu tab Tải (12/11): «Chỉ audio» = mức «Chỉ tiếng» — trước đó nó nằm khuất cuối ô chất lượng.
+LOAI_TAI = ("🎬 Video (hình + tiếng)", "🎵 Chỉ audio (file .m4a)")
 # Ghép video (D-39): MỌI video cùng một kiểu H.264 ≤ 1080p + AAC trong MP4 để nối bằng `-c copy` (không nén lại). Video
 # không có cặp đó thì lấy bản ≤ 1080p bất kỳ — bước kiểm thông số trước khi ghép sẽ báo nó lệch.
 DINH_DANG_GHEP = {
@@ -82,6 +84,8 @@ TUY_CHON_THUMBNAIL = {
 _DUOI_ANH = (".jpg", ".jpeg", ".png", ".webp")
 # Mã ở tên file: YouTube 11 ký tự, hoặc VOD Twitch «v<số>» (yt-dlp đặt [id] như vậy) — xem :func:`ma_link`.
 _RE_MA_CUOI_TEN = re.compile(r"\[([A-Za-z0-9_-]{11}|v\d+)\]\.[^.]+$")
+# Thumbnail từ 12/11 tên đúng bằng mã («RMpCKfipD-Y.jpg», người dùng yêu cầu); ảnh tên cũ «tiêu đề [mã].jpg» vẫn tính.
+_RE_TEN_LA_MA = re.compile(r"^([A-Za-z0-9_-]{11}|v\d+)\.jpg$", re.IGNORECASE)
 # File chỉ-tiếng mang thêm «.audio» trước đuôi: «đã có» của video và của chỉ-tiếng không lẫn nhau.
 _RE_MA_CUOI_TEN_TIENG = re.compile(r"\[([A-Za-z0-9_-]{11}|v\d+)\]\.audio\.[^.]+$")
 _RE_MA_TWITCH = re.compile(r"^/(?:videos|[^/]+/v(?:ideo)?)/(\d+)/?$")
@@ -95,7 +99,12 @@ def tuy_chon_dinh_dang(chat_luong: str = CHAT_LUONG_MAC_DINH) -> dict:
         raise ValueError(f"Mức chất lượng không hợp lệ: {chat_luong!r}")
     cao = CHAT_LUONG[chat_luong]
     if cao == 0:
-        return {"format": "ba/b"}
+        # M4A (AAC) mở được ở mọi nơi; Opus/WebM thì Premiere, CapCut, điện thoại không mở. Luồng M4A YouTube có sẵn →
+        # không nén lại; không có (hay trang chỉ có luồng hình + tiếng) → FFmpeg đổi sang M4A, bỏ hình.
+        return {
+            "format": "ba[ext=m4a]/ba/b",
+            "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "m4a"}],
+        }
     if cao is None:
         return {"format": DINH_DANG, "merge_output_format": VO_GHEP}
     return {
@@ -120,7 +129,7 @@ def ma_link(url: str) -> str:
 
 def ma_da_co(thu_muc: str, chi_tieng: bool = False, anh: bool = False) -> set:
     """Mã video đã có file trong ``thu_muc``: video = «[mã].đuôi», chỉ-tiếng = «[mã].audio.đuôi», ``anh`` = thumbnail
-    «[mã].jpg». Các loại tách riêng: có video không có nghĩa là đã có thumbnail, và ngược lại."""
+    «mã.jpg» (hoặc tên cũ «[mã].jpg»). Các loại tách riêng: có video không có nghĩa là đã có thumbnail, và ngược lại."""
     mau = _RE_MA_CUOI_TEN_TIENG if chi_tieng else _RE_MA_CUOI_TEN
     try:
         ten = os.listdir(thu_muc)
@@ -129,7 +138,8 @@ def ma_da_co(thu_muc: str, chi_tieng: bool = False, anh: bool = False) -> set:
     return {
         m.group(1)
         for t in ten
-        if (t.lower().endswith(".jpg") if anh else not t.lower().endswith(_DUOI_ANH)) and (m := mau.search(t))
+        if (t.lower().endswith(".jpg") if anh else not t.lower().endswith(_DUOI_ANH))
+        and (m := (anh and _RE_TEN_LA_MA.match(t)) or mau.search(t))
     }
 
 
@@ -278,7 +288,9 @@ def tai_nhieu(
     da_co = ma_da_co(thu_muc, chi_tieng, anh=thumbnail) if bo_qua_da_co else set()
     da_tai: set = set()
     ten_mau = (
-        "%(title).150B [%(id)s].audio.%(ext)s"
+        "%(id)s.%(ext)s"
+        if thumbnail
+        else "%(title).150B [%(id)s].audio.%(ext)s"
         if chi_tieng
         else "%(title).150B [%(id)s].%(ext)s"
     )
@@ -554,8 +566,8 @@ def _tai_anh_kenh(
 ) -> list:
     """Thumbnail cả kênh (D-45): ảnh tải THẲNG theo địa chỉ cố định ``i.ytimg.com/vi/<mã>/…`` bằng ``YoutubeDL.urlopen``
     (timeout/proxy chung) trong ``PhienYouTube.chay`` (cầu dao, phân loại lỗi) — không trích thông tin từng video như tải
-    theo link (đo thật 11/11: ~8 s/ảnh vì giãn nhịp + giải JavaScript). Tên file như đường tải theo link («tiêu đề
-    [mã].jpg»); ảnh đã có thì bỏ qua. Trả list dict như :func:`tai_nhieu`."""
+    theo link (đo thật 11/11: ~8 s/ảnh vì giãn nhịp + giải JavaScript). Tên file như đường tải theo link («mã.jpg»); ảnh
+    đã có thì bỏ qua. Trả list dict như :func:`tai_nhieu`."""
     import yt_dlp
 
     thu_muc = os.path.abspath(str(thu_muc or "").strip().strip('"'))
@@ -567,7 +579,7 @@ def _tai_anh_kenh(
     ket_qua: list = []
     # Ảnh tĩnh không cần đăng nhập: bỏ cookie (khỏi điều kiện Node/EJS của cookie); timeout + proxy giữ nguyên.
     opts = (cau_hinh_mang or CauHinhMang()).bo_cookie().tuy_chon(
-        "download", outtmpl=os.path.join(thu_muc, "%(title).150B [%(id)s].%(ext)s")
+        "download", outtmpl=os.path.join(thu_muc, "%(id)s.%(ext)s")
     )
     with yt_dlp.YoutubeDL(opts) as ydl:
         for i, v in enumerate(ds):
