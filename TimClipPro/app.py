@@ -1477,7 +1477,8 @@ def _chua_tai_duoc() -> bool:
 with tab_tai:
     st.subheader("Tải video / audio gốc theo link")
     st.caption("Tải file video (hình + tiếng) hoặc chỉ audio — không đưa vào kho vân tay. Bản 4K thường ra file .mkv (mở "
-               "bằng VLC hoặc ứng dụng Phim & TV của Windows); bản thấp hơn ra .mp4; chỉ audio ra .m4a.")
+               "bằng VLC hoặc ứng dụng Phim & TV của Windows); bản thấp hơn ra .mp4; chỉ audio ra .m4a. Tên file = tiêu đề "
+               "không dấu + mã video, không dấu cách (vd. Ten_video_RMpCKfipD-Y.mp4).")
     _loai_tai = st.radio("Tải về", tai_video_goc.LOAI_TAI, horizontal=True, key="loai_tai")
     _chi_audio = _loai_tai == tai_video_goc.LOAI_TAI[1]
     links_tai = st.text_area("Link video (mỗi dòng một link)", height=120,
@@ -1562,7 +1563,7 @@ with tab_anh:
 with tab_kenh:
     st.subheader("Tải video gốc của cả kênh")
     st.caption("Tải file video ở tab Videos của kênh (không lấy Shorts/Live) — không nén, không đưa vào kho vân tay. "
-               "Video đã có trong thư mục (theo [mã video] ở tên file) được bỏ qua: bấm lại là tải tiếp phần còn thiếu.")
+               "Video đã có trong thư mục (theo mã video ở cuối tên file) được bỏ qua: bấm lại là tải tiếp phần còn thiếu.")
     url_kenh_tai = st.text_input("Link kênh YouTube cần tải", placeholder="https://www.youtube.com/@TenKenh")
     _thu_muc_kenh = _o_thu_muc_tai("Thư mục lưu video của kênh", "kenh")
     c_so, c_cl = st.columns(2)
@@ -1589,7 +1590,8 @@ with tab_ghep:
     st.caption("Trộn được link YouTube với file có sẵn trong máy. File trong máy không bị sửa hay xoá (chỉnh âm lượng làm "
                "trên bản sao tạm).")
     _thu_muc_ghep = _o_thu_muc_tai("Thư mục lưu video ghép", "ghep")
-    _ten_ghep = st.text_input("Tên file video ghép (để trống = «Video ghép <ngày giờ>»)")
+    _ten_ghep = st.text_input("Tên file video ghép (để trống = «Video_ghep_<ngày giờ>»; dấu cách, dấu tiếng Việt, ký tự "
+                              "đặc biệt được đổi thành chữ không dấu và «_»)")
     _ds_ghep = ghep_video_goc.tach_link(links_ghep)
     _am_ghep = st.checkbox(O_AM_LUONG, value=True, key="am_ghep", help=GIAI_THICH_AM_LUONG)
     st.caption("Video khác độ phân giải hay số hình/giây video 1 (vd. một video 60 hình/giây giữa các video 30) thì "

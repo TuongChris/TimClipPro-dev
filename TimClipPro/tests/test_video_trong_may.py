@@ -117,7 +117,7 @@ def test_cat_file_trong_may_giu_nguyen_file_goc(tmp_path):
     bam = _bam(goc)
     k = vm.xu_ly([goc], str(tmp_path / "ra"), tu_s=1, den_s=3)[0]
     assert k["trang_thai"] == "xong", k
-    assert k["duong_dan"].endswith("Phim của tôi (00.00.01-00.00.03).mp4")
+    assert k["duong_dan"].endswith("Phim_cua_toi_00-00-01_00-00-03.mp4")
     assert _dai(k["duong_dan"]) == pytest.approx(2, abs=0.06)
     assert _bam(goc) == bam and k["la_file_may"] is True
 
@@ -142,7 +142,7 @@ def test_chi_chinh_am_ra_file_moi(tmp_path):
     bam = _bam(goc)
     k = vm.xu_ly([goc], str(tmp_path / "ra"), chuan_hoa_am=True)[0]
     assert k["trang_thai"] == "xong", k
-    assert k["duong_dan"].endswith("nho (-14 LUFS).mp4")
+    assert k["duong_dan"].endswith("nho_am_luong_YouTube.mp4")
     assert _lufs(k["duong_dan"]) == pytest.approx(-14, abs=1.0)
     assert _dai(k["duong_dan"]) == pytest.approx(_dai(goc), abs=0.1)
     assert _bam(goc) == bam

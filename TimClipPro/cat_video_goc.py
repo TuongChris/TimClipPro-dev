@@ -232,12 +232,11 @@ def cat_mot(
     if den_s > do_dai + LECH_DO_DAI_TOI_DA_S:
         return {"trang_thai": "loi", "duong_dan": "",
                 "ghi_chu": f"Video chỉ dài {hhmmss(do_dai)} — đoạn {doan} vượt quá. {giu}".strip()}
-    goc = re.sub(r"\.audio$", "", os.path.splitext(os.path.basename(nguon))[0])
+    # Tên không dấu cách/ký tự đặc biệt (12/11): «Tieu_de_<mã>_00-01-23_00-02-45,5» → «…_00-02-45-5».
+    goc = tv.ten_khong_dau(re.sub(r"\.audio$", "", os.path.splitext(os.path.basename(nguon))[0])) or "doan_cat"
     os.makedirs(thu_muc, exist_ok=True)
-    dich = tv._ten_trong(
-        thu_muc,
-        f"{goc} ({moc_hien(tu_s, '.')}-{moc_hien(den_s, '.')})" + (".mp4" if co_hinh else ".m4a"),
-    )
+    moc = "_".join(moc_hien(g, "-").replace(",", "-") for g in (tu_s, den_s))
+    dich = tv._ten_trong(thu_muc, f"{goc}_{moc}" + (".mp4" if co_hinh else ".m4a"))
     nhan = f"{nhan}: đang cắt đoạn {doan}" if nhan else f"Đang cắt đoạn {doan}"
 
     def tien_do(d: dict) -> None:

@@ -136,7 +136,7 @@ def xu_ly(
             )
             continue
         os.makedirs(thu_muc, exist_ok=True)
-        dich = tv._ten_trong(thu_muc, f"{goc} ({am_luong.MUC_LUFS:g} LUFS){duoi}")
+        dich = tv._ten_trong(thu_muc, f"{tv.ten_khong_dau(goc) or 'video'}_am_luong_YouTube{duoi}")  # tên không dấu cách (12/11)
         bao_i(0.0, f"{nhan}: đang chỉnh âm lượng «{goc}»...")
         try:
             ghi = am_luong.chuan_hoa(f, huy=huy, dich=dich)

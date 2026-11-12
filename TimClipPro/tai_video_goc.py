@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import time
+import unicodedata
 import urllib.parse
 import uuid
 from dataclasses import asdict, dataclass
@@ -82,12 +83,13 @@ TUY_CHON_THUMBNAIL = {
     ],
 }
 _DUOI_ANH = (".jpg", ".jpeg", ".png", ".webp")
-# Mã ở tên file: YouTube 11 ký tự, hoặc VOD Twitch «v<số>» (yt-dlp đặt [id] như vậy) — xem :func:`ma_link`.
-_RE_MA_CUOI_TEN = re.compile(r"\[([A-Za-z0-9_-]{11}|v\d+)\]\.[^.]+$")
+# Mã ở tên file: YouTube 11 ký tự, hoặc VOD Twitch «v<số>» (yt-dlp đặt [id] như vậy) — xem :func:`ma_link`. Từ 12/11 tên
+# file là «Tieu_de_<mã>.đuôi» (không dấu cách); tên cũ «tiêu đề [mã].đuôi» vẫn nhận. «.m4a» là file chỉ-tiếng, không phải video.
+_RE_MA_CUOI_TEN = re.compile(r"[\[_]([A-Za-z0-9_-]{11}|v\d+)\]?\.(?!m4a$)[^.]+$", re.IGNORECASE)
 # Thumbnail từ 12/11 tên đúng bằng mã («RMpCKfipD-Y.jpg», người dùng yêu cầu); ảnh tên cũ «tiêu đề [mã].jpg» vẫn tính.
 _RE_TEN_LA_MA = re.compile(r"^([A-Za-z0-9_-]{11}|v\d+)\.jpg$", re.IGNORECASE)
 # File chỉ-tiếng mang thêm «.audio» trước đuôi: «đã có» của video và của chỉ-tiếng không lẫn nhau.
-_RE_MA_CUOI_TEN_TIENG = re.compile(r"\[([A-Za-z0-9_-]{11}|v\d+)\]\.audio\.[^.]+$")
+_RE_MA_CUOI_TEN_TIENG = re.compile(r"[\[_]([A-Za-z0-9_-]{11}|v\d+)(?:\]\.audio\.[^.]+|\.m4a)$", re.IGNORECASE)
 _RE_MA_TWITCH = re.compile(r"^/(?:videos|[^/]+/v(?:ideo)?)/(\d+)/?$")
 # Dưới mức trống này thì không tải video kế: một lượt tải cả kênh qua đêm không được làm đầy ổ.
 TRONG_TOI_THIEU_BYTE = 5 * 10**9
@@ -113,6 +115,15 @@ def tuy_chon_dinh_dang(chat_luong: str = CHAT_LUONG_MAC_DINH) -> dict:
     }
 
 
+def ten_khong_dau(s: str, toi_da: int = 100) -> str:
+    """Phần tên file chỉ gồm chữ KHÔNG dấu, số, «_», «-» (người dùng 12/11: không dấu cách, không ký tự đặc biệt): bỏ dấu
+    tiếng Việt, mỗi chuỗi ký tự khác thành một «_». Chữ không phải Latin (Nhật, Hàn…) bị bỏ — có thể ra rỗng."""
+    s = unicodedata.normalize("NFKD", str(s or "").replace("đ", "d").replace("Đ", "D"))
+    s = re.sub(r"[^A-Za-z0-9-]+", "_", s.encode("ascii", "ignore").decode())
+    s = re.sub(r"_*-+_*", "-", s).strip("_-")
+    return s[:toi_da].rstrip("_-")
+
+
 def ma_link(url: str) -> str:
     """Mã video của link để nhận «đã có»/«trùng» — CÙNG mã yt-dlp ghi trong «[mã]» ở tên file: YouTube 11 ký tự, VOD
     Twitch «v<số>». Không nhận ra (clip Twitch, trang khác) → rỗng: link đó luôn được tải như mới."""
@@ -128,7 +139,8 @@ def ma_link(url: str) -> str:
 
 
 def ma_da_co(thu_muc: str, chi_tieng: bool = False, anh: bool = False) -> set:
-    """Mã video đã có file trong ``thu_muc``: video = «[mã].đuôi», chỉ-tiếng = «[mã].audio.đuôi», ``anh`` = thumbnail
+    """Mã video đã có file trong ``thu_muc``: video = «_mã.đuôi», chỉ-tiếng = «_mã.m4a» (tên cũ «[mã].đuôi»,
+    «[mã].audio.đuôi»), ``anh`` = thumbnail
     «mã.jpg» (hoặc tên cũ «[mã].jpg»). Các loại tách riêng: có video không có nghĩa là đã có thumbnail, và ngược lại."""
     mau = _RE_MA_CUOI_TEN_TIENG if chi_tieng else _RE_MA_CUOI_TEN
     try:
@@ -203,11 +215,11 @@ def mo_ta_chat_luong(info: dict) -> str:
 
 
 def _ten_trong(thu_muc: str, ten: str) -> str:
-    """Đường dẫn chưa có file trong ``thu_muc``: trùng tên thì thêm « (2)», « (3)»… — không bao giờ ghi đè."""
+    """Đường dẫn chưa có file trong ``thu_muc``: trùng tên thì thêm «_2», «_3»… — không bao giờ ghi đè."""
     goc, duoi = os.path.splitext(ten)
     dich, i = os.path.join(thu_muc, ten), 2
     while os.path.lexists(dich):
-        dich, i = os.path.join(thu_muc, f"{goc} ({i}){duoi}"), i + 1
+        dich, i = os.path.join(thu_muc, f"{goc}_{i}{duoi}"), i + 1
     return dich
 
 
@@ -287,13 +299,7 @@ def tai_nhieu(
     chi_tieng = not thumbnail and CHAT_LUONG[chat_luong] == 0
     da_co = ma_da_co(thu_muc, chi_tieng, anh=thumbnail) if bo_qua_da_co else set()
     da_tai: set = set()
-    ten_mau = (
-        "%(id)s.%(ext)s"
-        if thumbnail
-        else "%(title).150B [%(id)s].audio.%(ext)s"
-        if chi_tieng
-        else "%(title).150B [%(id)s].%(ext)s"
-    )
+    ten_mau = "%(id)s.%(ext)s"  # trong thư mục tạm; tên cuối đặt lúc chuyển ra (tiêu đề không dấu + mã)
 
     for i, url in enumerate(links):
         kq = KetQuaTaiVideo(url=url, trang_thai="loi")
@@ -446,7 +452,11 @@ def tai_nhieu(
                     ghi_am = "Đã dừng lúc chỉnh âm lượng — giữ âm lượng gốc."
                 except RuntimeError as e:
                     ghi_am = f"Chưa chỉnh được âm lượng ({e}) — giữ âm lượng gốc."
-            dich = _ten_trong(thu_muc, os.path.basename(xong[0]))
+            goc, duoi = os.path.splitext(os.path.basename(xong[0]))
+            if not re.fullmatch(r"[A-Za-z0-9_-]+", goc):  # mã của trang khác YouTube/Twitch có thể có dấu cách
+                goc = ten_khong_dau(goc) or "video"
+            tieu = "" if thumbnail else ten_khong_dau(str((info or {}).get("title") or ""))
+            dich = _ten_trong(thu_muc, (f"{tieu}_{goc}" if tieu else goc) + duoi)
             os.rename(xong[0], dich)
             kq.trang_thai, kq.duong_dan = "xong", dich
             if ma:

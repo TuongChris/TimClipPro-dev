@@ -58,7 +58,8 @@ class YdlGia:
         if h:
             h(self.opts)
         os.remove(ten.replace("%(ext)s", "f137.mp4.part"))
-        with open(ten.replace("%(ext)s", "mkv"), "wb") as f:
+        tieng = any(p.get("key") == "FFmpegExtractAudio" for p in self.opts.get("postprocessors") or [])
+        with open(ten.replace("%(ext)s", "m4a" if tieng else "mkv"), "wb") as f:
             f.write(b"video")
         hook({"status": "finished", "info_dict": {}})
         return {
@@ -116,16 +117,16 @@ def test_mo_ta_chat_luong():
 
 
 def test_tai_hai_link_chat_luong_cao_nhat_khong_ghi_de(gia, tmp_path):
-    (tmp_path / "Tiêu đề abcdefghij1 [abcdefghij1].mkv").write_bytes(b"cu")
+    (tmp_path / "Tieu_de_abcdefghij1_abcdefghij1.mkv").write_bytes(b"cu")
     tien_do = []
     kq = tv.tai_nhieu(
         [URL1, URL2], str(tmp_path), progress=lambda p, m: tien_do.append((p, m))
     )
 
     assert [k["trang_thai"] for k in kq] == ["xong", "xong"]
-    assert kq[0]["duong_dan"].endswith("Tiêu đề abcdefghij1 [abcdefghij1] (2).mkv")
+    assert kq[0]["duong_dan"].endswith("Tieu_de_abcdefghij1_abcdefghij1_2.mkv")
     assert (
-        tmp_path / "Tiêu đề abcdefghij1 [abcdefghij1].mkv"
+        tmp_path / "Tieu_de_abcdefghij1_abcdefghij1.mkv"
     ).read_bytes() == b"cu"  # file cũ không bị đè
     assert kq[1]["chat_luong"] == "2160p60 · vp9 + opus"
     assert not (tmp_path / tv.THU_MUC_TAM).exists()
@@ -146,7 +147,7 @@ def test_mot_link_loi_khong_dung_ca_lo(gia, tmp_path):
     kq = tv.tai_nhieu(["https://www.youtube.com/@Kenh", URL1, URL2], str(tmp_path))
     assert [k["trang_thai"] for k in kq] == ["loi", "loi", "xong"]
     assert "kênh" in kq[0]["ghi_chu"] and kq[1]["ghi_chu"]
-    assert sorted(os.listdir(tmp_path)) == ["Tiêu đề abcdefghij2 [abcdefghij2].mkv"]
+    assert sorted(os.listdir(tmp_path)) == ["Tieu_de_abcdefghij2_abcdefghij2.mkv"]
 
 
 def test_dung_giua_chung_xoa_phan_do_va_bo_qua_phan_con_lai(gia, tmp_path):
@@ -188,7 +189,7 @@ def test_doi_client_khi_khong_co_dinh_dang_khong_de_lai_file_do(gia, tmp_path):
         for _, o in gia.goi
     ]
     assert clients == [None, ["tv"]]
-    assert os.listdir(tmp_path) == ["Tiêu đề abcdefghij1 [abcdefghij1].mkv"]
+    assert os.listdir(tmp_path) == ["Tieu_de_abcdefghij1_abcdefghij1.mkv"]
 
 
 def test_thieu_ffmpeg_bao_ro_truoc_khi_tai(gia, tmp_path, monkeypatch):
@@ -601,9 +602,7 @@ def test_o_dia_sap_day_thi_dung_khong_tai_tiep(gia, tmp_path, monkeypatch):
 
 def test_file_chi_tieng_khong_chan_tai_video_va_nguoc_lai(gia, tmp_path):
     kq = tv.tai_nhieu([URL1], str(tmp_path), chat_luong="Chỉ tiếng")
-    assert kq[0]["duong_dan"].endswith(
-        "[abcdefghij1].audio.mkv"
-    )  # yt-dlp giả luôn ra .mkv
+    assert kq[0]["duong_dan"].endswith("_abcdefghij1.m4a")
     # Đã có bản chỉ-tiếng: tải VIDEO cùng thư mục vẫn phải tải; tải CHỈ TIẾNG lần nữa thì bỏ qua.
     assert [
         k["trang_thai"] for k in tv.tai_nhieu([URL1], str(tmp_path), bo_qua_da_co=True)
@@ -1022,3 +1021,44 @@ def test_thumbnail_ca_kenh_khong_co_anh_nao(ydl_anh, tmp_path):
     kq = tv.tai_kenh("https://www.youtube.com/@Kenh", str(tmp_path), thumbnail=True)
     assert kq[0]["trang_thai"] == "loi" and "thumbnail" in kq[0]["ghi_chu"]
     assert [k["trang_thai"] for k in kq[1:]] == ["xong", "xong"]
+
+
+# ---- 12/11: tên file tải về không dấu cách, không ký tự đặc biệt (người dùng yêu cầu)
+@pytest.mark.parametrize(
+    "vao, ra",
+    [
+        ("Tiêu đề: Đặc biệt / Ký tự? *", "Tieu_de_Dac_biet_Ky_tu"),
+        ("The Weirdest Anomaly Game... [Kun Kun Nest]", "The_Weirdest_Anomaly_Game_Kun_Kun_Nest"),
+        ("Joe Bart - Reacts!", "Joe_Bart-Reacts"),
+        ("日本語のタイトル", ""),
+        ("", ""),
+    ],
+)
+def test_ten_khong_dau(vao, ra):
+    assert tv.ten_khong_dau(vao) == ra
+
+
+def test_ten_khong_dau_cat_ngan():
+    assert tv.ten_khong_dau("a " * 200) == "_".join(["a"] * 50)  # 99 ký tự, không để «_» ở cuối
+
+
+def test_ten_file_tai_ve_khong_dau_cach(gia, tmp_path):
+    """Video «Tieu_de_<mã>.mkv», audio «Tieu_de_<mã>.m4a», trùng tên thêm «_2»: không dấu cách, không ngoặc."""
+    kq = tv.tai_nhieu([URL1], str(tmp_path))
+    assert os.path.basename(kq[0]["duong_dan"]) == "Tieu_de_abcdefghij1_abcdefghij1.mkv"
+    assert kq[0]["tieu_de"] == "Tiêu đề abcdefghij1"  # tiêu đề HIỂN THỊ giữ nguyên
+    kq = tv.tai_nhieu([URL1], str(tmp_path))
+    assert os.path.basename(kq[0]["duong_dan"]) == "Tieu_de_abcdefghij1_abcdefghij1_2.mkv"
+    kq = tv.tai_nhieu([URL1], str(tmp_path), chat_luong="Chỉ tiếng")
+    assert os.path.basename(kq[0]["duong_dan"]) == "Tieu_de_abcdefghij1_abcdefghij1.m4a"
+    for f in os.listdir(tmp_path):
+        assert " " not in f and "[" not in f and "(" not in f, f
+
+
+def test_ma_da_co_nhan_ten_moi_va_ten_cu(tmp_path):
+    for t in ("Cu [abcdefghij1].mkv", "Moi_abcdefghij2.mp4", "Moi_v123456.mp4",
+              "Cu [abcdefghij3].audio.webm", "Moi_abcdefghij4.m4a", "ab_cdefghij5.jpg", "abcdefghij6.jpg"):
+        (tmp_path / t).write_bytes(b"x")
+    assert tv.ma_da_co(str(tmp_path)) == {"abcdefghij1", "abcdefghij2", "v123456"}
+    assert tv.ma_da_co(str(tmp_path), chi_tieng=True) == {"abcdefghij3", "abcdefghij4"}
+    assert tv.ma_da_co(str(tmp_path), anh=True) == {"abcdefghij6"}

@@ -167,12 +167,12 @@ def test_ghep_dung_thu_tu_moc_khop_tieng_that_va_xoa_file_le(
     assert goi["dinh_dang"] == tv.DINH_DANG_GHEP and goi["bo_qua_da_co"] is True
     cuoi = kq[-1]
     assert cuoi["trang_thai"] == "xong", cuoi
-    assert os.path.basename(cuoi["duong_dan"]) == "Thử_ ghép_1.mp4"
+    assert os.path.basename(cuoi["duong_dan"]) == "Thu_ghep_1.mp4"
     assert not os.path.exists(
         tmp_path / gv.THU_MUC_PHAN
     )  # file lẻ đã xoá sau khi ghép thành công
 
-    with open(tmp_path / "Thử_ ghép_1.moc.csv", encoding="utf-8-sig") as f:
+    with open(tmp_path / "Thu_ghep_1.moc.csv", encoding="utf-8-sig") as f:
         moc = list(csv.DictReader(f))
     assert [d["Tiêu đề"] for d in moc] == [
         "Tập 1: Mở đầu",
@@ -305,8 +305,10 @@ def test_danh_sach_noi_va_chuong_thoat_ky_tu():
 
 
 def test_ten_file_ra():
-    assert gv.ten_file_ra('a<b>:c"/d\\e|f?g*') == "a_b__c__d_e_f_g_"
-    assert gv.ten_file_ra("  ").startswith("Video ghép ")
+    # 12/11: tên file ra không dấu cách, không ký tự đặc biệt, không dấu tiếng Việt.
+    assert gv.ten_file_ra('a<b>:c"/d\\e|f?g*') == "a_b_c_d_e_f_g"
+    assert gv.ten_file_ra("Tập 1 + Tập 2") == "Tap_1_Tap_2"
+    assert gv.ten_file_ra("  ").startswith("Video_ghep_") and " " not in gv.ten_file_ra("")
 
 
 def test_csv_moc_chan_cong_thuc():
@@ -421,9 +423,9 @@ def test_ten_ra_khong_de_file_moc_cu_va_dong_link_khong_tro_file_da_xoa(nguon, t
     (tmp_path / "Thu.moc.csv").write_bytes(b"dap an cu")
     kq = gv.ghep(URL[:2], str(tmp_path), ten_file="Thu")
     assert kq[-1]["trang_thai"] == "xong", kq[-1]
-    assert os.path.basename(kq[-1]["duong_dan"]) == "Thu (2).mp4"
+    assert os.path.basename(kq[-1]["duong_dan"]) == "Thu_2.mp4"
     assert (tmp_path / "Thu.moc.csv").read_bytes() == b"dap an cu"
-    assert (tmp_path / "Thu (2).moc.csv").is_file()
+    assert (tmp_path / "Thu_2.moc.csv").is_file()
     assert kq[-1]["la_dong_ghep"] is True
     for k in kq[:-1]:
         assert k["duong_dan"] == "" and "ghép" in k["ghi_chu"]

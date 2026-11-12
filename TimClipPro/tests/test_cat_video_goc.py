@@ -89,7 +89,7 @@ def _gia_tai(monkeypatch, src, chi_tieng=False, loi=()):
             ma = tv.ma_tu_url(url)
             dich = os.path.join(
                 thu_muc,
-                f"Tiêu đề {ma} [{ma}]" + (".audio.m4a" if chi_tieng else ".mp4"),
+                f"Tieu_de_{ma}_{ma}" + (".m4a" if chi_tieng else ".mp4"),  # tên tai_nhieu đặt từ 12/11
             )
             shutil.copy(src, dich)
             ra.append(
@@ -205,7 +205,8 @@ def test_cat_dung_tung_khung_hinh_va_xoa_video_tron(
     assert os.listdir(ra_dir) == [
         os.path.basename(k["duong_dan"])
     ]  # video trọn + thư mục tạm đã xoá
-    assert "[abcdefghij0]" in k["duong_dan"] and k["duong_dan"].endswith(".mp4")
+    ten = os.path.basename(k["duong_dan"])  # 12/11: không dấu cách, không ngoặc
+    assert ten.startswith("Tieu_de_abcdefghij0_abcdefghij0_00-00-0") and ten.endswith(".mp4") and " " not in ten
 
 
 @can_ffmpeg
@@ -227,7 +228,7 @@ def test_chi_tieng_cat_ra_m4a(tmp_path, monkeypatch):
         [URL[0]], str(tmp_path / "ra"), tu_s=3.5, den_s=6, chat_luong="Chỉ tiếng"
     )[0]
     assert k["trang_thai"] == "xong", k
-    assert k["duong_dan"].endswith(".m4a")
+    assert os.path.basename(k["duong_dan"]) == "Tieu_de_abcdefghij0_abcdefghij0_00-00-03-5_00-00-06.m4a"
     p = _probe(k["duong_dan"])
     assert [s["codec_type"] for s in p["streams"]] == ["audio"]
     assert float(p["format"]["duration"]) == pytest.approx(2.5, abs=0.05)
@@ -384,4 +385,4 @@ def test_cat_lai_video_twitch_khong_tai_lai(tmp_path, monkeypatch):
     monkeypatch.setattr(tv, "tai_nhieu", tai_nhieu)
     k = cv.tai_doan([tw], str(tmp_path / "ra"), tu_s=1, den_s=3)[0]
     assert k["trang_thai"] == "xong", k
-    assert "[v12345678901]" in k["duong_dan"]
+    assert os.path.basename(k["duong_dan"]).startswith("Phat_lai_v12345678901_")  # tên cũ «[mã]» vẫn nhận ra

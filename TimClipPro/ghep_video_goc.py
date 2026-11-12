@@ -66,7 +66,6 @@ _THONG_SO_TIENG = ("ma_tieng", "tan_so_tieng", "kenh_tieng")
 # File ra lệch tổng độ dài các phần quá mức này thì không tin mốc — giữ file tạm, báo.
 LECH_DO_DAI_TOI_DA_S = 1.0
 _DU_PHONG_O_DIA = 10**9
-_KY_TU_CAM = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
 def tach_link(van_ban: str) -> list:
@@ -180,7 +179,7 @@ def _ten_ra(thu_muc: str, ten: str) -> str:
     video đã chuyển đi chỗ khác."""
     goc, i = ten, 2
     while any(os.path.exists(os.path.join(thu_muc, goc + duoi)) for duoi in (".mp4", ".moc.csv")):
-        goc, i = f"{ten} ({i})", i + 1
+        goc, i = f"{ten}_{i}", i + 1
     return os.path.join(thu_muc, goc + ".mp4")
 
 
@@ -244,13 +243,13 @@ def csv_moc(dong: list) -> bytes:
 
 
 def ten_file_ra(ten: str) -> str:
-    """Tên file video ghép (không đuôi) an toàn cho Windows; rỗng → «Video ghép <ngày giờ>»."""
-    ten = _KY_TU_CAM.sub("_", str(ten or "")).strip(" .")
-    return ten[:150] or datetime.now().strftime("Video ghép %Y-%m-%d %H%M%S")
+    """Tên file video ghép (không đuôi): không dấu cách/ký tự đặc biệt/dấu tiếng Việt (12/11); rỗng →
+    «Video_ghep_<ngày giờ>»."""
+    return tv.ten_khong_dau(ten, 150) or datetime.now().strftime("Video_ghep_%Y-%m-%d_%H%M%S")
 
 
 def _ten_tu_file(path: str) -> str:
-    return re.sub(r"\s*\[[A-Za-z0-9_-]{11}\]\.[^.]+$", "", os.path.basename(path))
+    return re.sub(r"(?:\s*\[[A-Za-z0-9_-]{11}\]|_[A-Za-z0-9_-]{11})\.[^.]+$", "", os.path.basename(path))
 
 
 def ghep(
