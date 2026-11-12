@@ -52,6 +52,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 ### 2026-11-12 — thumbnail tên = mã, «Chỉ audio» ra M4A (D-47, nhánh feature/pc2/audio-thumbnail-ma)
 - Thumbnail lưu «<mã>.jpg» (người dùng: bỏ tiêu đề có dấu cách); ảnh tên cũ vẫn tính «đã có». Tab Tải: chọn «🎵 Chỉ audio» đầu tab.
 - Chỉ-tiếng ra «… [mã].audio.m4a» (trước: .webm Opus); test yt-dlp thật (file://) + FFmpeg thật. Nhanh 3737 = 3733/4/0. Gộp `b5d5c3e`, DEV 12/11 09:33 (sao lưu `data_20261112_093309`). Chưa thử YouTube thật.
+- Chiều 12/11 (D-48): MỌI file tải về «Tieu_de_khong_dau_<mã>.đuôi», audio «…_<mã>.m4a», cắt/ghép cũng không dấu cách; «đã có» nhận cả tên cũ. Nhanh 3745 = 3741/4/0.
 ### 2026-11-11 — audit tổng toàn dự án (Codex GPT-6 Astra chỉ nhận chữ, nhánh fix/pc2/audit-tong-1111)
 - 27 lượt Codex (12 vùng × 2 góc nhìn + Apps Script + mã chết + soát bản sửa), ~78 phát hiện; Claude đọc lại mã từng cái → 20 lỗi
   thật sửa kèm 30 test đỏ→xanh: che mật khẩu proxy trong log, phục hồi JSON không mất file chính, dựng kho DỪNG khi thư mục con không
