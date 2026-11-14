@@ -215,11 +215,13 @@ def test_khuc_goi_cung_align_khong_bi_coi_la_bong():
 
 
 def test_troi_toc_do_noi_tiep_khong_bi_coi_la_bong():
-    """Video đổi tốc độ nhẹ chưa bù: align trôi đều 0,6 s/mảnh, vùng NỐI TIẾP (chồng 2 s) — giữ nguyên."""
+    """Video đổi tốc độ nhẹ chưa bù: align trôi đều 0,6 s/mảnh, vùng NỐI TIẾP (chồng 2 s) — một dòng, không mảnh nào
+    thành bóng. Mốc đầu clip tính với tốc độ đo từ độ trôi (P-8): align tăng 0,6 s mỗi 27 s video ⇒ video phát với
+    r = 1 − 0,6/27, giây clip 30 ở giây video 130 ⇒ đầu clip ở 130 − 30/r ≈ 99,32 (công thức k = 1 cũ: 100,0)."""
     tho = [_manh(100.0 + 0.6 * i, 130.0 + 27.0 * i, 159.0 + 27.0 * i, 1200 + 10 * i) for i in range(10)]
     ds = _engine({CLIP: 36981})._merge(tho)
     assert len(ds) == 1
-    assert ds[0].start_s == pytest.approx(100.0, abs=0.01)
+    assert ds[0].start_s == pytest.approx(130.0 - 30.0 / (1.0 - 0.6 / 27.0), abs=0.01)
     assert ds[0].hashes >= 10 * 1200 * 27 // 29
 
 

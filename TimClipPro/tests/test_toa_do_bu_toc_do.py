@@ -145,3 +145,53 @@ def test_duong_k_bang_1_cho_ket_qua_y_het_cong_thuc_cu(tmp_path):
         for truong in ("start_s", "end_s", "matched_s", "clip_offset_s",
                        "clip_bat_dau_s", "vung_khop_s", "hashes"):
             assert getattr(m, truong) == pytest.approx(getattr(mk, truong)), truong
+
+
+def _chuoi_troi(tmp_path, toc_do: float, so_manh: int, t_clip0: float, dau_clip: float,
+                dai: float = 6.0, buoc: float = 6.0, so_hash: int = 60) -> list:
+    """Mảnh vụn của LƯỢT THƯỜNG (k = 1) khi video phát nhanh ``toc_do`` lần: mảnh i khớp giây clip
+    ``t_clip0 + i·buoc``, nằm ở giây video ``dau_clip + t_clip/toc_do`` (một khúc, offset 0)."""
+    return [(_ten_khuc(tmp_path, 0, 1.0), dau_clip + (t_clip0 + i * buoc) / toc_do, t_clip0 + i * buoc,
+             dai, so_hash) for i in range(so_manh)]
+
+
+@pytest.mark.parametrize("toc_do", [1.02, 0.98, 1.04])
+def test_nhom_luot_thuong_troi_deu_tinh_moc_theo_toc_do_do_duoc(tmp_path, toc_do):
+    """Nghiên cứu 14/11 (S7b, P-8): video nhanh 2 %, dùng clip từ giây 300. Các mảnh vụn k = 1 nối lại đã ĐẠT chuẩn
+    nên lượt bù tốc độ không chạy, và mốc đầu clip từng tính với k = 1: lệch (1 − 1/r)·300 ≈ −5,9 s. Mốc phải tính
+    với tốc độ đo từ độ trôi của chính các mảnh (cùng bộ ước lượng của lượt bù)."""
+    e = _eng(tmp_path)
+    dau_clip = 400.0 - 300.0 / toc_do                 # giây video của giây 0 clip gốc
+    tho = _khop_tho(e, tmp_path, _chuoi_troi(tmp_path, toc_do, 50, 300.0, dau_clip))
+    ket = e._merge(tho)
+    assert len(ket) == 1, "các mảnh của cùng một lần dùng phải gộp làm một"
+    m = ket[0]
+    assert m.start_s == pytest.approx(dau_clip, abs=0.2), "mốc tính với k = 1 lệch ≈ 5,9 s"
+    assert m.clip_bat_dau_s == pytest.approx(dau_clip, abs=0.2)
+    assert m.clip_offset_s == pytest.approx(300.0, abs=0.2)
+    assert m.vung_khop_s == pytest.approx(400.0, abs=0.06)   # vùng khớp, độ dài, hash: không đổi
+
+
+def test_nhom_on_dinh_nhieu_manh_rung_nho_giu_nguyen_cong_thuc_cu(tmp_path):
+    """Mảnh cùng một căn chỉnh chỉ rung 0,1 s (bước dòng audfprint): dù bộ ước lượng thấy «trôi» 0,2 %, độ trôi tích
+    luỹ chỉ 0,2 s — không đủ chắc để đổi mốc. Mốc giữ ĐÚNG công thức k = 1."""
+    e = _eng(tmp_path)
+    dong = [(_ten_khuc(tmp_path, 0, 1.0), 400.0 + i * 25.0 + rung, 300.0 + i * 25.0, 20.0, 400)
+            for i, rung in enumerate((0.0, 0.0, 0.1, 0.1, 0.2))]
+    ket = e._merge(_khop_tho(e, tmp_path, dong))
+    assert len(ket) == 1
+    m = ket[0]
+    assert m.start_s == pytest.approx(400.0 - 300.0, abs=1e-6)
+    assert m.clip_offset_s == pytest.approx(300.0, abs=1e-6)
+
+
+def test_nhom_luot_bu_nhieu_manh_khong_bi_do_troi_lan_hai(tmp_path):
+    """Nhóm nhiều mảnh của LƯỢT BÙ (k = 0,98) giữ đúng mốc: phần đo độ trôi của P-8 chỉ dành cho lượt thường."""
+    e = _eng(tmp_path)
+    k, dau_clip = 0.98, 2000.0
+    dong = [(_ten_khuc(tmp_path, 0, k), (dau_clip + k * (300.0 + 40.0 * i)) / k, 300.0 + 40.0 * i, 40.0, 900)
+            for i in range(6)]
+    ket = e._merge(_khop_tho(e, tmp_path, dong))
+    assert len(ket) == 1
+    assert ket[0].start_s == pytest.approx(dau_clip, abs=0.2)
+    assert ket[0].clip_offset_s == pytest.approx(300.0, abs=0.2)

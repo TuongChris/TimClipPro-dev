@@ -223,6 +223,26 @@ def uoc_luong_toc_do(
     return gon
 
 
+# Độ trôi tích luỹ tối thiểu trên MỘT nhóm để đổi mốc đầu clip theo tốc độ đo được: 10 lần bước 0,1 s của dòng
+# audfprint. Dưới mức này «trôi» có thể chỉ là rung làm tròn của vài mảnh cùng căn chỉnh — giữ k = 1 như cũ.
+TROI_DOI_MOC_TOI_THIEU_S = 1.0
+
+
+def he_so_moc_theo_troi(manh: list, **nguong) -> float:
+    """k (giây video / giây clip) để tính mốc đầu clip của MỘT nhóm lượt thường, đo từ độ trôi align của chính các mảnh.
+
+    Video đổi tốc độ mà các mảnh vụn của lượt thường nối lại vẫn đạt chuẩn thì lượt bù tốc độ không chạy (nó chỉ chạy
+    khi chưa có gì đạt chuẩn), nên mốc đầu clip từng tính với k = 1 và lệch (1 − 1/r)·t_clip — nghiên cứu 14/11, S7b:
+    −5,98 s (P-8). Chỉ đổi khi độ trôi CHẮC: qua đủ ngưỡng của ``uoc_luong_toc_do`` (``nguong`` = các ngưỡng
+    ``toc_do_*`` của Config) VÀ trôi tích luỹ trên nhóm ≥ ``TROI_DOI_MOC_TOI_THIEU_S``; không thì 1,0 — y như cũ.
+    ``manh``: các mảnh CHÍNH của nhóm (bóng của âm thanh lặp không làm mốc, cũng không đo độ trôi).
+    """
+    uoc = uoc_luong_toc_do(manh, toi_da=1, **nguong)
+    if not uoc or abs(uoc[0].ty_le - 1.0) * uoc[0].trai_dai_s < TROI_DOI_MOC_TOI_THIEU_S:
+        return 1.0
+    return uoc[0].he_so_bu
+
+
 def bo_loc_ffmpeg(he_so: float, ho: str = HO_TEMPO, sr: int = 11025) -> str:
     """Chuỗi bộ lọc ffmpeg làm audio nhanh lên ``he_so`` lần.
 

@@ -73,6 +73,7 @@ from toc_do_khop import (
     bo_loc_ffmpeg,
     giai_ma_he_so,
     ma_he_so,
+    he_so_moc_theo_troi,
     uoc_luong_toc_do,
 )
 from clip_metadata import (
@@ -4668,6 +4669,13 @@ class Engine:
                         f"đã chạm cận trên {gioi_han}; có dấu hiệu đếm trùng."
                     )
             k = g["he_so"]
+            if k == 1.0:
+                # Lượt thường mà các mảnh chính trôi đều (video đổi tốc độ, mảnh vụn vẫn đủ đạt chuẩn nên lượt bù không
+                # chạy): mốc tính với tốc độ đo từ độ trôi; không chắc thì giữ k = 1 (P-8, phần sót TCP-05).
+                k = he_so_moc_theo_troi(
+                    [loc[i] for i in g["cs"] if nhan[i].loai == chong_bong_lap.CHINH],
+                    min_manh=cfg.toc_do_min_manh, min_ty_le_hop=cfg.toc_do_thang_hang,
+                    lech_toi_thieu=cfg.toc_do_lech_toi_thieu, lech_toi_da=cfg.toc_do_lech_toi_da)
             # Mốc đầu clip gốc trên trục VIDEO: `bat_dau − k·t_clip` (xem parser). Có thể âm khi
             # bản reup cắt mất phần đầu clip; chỉ mốc hiển thị/link mới kẹp về 0.
             dau_clip_tho = som_nhat["bat_dau"] - k * som_nhat["t_clip"]

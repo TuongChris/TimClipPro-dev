@@ -83,19 +83,6 @@
    },
    {
     "clip": "A [aaaaaaaaaaa].opus",
-    "clip_bat_dau_s": 43.7,
-    "clip_offset_s": 216.3,
-    "confidence": "Rất chắc chắn",
-    "end_s": 345.0,
-    "hashes": 120,
-    "matched_s": 30.0,
-    "start_s": 43.7,
-    "ty_le": 0.6,
-    "vung": "Đầu",
-    "vung_khop_s": 260.0
-   },
-   {
-    "clip": "A [aaaaaaaaaaa].opus",
     "clip_bat_dau_s": 44.6,
     "clip_offset_s": 185.4,
     "confidence": "Nên kiểm tra lại",
@@ -171,6 +158,19 @@
     "ty_le": 0.1,
     "vung": "Đầu",
     "vung_khop_s": 80.0
+   },
+   {
+    "clip": "A [aaaaaaaaaaa].opus",
+    "clip_bat_dau_s": 50.0,
+    "clip_offset_s": 216.3,
+    "confidence": "Rất chắc chắn",
+    "end_s": 345.0,
+    "hashes": 120,
+    "matched_s": 30.0,
+    "start_s": 50.0,
+    "ty_le": 0.6,
+    "vung": "Đầu",
+    "vung_khop_s": 260.0
    },
    {
     "clip": "A [aaaaaaaaaaa].opus",

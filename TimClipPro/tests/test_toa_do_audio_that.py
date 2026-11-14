@@ -8,7 +8,9 @@ Dựng dữ liệu (FFmpeg thật, audfprint thật):
   (nhanh hơn 2%, giữ cao độ) tại mốc P = 400 s — vắt qua ranh giới khúc 480 s.
 
 Ngưỡng chấp nhận để MẶC ĐỊNH của sản phẩm: lệch 2% làm lượt quét thường chỉ còn vài
-mảnh vụn dưới ngưỡng, nên kết quả buộc phải đến từ lượt BÙ TỐC ĐỘ — đúng đường TCP-05.
+mảnh vụn; với seed 9101/9102 chúng dưới ngưỡng, nên kết quả đến từ lượt BÙ TỐC ĐỘ — đúng
+đường TCP-05. Với seed 1711/1712 (nghiên cứu 14/11, S7b) các mảnh vụn nối lại ĐẠT chuẩn
+nên lượt bù không chạy: mốc phải tính với tốc độ đo từ độ trôi của chính các mảnh (P-8).
 
 Kỳ vọng tính TRỰC TIẾP từ cách dựng (không gọi hàm đang kiểm):
 * trên video, đầu clip gốc (t_clip = 0) ở P − 300/1,02 ≈ 105,88 s;
@@ -42,12 +44,13 @@ def _doc_wav(path) -> np.ndarray:
 
 
 @pytest.mark.slow
-def test_moc_dau_clip_dung_khi_video_bi_tang_toc(engine, tmp_path):
+@pytest.mark.parametrize("seed_clip,seed_nen,tu_luot_bu", [(9101, 9102, True), (1711, 1712, False)])
+def test_moc_dau_clip_dung_khi_video_bi_tang_toc(engine, tmp_path, seed_clip, seed_nen, tu_luot_bu):
     if shutil.which("ffmpeg") is None:
         pytest.skip("cần ffmpeg trong PATH")
     kho = tmp_path / "kho"
     kho.mkdir()
-    clip = _giai_dieu(600, seed=9101, sr=SR)
+    clip = _giai_dieu(600, seed=seed_clip, sr=SR)
     _ghi_wav(kho / "ref.wav", clip, SR)
 
     doan = tmp_path / "doan.wav"
@@ -58,7 +61,7 @@ def test_moc_dau_clip_dung_khi_video_bi_tang_toc(engine, tmp_path):
                     str(doan_nhanh)], check=True)
     chen = _doc_wav(doan_nhanh)
 
-    nen = _giai_dieu(900, seed=9102, sr=SR)
+    nen = _giai_dieu(900, seed=seed_nen, sr=SR)
     i0 = int(P * SR)
     nen[i0:i0 + len(chen)] = chen[: len(nen) - i0]
     video = tmp_path / "vi_pham.wav"
@@ -74,8 +77,8 @@ def test_moc_dau_clip_dung_khi_video_bi_tang_toc(engine, tmp_path):
     kq = engine.scan_media(str(video))
 
     assert kq.status == "ok", kq.note
-    assert kq.chan_doan and kq.chan_doan.toc_do_tim_duoc, \
-        "điều kiện test: kết quả phải đến từ lượt BÙ TỐC ĐỘ"
+    assert kq.chan_doan and bool(kq.chan_doan.toc_do_tim_duoc) == tu_luot_bu, \
+        "điều kiện test: kết quả phải đến từ " + ("lượt BÙ TỐC ĐỘ" if tu_luot_bu else "LƯỢT THƯỜNG (k = 1 trôi)")
     m = next(m for m in kq.matches if m.clip == "ref.wav")
     dau_clip = P - CAT_DAU / TOC_DO
     assert m.start_s == pytest.approx(dau_clip, abs=1.0)
