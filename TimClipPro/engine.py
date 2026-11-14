@@ -255,6 +255,11 @@ class Config:
     # Đổi tốc độ giữ cao độ đã được bộ dò độ trôi phủ tới ±6% nên lưới này để rỗng.
     luoi_tempo: list = field(default_factory=list)
     toc_do_toi_da_thu: int = 6        # Trần số lượt so khớp phụ mỗi video
+    # --- Tinh chỉnh mốc từng giây (P-8, thử nghiệm; tinh_chinh_moc.py) ---
+    # SAU khi đã chọn kết quả: đo độ tương đồng phổ từng giây giữa clip gốc và video quanh mỗi kết quả đã chọn, ra
+    # đoạn dùng thật + chỗ cắt + hồ sơ từng giây. Không tạo/bỏ kết quả nào nên KHÔNG thuộc chính sách nhận diện
+    # (không có trong TRUONG_CHINH_SACH); không đổi báo cáo V2, Sheets, lịch sử. Tắt mặc định.
+    tinh_chinh_moc: bool = False
     phan_bo_deu: bool = True     # Chia video vi phạm thành N vùng, mỗi vùng lấy 1 kết quả
     uu_tien_clip_khac_nhau: bool = True  # Ưu tiên 5 clip GỐC KHÁC NHAU thay vì trùng lặp
     # Hai ứng viên chênh nhau trong dung sai này thì coi là NGANG BẰNG về bằng
@@ -388,6 +393,12 @@ class Match:
     # Đường dẫn bản ghi vân tay ĐÃ khớp (chuỗi audfprint lưu lúc tạo kho), chỉ trong bộ nhớ: kho dựng đệ quy nên
     # hai thư mục có thể cùng tên file, mà `clip` chỉ giữ basename (audit A-1). Rỗng = kết quả dựng kiểu cũ.
     duong_dan_kho: str = field(default="", compare=False)
+    # P-8 (tinh chỉnh mốc từng giây), chỉ trong bộ nhớ, không vào lịch sử/báo cáo: hệ số tốc độ k của dòng (giây
+    # video / giây clip — lượt bù, hoặc đo từ độ trôi); họ biến đổi của lượt bù («tempo»/«resample», rỗng = lượt
+    # thường); các căn chỉnh CHÍNH khác nhau của dòng: ((giây video của giây 0 clip, CHƯA kẹp, k), …), mạnh trước.
+    he_so: float = field(default=1.0, compare=False)
+    ho: str = field(default="", compare=False)
+    neo: tuple = field(default=(), compare=False)
 
     @property
     def start_hhmmss(self) -> str:
@@ -417,6 +428,9 @@ class ScanResult:
     # Số ứng viên ĐẠT tiêu chí chấp nhận trước khi cắt còn Top-N. Ý nghĩa này giữ
     # nguyên như trước; chỉ có định nghĩa "đạt" là mở rộng thêm bậc phủ vân tay cao.
     so_dat_nguong: int = 0
+    # P-8: kết quả tinh chỉnh mốc từng giây của từng dòng ``matches`` (cùng thứ tự; dict của tinh_chinh_moc + «clip»,
+    # «start_s»). Chỉ trong bộ nhớ — không vào lịch sử, báo cáo V2, Sheets. Rỗng khi tuỳ chọn tắt.
+    tinh_chinh: list = field(default_factory=list, compare=False, repr=False)
     # Phễu phát hiện của chính lượt quét này. Nhờ nó mà một kết quả 0 đoạn nói được
     # nó mất ở tầng nào, thay vì chỉ nói "không tìm thấy".
     chan_doan: Optional[ChanDoanQuet] = None
@@ -586,6 +600,11 @@ TRUONG_CHINH_SACH = (
 )
 
 
+# P-8: căn chỉnh chính lệch nhau ≤ NEO_GOP_S giây là cùng một neo cho bước tinh chỉnh; tối đa NEO_TOI_DA neo mỗi dòng.
+NEO_GOP_S = 1.0
+NEO_TOI_DA = 6
+
+
 def chu_ky_chinh_sach(cfg) -> str:
     """Chữ ký ngắn của chính sách nhận diện; tiền tố là phiên bản danh sách trường."""
     gia_tri = {k: getattr(cfg, k, None) for k in TRUONG_CHINH_SACH}
@@ -597,6 +616,14 @@ def chu_ky_chinh_sach(cfg) -> str:
 # =====================================================================
 #  Hàm tiện ích dùng chung
 # =====================================================================
+
+def hhmmss_tp(giay: float) -> str:
+    """«hh:mm:ss.d» — mốc tinh chỉnh tới phần mười giây (P-8). Làm tròn TRƯỚC khi tách giờ/phút: 59,96 s → «00:01:00.0»."""
+    t = max(0.0, round(float(giay), 1))
+    h, du = divmod(t, 3600)
+    m, s = divmod(du, 60)
+    return f"{int(h):02d}:{int(m):02d}:{s:04.1f}"
+
 
 def hhmmss(giay: float) -> str:
     """Định dạng một mốc/độ dài MEDIA thành HH:MM:SS, CẮT phần lẻ (không làm tròn).
@@ -4454,7 +4481,8 @@ class Engine:
                     tho.append({"clip": file_clip, "bat_dau": bat_dau,
                                 "khop": khop, "t_clip": t_clip, "hash": so_hash,
                                 "he_so": he_so,
-                                "align": bat_dau - he_so * t_clip})
+                                "align": bat_dau - he_so * t_clip,
+                                "ho": luot_bu.split("_", 1)[1] if "_" in luot_bu else ""})
 
         # Lớp phòng thủ thứ hai, theo NỘI DUNG khúc chứ không theo stdout: khúc 0 hash mà
         # bộ đọc WAV của tool không đọc được, hoặc đọc được mà CÓ TIẾNG RÕ, thì audfprint
@@ -4682,6 +4710,14 @@ class Engine:
             clip_bat_dau_s = max(0.0, dau_clip_tho)
             moc_mo_ho, moc_thay_the, ty_so_doi_thu = chong_bong_lap.bang_chung_moc(
                 i_moc, loc, nhan, canh_tranh, vung_khop_s, end_s, k)
+            # Các căn chỉnh CHÍNH khác nhau của dòng (bản tua lùi/phát lại cùng clip có thể gộp chung một dòng):
+            # bước tinh chỉnh phải đo dọc TỪNG căn chỉnh, không chỉ căn chỉnh làm mốc (P-8, phản biện H1b).
+            neo: list = []
+            for i in sorted((i for i in g["cs"] if nhan[i].loai == chong_bong_lap.CHINH),
+                            key=lambda i: (-loc[i]["hash"], loc[i]["bat_dau"])):
+                a = loc[i]["bat_dau"] - k * loc[i]["t_clip"]
+                if all(abs(a - b) > NEO_GOP_S for b, _ in neo):
+                    neo.append((round(a, 3), round(k, 6)))
             ket_qua.append(Match(
                 clip=ten_clip,
                 start_s=clip_bat_dau_s,
@@ -4699,6 +4735,9 @@ class Engine:
                 moc_thay_the=moc_thay_the,
                 ty_so_doi_thu=ty_so_doi_thu,
                 duong_dan_kho=g["clip"],
+                he_so=k,
+                ho=next((x.get("ho", "") for x in manh), ""),
+                neo=tuple(neo[:NEO_TOI_DA]),
             ))
         return sorted(ket_qua, key=lambda m: m.start_s)
 
@@ -5629,6 +5668,7 @@ class Engine:
         # Mốc phần trăm cắt-khúc cũ không còn cố định: quét tăng dần chia dải
         # `pct_start..p_match1` cho từng đoạn, mỗi đoạn tự có phần cắt và phần khớp.
         p_match1 = 0.95
+        t_bat_dau = time.monotonic()
         ten = label or os.path.basename(path)
         kq = ScanResult(source_name=ten, source_ref=ref or path)
         self._gan_danh_tinh(kq)
@@ -5792,6 +5832,10 @@ class Engine:
                            "Bằng chứng chỉ nằm trong phần đã quét.")
                 kq.note = "\n".join([x for x in (kq.note, tin) if x])
                 self._bao(progress, p_match1, "ℹ️ " + tin)
+            if self.config.tinh_chinh_moc and muc_tieu is None and kq.status == "ok" and kq.matches:
+                # shortcut: YouTube tải một phần mà chưa đủ top_n thì `_scan_youtube` tải nốt rồi quét lại — lần tinh
+                # chỉnh của lượt đầu là vô ích (tốn ≤ ngân sách 30 s); hoãn tới bản cuối nếu đo thấy chậm.
+                self._tinh_chinh_ket_qua(kq, path, progress, t_bat_dau)
             tb = f"Xong — chọn {len(kq.matches)} kết quả tốt nhất"
             if kq.matches_loai:
                 tb += f" (loại {len(kq.matches_loai)} kết quả yếu)"
@@ -5848,6 +5892,72 @@ class Engine:
         kq.vung_da_khop = hop_khoang(khoang)
         kq.vung_loi = tru_khoang(loi, kq.vung_da_khop)
         kq.pham_vi_quet_s = max((b for _, b in kq.vung_da_khop), default=0.0)
+
+    def _tinh_chinh_ket_qua(self, kq: "ScanResult", path: str, progress: Optional[Callable],
+                            t_bat_dau: float) -> None:
+        """P-8: tinh chỉnh mốc từng giây cho từng dòng ``kq.matches`` (tinh_chinh_moc.py), ghi ``kq.tinh_chinh``.
+
+        Không bao giờ đổi ``kq.matches``, ``status``, ``note`` hay bất kỳ số nào của engine: lỗi/huỷ của bước này chỉ
+        thành «chưa tinh chỉnh» của các dòng còn lại — một video đã tìm thấy không được thành lỗi vì bước phụ. Huỷ
+        giữ nguyên cờ huỷ để lô dừng ở video kế tiếp. Ngân sách: max(30 s, 15 % thời gian quét tới lúc này).
+        Giữ dấu «đang dùng» của file đệm suốt lúc đọc (khối quét đã nhả nó; dọn đệm không được xoá giữa chừng).
+        """
+        import tinh_chinh_moc   # chỉ nạp khi bật (numpy chỉ cần ở đây)
+
+        han_chot = time.monotonic() + max(30.0, 0.15 * (time.monotonic() - t_bat_dau))
+        den = float(kq.pham_vi_quet_s or kq.duration_s or 0.0)
+        pham_vi = (0.0, den) if den > 0 else None
+        ra: list = []
+
+        def chua(m, ly_do: str) -> dict:
+            return {"clip": m.clip, "start_s": m.start_s, "trang_thai": tinh_chinh_moc.CHUA, "ly_do": ly_do}
+
+        dung = ""
+        try:
+            with self._giu_file_dem(path):
+                for i, m in enumerate(kq.matches):
+                    if dung:
+                        ra.append(chua(m, dung))
+                        continue
+                    self._bao(progress, 0.95 + 0.05 * i / max(1, len(kq.matches)),
+                              f"Tinh chỉnh mốc từng giây ({i + 1}/{len(kq.matches)})...")
+                    ly_do = self._ly_do_khong_tinh_chinh(m)
+                    if ly_do:
+                        ra.append(chua(m, ly_do))
+                        continue
+                    if time.monotonic() >= han_chot:
+                        dung = "Hết thời gian dành cho bước tinh chỉnh — giữ mốc của lượt quét."
+                        ra.append(chua(m, dung))
+                        continue
+                    neo = m.neo or ((m.vung_khop_s - m.he_so * m.clip_offset_s, m.he_so),)
+                    try:
+                        kq_tc = tinh_chinh_moc.tinh_chinh_dong(
+                            m.duong_dan_kho, path, neo, m.vung_khop_s, m.end_s, pham_vi_s=pham_vi,
+                            kiem_huy=self._check_cancel, han_chot=han_chot)
+                    except Cancelled:
+                        raise
+                    except Exception as e:  # noqa: BLE001 — bước phụ: lỗi chỉ thành «chưa tinh chỉnh»
+                        LOGGER_SCAN.warning("event=scan.tinh_chinh.loi clip=%s loi=%r", m.clip, e)
+                        kq_tc = {"trang_thai": tinh_chinh_moc.CHUA, "ly_do": f"Lỗi khi tinh chỉnh: {e}"}
+                    ra.append({"clip": m.clip, "start_s": m.start_s, **kq_tc})
+        except Cancelled:
+            # Cờ huỷ VẪN bật: lô dừng ở video kế tiếp; kết quả của video này giữ nguyên.
+            ra += [chua(m, "Đã huỷ — giữ mốc của lượt quét.") for m in kq.matches[len(ra):]]
+        except Exception as e:  # noqa: BLE001 — giữ dấu đệm hỏng… không được làm mất kết quả đã chọn
+            LOGGER_SCAN.warning("event=scan.tinh_chinh.loi loi=%r", e)
+            ra += [chua(m, f"Lỗi khi tinh chỉnh: {e}") for m in kq.matches[len(ra):]]
+        kq.tinh_chinh = ra
+
+    def _ly_do_khong_tinh_chinh(self, m: "Match") -> str:
+        """Lý do KHÔNG tinh chỉnh một dòng (rỗng = tinh chỉnh được)."""
+        if m.moc_mo_ho:
+            return ("Âm thanh lặp y hệt — có nhiều mốc đúng như nhau, bước tinh chỉnh không phân biệt được: "
+                    "giữ mốc của lượt quét.")
+        if m.ho == HO_RESAMPLE:
+            return "Video bị đổi cả cao độ (lượt bù «lưới cao độ») — chưa hỗ trợ tinh chỉnh."
+        if not m.duong_dan_kho or not os.path.isfile(m.duong_dan_kho):
+            return "Không đọc được file clip gốc của kho trên máy này."
+        return ""
 
     def _du_muc_tieu(self, matches: list) -> bool:
         """Chính sách chọn lọc đã thoả chưa: đủ Top-N (và đủ clip khác nhau nếu bật)."""
@@ -6526,6 +6636,52 @@ class Engine:
         if loi:
             raise bao_cao_v2.LoiXuatBaoCaoV2(bao_cao_v2.thong_bao_ket_qua_loi(loi))
 
+    HEADER_TINH_CHINH = ["Nguồn video dài", "Clip gốc", "Mốc lượt quét", "Trạng thái", "Lý do", "Phần",
+                         "Video từ", "Video đến", "Clip từ", "Clip đến", "Tốc độ (giây video / giây clip)",
+                         "Tương đồng TB (%)", "Tương đồng thấp nhất (%)", "Chạm giới hạn phần đã quét"]
+    HEADER_TUNG_GIAY = ["Nguồn video dài", "Clip gốc", "Mốc lượt quét", "Giây trong video", "Mốc video",
+                        "Tương đồng (%)"]
+
+    @staticmethod
+    def dong_tinh_chinh(ket: Iterable) -> tuple:
+        """``(dòng đoạn + chỗ cắt, dòng từng giây)`` của bước tinh chỉnh P-8 (``ScanResult.tinh_chinh``) — cho CSV phụ
+        và nút tải. Đoạn và chỗ cắt xếp theo giây video; «Chưa tinh chỉnh» một dòng kèm lý do."""
+        doan, giay = [], []
+        for kq in ket:
+            for tc in getattr(kq, "tinh_chinh", None) or ():
+                goc = [kq.source_name, tc.get("clip", ""), hhmmss(tc.get("start_s") or 0.0)]
+                if tc.get("trang_thai") != "da_tinh_chinh":
+                    doan.append(goc + ["Chưa tinh chỉnh", tc.get("ly_do", "")] + [""] * 9)
+                    continue
+                cham = "Có" if tc.get("cham_gioi_han") else ""
+                phan = [(d["video_tu"], ["Đoạn dùng thật", hhmmss_tp(d["video_tu"]), hhmmss_tp(d["video_den"]),
+                                         hhmmss_tp(d["clip_tu"]), hhmmss_tp(d["clip_den"]), d.get("k", 1.0),
+                                         d.get("tuong_dong_tb", ""), d.get("tuong_dong_min", ""), cham])
+                        for d in tc.get("doan") or ()]
+                phan += [(c["video_tu"], ["Chỗ cắt / chèn", hhmmss_tp(c["video_tu"]), hhmmss_tp(c["video_den"]),
+                                          hhmmss_tp(c["clip_bo_tu"]), hhmmss_tp(c["clip_bo_den"]), "", "", "", ""])
+                         for c in tc.get("cho_cat") or ()]
+                doan += [goc + ["Đã tinh chỉnh", ""] + o for _, o in sorted(phan, key=lambda x: x[0])]
+                giay += [goc + [t, hhmmss_tp(t), pct] for t, pct in tc.get("ho_so") or ()]
+        return doan, giay
+
+    def _ghi_tinh_chinh_canh(self, ten_file: str, ket: Iterable) -> list:
+        """CSV phụ P-8 cạnh báo cáo: «<tên>.tinh_chinh.csv» (đoạn dùng thật, chỗ cắt) và «<tên>.tung_giay.csv» (độ
+        tương đồng từng giây). Lượt quét không bật tinh chỉnh thì không ghi gì."""
+        doan, giay = self.dong_tinh_chinh(ket)
+        ra = []
+        for duoi, header, dong in ((".tinh_chinh.csv", self.HEADER_TINH_CHINH, doan),
+                                   (".tung_giay.csv", self.HEADER_TUNG_GIAY, giay)):
+            if not dong:
+                continue
+            f, phu = _mo_file_text_moi(os.path.splitext(ten_file)[0] + duoi, newline="", encoding="utf-8-sig")
+            with f:
+                w = csv.writer(f)
+                w.writerow(header)
+                w.writerows([[o_bang_tinh_an_toan(o) for o in d] for d in dong])
+            ra.append(phu)
+        return ra
+
     def _ghi_pham_vi_canh(self, ten_file: str, ket: Iterable) -> str:
         """CSV phụ ``<tên>.pham_vi.csv`` cạnh báo cáo V2: tên video sạch, phạm vi không mất."""
         bcs = [kq.bao_cao for kq in ket if getattr(kq, "bao_cao", None) is not None]
@@ -6828,6 +6984,7 @@ class Engine:
                 for dong in self.to_rows(ket)
             ])
         self._ghi_pham_vi_canh(ten_file, ket)
+        self._ghi_tinh_chinh_canh(ten_file, ket)
         return ten_file
 
     def to_rows_ngang(self, ket: Iterable) -> list:
@@ -6866,6 +7023,7 @@ class Engine:
                 for dong in rows
             ])
         self._ghi_pham_vi_canh(ten_file, ket)
+        self._ghi_tinh_chinh_canh(ten_file, ket)
         return ten_file
 
     def export_ho_so(self, ket: Iterable, ten_file: Optional[str] = None) -> list:

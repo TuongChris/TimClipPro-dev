@@ -36,7 +36,7 @@ import truy_cap_youtube
 import ytdlp_chung
 from common_original_jobs import TEN_PHA as TEN_PHA_NGUON_CHUNG
 from common_original_jobs import CommonOriginalJobController, xuat_csv
-from engine import Engine, LoiXoaJob, ScanResult, hhmmss, mo_ta_pham_vi, o_bang_tinh_an_toan
+from engine import Engine, LoiXoaJob, ScanResult, hhmmss, hhmmss_tp, mo_ta_pham_vi, o_bang_tinh_an_toan
 from engine import GHVD_TOAN_BO, GHVD_TU_DONG, NHAN_GHVD
 from fingerprint_progress import FingerprintJobController
 from khoa import DangChayRoi
@@ -563,6 +563,52 @@ def df_ket_qua(rows: list) -> pd.DataFrame:
     return df
 
 
+def hien_tinh_chinh(results: list) -> None:
+    """P-8: đoạn dùng thật, chỗ cắt và biểu đồ % giống từng giây của các kết quả đã chọn — chỉ khi lượt quét bật tinh
+    chỉnh (``ScanResult.tinh_chinh``). Báo cáo, Sheets, lịch sử vẫn dùng mốc của lượt quét."""
+    co = [(r, tc) for r in results if r.status == "ok" for tc in (getattr(r, "tinh_chinh", None) or ())]
+    if not co:
+        return
+    with st.expander("🎯 Mốc tinh chỉnh từng giây (thử nghiệm)", expanded=False):
+        st.caption("Đo độ giống âm thanh từng giây giữa clip gốc và video quanh mỗi kết quả. Mốc là ƯỚC LƯỢNG PHÍA "
+                   "TRONG, tới khoảng 0,1 giây trên dữ liệu thử. «% giống» chỉ có nghĩa khi so với nền của chính kết "
+                   "quả đó: nhạc đè to có thể chỉ khoảng 50 % dù khớp chắc. Báo cáo, Google Sheets và lịch sử vẫn dùng "
+                   "mốc của lượt quét. Khớp vân tay không phải xác nhận quyền sở hữu.")
+        for r, tc in co:
+            ten = (f"**{thoat_markdown(tc.get('clip', ''))}** — {thoat_markdown(r.source_name[:60])} "
+                   f"(mốc lượt quét {hhmmss(tc.get('start_s') or 0.0)})")
+            if tc.get("trang_thai") != "da_tinh_chinh":
+                st.markdown(f"{ten}: chưa tinh chỉnh — {thoat_markdown(tc.get('ly_do', ''))}")
+                continue
+            dong = [f"Đoạn dùng thật {hhmmss_tp(d['video_tu'])} → {hhmmss_tp(d['video_den'])} "
+                    f"(clip {hhmmss_tp(d['clip_tu'])} → {hhmmss_tp(d['clip_den'])}), "
+                    f"giống trung bình {float(d.get('tuong_dong_tb') or 0):.0f} %"
+                    for d in tc.get("doan") or ()]
+            dong += [f"Chỗ cắt / chèn {hhmmss_tp(c['video_tu'])} → {hhmmss_tp(c['video_den'])} "
+                     f"(clip nhảy {hhmmss_tp(c['clip_bo_tu'])} → {hhmmss_tp(c['clip_bo_den'])})"
+                     for c in tc.get("cho_cat") or ()]
+            st.markdown(ten + "\n" + "\n".join(f"- {x}" for x in dong))
+            if tc.get("cham_gioi_han"):
+                st.caption("⚠️ Một mép chạm giới hạn phần đã quét — mép thật có thể nằm ngoài.")
+            ho_so = tc.get("ho_so") or []
+            if ho_so:
+                st.line_chart(pd.DataFrame({"% giống": [p for _, p in ho_so]},
+                                           index=pd.Index([t for t, _ in ho_so], name="Giây trong video")),
+                              height=160)
+        doan, giay = eng.dong_tinh_chinh(results)
+        t1, t2 = st.columns(2)
+        for cot, ten_file, header, dong, khoa in ((t1, "tinh_chinh", eng.HEADER_TINH_CHINH, doan, "tai_tinh_chinh"),
+                                                 (t2, "tung_giay", eng.HEADER_TUNG_GIAY, giay, "tai_tung_giay")):
+            if dong:
+                with cot:
+                    st.download_button(
+                        f"⬇️ Tải {'đoạn tinh chỉnh' if ten_file == 'tinh_chinh' else '% giống từng giây'} (CSV)",
+                        pd.DataFrame([[o_bang_tinh_an_toan(o) for o in d] for d in dong], columns=header)
+                        .to_csv(index=False).encode("utf-8-sig"),
+                        file_name=f"ketqua_{time.strftime('%Y%m%d_%H%M%S')}.{ten_file}.csv",
+                        mime="text/csv", width="stretch", key=khoa)
+
+
 def bang_ket_qua(results: list[ScanResult]) -> None:
     """Vẽ bảng kết quả + các nút xuất báo cáo và đẩy lên Google Sheets."""
     # Báo cáo V2 lỗi/hỏng (audit P1-02): kết quả khớp đã lưu lịch sử nhưng KHÔNG được xuất hay
@@ -841,6 +887,12 @@ with st.sidebar:
                  "hồ sơ khiếu nại chứng minh được vi phạm trải dài cả video.")
         c.uu_tien_clip_khac_nhau = st.checkbox(
             "Ưu tiên các clip gốc khác nhau", c.uu_tien_clip_khac_nhau)
+        c.tinh_chinh_moc = st.checkbox(
+            "🎯 Tinh chỉnh mốc từng giây (thử nghiệm)", c.tinh_chinh_moc,
+            help="Sau khi tìm thấy, đo độ giống âm thanh TỪNG GIÂY quanh mỗi kết quả đã chọn: ra đoạn dùng thật tới "
+                 "khoảng 0,1 giây, chỗ bị cắt ghép, và biểu đồ % giống. Không đổi kết quả tìm thấy, báo cáo, Google "
+                 "Sheets hay lịch sử; mỗi kết quả tốn thêm vài giây. Xem ở mục «🎯 Mốc tinh chỉnh từng giây» dưới bảng "
+                 "kết quả và 2 file CSV phụ.")
         c.keep_downloads = st.checkbox("Giữ lại audio đã tải", c.keep_downloads,
                                        help="Bỏ tick để tiết kiệm ổ cứng (lần sau phải tải lại).")
         c.quet_tang_dan = st.checkbox(
@@ -1420,6 +1472,7 @@ if not job["running"] and (job["results"] or job["error"]):
             st.error("Có nguồn bị lỗi: " + "; ".join(f"{thoat_markdown(x.source_name)} ({thoat_markdown(x.note)})"
                                                       for x in loi))
         bang_ket_qua(res)
+        hien_tinh_chinh(res)
     if st.button("🧹 Xóa kết quả, làm việc khác"):
         job.update({"results": [], "error": "", "kind": ""})
         st.rerun()
