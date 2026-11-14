@@ -93,9 +93,21 @@ DOT_BIEN = [
     # 22. vùng kiểm phía ngoài mép không kẹp vào phần video đã giải mã: ô vượt ra ngoài «không đo được» = «vắng»
     ("ngoai_khong_kep_cua_so", "idx = _o_ngoai(u, max(lo, vi.t0), min(hi, vi.het_s))", "idx = _o_ngoai(u, lo, hi)"),
     # 23. phần dư còn bậc (≥ 4 ô liền lệch > 0,12 s) sau căn chỉnh mà không tách được: vẫn tin (vòng 5)
-    ("bac_con_lai_tat", ">= BAC_O_LIEN for j in {t[0] for t in tho}):", ">= 10 ** 9 for j in {t[0] for t in tho}):"),
+    ("bac_con_lai_tat", "if _lech_chua_giai_thich(can, tho, tat_ca, len(u)):", "if False:"),
     # 24. luồng canh lại tính thời gian nơi gọi xử lý khối vào hạn một khối (vòng 5)
     ("canh_tinh_ca_xu_ly", "cho_tu[0] = None", "pass"),
+    # 25. chuỗi ô lệch không cần KỀ NHAU (bóng ô nhịp từng cặp cách xa nhau thành «4 ô liền» → CHUA nhầm)
+    ("lech_khong_ke_nhau", "if lech and chay and i == chay[-1] + 1:", "if lech and chay:"),
+    # 25b. đoạn neo khác KHÔNG chạm lõi không còn «giải thích» ô lệch (mảnh kia của cùng clip cạnh dòng → CHUA nhầm)
+    ("chu_bo_doan_ngoai_loi", "for i_neo, i0, i1 in tat_ca:\n        chu[i0:i1 + 1] = i_neo",
+     "for i_neo, i0, i1 in tho:\n        chu[i0:i1 + 1] = i_neo"),
+    # 26. ffprobe không đọc được → coi độ trễ là 0 (giải mã như vòng 4) thay vì CHUA
+    ("tre_am_khong_ro_la_0", "            return _chua(LY_DO_TRE_AM, t_bat_dau)", "            tre = 0.0"),
+    # 27. chờ ffprobe mà không kiểm huỷ / hạn chót
+    ("ffprobe_khong_kiem_huy", "except subprocess.TimeoutExpired:\n                moc()",
+     "except subprocess.TimeoutExpired:"),
+    # 28. bỏ nhãn gói tiếng đầu: chỉ tin start_time của luồng (ffprobe dừng dò trước gói đó)
+    ("tre_am_bo_goi_dau", ', *(giay(g.get("pts_time")) for g in j.get("packets", [])[:1])]', "]"),
 ]
 
 
