@@ -99,7 +99,7 @@ chạm file) — không phải audit lại mã. Thêm/xoá/đổi vai trò modul
 | `scan_ui.py` | Dựng dữ liệu bảng trạng thái quét. **Không import streamlit.** | 234 | `83fb6c3 2026-10-07` |
 | `thiet_lap_may_phu.py` | thiet_lap_may_phu.py — Chạy MỘT LẦN trên máy phụ sau khi giải nén gói. | 143 | `8f0558f 2026-10-02` |
 | `tien_do_quet.py` | Tiến độ THẬT của một lô quét: số đo từ pipeline, nhịp sống, nhật ký ngắn. | 278 | nhánh `fix/pc2/live-progress-smart-marathon` (PC2, 13/10) |
-| `tinh_chinh_moc.py` | Tinh chỉnh mốc từng giây SAU khi đã chọn kết quả: độ tương đồng phổ từng giây, đoạn dùng thật, chỗ cắt (P-8/D-49; `docs/KHOP_TUNG_GIAY.md`). Không đổi kết quả tìm thấy. | 1072 | nhánh `feature/pc2/khop-tung-giay` (PC2, 14/11) |
+| `tinh_chinh_moc.py` | Tinh chỉnh mốc từng giây SAU khi đã chọn kết quả: độ tương đồng phổ từng giây, đoạn dùng thật, chỗ cắt (P-8/D-49; `docs/KHOP_TUNG_GIAY.md`). Không đổi kết quả tìm thấy. | 1132 | nhánh `feature/pc2/khop-tung-giay` (PC2, 14/11) |
 | `toc_do_khop.py` | Phát hiện video vi phạm đã bị ĐỔI TỐC ĐỘ để né vân tay âm thanh; `he_so_moc_theo_troi` cho mốc nhóm lượt thường trôi (D-49). | 273 | `1d8b6d9 2026-11-14` |
 | `ui_tien_do_quet.py` | Màn hình tiến độ khi ĐANG quét (Streamlit) — chỉ ĐỌC ảnh chụp ``scan_jobs.BatchSnapshot``. | 146 | nhánh `fix/pc2/live-progress-smart-marathon` (PC2, 13/10) |
 | `watch.py` | Mô hình dữ liệu và lưu trữ danh sách nguồn YouTube cần theo dõi. | 729 | `ce5a64b 2026-10-07` |

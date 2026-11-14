@@ -110,25 +110,43 @@ theo đường nền tại chỗ trên chính cặp clip–video): ỨNG VIÊN.
   - Kiểm độc lập vòng 4 (15/11, 71 tác tử: tái hiện cũ/mới, chạy lại các bộ, đột biến, review mới, fuzz 2.100 ca, phản biện
     từng phát hiện): 7 sửa đều đúng; 65 ca trong/ngoài mẫu không đổi; đột biến 19/21 bị giết (2 sống = thiếu test, nay có).
     Tìm thêm 3 lỗi, sửa ở vòng 5 kèm test đỏ→xanh: (1) video có luồng tiếng bắt đầu SAU hình (bản ghi mkv/mp4/ts): vòng 4
-    làm mọi mốc sớm đúng độ trễ (0,5 s) mà vẫn «đã tinh chỉnh» → cửa sổ video bắt đầu sau chỗ tiếng bắt đầu ≥ 1 s (ffprobe
-    `start_time`); nay mkv/mp4/ts trễ 0,3–0,5 s ra đúng giây (lệch ≤ 6 ms), trễ 0,8–1,5 s «chưa tinh chỉnh»; (2) ô kiểm phía
+    làm mọi mốc sớm đúng độ trễ (0,5 s) mà vẫn «đã tinh chỉnh» → cửa sổ video bắt đầu sau chỗ tiếng bắt đầu ≥ 1 s (ffprobe:
+    nhãn gói tiếng đầu); nay mkv/mp4/ts/webm trễ 0,01–0,5 s ra đúng giây (lệch ≤ 7 ms), trễ ≥ 0,8 s «chưa tinh chỉnh»; (2) ô
+    kiểm phía
     ngoài mép có miếng vượt phần đã giải mã cho độ giống «không đo được» mà bị coi là «clip vắng» → mép sớm 5,5 s không cờ →
     kẹp vùng kiểm vào phần đã giải mã; (3) nhảy/tua nhỏ 0,15–0,45 s trong lần dùng ngắn (engine gộp một neo) hay tốc độ lệch
     > 1 %: một đoạn ánh xạ lệch 0,2–0,4 s, mép sớm tới 5,5 s, không cờ → ≥ 4 ô chắc chắn liền nhau lệch đường > 0,12 s mà
     không đoạn nào của neo khác giải thích → «chưa tinh chỉnh». Cộng: luồng canh không tính thời gian xử lý khối, đóng ống
     stderr, câu lỗi «file mất, đang bị khoá, hỏng hoặc không có tiếng».
-  - Số đo sau vòng 5: 27 ca trong mẫu + 38 ca ngoài mẫu: kết quả giống hệt vòng 4 (lượt đầu của luật (3) từng làm hỏng
+  - Kiểm độc lập vòng 5 (15/11, 3 góc: video tiếng trễ thật qua FFmpeg, review mới, fuzz nhắm luật mới; phản biện từng
+    phát hiện): (a) ffprobe để `start_time` của luồng tiếng = của file khi dừng dò trước gói tiếng đầu — video bitrate cao
+    (5 MB ≈ 1 s hình) hay tiếng trễ > 5 s: sửa (1) lọt, sai 0,28–3 s không cờ (19/21 file 40 Mb/s) → đọc nhãn gói tiếng
+    đầu; ffprobe không đọc được → «chưa tinh chỉnh»; (b) ffprobe chạy 60 s không kiểm huỷ → kiểm huỷ + hạn chót mỗi 0,2 s;
+    (c) luật (3) chặn nhầm kết quả đúng: nối các ô cách xa nhau (bóng ô nhịp, nhạc có nhịp trôi 0,3–0,9 %) thành «4 ô liền»,
+    và đếm cả ô của mảnh khác của cùng clip ngay cạnh dòng → chỉ đếm ô KỀ NHAU thật, đoạn neo khác kể cả đoạn không chạm lõi
+    (186 ca luật này bật: chặn nhầm 27 → 17, bắt đúng 38 → 38; một cửa sổ «quanh lõi ± 3 s» thử giữa chừng bị loại vì thả
+    lại 6 kết quả sai mà tự tin khi lõi engine hẹp hơn lần dùng); (d) tên file bắt đầu bằng «-». Có từ trước, chưa sửa
+    (giới hạn bên dưới): nhạc 4 phách khớp nhịp với bài bên cạnh; giọng nói đè lên nhạc nhiều trầm; chỗ nối sau khi tách
+    hai mảnh; tiếng đè ở mép ngoài dài tới ~8 s; mảnh lệch < 4 ô.
+  - Số đo cuối vòng 5: 27 ca trong mẫu + 38 ca ngoài mẫu: kết quả giống hệt vòng 4 (lượt đầu của luật (3) từng làm hỏng
     B07 — tua lùi 10 s, clip tự giống chu kỳ ~10 s: ô «bóng» thuộc đoạn của neo kia — đã thu hẹp). Lưới 96 ca nhảy nhỏ: sai
     mà tự tin 27 → 0, mất 0 ca đúng; lưới 48 ca tốc độ lệch 1,2–3 %: 22 → 0. Fuzz 2.100 ca: đúng 1.307 → 1.308, sai có cờ
-    33 → 26, sai không cờ 30 → 29. 55 ca đối kháng: 54 đạt + 1 hụt có cờ (như vòng 4). Đột biến 25/25 bị giết (đối chứng
-    đạt ở cả 3 lô). Test: nhanh 3885 = 3881 đạt / 4 bỏ qua / 0 hỏng, chậm 25/25.
+    33 → 26, sai không cờ 30 → 29. 240 file tiếng trễ (mkv/mp4/ts/webm, trễ 0,01–5 s): sai mà tự tin 74 → 0, mất 0 ca
+    đúng; 21 file 40 Mb/s: 21 → 0. 55 ca đối kháng: 54 đạt + 1 hụt có cờ (như vòng 4). Đột biến 30/30 bị giết (đối
+    chứng đạt ở cả 3 lô). Test: nhanh 3890 = 3886 đạt / 4 bỏ qua / 0 hỏng, chậm 25/25.
 - Giới hạn đã biết: độ phân giải theo ô 3 s — tiếng THAY < ~2,5 s giữa đoạn bị nối qua; tiếng đè ngắn đúng chỗ nối hai
   neo có thể thành chỗ cắt ngắn bịa; tiếng đè to hơn clip ≥ 6 dB không phân biệt được với tiếng thay (≥ 3 dB và dài ≥ 10 s
   ở mép ngoài: mép vào trong không cờ); nhảy 0,5–1 s trong một neo → «chưa tinh chỉnh»; engine tách một lần dùng thành hai
   dòng (B07) → dòng đầu «chưa tinh chỉnh» (sửa phía engine); hằng ước tính thời gian đo trên PC2. Fuzz 2.100 ca còn 29 ca
   (1,4 %) sai mà không cờ, có từ trước vòng 4: 22 ca mép lệch 0,15–0,6 s (nốt nền cùng dải mel, nốt clip < 300 Hz, chỗ
   vấp sát mép), 7 ca tiếng đè ở mép hay quanh chỗ thay đẩy mép 0,8–4 s. Clip có luồng tiếng bắt đầu trễ: giây clip có thể
-  lệch đúng độ trễ đó.
+  lệch đúng độ trễ đó. Video tiếng trễ > ~0,45 s: lần dùng trong khối đầu của engine thường «chưa tinh chỉnh» (mốc engine
+  theo trục tiếng, vòng tìm ± 0,5 s). Nhạc tổng hợp kiểu EDM (kiểm độc lập vòng 5, có từ trước): bài 4 phách khớp nhịp với
+  bài bên cạnh (DJ) — đoạn lấn sang bài kia tới ~16 s, mép «đầu clip» không cờ (11/40 ca thử); giọng nói đè lên nhạc nhiều
+  trầm, mạnh hơn clip trong dải 300–5000 Hz dù nhỏ hơn cả dải — chỗ cắt bịa, mép lệch tới ~5 s (12/21); chỗ nối sau khi tách
+  hai mảnh lệch 0,15–0,5 s (16/192); tiếng đè ngang mức clip ở mép ngoài dài tới ~8 s đẩy mép vào cả độ dài đó, không cờ;
+  mảnh lệch < 4 ô (mảnh xa < ~4,5 s, lần dùng < ~13 s ở tốc độ lệch) lọt luật (3); nhạc cùng nhịp của bài bên cạnh có thể
+  làm luật (3) chặn nhầm (CHƯA).
 - Công cụ kiểm: `tools/khop_tung_giay/san_pham/` (`kiem_trong_mau.py`; `ca_an/` dựng + chấm ca ẩn; `phan_bien/` ca đối
   kháng, đột biến, hiệu năng). Bằng chứng (ngoài Git): `C:\Dev\pc2_test_runs\2026-11-14_p8\`,
   `…\2026-11-15_p8_vong4\`, `…\2026-11-15_p8_vong5\`.
