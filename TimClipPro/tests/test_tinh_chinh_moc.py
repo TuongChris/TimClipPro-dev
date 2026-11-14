@@ -580,6 +580,7 @@ def test_ffmpeg_treo_hay_loi_bao_cau_tieng_viet_ngan(tmp_path, monkeypatch):
     assert str(loi.value) == "FFmpeg đọc «c.wav» quá lâu — giữ mốc của lượt quét." and time.monotonic() - t < 10
     monkeypatch.setattr(tcm, "HAN_KHOI_S", 120.0)
     monkeypatch.setattr(tcm, "CHI_PHI_GIAI_MA_S", 0.0)  # kiểm đường giết-khi-hết-hạn, không phải ước tính (đo trên PC2)
+    monkeypatch.setattr(tcm, "_tre_am", lambda *a: 0.0)  # file rỗng: kiểm đường FFmpeg, không phải ffprobe
     t = time.monotonic()
     kq = tcm.tinh_chinh_dong(str(p), str(p), [(0.0, 1.0)], 3.0, 27.0, han_chot=t + 0.5)
     assert kq["ly_do"] == tcm.LY_DO_HET_GIO and time.monotonic() - t < 10
@@ -908,6 +909,7 @@ def test_bam_dung_khi_ffmpeg_im_lang_thi_dung_ngay(tmp_path, monkeypatch):
     p.write_bytes(b"")
     monkeypatch.setattr(tcm, "_lenh_ffmpeg", lambda duong, tu, dai: [sys.executable, "-c", "import time; time.sleep(30)"])
     monkeypatch.setattr(tcm, "HAN_KHOI_S", 8.0)
+    monkeypatch.setattr(tcm, "_tre_am", lambda *a: 0.0)  # file rỗng: kiểm đường FFmpeg, không phải ffprobe
 
     class Dung(Exception):
         pass
@@ -1028,12 +1030,100 @@ def test_nhay_nho_trong_lan_dung_ngan_khong_anh_xa_sai(A, B, delta):
 def test_canh_ffmpeg_khong_tinh_thoi_gian_noi_goi_xu_ly_khoi(tmp_path, monkeypatch):
     """Luồng canh đo «một khối không về trong HAN_KHOI_S» từ lúc BẮT ĐẦU đọc khối — cả thời gian nơi gọi xử lý khối
     trước (đổi log-mel, máy bận) cũng bị tính: xử lý chậm thì FFmpeg khoẻ vẫn bị giết, «đọc quá lâu». Chỉ tính lúc chờ."""
-    _ghi_wav(tmp_path / "a.wav", _giai_dieu(4, seed=9711))
+    _ghi_wav(tmp_path / "a.wav", _giai_dieu(3, seed=9711))
     monkeypatch.setattr(tcm, "KHOI_GIAI_MA_S", 1.0)
-    monkeypatch.setattr(tcm, "HAN_KHOI_S", 0.6)
+    monkeypatch.setattr(tcm, "HAN_KHOI_S", 2.5)          # đủ cho FFmpeg khởi động + đọc một khối cả khi máy bận
+    goi: list = []
 
     def moc():
         if threading.current_thread() is threading.main_thread():
-            time.sleep(0.9)                              # nơi gọi xử lý một khối lâu hơn HAN_KHOI_S
-    cs = tcm._dac_trung(None, str(tmp_path / "a.wav"), 0.0, 4.0, moc)
-    assert abs(cs.het_s - 4.0) < 0.05 and not cs.het_file
+            goi.append(1)
+            if len(goi) == 2:                            # sau khối đầu: nơi gọi xử lý lâu hơn HAN_KHOI_S
+                time.sleep(3.5)
+    cs = tcm._dac_trung(None, str(tmp_path / "a.wav"), 0.0, 3.0, moc)
+    assert abs(cs.het_s - 3.0) < 0.05 and not cs.het_file
+
+
+@co_ffmpeg
+def test_tieng_tre_qua_tam_do_cua_ffprobe_van_khong_som(tmp_path):
+    """Tiếng trễ 5,1 s sau hình nhỏ (mkv + FLAC): ffprobe ngừng dò sau 5 s nên ``start_time`` của luồng tiếng = của file
+    (0) — vòng 5 lượt đầu đọc độ trễ 0, giải mã như vòng 4: «đã tinh chỉnh» sớm đúng 5,1 s, không cờ (video bitrate cao:
+    5 MB dò ≈ 1 s hình, trễ 0,3 s đã lọt). Đọc nhãn GÓI tiếng đầu."""
+    clip, a, P, tre = _giai_dieu(40, seed=8111), _giai_dieu(100, seed=8112), 30.0, 5.1
+    i0 = int(round((P - tre) * 22050))
+    a[i0: i0 + len(clip)] = clip
+    _ghi_wav(tmp_path / "clip.wav", clip)
+    _ghi_wav(tmp_path / "a.wav", a)
+    v = tmp_path / "v.mkv"
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i",
+                    "color=c=gray:s=64x48:r=10:d=106", "-itsoffset", str(tre), "-i", str(tmp_path / "a.wav"),
+                    "-map", "0:v", "-map", "1:a", "-c:v", "mpeg4", "-c:a", "flac", str(v)], check=True)
+    assert tcm._tre_am(str(v), lambda: None) == pytest.approx(tre, abs=0.01)
+    neo = P - tre + 0.04                                 # engine: khối 0 theo trục tiếng
+    kq = tcm.tinh_chinh_dong(str(tmp_path / "clip.wav"), str(v), [(neo, 1.0)], neo + 2.5, neo + 37.5,
+                             pham_vi_s=(0.0, 100.0))
+    assert kq["trang_thai"] == tcm.CHUA or _gan(kq["doan"][0]["video_tu"], P, 0.05), kq["doan"]
+
+
+def test_ffprobe_treo_bam_dung_hay_het_han_thi_dung_ngay(tmp_path, monkeypatch):
+    """ffprobe đọc độ trễ tiếng (vòng 5) chạy bằng subprocess.run 60 s, trước lần kiểm huỷ đầu: ổ mạng/ổ ngủ không trả
+    byte nào thì bấm Dừng hay hết ngân sách phải chờ tới 60 s. Nay kiểm huỷ + hạn chót mỗi 0,2 s, giết ffprobe."""
+    p = tmp_path / "c.wav"
+    p.write_bytes(b"")
+    monkeypatch.setattr(tcm, "_lenh_ffprobe", lambda duong: [sys.executable, "-c", "import time; time.sleep(30)"])
+    monkeypatch.setattr(tcm, "CHI_PHI_GIAI_MA_S", 0.0)
+
+    class Dung(Exception):
+        pass
+    t = time.monotonic()
+
+    def huy():
+        if time.monotonic() - t > 0.5:
+            raise Dung
+    with pytest.raises(Dung):
+        tcm.tinh_chinh_dong(str(p), str(p), [(0.0, 1.0)], 3.0, 27.0, kiem_huy=huy)
+    assert time.monotonic() - t < 3.0
+    t = time.monotonic()
+    kq = tcm.tinh_chinh_dong(str(p), str(p), [(0.0, 1.0)], 3.0, 27.0, han_chot=t + 0.5)
+    assert kq["ly_do"] == tcm.LY_DO_HET_GIO and time.monotonic() - t < 3.0
+
+
+def test_ffprobe_khong_doc_duoc_thi_chua_tinh_chinh_khong_giai_ma(tmp_path, monkeypatch):
+    """ffprobe hỏng: lượt đầu coi độ trễ là 0 và giải mã như vòng 4 (sai cả độ trễ nếu tiếng trễ). Chưa biết → CHƯA."""
+    p = tmp_path / "c.wav"
+    p.write_bytes(b"")
+    monkeypatch.setattr(tcm, "_lenh_ffprobe", lambda duong: [sys.executable, "-c", "import sys; sys.exit(1)"])
+
+    def khong_giai_ma(*a, **k):
+        raise AssertionError("không được giải mã khi chưa biết độ trễ tiếng")
+    monkeypatch.setattr(tcm, "_khoi_ffmpeg", khong_giai_ma)
+    kq = tcm.tinh_chinh_dong(str(p), str(p), [(0.0, 1.0)], 3.0, 27.0)
+    assert kq["trang_thai"] == tcm.CHUA and kq["ly_do"] == tcm.LY_DO_TRE_AM
+
+
+def test_luat_lech_khong_dem_o_thuoc_doan_neo_khac_ke_ca_doan_khong_cham_loi():
+    """Luật G (ô chắc chắn lệch đường > 0,12 s): đếm ô của đoạn chính nó hay không đoạn nào — kể cả xa lõi engine (lõi
+    hẹp hơn lần dùng: chỉ đếm quanh lõi ± 3 s từng thả lại 6 kết quả sai mà tự tin, kiểm độc lập vòng 5). Không đếm ô
+    thuộc đoạn neo khác (bóng của clip tự giống — B07), kể cả đoạn bị bỏ vì không chạm lõi (mảnh kia của cùng clip ngay
+    cạnh dòng — một kết quả đúng thành CHƯA)."""
+    def can(*lech):
+        return [(0.0, 1.0, None, np.array(ds, np.int64)) for ds in lech]
+    mot = [(0, 10, 40)]                                 # đoạn thô (chạm lõi) của neo 0: ô 10–40
+    hai = mot + [(1, 41, 70)]                           # thêm đoạn của neo 1: ô 41–70
+    assert tcm._lech_chua_giai_thich(can([20, 21, 22, 23]), mot, mot, 80)                 # trong đoạn chính nó
+    assert tcm._lech_chua_giai_thich(can([60, 61, 62, 63]), mot, mot, 80)                 # không đoạn nào, xa lõi
+    assert not tcm._lech_chua_giai_thich(can([20, 21, 22]), mot, mot, 80)                 # < 4 ô
+    assert not tcm._lech_chua_giai_thich(can([50, 51, 52, 53], []), hai, hai, 80)         # trong đoạn neo 1
+    assert not tcm._lech_chua_giai_thich(can([50, 51, 52, 53], []), mot, hai, 80)         # đoạn neo 1 không chạm lõi
+
+
+def test_chuoi_lech_chi_tinh_o_ke_nhau():
+    """Chuỗi ô lệch = ô KỀ NHAU (u, u + 1, …): ô không chắc chắn ở giữa làm đứt chuỗi. Bản trước nối cả các ô cách nhau
+    hàng chục giây (bóng ô nhịp từng cặp, nhạc có nhịp trôi 0,3–0,9 %) thành «4 ô liền» → kết quả đúng thành CHƯA."""
+    def chuoi(o, xa=None):
+        return tcm._chuoi_lech(np.array(o, np.int64), np.ones(len(o), bool) if xa is None else np.array(xa)).tolist()
+    assert chuoi([10, 11, 12, 13, 20]) == [10, 11, 12, 13]
+    assert chuoi([10, 11, 13, 14, 15, 16]) == [13, 14, 15, 16]
+    assert chuoi([250, 251, 258, 259]) == []
+    assert chuoi([10, 11, 12, 13], [True, True, False, True]) == []
+    assert chuoi([5, 6, 7, 8, 9]) == [5, 6, 7, 8, 9]

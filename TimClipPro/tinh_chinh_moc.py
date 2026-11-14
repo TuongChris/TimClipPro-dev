@@ -20,10 +20,11 @@ bộ kiểm ngoài mẫu vòng 1 (A03, A05), của phản biện vòng 2 (N.., �
    đầu đúng giây đã tua — AAC (m4a/mp4) từng trễ 1 khung 1024 mẫu (≤ 46 ms), nay 0; Opus trong webm còn ~6 ms (dưới một
    khung). Không ``first_pts=0`` (vòng 4): file đổi tần số mẫu/số kênh giữa chừng (bản ghi .ts) làm FFmpeg dựng lại bộ
    lọc, áp lại từ đầu cửa sổ — phần sau chỗ đổi trễ đúng (chỗ đổi − đầu cửa sổ). Vì thế không gì đệm im lặng trước mẫu
-   tiếng đầu: video có luồng tiếng bắt đầu SAU đầu file (bản ghi, bản cắt chép luồng: hình có trước tiếng — ffprobe
-   ``start_time``) thì cửa sổ video bắt đầu sau chỗ tiếng bắt đầu ≥ 1 s (vòng 5: cửa sổ ở 0 có mẫu tiếng đầu mang nhãn
-   giây 0 — mọi mốc sớm đúng độ trễ, không cờ); lần dùng bắt đầu trong khoảng bỏ qua → cờ chạm giới hạn. Bộ đọc tiêm
-   vào (``doc_pcm``) gọi theo khối: khối trả thiếu = hết file, không bao giờ xin mẩu < 50 ms (vòng 2: xin 1–26 ms, FFmpeg trả 0 mẫu mãi → lặp vô hạn
+   tiếng đầu: video có luồng tiếng bắt đầu SAU đầu file (bản ghi, bản cắt chép luồng: hình có trước tiếng — ffprobe:
+   nhãn GÓI tiếng đầu, vì ``start_time`` của luồng chỉ là của file khi ffprobe dừng dò trước gói đó — video bitrate cao)
+   thì cửa sổ video bắt đầu sau chỗ tiếng bắt đầu ≥ 1 s (vòng 5: cửa sổ ở 0 có mẫu tiếng đầu mang nhãn giây 0 — mọi mốc
+   sớm đúng độ trễ, không cờ); lần dùng bắt đầu trong khoảng bỏ qua → cờ chạm giới hạn; không đọc được ffprobe → CHUA.
+   Bộ đọc tiêm vào (``doc_pcm``) gọi theo khối: khối trả thiếu = hết file, không bao giờ xin mẩu < 50 ms (vòng 2: xin 1–26 ms, FFmpeg trả 0 mẫu mãi → lặp vô hạn
    tới hạn chót). Đo trên PC2 (opus 64 kbps, một neo): lõi 10 phút 3,0 s / RAM đỉnh 95 MB; 1 giờ 21 s / 183 MB; 2 giờ
    42 s / 286 MB (5 neo trôi: 49 s); khe dài nhất giữa hai lần kiểm huỷ ≤ 0,35 s. Có hạn chót mà ước tính (2,4 ms mỗi
    giây âm thanh của hai cửa sổ + 0,3 ms mỗi giây lõi cho mỗi neo thêm) vượt phần còn lại: CHUA ngay, không giải mã (để
@@ -37,10 +38,11 @@ bộ kiểm ngoài mẫu vòng 1 (A03, A05), của phản biện vòng 2 (N.., �
    mà HAI mảnh song song cùng tốc độ giải thích được (nhảy/tua lùi 0,1–0,5 s trong MỘT neo — engine gộp hai căn chỉnh
    cách < 1 s): tách thành hai căn chỉnh → hai đoạn + chỗ cắt dài 0 (vòng 2: nhảy 0,3 s thành MỘT đoạn với k giả
    0,9964). Không tách được (mảnh < 10 ô chắc chắn, mảnh lệch là số ít nên MAD nhỏ, tốc độ khác > 1 % bị chặn sửa) mà
-   ≥ 4 ô chắc chắn liền nhau vẫn lệch đường cuối > 0,12 s mà không đoạn nào của neo KHÁC giải thích: clip có ở đó
-   nhưng ở căn chỉnh không đoạn nào báo → CHUA (vòng 5: một đoạn ánh xạ lệch 0,2–0,4 s, hay mảnh sau bị bỏ còn mép lấn
-   0,5 s vào nó, mép sớm tới 5,5 s, không cờ). Ô lệch nằm trong đoạn của neo khác (bóng của clip tự giống: B07) không
-   tính. Miếng không đổi theo thời gian (im lặng tuyệt đối, tiếng đều: phương sai mỗi phần tử < SAN_PHUONG_SAI) không
+   ≥ 4 ô chắc chắn KỀ NHAU vẫn lệch đường cuối > 0,12 s mà không đoạn thô nào của neo KHÁC (kể cả đoạn không chạm lõi)
+   giải thích: clip có ở đó nhưng ở căn chỉnh không đoạn nào báo → CHUA (vòng 5: một đoạn ánh xạ lệch 0,2–0,4 s, hay mảnh sau bị bỏ còn mép lấn
+   0,5 s vào nó, mép sớm tới 5,5 s, không cờ). Ô lệch nằm trong đoạn của neo khác (bóng của clip tự giống: B07; mảnh
+   kia của cùng clip ngay cạnh dòng) không tính; mảnh lệch < 4 ô (mảnh xa < ~4,5 s, lần dùng < ~13 s) lọt luật này.
+   Miếng không đổi theo thời gian (im lặng tuyệt đối, tiếng đều: phương sai mỗi phần tử < SAN_PHUONG_SAI) không
    mang thông tin: video không đổi mà clip có thay đổi → 0 (tiếng clip không có ở đó); clip không đổi → không đo được
    (trung tính: không bao giờ là bằng chứng có hay vắng).
 3. Ngưỡng — đường nền tại chỗ = CÙNG giây clip, video lệch 6 khoảng LECH_NEN_S (bỏ khoảng trùng độ lệch giữa hai neo).
@@ -94,8 +96,13 @@ to hơn ≥ 3 dB và dài ≥ 10 s ở mép ngoài thì ô phía ngoài cũng «
 Tiếng đè ≤ ~4 s đúng ở mép ngoài một lần dùng có thể đẩy mép vào trong tới độ dài tiếng đè; chỗ vấp ngắn sát mép mà
 sau nó clip chỉ còn < 0,3 s (nhạc có nhịp: < 0,6 s) vẫn kéo mép vào trong tới ~0,6 s (~0,9 s). Mảnh ngắn (< 10 ô chắc
 chắn) giữ k của engine: k lệch 0,2–0,3 % làm khung hai đầu mảnh ~10 s lệch quá nửa khung, mép bị kéo vào ~1 s. CLIP
-có luồng tiếng bắt đầu trễ (hiếm: clip trong kho thường chỉ có tiếng): giây clip có thể lệch đúng độ trễ đó. Mẩu NGOÀI cùng < 1 s sau một khoảng lặng (tắt tiếng sát mép)
-bị bỏ như mọi mẩu ngắn: lần dùng ngắn đi tới ~1,25 s, mép = biên khoảng lặng. Nhảy 0,5–1 s trong MỘT neo
+có luồng tiếng bắt đầu trễ (hiếm: clip trong kho thường chỉ có tiếng): giây clip có thể lệch đúng độ trễ đó. Video có
+tiếng trễ > ~0,45 s: lần dùng trong khối đầu của engine (mốc engine theo trục tiếng) thường CHUA. Nhạc 4 phách đều nối
+khớp nhịp với bài bên cạnh (DJ): đoạn có thể lấn sang bài kia, mép «đầu/cuối clip» không cờ; giọng nói đè lên nhạc nhiều
+trầm (năng lượng dưới 300 Hz) mạnh hơn clip TRONG dải 300–5000 Hz dù nhỏ hơn cả dải: chỗ cắt bịa, mép lệch tới ~5 s;
+chỗ nối sau khi tách hai mảnh (nhảy nhỏ) có thể lệch 0,15–0,5 s — ba lớp này đo trên nhạc tổng hợp (kiểm độc lập vòng
+5). Mẩu NGOÀI cùng < 1 s sau một khoảng lặng (tắt tiếng sát mép) bị bỏ như mọi mẩu ngắn: lần dùng ngắn đi tới ~1,25 s,
+mép = biên khoảng lặng. Nhảy 0,5–1 s trong MỘT neo
 (engine gộp) không thấy được ở vòng tìm ±0,5 s: phần sau thành lỗ hổng của lõi → CHUA. «Tắt tiếng» còn tiếng ồn trên sàn
 −57 dB không nhận là khoảng lặng. Nốt nền TRÙNG tần số với nốt clip ngay sau mép (cùng nội dung) vẫn kéo mép ra tới hết
 nốt đó.
@@ -156,6 +163,7 @@ BAC_TOI_THIEU_S = 0.12                  # hai mảnh lệch nhau ít hơn: một
 MANH_TOI_THIEU = 10                     # ô (và ≥ 5 s) mỗi mảnh
 BAC_O_LIEN = 4                          # ≥ chừng này ô chắc chắn liền nhau lệch đường cuối > BAC_TOI_THIEU_S: ánh xạ sai
 TRE_AM_TOI_DA_S = 0.02                  # luồng tiếng bắt đầu sau đầu file hơn chừng này: cửa sổ video tránh phần đầu
+FFPROBE_TOI_DA_S = 60.0                 # ffprobe không xong trong chừng này: coi như không đọc được
 
 NEN_TAI_CHO_LE = 0.05                   # nhạc tự giống: «có mặt» = hơn nền tại chỗ ≥ 5 điểm
 SAU_NGOAI_S = 10.0                      # kiểm có mặt phía ngoài mép: tới 10 s ...
@@ -201,6 +209,7 @@ LY_DO_TUONG_PHAN = ("Âm thanh quanh kết quả giống nhau ở mọi độ l�
 LY_DO_MEP = ("Không đo được mép đoạn (tiếng đè hoặc âm thanh giống nhau quanh mép) — giữ mốc của lượt quét.")
 LY_DO_CON_DUOI_DE = ("Tiếng clip có vẻ vẫn còn dưới tiếng đè ở mép đoạn hay chỗ cắt — không đo được mép thật: giữ mốc "
                      "của lượt quét.")
+LY_DO_TRE_AM = "Không đọc được thông tin luồng tiếng của video (ffprobe) — giữ mốc của lượt quét."
 LY_DO_LECH_NEO = ("Một phần đoạn khớp lệch khỏi mốc của lượt quét (chỗ nhảy/tua nhỏ hay tốc độ khác) mà không đo tách "
                   "được — giữ mốc của lượt quét.")
 
@@ -309,17 +318,48 @@ def _khoi_ffmpeg(duong: str, tu_s: float, den_s: float, moc=None):
         luong_canh.join(timeout=1.0)
 
 
-def _tre_am(duong: str) -> float:
-    """Giây luồng tiếng (a:0) bắt đầu SAU đầu file theo trục thời gian trình phát: ``start_time`` của luồng trừ của file
-    (bản ghi, bản cắt chép luồng: hình có trước tiếng). 0 với file chỉ có tiếng, hay khi ffprobe không đọc được."""
+def _lenh_ffprobe(duong: str) -> list:
+    # nhãn GÓI tiếng đầu: start_time của luồng chỉ là start_time của file khi ffprobe dừng dò (5 MB / 5 s) trước gói đó
+    return ["ffprobe", "-v", "error", "-select_streams", "a:0", "-read_intervals", "%+#1", "-show_entries",
+            "packet=pts_time:stream=start_time:format=start_time", "-of", "json", "-i", duong]
+
+
+def _tre_am(duong: str, moc) -> float | None:
+    """Giây luồng tiếng (a:0) bắt đầu SAU đầu file theo trục thời gian trình phát: max(``start_time`` của luồng, nhãn gói
+    tiếng đầu) − ``start_time`` của file (bản ghi, bản cắt chép luồng: hình có trước tiếng). File chỉ có tiếng: 0. None =
+    không đọc được (ffprobe hỏng, không có luồng tiếng, quá FFPROBE_TOI_DA_S). Kiểm huỷ + hạn chót (``moc``, ném lỗi đi
+    thẳng ra ngoài, ffprobe bị giết) mỗi CANH_S trong lúc chờ."""
     try:
-        r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries",
-                            "stream=start_time:format=start_time", "-of", "json", duong], stdin=subprocess.DEVNULL,
-                           capture_output=True, timeout=60.0, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        j = json.loads(r.stdout or b"{}")
-        return max(0.0, float(j["streams"][0]["start_time"]) - float(j["format"]["start_time"]))
-    except (OSError, subprocess.SubprocessError, ValueError, LookupError, TypeError):
-        return 0.0
+        p = subprocess.Popen(_lenh_ffprobe(duong), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except OSError:
+        return None
+    han = time.monotonic() + FFPROBE_TOI_DA_S
+    try:
+        while True:
+            try:
+                ra = p.communicate(timeout=CANH_S)[0]
+                break
+            except subprocess.TimeoutExpired:
+                moc()
+                if time.monotonic() > han:
+                    return None
+    finally:
+        if p.poll() is None:
+            p.kill()
+            p.communicate()
+    if p.returncode:
+        return None
+
+    def giay(x):
+        return float(x) if x not in (None, "N/A") else None
+    try:
+        j = json.loads(ra or b"{}")
+        moc_tieng = [giay(j["streams"][0].get("start_time")), *(giay(g.get("pts_time")) for g in j.get("packets", [])[:1])]
+        f0 = giay(j.get("format", {}).get("start_time")) or 0.0
+        return max(0.0, max((x for x in moc_tieng if x is not None), default=f0) - f0)
+    except (ValueError, LookupError, TypeError):
+        return None
 
 
 def _doc_pcm_ffmpeg(duong: str, tu_s: float, dai_s: float) -> tuple:
@@ -584,15 +624,23 @@ def _can_chinh(cl: _CuaSo, vi: _CuaSo, dau: float, k: float, u: np.ndarray, nguo
     if s is None:
         moc()
         s = _do_duong(cl, vi, dau, k, u, moc=moc)[0]
-    lech, chay = [], []
-    for i, xa in zip(list(np.nonzero(m)[0][o]) + [-1], list(np.abs(y) > BAC_TOI_THIEU_S) + [False]):
-        if xa:
+    return [(dau, k, s, _chuoi_lech(np.nonzero(m)[0][o], np.abs(y) > BAC_TOI_THIEU_S))]
+
+
+def _chuoi_lech(o_chac: np.ndarray, xa: np.ndarray) -> np.ndarray:
+    """Chỉ số các ô (trong ``u``) thuộc chuỗi ≥ BAC_O_LIEN ô KỀ NHAU (u, u + 1, …) đều lệch đường (``xa``), theo các ô chắc
+    chắn ``o_chac`` đã sắp: ô không chắc chắn hay không lệch ở giữa làm đứt chuỗi."""
+    ra, chay = [], []
+    for i, lech in zip(o_chac.tolist(), xa.tolist()):
+        if lech and chay and i == chay[-1] + 1:
             chay.append(i)
             continue
         if len(chay) >= BAC_O_LIEN:
-            lech += chay
-        chay = []
-    return [(dau, k, s, np.array(lech, dtype=np.int64))]
+            ra += chay
+        chay = [i] if lech else []
+    if len(chay) >= BAC_O_LIEN:
+        ra += chay
+    return np.array(ra, dtype=np.int64)
 
 
 def _nen_p99(cl: _CuaSo, vi: _CuaSo, neo: list, u: np.ndarray, moc):
@@ -630,14 +678,14 @@ def _co_mat(s: np.ndarray, muc: np.ndarray) -> bool:
     return bool(m.sum() and np.sum(s[m] >= muc[m]) >= CO_MAT_TY_LE * m.sum())
 
 
-def _cac_doan_tho(S: np.ndarray, u: np.ndarray, nguong: float, loi: tuple, muc_co_mat, gan=None) -> list:
+def _cac_doan_tho(S: np.ndarray, nguong: float, muc_co_mat, gan=None) -> list:
     """S: (số neo × số ô) độ giống. Ô thuộc neo ≥ ngưỡng: giữ neo của ô trước nếu nó vẫn ≥ ngưỡng (bóng gần bằng của
     vòng lặp không làm đổi neo qua lại) — trừ khi neo tốt nhất là căn chỉnh GẦN (``gan[i][j]``: cách < GAN_S, hai mảnh
     của một bước nhảy nhỏ) hơn nó quá GIU_NEO; không thì neo giống nhất. Trả các đoạn [neo, ô đầu, ô cuối] (chỉ số ô):
     bỏ chuỗi < CHAY_TOI_THIEU ô; nối hai chuỗi CÙNG neo liền nhau khi khe chỉ gồm ô không đo được (clip tự im lặng), khi
     khe ≤ NOI_CUNG_NEO_S ô đo được mà MỌI ô còn «có mặt» (độ giống ≥ ``muc_co_mat(i_neo, chỉ số ô)``), hoặc khe dài hơn
-    mà ≥ 3/4 số ô còn có mặt (clip ở dưới tiếng đè to: A03, B03; tiếng THAY kéo ô xuống bằng nền — không nối); bỏ đoạn
-    không chạm lõi ``loi``."""
+    mà ≥ 3/4 số ô còn có mặt (clip ở dưới tiếng đè to: A03, B03; tiếng THAY kéo ô xuống bằng nền — không nối). Trả MỌI
+    đoạn — nơi gọi bỏ đoạn không chạm lõi (luật G cần cả chúng)."""
     S0 = np.nan_to_num(S, nan=-1.0)
     dat = S0 >= nguong
     chuoi: list = []
@@ -662,7 +710,7 @@ def _cac_doan_tho(S: np.ndarray, u: np.ndarray, nguong: float, loi: tuple, muc_c
             doan[-1][2] = c[2]
         else:
             doan.append(c)
-    return [c for c in doan if u[c[1]] < loi[1] and u[c[2]] + 1 > loi[0]]
+    return doan
 
 
 def _mo_ho(S: np.ndarray, tho: list, nguong: float, gan=None) -> bool:
@@ -902,6 +950,16 @@ def tinh_chinh_dong(clip_path, video_path, neo, vung_khop_s, end_s, *, pham_vi_s
         return _chua(LY_DO_HET_GIO, t_bat_dau)
 
 
+def _lech_chua_giai_thich(can: list, tho: list, tat_ca: list, so_o: int) -> bool:
+    """Luật G: một căn chỉnh có đoạn thô chạm lõi (``tho``) mà ≥ BAC_O_LIEN ô lệch của nó (``can[j][3]``, từ
+    ``_can_chinh``) KHÔNG thuộc đoạn thô của neo khác (``tat_ca``: kể cả đoạn không chạm lõi) — thuộc đoạn của chính nó
+    hay không đoạn nào. Ô thuộc đoạn neo khác = bóng của clip tự giống (B07) hay mảnh kia của cùng clip cạnh dòng."""
+    chu = np.full(so_o, -1)                             # neo của đoạn chứa ô (−1: không đoạn nào)
+    for i_neo, i0, i1 in tat_ca:
+        chu[i0:i1 + 1] = i_neo
+    return any(np.count_nonzero(np.isin(chu[can[j][3]], (-1, j))) >= BAC_O_LIEN for j in {t[0] for t in tho})
+
+
 def _o_ngoai(u: np.ndarray, lo: float, hi: float, le: float = W_S) -> np.ndarray:
     """Chỉ số các ô có miếng 3 s (nới thêm ``le`` mỗi đầu: ±W_S tìm đỉnh) nằm trọn trong [lo, hi] giây video."""
     return np.nonzero((u - 1.0 - le >= lo) & (u + 2.0 + le <= hi))[0]
@@ -912,10 +970,6 @@ def _tinh_chinh(clip_path, video_path, neo, vung, end, pham_vi_s, doc, moc, han_
     c_tu = max(0.0, min((vung - a) / b for a, b in neo) - bien)
     c_den = max((end - a) / b for a, b in neo) + bien
     v_tu = max(0.0, vung - bien - BIEN_NEN_S)
-    if doc is None:                                     # FFmpeg thật: tua thô (1 s trước «tu») phải rơi vào luồng tiếng
-        tre = _tre_am(video_path)
-        if tre > TRE_AM_TOI_DA_S:
-            v_tu = max(v_tu, tre + 1.1)                 # tua thô rơi sau mẫu tiếng đầu ≥ 0,1 s
     v_den = end + bien + BIEN_NEN_S if pham_vi_s is None else min(end + bien + BIEN_NEN_S, float(pham_vi_s[1]))
     if c_den <= c_tu or v_den <= v_tu:
         return _chua(LY_DO_THIEU_AM, t_bat_dau)
@@ -924,6 +978,14 @@ def _tinh_chinh(clip_path, video_path, neo, vung, end, pham_vi_s, doc, moc, han_
         uoc = CHI_PHI_GIAI_MA_S * (c_den - c_tu + v_den - v_tu) + CHI_PHI_NEO_S * (end - vung) * (len(neo) - 1)
         if time.monotonic() + uoc > han_chot:
             return _chua(LY_DO_KHONG_KIP, t_bat_dau)
+    if doc is None:                                     # FFmpeg thật: tua thô (1 s trước «tu») phải rơi vào luồng tiếng
+        tre = _tre_am(video_path, moc)
+        if tre is None:
+            return _chua(LY_DO_TRE_AM, t_bat_dau)
+        if tre > TRE_AM_TOI_DA_S:
+            v_tu = max(v_tu, tre + 1.1)                 # tua thô rơi sau mẫu tiếng đầu ≥ 0,1 s
+            if v_den <= v_tu:
+                return _chua(LY_DO_THIEU_AM, t_bat_dau)
     cl = _dac_trung(doc, clip_path, c_tu, c_den, moc)
     vi = _dac_trung(doc, video_path, v_tu, v_den, moc)
     u = np.arange(int(np.floor(max(vung - bien, vi.t0 + 1.5))),
@@ -955,17 +1017,15 @@ def _tinh_chinh(clip_path, video_path, neo, vung, end, pham_vi_s, doc, moc, han_
         if not lap:
             return np.full(len(idx), nen_p99)
         return _nen_tai_cho(cl, vi, can[i_neo][0], can[i_neo][1], u[idx], moc, lap) + le
-    tho = _cac_doan_tho(S, u, nguong, (vung, end), muc_co_mat, gan)
+    tat_ca = _cac_doan_tho(S, nguong, muc_co_mat, gan)
+    tho = [c for c in tat_ca if u[c[1]] < end and u[c[2]] + 1 > vung]     # bỏ đoạn không chạm lõi engine
     if not tho:
         return chua(LY_DO_KHONG_THAY)
     if _mo_ho(S, tho, nguong, gan):
         return chua(LY_DO_MO_HO)
     if _lap_cho_khac(cl, vi, can, S, u, tho, nguong, moc, lap):
         return chua(LY_DO_LAP_CHO_KHAC)
-    chu = np.full(len(u), -1)                           # neo của đoạn chứa ô (−1: không đoạn nào)
-    for i_neo, i0, i1 in tho:
-        chu[i0:i1 + 1] = i_neo
-    if any(np.count_nonzero(np.isin(chu[can[j][3]], (-1, j))) >= BAC_O_LIEN for j in {t[0] for t in tho}):
+    if _lech_chua_giai_thich(can, tho, tat_ca, len(u)):
         return chua(LY_DO_LECH_NEO)
     doan = []
     for i_neo, i0, i1 in tho:
