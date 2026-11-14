@@ -51,6 +51,19 @@ def test_dong_csv_xep_theo_giay_video_va_noi_ro_dong_chua_tinh_chinh():
     assert all(len(g) == len(Engine.HEADER_TUNG_GIAY) for g in giay)
 
 
+def test_cho_cat_dai_0_dung_giua_hai_doan_trong_csv():
+    """Nhảy nhỏ / tua lùi có mép gặp nhau: chỗ cắt dài 0 cùng giây với đoạn sau — sắp CHỈ theo giây video thì đoạn sau
+    (thêm vào trước) đứng trước chỗ cắt của chính nó."""
+    d1 = {"video_tu": 36.3, "video_den": 78.047, "clip_tu": 0.0, "clip_den": 41.763, "k": 1.0, "tuong_dong_tb": 99.0,
+          "tuong_dong_min": 90.0, "cach_tim_mep": ["dau_clip", "bac_thang"]}
+    d2 = dict(d1, video_tu=78.047, video_den=161.4, clip_tu=36.639, clip_den=120.0)
+    tc = dict(_tc_da(), doan=[d1, d2],
+              cho_cat=[{"video_tu": 78.047, "video_den": 78.047, "clip_bo_tu": 41.763, "clip_bo_den": 36.639}])
+    doan, _ = Engine.dong_tinh_chinh([ScanResult(source_name="v", tinh_chinh=[tc])])
+    assert [d[5] for d in doan] == ["Đoạn dùng thật", "Chỗ cắt / chèn", "Đoạn dùng thật"]
+    assert doan[2][6:8] == ["00:01:18.0", "00:02:41.4"]
+
+
 def test_csv_phu_ghi_canh_bao_cao_va_an_toan_bang_tinh(tmp_path):
     e = Engine(root=str(tmp_path), data_dir=str(tmp_path / "data"), out_dir=str(tmp_path / "out"))
     bao_cao = tmp_path / "ketqua_1.csv"

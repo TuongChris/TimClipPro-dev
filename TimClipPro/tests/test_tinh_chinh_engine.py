@@ -17,6 +17,7 @@ import pytest
 
 import engine
 from engine import TRUONG_CHINH_SACH, Engine, Match, ScanResult, chu_ky_chinh_sach
+from tinh_chinh_moc import LY_DO_HET_GIO
 from golden_quet import GOLDEN_DIR, KICH_BAN, chay, chuan_hoa_ket_qua
 from toc_do_khop import ma_he_so
 
@@ -26,7 +27,7 @@ CHUA, DA = "chua_tinh_chinh", "da_tinh_chinh"
 def _module_gia(goi: list, hanh_vi=None):
     """``tinh_chinh_moc`` giả: ghi lại lời gọi, trả một đoạn cố định (hoặc chạy ``hanh_vi``)."""
     mod = types.ModuleType("tinh_chinh_moc")
-    mod.CHUA, mod.DA = CHUA, DA
+    mod.CHUA, mod.DA, mod.LY_DO_HET_GIO = CHUA, DA, LY_DO_HET_GIO
 
     def tinh_chinh_dong(clip, video, neo, vung_khop_s, end_s, *, pham_vi_s=None, kiem_huy=None, han_chot=None):
         goi.append({"clip": clip, "video": video, "neo": tuple(neo), "vung": (vung_khop_s, end_s),
@@ -79,8 +80,9 @@ def test_bat_tinh_chinh_khong_doi_ket_qua_lich_su_hay_loi_goi_media(kb, tmp_path
     if kq.status == "ok" and kq.matches:
         assert [x["clip"] for x in kq.tinh_chinh] == [m.clip for m in kq.matches]
         # YouTube tải một phần rồi tải nốt: lượt đầu cũng tinh chỉnh (shortcut ghi ở engine) — các lời gọi CUỐI
-        # phải đúng các dòng cuối cùng, theo thứ tự.
-        assert [g["clip"] for g in goi[-len(kq.matches):]] == [m.duong_dan_kho for m in kq.matches]
+        # phải đúng các dòng cuối cùng, dòng lõi ngắn trước (kết quả vẫn theo thứ tự dòng — kiểm ở trên).
+        theo_loi = sorted(kq.matches, key=lambda m: m.end_s - m.vung_khop_s)
+        assert [g["clip"] for g in goi[-len(kq.matches):]] == [m.duong_dan_kho for m in theo_loi]
     else:
         assert kq.tinh_chinh == [] and goi == []
 
@@ -207,6 +209,32 @@ def test_het_ngan_sach_thoi_gian_cac_dong_con_lai_chua_tinh_chinh(tmp_path, monk
     assert len(goi) == 1
     assert [x["trang_thai"] for x in kq.tinh_chinh] == [DA, CHUA, CHUA]
     assert "Hết thời gian" in kq.tinh_chinh[1]["ly_do"]
+
+
+def test_dong_loi_ngan_tinh_chinh_truoc_ket_qua_van_theo_thu_tu_dong(tmp_path, monkeypatch):
+    """Một ngân sách chung cho cả video: dòng lõi DÀI đứng đầu mà chạy chậm hơn ước tính (máy bận, hai lượt quét cùng
+    lúc) ăn hết ngân sách — bản cũ để MỌI dòng sau «hết thời gian», kể cả dòng 1 phút. Nay dòng lõi ngắn chạy trước;
+    kết quả vẫn theo thứ tự dòng của lượt quét."""
+    goi: list = []
+    gio = {"t": 1000.0}
+
+    def tre(_kiem_huy):
+        if goi[-1]["vung"][1] - goi[-1]["vung"][0] > 1000:
+            gio["t"] += 10_000.0                 # dòng lõi dài ăn hết ngân sách
+        return {"trang_thai": DA, "ly_do": "", "doan": []}
+
+    monkeypatch.setitem(sys.modules, "tinh_chinh_moc", _module_gia(goi, tre))
+    monkeypatch.setattr(engine, "time", types.SimpleNamespace(monotonic=lambda: gio["t"], time=time.time,
+                                                              sleep=time.sleep))
+    e = _eng(tmp_path)
+    kq = _kq_mot_dong(tmp_path)
+    m = kq.matches[0]
+    kq.matches = [dataclasses.replace(m, clip=f"c{i}.wav", start_s=s, vung_khop_s=s, end_s=s + dai)
+                  for i, (s, dai) in enumerate(((10.0, 3000.0), (3100.0, 60.0), (3300.0, 300.0)))]
+    e._tinh_chinh_ket_qua(kq, "video.wav", None, gio["t"])
+    assert [g["vung"][1] - g["vung"][0] for g in goi] == [60.0, 300.0, 3000.0]
+    assert [x["clip"] for x in kq.tinh_chinh] == ["c0.wav", "c1.wav", "c2.wav"]
+    assert [x["trang_thai"] for x in kq.tinh_chinh] == [DA, DA, DA]
 
 
 def test_file_dem_duoc_giu_suot_luc_tinh_chinh(tmp_path, monkeypatch):

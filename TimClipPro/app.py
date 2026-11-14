@@ -589,7 +589,8 @@ def hien_tinh_chinh(results: list) -> None:
                      for c in tc.get("cho_cat") or ()]
             st.markdown(ten + "\n" + "\n".join(f"- {x}" for x in dong))
             if tc.get("cham_gioi_han"):
-                st.caption("⚠️ Một mép chạm giới hạn phần đã quét — mép thật có thể nằm ngoài.")
+                st.caption("⚠️ Một mép chạm giới hạn đo được (cuối phần đã quét, rìa khung phân tích quanh kết quả, "
+                           "hoặc đoạn im lặng của chính clip) — mép thật có thể nằm ngoài.")
             ho_so = tc.get("ho_so") or []
             if ho_so:
                 st.line_chart(pd.DataFrame({"% giống": [p for _, p in ho_so]},
