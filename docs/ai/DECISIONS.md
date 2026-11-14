@@ -14,6 +14,9 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
   D-27 hằng ngày vì nó đã tốt hơn hẳn mã cũ (mã cũ gửi cả dòng «bóng» lẫn mốc lệch như chắc chắn).
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
+- **P-8 Khớp «chính xác từng giây»** (người dùng hỏi 14/11; nghiên cứu `docs/KHOP_TUNG_GIAY.md`): đổi `-Q` bị loại (đổi
+  chính sách nhận diện); bước tinh chỉnh SAU `_chon_loc` (Cách C, phổ từng giây) đúng ≤ 0,05 s trong mẫu nhưng hỏng 4/7 ca
+  ngoài mẫu → cần 5 sửa + thử thật. Người dùng chọn giai đoạn; có sửa riêng phần sót TCP-05 (S7b, mốc −5,98 s) không.
 
 ## D-48 Tên file tải về không dấu cách, không ký tự đặc biệt (người dùng, 2026-11-12) — thay phần tên file của D-47
 Video/audio tải về: «Tieu_de_khong_dau_<mã>.đuôi» (vd. `The_Weirdest_Anomaly_Game_Kun_Kun_Nest_RMpCKfipD-Y.mp4`; chỉ-tiếng

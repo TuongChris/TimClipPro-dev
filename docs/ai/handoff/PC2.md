@@ -38,17 +38,20 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 4. Người dùng: nghiệm thu DEV đợt 2 theo `C:\Dev\pc2_test_runs\2026-10-26_audit_p3\NGHIEM_THU_DEV_DOT2.md` (~15 phút).
 5. Người dùng quyết: P-6 (3 phương án, `…\2026-10-26_audit_p3\P6_PHUONG_AN.md`); P-7 (`P7_THIET_KE.md` cùng thư mục, công
    cụ `C:\Dev\pc2_test_tools\p7_lich_su_bong`, CHƯA chạy dữ liệu thật — chỉ chạy CHỈ ĐỌC khi duyệt); B-13, F-16; 3 ghép
-   tuỳ chọn của P0 (`ket_qua_panel.json`, mục 25/10 «P0 bóng»); Stable 1.1.3 có phát hành sau P3 hay không.
+   tuỳ chọn của P0 (`ket_qua_panel.json`, mục 25/10 «P0 bóng»); Stable 1.1.3 có phát hành sau P3 hay không; P-8 khớp từng giây
+   (`TimClipPro/docs/KHOP_TUNG_GIAY.md` «Đề xuất»: giai đoạn 1 tinh chỉnh TẮT mặc định? sửa riêng TCP-05 sót?).
 6. PC1: review `…\2026-10-26_audit_p3\GOI_REVIEW_PC1.md` (PR #15–#17 đã vào `integration/current` chưa có PC1 review, mã đang
    chạy dữ liệu THẬT trên DEV); chạy bộ đột biến outbox; quyết đề xuất E-1 (`.claude/settings.json` chặn đọc khoá Google, 2
    test xfail strict); cập nhật `CURRENT_STATE.md` theo mục 26/10.
 7. Còn mở từ trước: đồng bộ tiếp kênh Joe → vân tay «Kho Joe» (tab «Kho clip gốc», không tạo kho mới); hồ sơ đích Sheets +
    binding khoá NGOÀI State Stable cho DEV; ruleset GitHub (`release/github/`, chưa bật); C7; nghiệm thu preview 8502.
-8. Kho Joe VODs (D-34): 150 video mới nhất tải xong 07/11 (197 file, 727 giờ, 21 GB, 0 hỏng). DEV lên `fddcf39` 15:26 (sao lưu
-   `data_20261107_152616`). Người dùng muốn để đồng bộ/dựng về ĐÊM. Chưa tạo kho: RAM trống 6,2 GB, cần 15–20 GB. Rồi «Tạo lại từ đầu» → quét thử.
+8. Kho Joe VODs (D-34): 150 video tải xong 07/11 (197 file, 727 giờ, 21 GB, 0 hỏng). Về ĐÊM (cần RAM 15–20 GB): «Tạo lại từ đầu» → quét thử.
 9. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-11-14 — nghiên cứu «khớp chính xác từng giây» (P-8, nhánh feature/pc2/khop-tung-giay; mã sản phẩm KHÔNG đổi)
+- Workflow 7 tác tử, audio giả lập, engine `60b8b03`: mốc đầu ≤ 0,1 s; «khớp từ» trễ / mốc cuối sớm ~5 % (tới 29 s); dùng một
+  phần clip ra mốc ảo; TCP-05 sót (S7b mốc −5,98 s, lượt bù không chạy). `TimClipPro/docs/KHOP_TUNG_GIAY.md`, script `tools/khop_tung_giay/`.
 ### 2026-11-12 — thumbnail tên = mã, «Chỉ audio» ra M4A (D-47, nhánh feature/pc2/audio-thumbnail-ma)
 - Thumbnail lưu «<mã>.jpg» (người dùng: bỏ tiêu đề có dấu cách); ảnh tên cũ vẫn tính «đã có». Tab Tải: chọn «🎵 Chỉ audio» đầu tab.
 - Chỉ-tiếng ra «… [mã].audio.m4a» (trước: .webm Opus); test yt-dlp thật (file://) + FFmpeg thật. Nhanh 3737 = 3733/4/0. Gộp `b5d5c3e`, DEV 12/11 09:33 (sao lưu `data_20261112_093309`). Chưa thử YouTube thật.
@@ -74,7 +77,4 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 - Thử thật bằng mã mới: 2560×1440p60, 12,8 GB, tải ~8 phút + chỉnh âm lượng 13 phút; máy vẫn ra VN. File thử `D:\pc2_thu_twitch`.
 - Review 11/11 sửa 2 (file lạ làm đứt lượt, link kênh lặng lẽ 720p). Gộp `edeb2e2`, DEV 11/11 12:48 (sao lưu `data_20261111_124831`).
 - Audit 11/11 (nhánh fix/pc2/audit-1111): Dừng lúc chỉnh âm lượng giữ video đã tải; `ma_link` nhận VOD Twitch «v<số>» là đã có/trùng (cắt/ghép bấm lại không tải lại). Gộp `8c1e017`, DEV 13:17.
-### 2026-11-10 — âm lượng về mức YouTube (D-43, nhánh feature/pc2/am-luong-youtube)
-- Video Joe tải về -28,5 LUFS vì YouTube phát bằng «Âm lượng ổn định». Ô tick (sẵn) ở tab Tải + Ghép → `am_luong.chuan_hoa`.
-- Thử 3 phút Joe thật: -28,0 → -14,4 LUFS, đỉnh -0,8 dB, hình trùng MD5, 9,8 s. Ghép: mốc vẫn khớp tiếng thật. Gộp `4742c6a`, DEV 10/11 21:30.
-- Mục cũ hơn (2026-11-10 audit phần video mới; 2026-11-09 cắt đoạn D-42; 2026-11-09 tải 4 kết nối D-40; 2026-11-09 ghép video gốc D-39/D-41 + chương QuickTime; 2026-11-09 tiêu đề kênh D-38 + audit 09/11; 2026-11-08 tải video gốc D-37 + review/audit 08/11; 2026-11-07 Codex bước 2 audit 14 + 18; 2026-11-07 Codex review PR #27–#29 D-36; 2026-11-07 đồng bộ nén song song D-35; 2026-11-07 audit số 15, 19, 20; 2026-11-07 kho video dài D-34; 2026-11-07 dựng kho nhường ổ cứng D-33; 2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
+- Mục cũ hơn (2026-11-10 âm lượng D-43; 2026-11-10 audit phần video mới; 2026-11-09 cắt đoạn D-42; 2026-11-09 tải 4 kết nối D-40; 2026-11-09 ghép video gốc D-39/D-41 + chương QuickTime; 2026-11-09 tiêu đề kênh D-38 + audit 09/11; 2026-11-08 tải video gốc D-37 + review/audit 08/11; 2026-11-07 Codex bước 2 audit 14 + 18; 2026-11-07 Codex review PR #27–#29 D-36; 2026-11-07 đồng bộ nén song song D-35; 2026-11-07 audit số 15, 19, 20; 2026-11-07 kho video dài D-34; 2026-11-07 dựng kho nhường ổ cứng D-33; 2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
