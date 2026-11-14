@@ -104,6 +104,15 @@ def test_loi_trong_buoc_tinh_chinh_chi_thanh_chua_tinh_chinh(tmp_path, monkeypat
     assert kq.tinh_chinh and all(x["trang_thai"] == CHUA and "FFmpeg giả hỏng" in x["ly_do"] for x in kq.tinh_chinh)
 
 
+def test_module_tinh_chinh_khong_nap_duoc_khong_lam_video_thanh_loi(tmp_path, monkeypatch):
+    kb = _mot_kich_ban()
+    monkeypatch.setitem(sys.modules, "tinh_chinh_moc", None)      # «import tinh_chinh_moc» ném ImportError
+    kq, *_ = chay(_bat(kb), tmp_path, monkeypatch)
+    assert kq.status == "ok" and kq.matches
+    assert [x["trang_thai"] for x in kq.tinh_chinh] == [CHUA] * len(kq.matches)
+    assert all("Không nạp được" in x["ly_do"] for x in kq.tinh_chinh)
+
+
 def test_huy_giua_buoc_tinh_chinh_giu_ket_qua_va_co_huy(tmp_path, monkeypatch):
     """Bấm Dừng lúc đang tinh chỉnh: kết quả đã chọn GIỮ NGUYÊN (không thành «Đã hủy» như lỗi quét), các dòng còn lại
     «chưa tinh chỉnh», và cờ huỷ VẪN bật để lô dừng ở video kế tiếp."""

@@ -5902,7 +5902,13 @@ class Engine:
         giữ nguyên cờ huỷ để lô dừng ở video kế tiếp. Ngân sách: max(30 s, 15 % thời gian quét tới lúc này).
         Giữ dấu «đang dùng» của file đệm suốt lúc đọc (khối quét đã nhả nó; dọn đệm không được xoá giữa chừng).
         """
-        import tinh_chinh_moc   # chỉ nạp khi bật (numpy chỉ cần ở đây)
+        try:
+            import tinh_chinh_moc   # chỉ nạp khi bật
+        except Exception as e:  # noqa: BLE001 — module hỏng không được biến video đã tìm thấy thành lỗi
+            LOGGER_SCAN.warning("event=scan.tinh_chinh.khong_nap loi=%r", e)
+            kq.tinh_chinh = [{"clip": m.clip, "start_s": m.start_s, "trang_thai": "chua_tinh_chinh",
+                              "ly_do": f"Không nạp được bước tinh chỉnh: {e}"} for m in kq.matches]
+            return
 
         han_chot = time.monotonic() + max(30.0, 0.15 * (time.monotonic() - t_bat_dau))
         den = float(kq.pham_vi_quet_s or kq.duration_s or 0.0)
