@@ -73,7 +73,7 @@ theo đường nền tại chỗ trên chính cặp clip–video): ỨNG VIÊN.
 - Kho thường 16 bit, clip > 25,4 phút: mốc cuộn (W40: một lần dùng tách 3 dòng, mốc lệch tới 1521,7 s) — giới hạn đã
   biết (`docs/FINGERPRINT_RECOVERY_ARCHITECTURE.md` §6.1); tinh chỉnh không cứu.
 
-## Đề xuất (chờ duyệt — P-8)
+## Đề xuất (người dùng chọn «1 và 2» ngày 14/11 → D-49 trong `docs/ai/DECISIONS.md`)
 1. Giai đoạn 1: tuỳ chọn «Tinh chỉnh mốc từng giây» TẮT mặc định. Lõi Cách C + 5 sửa của phản biện (ngưỡng tuyệt đối theo
    đường nền + trễ; xét mọi căn chỉnh trong nhóm, hụt vùng engine thì «chưa tinh chỉnh»; chỉ chốt mép khi đo thấy; không
    chạy khi `moc_mo_ho`; H1b/H1c/H2a/H2b/H3/H4 vào hồi quy) + các chặn hiệu năng. Hiển thị biểu đồ từng giây + CSV phụ;
@@ -83,3 +83,54 @@ theo đường nền tại chỗ trên chính cặp clip–video): ỨNG VIÊN.
    báo cáo V3.
 4. Riêng: phần sót TCP-05 (S7b) — sửa trong matcher (ước độ trôi cho nhóm k = 1 nối từ mảnh trôi, hoặc vẫn chạy lượt bù
    khi nhóm đạt có độ trôi) đổi mốc báo cáo → cần duyệt riêng, test đỏ bằng S7b.
+
+## Đã làm (D-49, 14/11 — nhánh `feature/pc2/khop-tung-giay`)
+- Việc 2 (`1d8b6d9`): nhóm lượt thường có mảnh chính trôi đều → mốc đầu tính với k đo từ độ trôi
+  (`toc_do_khop.he_so_moc_theo_troi`). S7b −5,98 s → đúng; golden đổi đúng một dòng BỊ LOẠI (43,7 → 50,0 s = mốc thật).
+- Việc 1: ống nối trong engine (`4e1728d`, `1c6d693`, `16332aa`) + `tinh_chinh_moc.py` (lõi Cách C + các sửa dưới đây).
+  Tắt mặc định; bật thì matches/V2/Sheets/lịch sử/Watch giống hệt từng trường (28 tình huống golden + 12 lượt engine thật
+  tắt/bật). Sau 3 vòng viết → kiểm ngoài mẫu → phản biện → sửa (workflow 10 tác tử):
+  - Trong mẫu, 27 tình huống qua engine thật: mép lệch ≤ 0,028 s (riêng X1 — dùng một phần clip + nhạc đè 0 dB — 0,055 s);
+    0 chỗ cắt bịa, 0 chỗ cắt sót; đúng/đủ theo giây ≥ 0,9998.
+  - Ca ẩn bộ 1 (18 ca, người dựng khác, không xem mã): vòng 1 đạt 14, hỏng 2 (1 nghiêm trọng: im lặng 4 s bị nối qua và
+    miếng im lặng cho «giống 100 %») → vòng 3 đạt 16/16. Bộ 2 (20 ca mới): vòng 2 đạt 16, hỏng 2 → vòng 3 đạt 18/18.
+    Ca còn lại: engine không ra dòng (video đổi tốc độ ±2–3 %) — bước này không chạy.
+  - 55 ca đối kháng của 3 phản biện (thuật toán, hiệu năng, mã + test): vòng 2 có 5 kết quả sai mà tự tin → vòng 3 đạt 54,
+    hụt 1 (mép ở giới hạn cửa sổ, có cờ «chạm giới hạn»).
+  - Lỗi lớn đã sửa: FFmpeg lặp vô hạn (AAC, cuối file — nay MỘT tiến trình FFmpeg mỗi cửa sổ, đọc theo khối); khe giữa
+    hai neo luôn tính là chỗ cắt (tiếng đè quanh chỗ tua lùi → chỗ cắt bịa); mép «thô» dưới tiếng đè vẫn báo ĐÃ; thay 3–6 s
+    bị nối thành một đoạn; DJ lặp ô nhịp; nhảy 0,15–0,5 s trong một neo thành k giả; neo trôi hội tụ → «lặp y hệt» giả.
+  - Hiệu năng (PC2, một neo): lõi 10 phút 3,0 s / 95 MB; 1 giờ 21 s / 183 MB; 2 giờ 42 s / 286 MB; huỷ ≤ 0,35 s; lõi
+    2 giờ mà ngân sách 30 s → từ chối ngay. Qua engine: thêm ~1–2 s mỗi dòng.
+  - Review trước khi gộp (vòng 4, 15/11; 4 góc review + kiểm lại từng phát hiện) — 7 lỗi sửa kèm test đỏ→xanh: bản ghi .ts
+    đổi tần số mẫu giữa chừng làm phần sau lệch (bỏ `first_pts=0`, tua thô 1 s trước rồi cắt theo nhãn thời gian); bấm Dừng
+    khi FFmpeg im lặng phải chờ tới 2 phút (luồng canh 0,2 s); câu lỗi FFmpeg tiếng Anh kèm đường dẫn; mép bám chỗ vấp ngắn
+    sát mép; mép ngoài sát giới hạn đo không kiểm được mà không cờ; dòng lõi dài tiêu hết ngân sách của các dòng sau (nay
+    dòng lõi ngắn chạy trước); CSV phụ xếp sai chỗ cắt dài 0.
+  - Kiểm độc lập vòng 4 (15/11, 71 tác tử: tái hiện cũ/mới, chạy lại các bộ, đột biến, review mới, fuzz 2.100 ca, phản biện
+    từng phát hiện): 7 sửa đều đúng; 65 ca trong/ngoài mẫu không đổi; đột biến 19/21 bị giết (2 sống = thiếu test, nay có).
+    Tìm thêm 3 lỗi, sửa ở vòng 5 kèm test đỏ→xanh: (1) video có luồng tiếng bắt đầu SAU hình (bản ghi mkv/mp4/ts): vòng 4
+    làm mọi mốc sớm đúng độ trễ (0,5 s) mà vẫn «đã tinh chỉnh» → cửa sổ video bắt đầu sau chỗ tiếng bắt đầu ≥ 1 s (ffprobe
+    `start_time`); nay mkv/mp4/ts trễ 0,3–0,5 s ra đúng giây (lệch ≤ 6 ms), trễ 0,8–1,5 s «chưa tinh chỉnh»; (2) ô kiểm phía
+    ngoài mép có miếng vượt phần đã giải mã cho độ giống «không đo được» mà bị coi là «clip vắng» → mép sớm 5,5 s không cờ →
+    kẹp vùng kiểm vào phần đã giải mã; (3) nhảy/tua nhỏ 0,15–0,45 s trong lần dùng ngắn (engine gộp một neo) hay tốc độ lệch
+    > 1 %: một đoạn ánh xạ lệch 0,2–0,4 s, mép sớm tới 5,5 s, không cờ → ≥ 4 ô chắc chắn liền nhau lệch đường > 0,12 s mà
+    không đoạn nào của neo khác giải thích → «chưa tinh chỉnh». Cộng: luồng canh không tính thời gian xử lý khối, đóng ống
+    stderr, câu lỗi «file mất, đang bị khoá, hỏng hoặc không có tiếng».
+  - Số đo sau vòng 5: 27 ca trong mẫu + 38 ca ngoài mẫu: kết quả giống hệt vòng 4 (lượt đầu của luật (3) từng làm hỏng
+    B07 — tua lùi 10 s, clip tự giống chu kỳ ~10 s: ô «bóng» thuộc đoạn của neo kia — đã thu hẹp). Lưới 96 ca nhảy nhỏ: sai
+    mà tự tin 27 → 0, mất 0 ca đúng; lưới 48 ca tốc độ lệch 1,2–3 %: 22 → 0. Fuzz 2.100 ca: đúng 1.307 → 1.308, sai có cờ
+    33 → 26, sai không cờ 30 → 29. 55 ca đối kháng: 54 đạt + 1 hụt có cờ (như vòng 4). Đột biến 25/25 bị giết (đối chứng
+    đạt ở cả 3 lô). Test: nhanh 3885 = 3881 đạt / 4 bỏ qua / 0 hỏng, chậm 25/25.
+- Giới hạn đã biết: độ phân giải theo ô 3 s — tiếng THAY < ~2,5 s giữa đoạn bị nối qua; tiếng đè ngắn đúng chỗ nối hai
+  neo có thể thành chỗ cắt ngắn bịa; tiếng đè to hơn clip ≥ 6 dB không phân biệt được với tiếng thay (≥ 3 dB và dài ≥ 10 s
+  ở mép ngoài: mép vào trong không cờ); nhảy 0,5–1 s trong một neo → «chưa tinh chỉnh»; engine tách một lần dùng thành hai
+  dòng (B07) → dòng đầu «chưa tinh chỉnh» (sửa phía engine); hằng ước tính thời gian đo trên PC2. Fuzz 2.100 ca còn 29 ca
+  (1,4 %) sai mà không cờ, có từ trước vòng 4: 22 ca mép lệch 0,15–0,6 s (nốt nền cùng dải mel, nốt clip < 300 Hz, chỗ
+  vấp sát mép), 7 ca tiếng đè ở mép hay quanh chỗ thay đẩy mép 0,8–4 s. Clip có luồng tiếng bắt đầu trễ: giây clip có thể
+  lệch đúng độ trễ đó.
+- Công cụ kiểm: `tools/khop_tung_giay/san_pham/` (`kiem_trong_mau.py`; `ca_an/` dựng + chấm ca ẩn; `phan_bien/` ca đối
+  kháng, đột biến, hiệu năng). Bằng chứng (ngoài Git): `C:\Dev\pc2_test_runs\2026-11-14_p8\`,
+  `…\2026-11-15_p8_vong4\`, `…\2026-11-15_p8_vong5\`.
+- Tiếp: người dùng thử thật trên DEV 8502 (ô «🎯 Tinh chỉnh mốc từng giây» ở thanh bên) → giai đoạn 2 (lưu lịch sử),
+  giai đoạn 3 (giây tinh chỉnh vào Sheets/CSV chính) là quyết định riêng.

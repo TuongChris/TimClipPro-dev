@@ -14,9 +14,23 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
   D-27 hằng ngày vì nó đã tốt hơn hẳn mã cũ (mã cũ gửi cả dòng «bóng» lẫn mốc lệch như chắc chắn).
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
-- **P-8 Khớp «chính xác từng giây»** (người dùng hỏi 14/11; nghiên cứu `docs/KHOP_TUNG_GIAY.md`): đổi `-Q` bị loại (đổi
-  chính sách nhận diện); bước tinh chỉnh SAU `_chon_loc` (Cách C, phổ từng giây) đúng ≤ 0,05 s trong mẫu nhưng hỏng 4/7 ca
-  ngoài mẫu → cần 5 sửa + thử thật. Người dùng chọn giai đoạn; có sửa riêng phần sót TCP-05 (S7b, mốc −5,98 s) không.
+
+## D-49 Tinh chỉnh mốc từng giây (thử nghiệm, TẮT mặc định) + mốc theo độ trôi tốc độ (người dùng chọn P-8 «1 và 2», 2026-11-14)
+Nghiên cứu: `docs/KHOP_TUNG_GIAY.md`. Hai việc, cả hai KHÔNG đổi chuyện tìm thấy hay không (chữ ký chính sách giữ nguyên):
+1. Mốc đầu clip của nhóm LƯỢT THƯỜNG có các mảnh chính trôi đều (video đổi tốc độ, mảnh vụn nối lại vẫn đạt chuẩn nên
+   lượt bù không chạy) tính với k = 1/r đo bằng chính `uoc_luong_toc_do` trên các mảnh đó — chỉ khi đủ ngưỡng `toc_do_*`
+   VÀ trôi tích luỹ ≥ 1 s (`toc_do_khop.he_so_moc_theo_troi`), không thì k = 1 như cũ. Đổi `start_s`, `clip_bat_dau_s`,
+   `clip_offset_s`, `moc_thay_the` của các nhóm đó (Top-N chia vùng theo mốc mới). Golden đổi duy nhất:
+   `file_bu_toc_do_theo_do_troi` — một dòng BỊ LOẠI 43,7 → 50,0 s (= mốc thật). Bằng chứng: S7b −5,98 s → đúng (`1d8b6d9`).
+2. Tuỳ chọn «🎯 Tinh chỉnh mốc từng giây (thử nghiệm)» (`Config.tinh_chinh_moc`, NGOÀI `TRUONG_CHINH_SACH`): sau
+   `_chon_loc`, mỗi kết quả đã chọn được đo độ tương đồng phổ từng giây (`tinh_chinh_moc.py`, dọc MỌI căn chỉnh chính của
+   dòng — `Match.neo`) → đoạn dùng thật, chỗ cắt, hồ sơ % từng giây; hiện ở mục dưới bảng kết quả + CSV phụ
+   `.tinh_chinh.csv`, `.tung_giay.csv`. KHÔNG đổi báo cáo V2, Sheets 16/34 cột, lịch sử, Watch. Âm thanh lặp (`moc_mo_ho`),
+   đổi cao độ, thiếu file clip → «chưa tinh chỉnh» kèm lý do; lỗi/huỷ/hết ngân sách (max 30 s, 15 % thời gian quét) chỉ
+   thành «chưa tinh chỉnh». Kết quả chỉ trong bộ nhớ (chưa lưu lịch sử — giai đoạn 2). Đưa giây tinh chỉnh vào Sheets/CSV
+   chính (chính sách báo cáo V3) là quyết định riêng SAU khi người dùng thử thật trên DEV. Ngân sách chung cả video: dòng
+   lõi NGẮN tinh chỉnh trước (một dòng lõi dài không ăn hết phần của các dòng sau); kết quả vẫn theo thứ tự dòng. Luật «không
+   bao giờ sai mà tự tin»: không chắc thì «chưa tinh chỉnh» (review vòng 4–5, 15/11: `docs/KHOP_TUNG_GIAY.md` «Đã làm»).
 
 ## D-48 Tên file tải về không dấu cách, không ký tự đặc biệt (người dùng, 2026-11-12) — thay phần tên file của D-47
 Video/audio tải về: «Tieu_de_khong_dau_<mã>.đuôi» (vd. `The_Weirdest_Anomaly_Game_Kun_Kun_Nest_RMpCKfipD-Y.mp4`; chỉ-tiếng
