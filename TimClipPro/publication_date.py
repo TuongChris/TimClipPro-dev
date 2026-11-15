@@ -95,15 +95,6 @@ class PublicationDateResult:
         return any(w.startswith("khac_") for w in self.warnings)
 
 
-KHONG_CO_NGAY = PublicationDateResult(
-    date=None,
-    source_field=None,
-    raw_value=None,
-    confidence="none",
-    warnings=("khong_co_du_lieu_ngay",),
-)
-
-
 def _mui_gio(ten: str) -> ZoneInfo:
     try:
         return ZoneInfo(ten)

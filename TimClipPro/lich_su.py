@@ -141,7 +141,8 @@ COT_GUI_MOI = (
 )
 
 CHUA_RO = "Chưa rõ (lịch sử cũ — cần rà soát)"
-_LY_DO = {
+# Dùng chung với báo cáo V2 (``bao_cao_v2``): sửa một chỗ.
+LY_DO_PHAM_VI = {
     "dung_som": "dừng sớm vì đã đủ bằng chứng",
     "gioi_han_tai": "chỉ tải phần đầu video",
     "loi_khuc": "có vùng không xử lý được",
@@ -149,6 +150,7 @@ _LY_DO = {
     "huy": "đã huỷ",
     # Lượt TRỌN nhưng có điều kiện: hai lần tải độc lập cùng ngắn hơn lengthSeconds.
     "am_thanh_ngan_hon": "âm thanh YouTube ngắn hơn thời lượng video — đã tải lại kiểm",
+    # Giới hạn quét video dài chọn theo lô (engine.GHVD_*): chỉ phần đầu, phần sau CHƯA quét.
     "gioi_han_video_dai": "giới hạn quét video dài — chỉ quét phần đầu, phần sau chưa quét",
     "thoi_luong_chua_ro": "YouTube không cho biết thời lượng — chưa xác nhận đã quét trọn",
 }
@@ -413,7 +415,7 @@ def mo_ta_pham_vi(hang: dict) -> str:
     with contextlib.suppress(ValueError, TypeError):
         pham_vi = json.loads(hang.get("pham_vi") or "{}") or {}
     if hang.get("day_du") == 1:
-        ly_do = _LY_DO.get(pham_vi.get("ly_do") or "", "")
+        ly_do = LY_DO_PHAM_VI.get(pham_vi.get("ly_do") or "", "")
         return "Trọn video" + (f" ({ly_do})" if ly_do else "")
     vung = pham_vi.get("vung_da_khop")
     tong = float(hang.get("duration_s") or 0)
@@ -422,7 +424,7 @@ def mo_ta_pham_vi(hang: dict) -> str:
     else:
         da = sum(max(0.0, float(b) - float(a)) for a, b in vung)
         phan = f"đã so khớp {_hhmmss(da)}" + (f"/{_hhmmss(tong)}" if tong else "")
-    ly_do = _LY_DO.get(pham_vi.get("ly_do") or "", "")
+    ly_do = LY_DO_PHAM_VI.get(pham_vi.get("ly_do") or "", "")
     return f"Một phần — {phan}" + (f" ({ly_do})" if ly_do else "")
 
 

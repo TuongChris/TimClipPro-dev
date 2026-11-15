@@ -144,7 +144,7 @@ def test_bao_cao_va_ten_video_ghi_ro_quet_mot_phan(tmp_path, monkeypatch):
     mo_ta = mo_ta_pham_vi(kq)
     assert "03:00:00/65:01:54" in mo_ta and "chưa quét" in mo_ta
     assert nhan_pham_vi(kq).startswith(" [QUÉT MỘT PHẦN")
-    assert "gioi_han_video_dai" in bao_cao_v2._LY_DO_PHAM_VI
+    assert "gioi_han_video_dai" in bao_cao_v2.LY_DO_PHAM_VI
     assert goi_y_quet_mot_phan([kq]) == [GOI_Y_VIDEO_DAI]
 
 

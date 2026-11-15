@@ -106,16 +106,18 @@ def test_cong_bo_nhanh_permissionerror_cung_phai_fsync(tmp_path, theo_doi_ben, m
     da_nem = []
 
     def replace_khoa_kho_cu(src, dst, *a, **kw):
-        if (not da_nem and os.fspath(src).endswith("database.pklz")
+        if (os.fspath(src).endswith("database.pklz")
                 and os.path.normcase(os.fspath(dst)) == os.path.normcase(str(db))):
+            if not da_nem:      # ghi nhận lần thử công bố ĐẦU; file cũ bị khoá SUỐT vòng thử lại (audit 16/11)
+                cong_bo.append((os.fspath(src), os.fspath(dst),
+                                _danh_tinh_path(os.fspath(src)) in _ben))
             da_nem.append(1)
-            # ghi nhận lần thử công bố, rồi giả lập file cũ bị khoá
-            cong_bo.append((os.fspath(src), os.fspath(dst),
-                            _danh_tinh_path(os.fspath(src)) in _ben))
             raise PermissionError(13, "file đang bị khoá (giả lập)", os.fspath(dst))
         return replace_dang_boc(src, dst, *a, **kw)
 
+    import luu_tru
     monkeypatch.setattr(os, "replace", replace_khoa_kho_cu)
+    monkeypatch.setattr(luu_tru.time, "sleep", lambda s: None)
 
     r = e.build_database(str(nguon), mode="new")
 

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Test vá metadata clip bằng fetcher giả, không gọi mạng."""
 
+from luu_tru import ghi_json_an_toan
 from channel import ChannelSync
 
 
@@ -28,7 +29,7 @@ def test_file_meta_khong_ton_tai_tra_ket_qua_rong(tmp_path):
 
 def test_chi_va_muc_thieu(tmp_path):
     channel = ChannelSync(str(tmp_path))
-    channel.save_meta({
+    ghi_json_an_toan(channel.meta_file, {
         "du.opus": _meta_day_du("du1234"),
         "thieu.opus": {
             **_meta_day_du("thieu1"),
@@ -52,7 +53,7 @@ def test_chi_va_muc_thieu(tmp_path):
 
 def test_khong_muc_nao_thieu_thi_khong_goi_fetcher(tmp_path):
     channel = ChannelSync(str(tmp_path))
-    channel.save_meta({
+    ghi_json_an_toan(channel.meta_file, {
         "a.opus": _meta_day_du("aaaaaa"),
         "b.opus": _meta_day_du("bbbbbb"),
     })
@@ -70,7 +71,7 @@ def test_khong_muc_nao_thieu_thi_khong_goi_fetcher(tmp_path):
 
 def test_ghi_ngay_sau_moi_muc(tmp_path):
     channel = ChannelSync(str(tmp_path))
-    channel.save_meta({
+    ghi_json_an_toan(channel.meta_file, {
         "mot.opus": {
             **_meta_day_du("mot123"),
             "upload_date": "",
@@ -98,7 +99,7 @@ def test_ghi_ngay_sau_moi_muc(tmp_path):
 
 def test_upload_date_none_giu_nguyen_gia_tri_cu(tmp_path):
     channel = ChannelSync(str(tmp_path))
-    channel.save_meta({
+    ghi_json_an_toan(channel.meta_file, {
         "clip.opus": {
             **_meta_day_du("abc123"),
             "upload_date": "00000000",
@@ -118,7 +119,7 @@ def test_upload_date_none_giu_nguyen_gia_tri_cu(tmp_path):
 
 def test_chi_thieu_false_xu_ly_toan_bo(tmp_path):
     channel = ChannelSync(str(tmp_path))
-    channel.save_meta({"clip.opus": _meta_day_du("abc123")})
+    ghi_json_an_toan(channel.meta_file, {"clip.opus": _meta_day_du("abc123")})
     da_goi = []
 
     ket_qua = channel.va_metadata(
@@ -137,7 +138,7 @@ def test_chi_thieu_false_xu_ly_toan_bo(tmp_path):
 
 def test_bao_tien_do_theo_tong_so_muc_can_va(tmp_path):
     channel = ChannelSync(str(tmp_path))
-    channel.save_meta({
+    ghi_json_an_toan(channel.meta_file, {
         "a.opus": {**_meta_day_du("aaaaaa"), "duration": 0},
         "b.opus": {**_meta_day_du("bbbbbb"), "duration": 0},
     })
@@ -165,7 +166,7 @@ def test_clip_tren_dia_chua_co_entry_van_duoc_va(tmp_path):
     _tao_clip(tmp_path, "00000000 - Clip cu mot [aaaaaaaaaaa].opus")
     _tao_clip(tmp_path, "00000000 - Clip cu hai [bbbbbbbbbbb].opus")
     channel = ChannelSync(str(tmp_path))
-    channel.save_meta({"00000000 - Da co [ccccccccccc].opus": _meta_day_du("ccccccccccc")})
+    ghi_json_an_toan(channel.meta_file, {"00000000 - Da co [ccccccccccc].opus": _meta_day_du("ccccccccccc")})
 
     da_goi = []
 
@@ -204,7 +205,7 @@ def test_seed_khong_ghi_de_metadata_that_bang_du_lieu_ten_file(tmp_path):
     ten = "20240101 - Tieu de cu [dddddddddddd].opus"
     _tao_clip(tmp_path, ten)
     channel = ChannelSync(str(tmp_path))
-    channel.save_meta({ten: {
+    ghi_json_an_toan(channel.meta_file, {ten: {
         "id": "dddddddddddd",
         "title": "Tiêu đề CHÍNH THỨC từ YouTube",
         "url": "https://youtu.be/dddddddddddd",
@@ -242,7 +243,7 @@ def test_fetcher_mac_dinh_chi_lay_metadata_khong_tai_video(
             return {"upload_date": "20250115", "duration": 180}
 
     channel = ChannelSync(str(tmp_path))
-    channel.save_meta({
+    ghi_json_an_toan(channel.meta_file, {
         "clip.opus": {
             **_meta_day_du("abc123"),
             "upload_date": "",

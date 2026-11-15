@@ -11,7 +11,6 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
-import queue
 import threading
 import time
 import uuid
@@ -164,7 +163,7 @@ class ScanJobController:
             return hien_tai
         return ScanJobController(engine)
 
-    def __init__(self, engine, recent_maxlen: int = 60):
+    def __init__(self, engine):
         self.engine = engine
         self.so_tien_do = tdq.SoTienDo()
         self._gioi_han_video_dai = ""
@@ -173,8 +172,6 @@ class ScanJobController:
         self._batch_id = ""
         self._videos: list = []
         self._results: list = []
-        self._recent: deque = deque(maxlen=recent_maxlen)
-        self._events: queue.Queue = queue.Queue(maxsize=512)
         self._running = False
         self._cancelled = False
         self._started_mono: Optional[float] = None
@@ -234,7 +231,6 @@ class ScanJobController:
                 VideoState(index=i, nguon=str(x)) for i, x in enumerate(nguon, 1)
             ]
             self._results = []
-            self._recent.clear()
             self._xong_gan_day.clear()
             self._running = True
             self._cancelled = False
@@ -287,16 +283,6 @@ class ScanJobController:
 
     def _ghi_su_kien(self, noi_dung: str) -> None:
         self.so_tien_do.ghi(noi_dung)
-        with self._lock:
-            self._recent.append((time.time(), noi_dung))
-        try:
-            self._events.put_nowait(noi_dung)
-        except queue.Full:
-            try:
-                self._events.get_nowait()
-                self._events.put_nowait(noi_dung)
-            except (queue.Empty, queue.Full):
-                pass
 
     def _chay(self, nguon: list, source_type: str, on_result: Optional[Callable],
               lease=None) -> None:
@@ -484,10 +470,6 @@ class ScanJobController:
     def results(self) -> list:
         with self._lock:
             return list(self._results)
-
-    def recent(self, n: int = 20) -> list:
-        with self._lock:
-            return list(self._recent)[-n:]
 
     @property
     def running(self) -> bool:

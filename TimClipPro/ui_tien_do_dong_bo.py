@@ -17,17 +17,10 @@ from tien_do_dong_bo import (
     GD_TAI,
     GD_THEO_VIDEO,
     TEN_GIAI_DOAN,
-    TT_BI_CHAN,
-    TT_DA_HUY,
-    TT_DANG_CHAY,
-    TT_MOT_PHAN,
-    TT_XONG,
     AnhDongBo,
 )
 
 SO_SU_KIEN_HIEN = 30
-TEN_TRANG_THAI = {TT_DANG_CHAY: "Đang chạy", TT_MOT_PHAN: "Xong một phần", TT_BI_CHAN: "Dừng giữa chừng (bị chặn)",
-                  TT_DA_HUY: "Đã dừng theo yêu cầu", TT_XONG: "Hoàn tất"}
 
 
 def thoi_luong(giay: Optional[float]) -> str:

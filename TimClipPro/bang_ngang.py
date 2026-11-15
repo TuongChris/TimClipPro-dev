@@ -50,15 +50,6 @@ HEADER_NGANG: list = [
 ]
 
 
-def dinh_dang_ngay(s) -> str:
-    """Đổi "20250115" -> "15/01/2025". Rỗng hoặc sai định dạng -> "".
-
-    Uỷ quyền cho ``publication_date.format_publication_date`` để mọi exporter
-    (CSV ngang, CSV dọc, Markdown, Sheets, UI) dùng đúng một hàm định dạng.
-    """
-    return format_publication_date(s)
-
-
 def dinh_dang_doan(m: Any, source_id: str, source_ref: str) -> str:
     """Trả về khoảng thời gian và link nhảy tới mốc nếu có."""
     noi_dung = f"{m.start_hhmmss} – {m.end_hhmmss}"
@@ -96,7 +87,7 @@ def dung_dong_ngang(
         f"(LỖI: {kq.note})" if loi else (kq.source_name or "") + nhan_pham_vi(kq),
         # Thời lượng 0 = CHƯA RÕ: ô trống, không «00:00:00» (audit A-5).
         hhmmss(kq.duration_s) if kq.duration_s and kq.duration_s > 0 else "",
-        dinh_dang_ngay(kq.upload_date),
+        format_publication_date(kq.upload_date),
     ]
 
     for i in range(SO_DOAN):
@@ -115,7 +106,7 @@ def dung_dong_ngang(
         dong.extend([
             meta.url,
             meta.title,
-            dinh_dang_ngay(meta.upload_date),
+            format_publication_date(meta.upload_date),
             (
                 hhmmss(duration)
                 if isinstance(duration, (int, float)) and duration > 0

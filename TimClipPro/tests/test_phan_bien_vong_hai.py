@@ -4,6 +4,7 @@
 """
 
 from __future__ import annotations
+from luu_tru import ghi_json_an_toan
 
 import os
 import shutil
@@ -726,7 +727,7 @@ def test_seed_metadata_bo_qua_ban_sao_khi_ban_chinh_da_co_muc(tmp_path):
     ban_sao = f"20260101 - Video {VID} [{VID}] - Copy.opus"
     (Path(cs.dest) / TEN).write_bytes(b"x")
     (Path(cs.dest) / ban_sao).write_bytes(b"x")
-    cs.save_meta({TEN: {"id": VID, "title": "Tiêu đề thật", "duration": 6}})
+    ghi_json_an_toan(cs.meta_file, {TEN: {"id": VID, "title": "Tiêu đề thật", "duration": 6}})
 
     meta, them = cs.seed_meta_tu_dia()
 
@@ -745,7 +746,7 @@ def test_kenh_duration_media_cua_cong_cu_bao_tri_khong_thanh_tham_chieu(tmp_path
     process_runner.chay_lenh_media(
         ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(nguon),
          "-c:a", "libopus", "-b:a", "64k", os.path.join(cs.dest, TEN)])
-    cs.save_meta({TEN: {"id": VID, "title": "Video", "duration": None,
+    ghi_json_an_toan(cs.meta_file, {TEN: {"id": VID, "title": "Video", "duration": None,
                         "duration_media": 1.0}})
 
     cs.sync("kenh")

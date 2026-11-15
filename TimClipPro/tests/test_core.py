@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Test các thành phần lõi: tiện ích, quản lý kho, báo cáo, đồng bộ kênh."""
+from luu_tru import ghi_json_an_toan
 import pytest
 from conftest import M
 
@@ -146,5 +147,5 @@ def test_archive_dung_dinh_dang_yt_dlp(tmp_path):
 
 def test_metadata_giu_nguyen_tieng_viet(tmp_path):
     cs = ChannelSync(str(tmp_path))
-    cs.save_meta({"a.opus": {"title": "Hướng dẫn làm bánh chưng"}})
+    ghi_json_an_toan(cs.meta_file, {"a.opus": {"title": "Hướng dẫn làm bánh chưng"}})
     assert cs.load_meta()["a.opus"]["title"] == "Hướng dẫn làm bánh chưng"

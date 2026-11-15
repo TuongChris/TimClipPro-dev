@@ -5,6 +5,7 @@ Mỗi test khoá đúng một phát hiện đã được reviewer tái hiện; m
 """
 
 from __future__ import annotations
+from luu_tru import ghi_json_an_toan
 
 import json
 import os
@@ -171,7 +172,7 @@ def test_seed_metadata_nhan_ma_tu_url_cua_muc_cu_khong_co_id(tmp_path):
     ban_sao = f"20260101 - Video {VID} [{VID}] (1).opus"
     for ten in (TEN, ban_sao):
         (Path(cs.dest) / ten).write_bytes(b"x")
-    cs.save_meta({"cu.opus": {"title": "Tiêu đề thật", "url": f"https://youtu.be/{VID}"}})
+    ghi_json_an_toan(cs.meta_file, {"cu.opus": {"title": "Tiêu đề thật", "url": f"https://youtu.be/{VID}"}})
 
     _, them = cs.seed_meta_tu_dia()
 
@@ -182,7 +183,7 @@ def test_seed_metadata_nhan_ma_tu_khoa_cua_muc_cu_khong_co_id(tmp_path):
     cs = ChannelSync(str(tmp_path / "kho"))
     ban_sao = f"20260101 - Video {VID} [{VID}] - Copy.opus"
     (Path(cs.dest) / ban_sao).write_bytes(b"x")
-    cs.save_meta({TEN: {"title": "Tiêu đề thật"}})
+    ghi_json_an_toan(cs.meta_file, {TEN: {"title": "Tiêu đề thật"}})
 
     _, them = cs.seed_meta_tu_dia()
 

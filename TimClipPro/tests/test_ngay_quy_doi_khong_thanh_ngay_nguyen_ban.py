@@ -11,6 +11,7 @@ BẢN; kho cũ chỉ có ngày quy đổi → để TRỐNG kèm lý do, không 
 Hoàn toàn offline: ``lay_info_video`` bị thay bằng bản giả trả info dạng yt-dlp.
 """
 from __future__ import annotations
+from luu_tru import ghi_json_an_toan
 
 import json
 
@@ -82,7 +83,7 @@ def test_seed_ten_file_roi_repair_offline_khong_bien_ngay_ten_file_thanh_ngay_ng
     cs = ChannelSync(str(tmp_path))
     meta, them = cs.seed_meta_tu_dia()
     assert them == 1 and meta[ten]["upload_date"] == NGAY_QUY_DOI
-    cs.save_meta(meta)
+    ghi_json_an_toan(cs.meta_file, meta)
     resolved, goc = _goc(tmp_path, ten)
     assert resolved.ngay_raw == ""                     # mốc: chưa có nguồn nguyên bản
 

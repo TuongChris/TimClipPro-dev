@@ -70,7 +70,7 @@ import tai_video_goc
 import video_trong_may
 from channel import ChannelSync
 from tien_do_dong_bo import SoDongBo
-from ui_tien_do_dong_bo import dong_hieu_suat, ve_tien_do_dong_bo
+from ui_tien_do_dong_bo import dong_ho, dong_hieu_suat, ve_tien_do_dong_bo
 from sheets import SheetsExporter
 
 st.set_page_config(page_title="TimClip Pro — Tìm video gốc trong video dài",
@@ -423,10 +423,7 @@ def chay_van_tay(thumuc: str, mode: str) -> None:
 
 
 def _thoi_luong(giay: float | None) -> str:
-    if giay is None:
-        return "Đang tính..."
-    giay = max(0, int(giay))
-    return f"{giay // 3600:02d}:{(giay % 3600) // 60:02d}:{giay % 60:02d}"
+    return "Đang tính..." if giay is None else dong_ho(giay)
 
 
 TEN_PHASE = {

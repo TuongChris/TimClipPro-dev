@@ -37,7 +37,7 @@ from clip_metadata import (basename_compatible, extract_youtube_id, filename_fal
                            valid_upload_date)
 from khoa import KhoaTienTrinh
 import ytdlp_chung
-from luu_tru import _thay_the, cap_nhat_json, doc_json_an_toan, ghi_json_an_toan, khoa_json
+from luu_tru import _thay_the, cap_nhat_json, doc_json_an_toan, khoa_json
 from process_runner import IM_LANG_FFMPEG_S, TRAN_FFPROBE_S, chay_lenh_media
 from publication_date import resolve_publication_date
 from tien_do_dong_bo import GD_LUU, GD_NEN, GD_TRICH_XUAT, GD_XAC_MINH, SoDongBo
@@ -487,11 +487,6 @@ class ChannelSync:
 
     def load_meta(self) -> dict:
         return doc_json_an_toan(self.meta_file, {})
-
-    def save_meta(self, meta: dict) -> None:
-        """Ghi đè TOÀN BỘ file. Chỉ dùng khi chủ ý thay cả file; muốn thêm/sửa vài
-        entry thì dùng :meth:`cap_nhat_meta` để không xoá mất cập nhật của writer khác."""
-        ghi_json_an_toan(self.meta_file, meta)
 
     def cap_nhat_meta(
         self,

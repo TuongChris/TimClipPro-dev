@@ -41,6 +41,7 @@ from dataclasses import asdict, dataclass, field, fields
 from typing import Any, Iterable, Mapping, Optional
 
 from clip_metadata import YOUTUBE_ID_PATTERN, valid_upload_date, youtube_ids_from_url
+from lich_su import LY_DO_PHAM_VI
 from publication_date import format_publication_date
 
 CHINH_SACH_V2 = "v2"
@@ -63,17 +64,6 @@ HEADER_PHAM_VI = [
     "Link video vi phạm", "Tên video vi phạm", "Phạm vi quét", "Mô tả phạm vi",
     "Lý do", "Vùng chưa kiểm", "Ghi chú", "Chính sách báo cáo",
 ]
-_LY_DO_PHAM_VI = {
-    "dung_som": "dừng sớm vì đã đủ bằng chứng",
-    "gioi_han_tai": "chỉ tải phần đầu video",
-    "loi_khuc": "có vùng không xử lý được",
-    "tai_thieu": "file tải về thiếu phần cuối",
-    "huy": "đã huỷ",
-    "am_thanh_ngan_hon": "âm thanh YouTube ngắn hơn thời lượng video — đã tải lại kiểm",
-    # Giới hạn quét video dài chọn theo lô (engine.GHVD_*): chỉ phần đầu, phần sau CHƯA quét.
-    "gioi_han_video_dai": "giới hạn quét video dài — chỉ quét phần đầu, phần sau chưa quét",
-    "thoi_luong_chua_ro": "YouTube không cho biết thời lượng — chưa xác nhận đã quét trọn",
-}
 
 
 # =====================================================================
@@ -685,7 +675,7 @@ def _han_che_am_tinh(pv: PhamViV2) -> str:
     if pv.quet_day_du:
         return ""
     if pv.quet_mot_phan:
-        mo_ta = pv.mo_ta or _LY_DO_PHAM_VI.get(pv.ly_do, pv.ly_do) or "phần sau chưa quét"
+        mo_ta = pv.mo_ta or LY_DO_PHAM_VI.get(pv.ly_do, pv.ly_do) or "phần sau chưa quét"
         return f" — QUÉT MỘT PHẦN: {mo_ta}"
     return " — chưa xác nhận đã quét trọn video"
 
@@ -724,7 +714,7 @@ def dong_pham_vi(bc: BaoCaoV2) -> list:
     vung_loi = ", ".join(f"{hien_thi_moc(giay_moc(a))}–{hien_thi_moc(giay_moc(b))}"
                          for a, b in bc.pham_vi.vung_loi)
     return [bc.link_video, bc.tieu_de, nhan_pham_vi(bc), bc.pham_vi.mo_ta,
-            _LY_DO_PHAM_VI.get(bc.pham_vi.ly_do, bc.pham_vi.ly_do), vung_loi, bc.ghi_chu,
+            LY_DO_PHAM_VI.get(bc.pham_vi.ly_do, bc.pham_vi.ly_do), vung_loi, bc.ghi_chu,
             bc.chinh_sach]
 
 

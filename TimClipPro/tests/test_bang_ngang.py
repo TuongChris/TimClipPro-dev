@@ -8,10 +8,10 @@ from conftest import M
 from bang_ngang import (
     HEADER_NGANG,
     dinh_dang_doan,
-    dinh_dang_ngay,
     dung_dong_ngang,
 )
 from clip_metadata import ClipMetadataResolver
+from publication_date import format_publication_date as dinh_dang_ngay
 from engine import ScanResult
 
 
