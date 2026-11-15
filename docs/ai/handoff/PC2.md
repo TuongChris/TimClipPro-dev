@@ -45,11 +45,17 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 7. Còn mở từ trước: đồng bộ tiếp kênh Joe → vân tay «Kho Joe» (tab «Kho clip gốc», không tạo kho mới); hồ sơ đích Sheets +
    binding khoá NGOÀI State Stable cho DEV; ruleset GitHub (`release/github/`, chưa bật); C7; nghiệm thu preview 8502.
 8. Kho Joe VODs (D-34): 150 video tải xong 07/11 (197 file, 727 giờ, 21 GB, 0 hỏng). Về ĐÊM (cần RAM 15–20 GB): «Tạo lại từ đầu» → quét thử.
-9. D-49: người dùng bật ô «🎯 Tinh chỉnh mốc từng giây» (thanh bên «⚙️ Tham số» → «Mở để tinh chỉnh») thử vài video
-   thật trên DEV; giới hạn đã biết + giai đoạn 2/3 (lưu lịch sử, đưa vào Sheets/CSV chính) = quyết định riêng: `TimClipPro/docs/KHOP_TUNG_GIAY.md`.
+9. D-49/D-50: ô «🎯 Tinh chỉnh mốc từng giây» (thanh bên «⚙️ Tham số» → «Mở để tinh chỉnh», DEV đang BẬT) nay đổi
+   «Đoạn vi phạm» của báo cáo/Sheets/lịch sử cho dòng tinh chỉnh được (D-50). Người dùng kiểm tay vài video nữa; giai đoạn 2
+   (lưu chỗ cắt/hồ sơ từng giây vào lịch sử) = quyết định riêng: `TimClipPro/docs/KHOP_TUNG_GIAY.md`.
 10. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-11-15 — «Đoạn vi phạm» theo mốc tinh chỉnh (D-50, nhánh feature/pc2/bao-cao-moc-tinh-chinh)
+- Người dùng kiểm tay (job DEV 838): lượt quét hụt 36 s / 8 s cuối hai video gốc (phân vị 95 %); tinh chỉnh (CHỈ ĐỌC audio đã
+  tải) ra 0:00–10:59, 1:46:12–1:57:28 = trọn gốc. Người dùng chọn «Dùng mốc tinh chỉnh» → `bao_cao_v2._moc_tinh_chinh`.
+- Review độc lập (11 tác tử): 5 thật đã sửa (cờ chạm giới hạn TỪNG MÉP `cham_dau`/`cham_cuoi`, nhãn vùng, xếp đoạn, bảng lịch
+  sử, chú thích), 2 bác. Nhanh 3920 = 3916/4/0, chậm 25/25, đột biến 34/34. Bằng chứng `C:\Dev\pc2_test_runs\2026-11-15_d50`.
 ### 2026-11-14/15 — tinh chỉnh mốc từng giây (D-49 = P-8 «1 và 2», nhánh feature/pc2/khop-tung-giay)
 - Nghiên cứu 14/11 → việc 2 mốc theo độ trôi (`1d8b6d9`, S7b −5,98 s → đúng); việc 1 `tinh_chinh_moc.py` + ống nối engine, ô
   «🎯 Tinh chỉnh mốc từng giây (thử nghiệm)» TẮT mặc định, không đổi V2/Sheets/lịch sử/Watch (bật/tắt trùng từng trường).
@@ -71,8 +77,4 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 - Tab «🛠️ Video trong máy» (`video_trong_may.py`) + tab Ghép nhận đường dẫn file; file gốc không bao giờ bị sửa (so băm).
 - Thử thật offline 2 video 1080p 90 s (30 + 60 hình/giây): cắt+âm 10 s, chỉ âm 4,8 s, ghép 3 phần 15,8 s; gốc không đổi. Nhanh 3688 = 3684/4/0, chậm 24/24. Gộp `878a7ce`, DEV 16:25.
 - Audit 11/11 chiều (nhánh fix/pc2/audit-1111b): bản nén khớp đặt theo đường dẫn đầy đủ + cỡ + giờ sửa (2 file cùng tên khác thư mục từng lẫn nhau); xoá bản chỉnh âm cũ của lượt hỏng; chỉnh âm MP3/FLAC/WAV/MPG giữ bộ nén hợp vỏ. Nhanh 3694 = 3690/4/0, chậm 24/24. Gộp `c2aa437`, DEV 18:59 (sao lưu `data_20261111_185850`).
-### 2026-11-11 — thumbnail cả kênh (D-45, nhánh feature/pc2/thumbnail-kenh)
-- Tab «🖼️ Tải thumbnail» thêm link kênh + số mới nhất → `tai_kenh(thumbnail=True)`; ảnh «[mã].jpg» đã có thì bỏ qua.
-- Test giả (AppTest + bỏ qua phần đã có); chưa thử kênh YouTube thật (người dùng thử trên DEV). Nhanh 3675 = 3671/4/0. Gộp `bddfa7c`, DEV 14:32.
-- Người dùng thấy chậm (đo 8 s/ảnh, kênh Joe 1.289 video ~3 giờ) → tải thẳng ảnh i.ytimg.com (nhánh feature/pc2/thumbnail-nhanh): thử thật 20 ảnh 3,4 s, 1280×720, trùng tên bản cũ. Nhanh 3677 = 3673/4/0. Gộp `6d0a4b7`, DEV 15:23.
-- Mục cũ hơn (2026-11-11 Twitch 1440p D-44; 2026-11-10 âm lượng D-43; 2026-11-10 audit phần video mới; 2026-11-09 cắt đoạn D-42; 2026-11-09 tải 4 kết nối D-40; 2026-11-09 ghép video gốc D-39/D-41 + chương QuickTime; 2026-11-09 tiêu đề kênh D-38 + audit 09/11; 2026-11-08 tải video gốc D-37 + review/audit 08/11; 2026-11-07 Codex bước 2 audit 14 + 18; 2026-11-07 Codex review PR #27–#29 D-36; 2026-11-07 đồng bộ nén song song D-35; 2026-11-07 audit số 15, 19, 20; 2026-11-07 kho video dài D-34; 2026-11-07 dựng kho nhường ổ cứng D-33; 2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
+- Mục cũ hơn (2026-11-11 thumbnail cả kênh D-45; 2026-11-11 Twitch 1440p D-44; 2026-11-10 âm lượng D-43; 2026-11-10 audit phần video mới; 2026-11-09 cắt đoạn D-42; 2026-11-09 tải 4 kết nối D-40; 2026-11-09 ghép video gốc D-39/D-41 + chương QuickTime; 2026-11-09 tiêu đề kênh D-38 + audit 09/11; 2026-11-08 tải video gốc D-37 + review/audit 08/11; 2026-11-07 Codex bước 2 audit 14 + 18; 2026-11-07 Codex review PR #27–#29 D-36; 2026-11-07 đồng bộ nén song song D-35; 2026-11-07 audit số 15, 19, 20; 2026-11-07 kho video dài D-34; 2026-11-07 dựng kho nhường ổ cứng D-33; 2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.

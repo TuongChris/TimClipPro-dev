@@ -198,11 +198,16 @@ Sửa đúng gốc là đổi tham số khớp (`--time-quantile`) — nhưng 0 
 giây, và mọi giá trị khác đều đổi `khop` → mật độ hash → chấp nhận/gộp: vượt phạm vi, cần duyệt
 và hiệu chỉnh riêng. V2 GIỮ NGUYÊN `end_s`; không đặt `end = start + thời lượng gốc`.
 
+Cập nhật 15/11/2026 (D-50): lượt quét bật «🎯 Tinh chỉnh mốc từng giây» thì dòng ĐÃ tinh chỉnh lấy `start_s`/`end_s`
+từ phép đo độ giống âm thanh từng giây (`tinh_chinh_moc.py`, `docs/KHOP_TUNG_GIAY.md`) — đầu mảnh sớm nhất tới cuối mảnh
+muộn nhất (`bao_cao_v2._moc_tinh_chinh`). Không đổi tham số khớp, không cộng thời lượng gốc: mép đo được trên âm thanh,
+không suy ra. Dòng chưa tinh chỉnh giữ đúng luật trên.
+
 ## 9. Giới hạn còn lại
 
 * Sheet độc lập không mang phạm vi quét (mục 5).
 * Ngày video gốc của kho cũ trống tới khi bật bổ sung (mạng) hoặc tải lại clip.
-* Mốc kết thúc vẫn là phân vị 95 % (mục 8) — `END_CASE_PENDING`.
+* Mốc kết thúc vẫn là phân vị 95 % (mục 8) — `END_CASE_PENDING` — trừ dòng đã tinh chỉnh (D-50).
 * Lịch sử trước V2 không dựng lại được báo cáo đã xuất.
 * Lượt quét có báo cáo V2 lỗi/hỏng chỉ khắc phục bằng quét lại (không có nút «dựng lại báo cáo» —
   dựng lại bằng resolver hiện tại là đúng điều V2 cấm).

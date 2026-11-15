@@ -3,6 +3,10 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-11-11 — thumbnail cả kênh (D-45, nhánh feature/pc2/thumbnail-kenh)
+- Tab «🖼️ Tải thumbnail» thêm link kênh + số mới nhất → `tai_kenh(thumbnail=True)`; ảnh «[mã].jpg» đã có thì bỏ qua.
+- Test giả (AppTest + bỏ qua phần đã có); chưa thử kênh YouTube thật (người dùng thử trên DEV). Nhanh 3675 = 3671/4/0. Gộp `bddfa7c`, DEV 14:32.
+- Người dùng thấy chậm (đo 8 s/ảnh, kênh Joe 1.289 video ~3 giờ) → tải thẳng ảnh i.ytimg.com (nhánh feature/pc2/thumbnail-nhanh): thử thật 20 ảnh 3,4 s, 1280×720, trùng tên bản cũ. Nhanh 3677 = 3673/4/0. Gộp `6d0a4b7`, DEV 15:23.
 ### 2026-11-11 — Twitch 1440p (D-44, nhánh feature/pc2/twitch-1440p)
 - Tab Tải đã tải được Twitch (720p60, thật 5,2 GB). 1440p khoá: AUTHZ_GEO + AUTHZ_NOT_LOGGED_IN → mục «🟣 Twitch»: file proxy
   (Windscribe Free, Proxy Gateway, Split Tunneling Inclusive rỗng) + cookie twitch.tv; chỉ bước trích qua proxy, tải thẳng.

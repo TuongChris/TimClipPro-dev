@@ -103,6 +103,7 @@ def test_chen_tron_clip_sach_mep_toi_0_1_s_va_ket_qua_json_tat_dinh(tmp_path):
     kq = tcm.tinh_chinh_dong(*goi, pham_vi_s=(0.0, 150.0))
     assert kq["trang_thai"] == tcm.DA, kq["ly_do"]
     assert len(kq["doan"]) == 1 and kq["cho_cat"] == [] and not kq["cham_gioi_han"]
+    assert kq["cham_dau"] is False and kq["cham_cuoi"] is False
     _khop_doan(kq["doan"][0], P, P + 60, 0, 60)
     assert kq["doan"][0]["cach_tim_mep"] == ["dau_clip", "cuoi_clip"]
     assert kq["doan"][0]["tuong_dong_min"] > 90 and kq["nguong_pct"] < 60
@@ -373,6 +374,7 @@ def test_doan_cham_cuoi_pham_vi_da_quet_thi_bao_cham_gioi_han():
     (d,) = kq["doan"]
     assert _gan(d["video_tu"], P) and d["video_den"] <= 100.0 and d["cach_tim_mep"][1] == "gioi_han"
     assert kq["cham_gioi_han"] is True
+    assert (kq["cham_dau"], kq["cham_cuoi"]) == (False, True)       # D-50: chỉ mép cuối được nới về mốc lượt quét
 
 
 # ---------------------------------------------------------------------------------------------- không chắc → chưa tinh chỉnh
@@ -805,6 +807,7 @@ def test_clip_mo_dau_bang_im_lang_dai_mep_o_cho_co_tieng_va_cham_gioi_han():
     (d,) = kq["doan"]
     _khop_doan(d, P + 20, P + 80, 20, 80)
     assert d["cach_tim_mep"][0] == "clip_lang" and kq["cham_gioi_han"] is True
+    assert (kq["cham_dau"], kq["cham_cuoi"]) == (True, False)
 
 
 # ---------------------------------------------------------------------------------------------- vòng 3: khoá vị từ
@@ -952,6 +955,7 @@ def test_tieng_de_sat_cuoi_pham_vi_quet_thi_cham_gioi_han(de_tu):
     video = _de(_chen(_am(220, 9992), clip, P), de_tu, 170.0, 0.0, 9993, chi_vung=(de_tu, 170.0), nguon=_giong_noi)
     kq = _chay(clip, video, [(P + 0.04, 1.0)], 45.0, 144.0, pham_vi_s=(0.0, 150.0))
     assert kq["trang_thai"] == tcm.CHUA or kq["cham_gioi_han"] is True, kq["doan"]
+    assert kq["trang_thai"] == tcm.CHUA or kq["cham_cuoi"] is True, kq["doan"]     # D-50: đúng mép đó
 
 
 def test_tieng_de_sat_dau_cua_so_phan_tich_thi_cham_gioi_han():
@@ -961,6 +965,7 @@ def test_tieng_de_sat_dau_cua_so_phan_tich_thi_cham_gioi_han():
     video = _de(_chen(_am(220, 9982), clip, P), 50.0, 65.5, 0.0, 9984, chi_vung=(50.0, 65.5), nguon=_giong_noi)
     kq = _chay(clip, video, [(P + 0.04, 1.0)], 100.0, 155.0)
     assert kq["trang_thai"] == tcm.CHUA or kq["cham_gioi_han"] is True, kq["doan"]
+    assert kq["trang_thai"] == tcm.CHUA or kq["cham_dau"] is True, kq["doan"]     # D-50: đúng mép đó
 
 
 def test_clip_ngan_sat_dau_video_khong_bao_file_ngan_hon_du_kien():
@@ -1007,6 +1012,7 @@ def test_o_ngoai_mep_vuot_phan_da_giai_ma_khong_tinh_la_clip_vang(het):
     video = _de(v, 145.3, 150.75, 0.0, 9773, chi_vung=(145.3, 151.2))
     kq = _chay(clip, video, [(P + 0.04, 1.0)], P + 6.0, 144.0, pham_vi_s=(0.0, het))
     assert kq["trang_thai"] == tcm.CHUA or kq["cham_gioi_han"] is True, kq["doan"]
+    assert kq["trang_thai"] == tcm.CHUA or kq["cham_cuoi"] is True, kq["doan"]     # D-50: đúng mép đó
 
 
 @pytest.mark.parametrize("A, B, delta", [(10, 10, 0.4), (10, 6, 0.3)], ids=["10+10_nhay_0.4", "10+6_nhay_0.3"])

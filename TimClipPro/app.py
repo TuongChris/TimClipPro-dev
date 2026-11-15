@@ -565,15 +565,17 @@ def df_ket_qua(rows: list) -> pd.DataFrame:
 
 def hien_tinh_chinh(results: list) -> None:
     """P-8: đoạn dùng thật, chỗ cắt và biểu đồ % giống từng giây của các kết quả đã chọn — chỉ khi lượt quét bật tinh
-    chỉnh (``ScanResult.tinh_chinh``). Báo cáo, Sheets, lịch sử vẫn dùng mốc của lượt quét."""
+    chỉnh (``ScanResult.tinh_chinh``). «Đoạn vi phạm» của báo cáo/Sheets/lịch sử dùng mốc này cho dòng tinh chỉnh
+    được (D-50, ``bao_cao_v2.dung_bao_cao``)."""
     co = [(r, tc) for r in results if r.status == "ok" for tc in (getattr(r, "tinh_chinh", None) or ())]
     if not co:
         return
     with st.expander("🎯 Mốc tinh chỉnh từng giây (thử nghiệm)", expanded=False):
         st.caption("Đo độ giống âm thanh từng giây giữa clip gốc và video quanh mỗi kết quả. Mốc là ƯỚC LƯỢNG PHÍA "
                    "TRONG, tới khoảng 0,1 giây trên dữ liệu thử. «% giống» chỉ có nghĩa khi so với nền của chính kết "
-                   "quả đó: nhạc đè to có thể chỉ khoảng 50 % dù khớp chắc. Báo cáo, Google Sheets và lịch sử vẫn dùng "
-                   "mốc của lượt quét. Khớp vân tay không phải xác nhận quyền sở hữu.")
+                   "quả đó: nhạc đè to có thể chỉ khoảng 50 % dù khớp chắc. «Đoạn vi phạm» trong bảng kết quả, báo cáo, "
+                   "Google Sheets và lịch sử dùng mốc đã tinh chỉnh; dòng «chưa tinh chỉnh» giữ mốc của lượt quét. "
+                   "Khớp vân tay không phải xác nhận quyền sở hữu.")
         for r, tc in co:
             ten = (f"**{thoat_markdown(tc.get('clip', ''))}** — {thoat_markdown(r.source_name[:60])} "
                    f"(mốc lượt quét {hhmmss(tc.get('start_s') or 0.0)})")
@@ -891,9 +893,10 @@ with st.sidebar:
         c.tinh_chinh_moc = st.checkbox(
             "🎯 Tinh chỉnh mốc từng giây (thử nghiệm)", c.tinh_chinh_moc,
             help="Sau khi tìm thấy, đo độ giống âm thanh TỪNG GIÂY quanh mỗi kết quả đã chọn: ra đoạn dùng thật tới "
-                 "khoảng 0,1 giây, chỗ bị cắt ghép, và biểu đồ % giống. Không đổi kết quả tìm thấy, báo cáo, Google "
-                 "Sheets hay lịch sử; mỗi kết quả tốn thêm vài giây. Xem ở mục «🎯 Mốc tinh chỉnh từng giây» dưới bảng "
-                 "kết quả và 2 file CSV phụ.")
+                 "khoảng 0,1 giây, chỗ bị cắt ghép, và biểu đồ % giống. «Đoạn vi phạm» trong báo cáo, Google Sheets "
+                 "và lịch sử dùng mốc đã tinh chỉnh (không tinh chỉnh được thì giữ mốc của lượt quét); kết quả tìm "
+                 "thấy không đổi; mỗi kết quả tốn thêm vài giây. Chi tiết ở mục «🎯 Mốc tinh chỉnh từng giây» dưới "
+                 "bảng kết quả và 2 file CSV phụ.")
         c.keep_downloads = st.checkbox("Giữ lại audio đã tải", c.keep_downloads,
                                        help="Bỏ tick để tiết kiệm ổ cứng (lần sau phải tải lại).")
         c.quet_tang_dan = st.checkbox(
@@ -2419,13 +2422,17 @@ with tab5:
         ms = eng.job_matches(chon)
         if ms:
             df = pd.DataFrame([{
-                "Clip gốc": m["clip"], "Xuất hiện từ": hhmmss(m["start_s"]),
-                "Đến": hhmmss(m["end_s"]), "Đoạn khớp (giây)": round(m["matched_s"]),
+                "Clip gốc": m["clip"], "Xuất hiện từ (lượt quét)": hhmmss(m["start_s"]),
+                "Đến (lượt quét)": hhmmss(m["end_s"]), "Đoạn khớp (giây)": round(m["matched_s"]),
                 "Khớp từ giây thứ (của clip)": round(m["clip_offset_s"]),
                 "Số hash": m["hashes"], "Đánh giá": m["confidence"],
                 "Phạm vi quét": pham_vi_chon,
             } for m in ms])
             st.dataframe(df, width="stretch", hide_index=True)
+            if bc_chon is not None and not loi_bc_chon:
+                st.caption("Bảng trên là số đo vân tay của lượt quét (chẩn đoán). «Đoạn vi phạm» để khiếu nại nằm "
+                           "trong 2 báo cáo tải ở trên — đã tinh chỉnh từng giây nếu lượt quét bật ô «🎯 Tinh chỉnh "
+                           "mốc từng giây».")
             if not loi_bc_chon:
                 # Bảng hiển thị giữ nguyên; chỉ bản CSV tải về chặn công thức ở tầng ghi như
                 # mọi đường xuất CSV khác (tên clip kho máy có thể bắt đầu bằng = + - @).

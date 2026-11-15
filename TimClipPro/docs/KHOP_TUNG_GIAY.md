@@ -150,5 +150,7 @@ theo đường nền tại chỗ trên chính cặp clip–video): ỨNG VIÊN.
 - Công cụ kiểm: `tools/khop_tung_giay/san_pham/` (`kiem_trong_mau.py`; `ca_an/` dựng + chấm ca ẩn; `phan_bien/` ca đối
   kháng, đột biến, hiệu năng). Bằng chứng (ngoài Git): `C:\Dev\pc2_test_runs\2026-11-14_p8\`,
   `…\2026-11-15_p8_vong4\`, `…\2026-11-15_p8_vong5\`.
-- Tiếp: người dùng thử thật trên DEV 8502 (ô «🎯 Tinh chỉnh mốc từng giây» ở thanh bên) → giai đoạn 2 (lưu lịch sử),
-  giai đoạn 3 (giây tinh chỉnh vào Sheets/CSV chính) là quyết định riêng.
+- Thử thật 15/11 (người dùng, video 3:15:16, hai video gốc): lượt quét hụt 36 s và 8 s cuối; bước tinh chỉnh ra đúng
+  trọn hai video gốc → D-50: «Đoạn vi phạm» của báo cáo V2 (bảng kết quả, CSV, Sheets, ảnh chụp lịch sử) dùng mốc đã
+  tinh chỉnh của dòng «đã tinh chỉnh» (giai đoạn 3 cho mốc đầu–cuối). Chưa làm: lưu đoạn/chỗ cắt/hồ sơ từng giây vào
+  lịch sử (giai đoạn 2), cột chỗ cắt trên Sheets.

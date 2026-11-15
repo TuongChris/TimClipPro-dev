@@ -258,7 +258,8 @@ class Config:
     # --- Tinh chỉnh mốc từng giây (P-8, thử nghiệm; tinh_chinh_moc.py) ---
     # SAU khi đã chọn kết quả: đo độ tương đồng phổ từng giây giữa clip gốc và video quanh mỗi kết quả đã chọn, ra
     # đoạn dùng thật + chỗ cắt + hồ sơ từng giây. Không tạo/bỏ kết quả nào nên KHÔNG thuộc chính sách nhận diện
-    # (không có trong TRUONG_CHINH_SACH); không đổi báo cáo V2, Sheets, lịch sử. Tắt mặc định.
+    # (không có trong TRUONG_CHINH_SACH). Dòng tinh chỉnh được: «Đoạn vi phạm» của báo cáo V2 / Sheets / ảnh chụp lịch
+    # sử dùng mốc đo được (D-50, ``bao_cao_v2._moc_tinh_chinh``); bảng ``matches`` giữ số engine. Tắt mặc định.
     tinh_chinh_moc: bool = False
     phan_bo_deu: bool = True     # Chia video vi phạm thành N vùng, mỗi vùng lấy 1 kết quả
     uu_tien_clip_khac_nhau: bool = True  # Ưu tiên 5 clip GỐC KHÁC NHAU thay vì trùng lặp
@@ -4832,10 +4833,7 @@ class Engine:
         p < 1/3 → «Đầu», p < 2/3 → «Giữa», còn lại «Cuối» (điểm ranh giới thuộc vùng SAU).
         Thời lượng không dương thì không có vị trí để nói: trả chuỗi rỗng.
         """
-        if not duration or duration <= 0:
-            return ""
-        p = start_s / duration
-        return "Đầu" if p < 1 / 3 else ("Giữa" if p < 2 / 3 else "Cuối")
+        return bao_cao_v2.nhan_vung(start_s, duration)
 
     def _bits_kho_dang_dung(self, ds: Optional[list] = None) -> int:
         """Bit mốc thời gian của kho đang dùng: theo chính file kho (``ds`` = danh sách đã đọc), vì ghi sổ đăng ký sau

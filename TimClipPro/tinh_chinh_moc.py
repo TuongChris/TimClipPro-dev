@@ -1068,11 +1068,14 @@ def _tinh_chinh(clip_path, video_path, neo, vung, end, pham_vi_s, doc, moc, han_
             kiem += [(x, a["v"][1], b["v"][0], phia == 1, False) for x, phia in ((a, 1), (b, 0))
                      if x["cach"][phia] == "bac_thang"]
     ngoai_khong_kiem = False                            # mép ngoài sát giới hạn đo: phía ngoài chưa hề được đo
+    ngoai_ben = set()                                   # ... ở mép nào: False = mép đầu, True = mép cuối
     for d, lo, hi, mep_o_tu, ngoai in kiem:
         idx = _o_ngoai(u, max(lo, vi.t0), min(hi, vi.het_s))   # miếng vượt phần đã giải mã: chưa đo, không phải «vắng»
         idx = idx[:SAT_MEP_O] if mep_o_tu else idx[-SAT_MEP_O:]
         if not len(idx):
             ngoai_khong_kiem |= ngoai
+            if ngoai:
+                ngoai_ben.add(mep_o_tu)
             continue
         moc()
         if _co_mat(_do_duong(cl, vi, d["dau"], d["k"], u[idx], moc=moc)[0], muc_co_mat(d["neo"], idx, NEN_TAI_CHO_LE)):
@@ -1099,6 +1102,9 @@ def _tinh_chinh(clip_path, video_path, neo, vung, end, pham_vi_s, doc, moc, han_
     return {"phien_ban": PHIEN_BAN, "trang_thai": DA, "ly_do": "", **_doan_ra(S, u, doan),
             "ho_so": _ho_so(S, u, doan), "nguong_pct": round(100.0 * nguong, 1),
             "nen_p99_pct": round(100.0 * nen_p99, 1), "cham_gioi_han": bool(cham),
+            # từng mép NGOÀI (báo cáo V2 chỉ nới đúng mép đó về mốc lượt quét — D-50); đoạn đã xếp theo video, không chồng
+            "cham_dau": bool(False in ngoai_ben or doan[0]["cach"][0] in GIOI_HAN or doan[0]["v"][0] < vi.t0 + 1.0),
+            "cham_cuoi": bool(True in ngoai_ben or doan[-1]["cach"][1] in GIOI_HAN or doan[-1]["v"][1] > vi.het_s - 1.0),
             "thoi_gian_s": round(time.monotonic() - t_bat_dau, 3)}
 
 

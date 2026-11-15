@@ -108,6 +108,13 @@ DOT_BIEN = [
      "except subprocess.TimeoutExpired:"),
     # 28. bỏ nhãn gói tiếng đầu: chỉ tin start_time của luồng (ffprobe dừng dò trước gói đó)
     ("tre_am_bo_goi_dau", ', *(giay(g.get("pts_time")) for g in j.get("packets", [])[:1])]', "]"),
+    # 31–33. D-50: cờ chạm giới hạn TỪNG MÉP (báo cáo V2 chỉ nới đúng mép đó về mốc lượt quét)
+    ("cham_dau_luon_sai", '"cham_dau": bool(False in ngoai_ben or doan[0]["cach"][0] in GIOI_HAN or doan[0]["v"][0] < vi.t0 + 1.0)',
+     '"cham_dau": False'),
+    ("cham_cuoi_luon_sai",
+     '"cham_cuoi": bool(True in ngoai_ben or doan[-1]["cach"][1] in GIOI_HAN or doan[-1]["v"][1] > vi.het_s - 1.0)',
+     '"cham_cuoi": False'),
+    ("ngoai_ben_tat", "if ngoai:\n                ngoai_ben.add(mep_o_tu)", "if False:\n                ngoai_ben.add(mep_o_tu)"),
 ]
 
 

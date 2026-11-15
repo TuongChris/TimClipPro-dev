@@ -308,3 +308,31 @@ def test_dong_tu_luot_bu_mang_ho_bien_doi(tmp_path):
     m = e._merge(tho)[0]
     assert m.ho == "tempo" and m.he_so == pytest.approx(k)
     assert m.neo == ((round(k * (700.0 - 600.0), 3), k),)
+
+
+def test_bao_cao_v2_va_lich_su_dung_moc_da_tinh_chinh(tmp_path, monkeypatch):
+    """D-50 (ca thật 15/11: lượt quét hụt 36 s / 8 s cuối video gốc): «Đoạn vi phạm» của ảnh chụp V2 — thứ đi vào bảng
+    kết quả, CSV, Google Sheets và ``bao_cao_job`` — dùng mốc đã tinh chỉnh; bảng ``matches`` vẫn giữ số của engine."""
+    kb = _mot_kich_ban()
+    kq0, e0, *_ = chay(kb, tmp_path / "tat", monkeypatch)
+    mod = _module_gia([])
+    goc = mod.tinh_chinh_dong
+
+    def gian(clip, video, neo, vung_khop_s, end_s, **k):
+        r = goc(clip, video, neo, vung_khop_s, end_s, **k)
+        r["doan"][0].update(video_tu=vung_khop_s - 1.5, video_den=end_s + 30.25)
+        return r
+
+    mod.tinh_chinh_dong = gian
+    monkeypatch.setitem(sys.modules, "tinh_chinh_moc", mod)
+    monkeypatch.setattr(Engine, "_ly_do_khong_tinh_chinh", lambda self, m: "")
+    kq, e, *_ = chay(_bat(kb), tmp_path / "bat", monkeypatch)
+    assert kq.matches == kq0.matches and kq.matches
+    mong = [(m.vung_khop_s - 1.5, m.end_s + 30.25) for m in kq.matches]
+    assert [(d.start_s, d.end_s) for d in kq.bao_cao.doan] == mong
+    assert [(d.start_s, d.end_s) for d in kq0.bao_cao.doan] == [(m.start_s, m.end_s) for m in kq0.matches]
+    luu = e.bao_cao_cua_job(kq.job_id)
+    assert [(d.giay_bat_dau, d.giay_ket_thuc) for d in luu.doan] == [(int(a // 1), int(b // 1)) for a, b in mong]
+    hoi = "SELECT clip, start_s, end_s, matched_s, clip_offset_s, hashes, confidence FROM matches ORDER BY id"
+    with e._db() as c, e0._db() as c0:
+        assert [tuple(r) for r in c.execute(hoi)] == [tuple(r) for r in c0.execute(hoi)]

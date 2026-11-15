@@ -120,7 +120,8 @@ thời điểm clip bắt đầu; khi chẩn đoán vân tay mới dùng vùng k
   đoán từ `timestamp`/tên file. Bổ sung qua mạng chỉ cho video gốc ĐÃ CHỌN, mặc định TẮT.
 - Mốc hiển thị và `t` của link là CÙNG một giây (`bao_cao_v2.giay_moc`). Không trừ 3 giây, không
   cộng thời lượng gốc vào `end_s` (mốc kết thúc bị cắt bởi `--time-quantile` 0,05 của audfprint —
-  sửa là đổi tham số khớp, cần duyệt riêng).
+  sửa là đổi tham số khớp, cần duyệt riêng). Ngoại lệ D-50: lượt bật «Tinh chỉnh mốc từng giây», dòng ĐÃ tinh chỉnh
+  dùng mốc đo từng giây (`bao_cao_v2._moc_tinh_chinh`); dòng chưa tinh chỉnh giữ mốc của lượt quét.
 - Gửi Sheets V2: nguyên văn (RAW, không thêm `'`), nghiêm ngặt — hàng tiêu đề sai là dừng, không
   chèn/sửa hàng 1. CSV vẫn chặn công thức ở tầng ghi. Hàng 1 trống CHƯA phải bảng rỗng: dò lần hai
   toàn trang tính, có bất kỳ ô nào là dừng, không ghi gì (P1-03).

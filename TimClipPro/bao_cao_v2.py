@@ -526,6 +526,45 @@ def _khoang(ds) -> Optional[tuple]:
     return tuple((float(a), float(b)) for a, b in ds)
 
 
+def _moc_tinh_chinh(tc: Any, m: Any) -> Optional[tuple]:
+    """``(đầu, cuối)`` trên trục video của một dòng ĐÃ tinh chỉnh (P-8, D-50): từ đầu mảnh sớm nhất tới cuối mảnh muộn
+    nhất. ``None`` = giữ mốc của lượt quét: chưa tinh chỉnh, mục không đúng dòng (clip hay lần dùng khác), số hỏng.
+    Mép chạm giới hạn đo (``cham_dau``/``cham_cuoi``: mép thật có thể nằm ngoài) không bao giờ làm đoạn hẹp hơn mốc lượt
+    quét ở mép ĐÓ; mép kia vẫn là mép đo được (mốc đầu lượt quét là vị trí ngoại suy của giây 0 clip — sớm hơn thật
+    đúng phần đầu clip bị cắt)."""
+    if (not isinstance(tc, Mapping) or tc.get("trang_thai") != "da_tinh_chinh" or tc.get("clip") != m.clip
+            or tc.get("start_s") != getattr(m, "start_s", None)):
+        return None
+    doan = tc.get("doan")
+    if not isinstance(doan, (list, tuple)) or not doan or not all(isinstance(d, Mapping) for d in doan):
+        return None
+    tu = [_so_hoac_none(d.get("video_tu")) for d in doan]
+    den = [_so_hoac_none(d.get("video_den")) for d in doan]
+    if None in tu or None in den:
+        return None
+    dau, cuoi = min(tu), max(den)
+    if not 0.0 <= dau < cuoi:
+        return None
+    s0, e0 = _so_hoac_none(getattr(m, "start_s", None)), _so_hoac_none(getattr(m, "end_s", None))
+    if tc.get("cham_dau", tc.get("cham_gioi_han")) is not False and s0 is not None:    # thiếu cờ = coi như chạm
+        dau = min(dau, s0)
+    if tc.get("cham_cuoi", tc.get("cham_gioi_han")) is not False and e0 is not None:
+        cuoi = max(cuoi, e0)
+    return dau, cuoi
+
+
+def nhan_vung(start_s: float, duration: float) -> str:
+    """Nhãn Đầu/Giữa/Cuối của mốc ``start_s`` trong video dài ``duration`` giây.
+
+    p < 1/3 → «Đầu», p < 2/3 → «Giữa», còn lại «Cuối» (điểm ranh giới thuộc vùng SAU).
+    Thời lượng không dương thì không có vị trí để nói: trả chuỗi rỗng.
+    """
+    if not duration or duration <= 0:
+        return ""
+    p = start_s / duration
+    return "Đầu" if p < 1 / 3 else ("Giữa" if p < 2 / 3 else "Cuối")
+
+
 def dung_bao_cao(
     kq: Any,
     *,
@@ -545,9 +584,17 @@ def dung_bao_cao(
     source_id = str(getattr(kq, "source_id", "") or "")
     source_ref = str(getattr(kq, "source_ref", "") or "")
     doan = []
-    for m in (getattr(kq, "matches", None) or []) if ok else []:
-        start = _so_hoac_none(getattr(m, "start_s", None))
-        end = _so_hoac_none(getattr(m, "end_s", None))
+    tinh_chinh = list(getattr(kq, "tinh_chinh", None) or ())
+    co_moc_moi = False
+    for i, m in enumerate((getattr(kq, "matches", None) or []) if ok else []):
+        # D-50: dòng đã tinh chỉnh dùng mốc đo từng giây (lượt quét hụt mép — cuối clip là phần mất theo
+        # ``--time-quantile`` của audfprint); số chẩn đoán vân tay (vùng khớp, offset, hash) vẫn của engine.
+        moc = _moc_tinh_chinh(tinh_chinh[i], m) if i < len(tinh_chinh) else None
+        start, end = moc or (_so_hoac_none(getattr(m, "start_s", None)), _so_hoac_none(getattr(m, "end_s", None)))
+        vung = str(getattr(m, "vung", "") or "")
+        if moc:
+            co_moc_moi = True
+            vung = nhan_vung(start, float(getattr(kq, "duration_s", 0.0) or 0.0)) or vung
         g0, g1 = giay_moc(start), giay_moc(end)
         goc = goc_theo_clip.get(m.clip) or GocV2(
             clip=m.clip, ngay_dang=NgayNguon(ly_do_thieu="không đọc được metadata kho"))
@@ -557,8 +604,10 @@ def dung_bao_cao(
             matched_s=float(getattr(m, "matched_s", 0.0) or 0.0),
             clip_offset_s=float(getattr(m, "clip_offset_s", 0.0) or 0.0),
             hashes=int(getattr(m, "hashes", 0) or 0), ty_le=float(getattr(m, "ty_le", 0.0) or 0.0),
-            confidence=str(getattr(m, "confidence", "") or ""), vung=str(getattr(m, "vung", "") or ""),
+            confidence=str(getattr(m, "confidence", "") or ""), vung=vung,
             giay_bat_dau=g0, giay_ket_thuc=g1, link=link_nhay(source_id, source_ref, g0)))
+    if co_moc_moi:      # engine xếp dòng theo mốc CỦA NÓ; «Đoạn vi phạm 1…5» phải theo mốc hiển thị
+        doan.sort(key=lambda d: (d.start_s is None, d.start_s or 0.0))
     so_dat = getattr(kq, "so_dat_nguong", 0)
     return BaoCaoV2(
         chinh_sach=CHINH_SACH_V2, thoi_diem_quet=thoi_diem_quet,

@@ -15,6 +15,23 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-50 «Đoạn vi phạm» dùng mốc đã tinh chỉnh (người dùng, 2026-11-15) — thay phần «KHÔNG đổi báo cáo V2» của D-49
+Ca thật (người dùng tự kiểm tay): lượt quét báo 00:00:00 – 00:10:23 và 01:46:12 – 01:57:20 cho hai video gốc dài 10:59 và
+11:16 — hụt 36 s và 8 s cuối (mốc cuối của audfprint là phân vị 95 %, `REPORT_POLICY_V2.md` §8). Bước tinh chỉnh đo đúng
+cả hai trọn video gốc (00:00:00 – 00:10:59, 01:46:12 – 01:57:28; kiểm độc lập bằng tương quan đường bao năng lượng 0,94–0,99
+so với nền ≤ 0,3). Người dùng chọn: khi lượt quét bật «🎯 Tinh chỉnh mốc từng giây» và một dòng «đã tinh chỉnh», `DoanV2`
+lấy `start_s`/`end_s` = đầu mảnh sớm nhất → cuối mảnh muộn nhất của bước tinh chỉnh (`bao_cao_v2._moc_tinh_chinh`), nên
+«Đoạn vi phạm» của bảng kết quả, CSV, Google Sheets (34 cột không đổi) và ảnh chụp `bao_cao_job` dùng mốc đó; mốc hiển
+thị và `t` của link vẫn là CÙNG một giây (`giay_moc`). Dòng «chưa tinh chỉnh», lượt không bật, mục tinh chỉnh lệch dòng
+(clip hay `start_s` khác) hoặc số hỏng → mốc của lượt quét như cũ. Mép chạm giới hạn đo (`cham_dau`/`cham_cuoi` của
+`tinh_chinh_moc`: cuối phần đã quét, rìa khung phân tích, đoạn im lặng của clip, phía ngoài chưa đo) lấy mốc RỘNG hơn
+giữa đo được và lượt quét, CHỈ ở mép đó (mốc đầu lượt quét là vị trí ngoại suy giây 0 clip — sớm hơn thật đúng phần đầu
+clip bị cắt, nên không được dùng thay mép đầu đã đo). Nhãn Đầu/Giữa/Cuối tính lại theo mốc mới (`bao_cao_v2.nhan_vung`,
+`Engine._nhan_vung` gọi chung); có dòng dùng mốc mới thì các đoạn xếp lại theo mốc hiển thị. Trang «Lịch sử»: bảng số đo
+vân tay đổi tên cột «… (lượt quét)» + chú thích «Đoạn vi phạm» nằm trong 2 báo cáo tải. KHÔNG đổi: bảng `matches`, vùng khớp/offset/hash (số
+chẩn đoán), chữ ký chính sách nhận diện, Watch, lần quét cũ và dòng đã gửi Sheets. Ô vẫn TẮT mặc định. Test:
+`tests/test_bao_cao_v2_moc_tinh_chinh.py`, `tests/test_tinh_chinh_engine.py::test_bao_cao_v2_va_lich_su_dung_moc_da_tinh_chinh`.
+
 ## D-49 Tinh chỉnh mốc từng giây (thử nghiệm, TẮT mặc định) + mốc theo độ trôi tốc độ (người dùng chọn P-8 «1 và 2», 2026-11-14)
 Nghiên cứu: `docs/KHOP_TUNG_GIAY.md`. Hai việc, cả hai KHÔNG đổi chuyện tìm thấy hay không (chữ ký chính sách giữ nguyên):
 1. Mốc đầu clip của nhóm LƯỢT THƯỜNG có các mảnh chính trôi đều (video đổi tốc độ, mảnh vụn nối lại vẫn đạt chuẩn nên
