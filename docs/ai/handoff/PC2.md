@@ -55,7 +55,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 - Người dùng kiểm tay (job DEV 838): lượt quét hụt 36 s / 8 s cuối hai video gốc (phân vị 95 %); tinh chỉnh (CHỈ ĐỌC audio đã
   tải) ra 0:00–10:59, 1:46:12–1:57:28 = trọn gốc. Người dùng chọn «Dùng mốc tinh chỉnh» → `bao_cao_v2._moc_tinh_chinh`.
 - Review độc lập 11 tác tử: 5 thật đã sửa (cờ giới hạn TỪNG MÉP, nhãn vùng, xếp đoạn, bảng lịch sử). Nhanh 3920 = 3916/4/0,
-  chậm 25/25, đột biến 34/34. Gộp `47d4bc9`, DEV 15/11 22:22 (sao lưu `data_20261115_222149`); bằng chứng `2026-11-15_d50`.
+  chậm 25/25, đột biến 34/34. Gộp `47d4bc9`, DEV 15/11 22:22; bằng chứng `C:\Dev\pc2_test_runs\2026-11-15_d50`.
 ### 2026-11-14/15 — tinh chỉnh mốc từng giây (D-49 = P-8 «1 và 2», nhánh feature/pc2/khop-tung-giay)
 - Nghiên cứu 14/11 → việc 2 mốc theo độ trôi (`1d8b6d9`, S7b −5,98 s → đúng); việc 1 `tinh_chinh_moc.py` + ống nối engine, ô
   «🎯 Tinh chỉnh mốc từng giây (thử nghiệm)» TẮT mặc định, không đổi V2/Sheets/lịch sử/Watch (bật/tắt trùng từng trường).
