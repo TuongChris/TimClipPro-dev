@@ -13,6 +13,7 @@ def _engine_thuan() -> Engine:
     eng.config.dedup_s = 20.0
     eng.canh_bao_gop = []
     eng.db_clips = lambda: []
+    eng.audfprint = None  # kho đọc được nhưng trống (không phải kho lỗi)
     return eng
 
 

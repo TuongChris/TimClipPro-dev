@@ -474,8 +474,9 @@ def _main():
         if r.get("han_che_bo_qua"):
             print("  Thử lại video bị hạn chế: thêm --thu-lai-han-che (tool tự thử lại khi đổi nguồn cookie).")
         if r.get("qua_dai"):
+            from channel import GIO_CLIP_TOI_DA
             from scan_ui import CAU_QUA_DAI
-            print(" ", CAU_QUA_DAI.format(n=r["qua_dai"]))
+            print(" ", CAU_QUA_DAI.format(n=r["qua_dai"], gio=r.get("gio_toi_da", GIO_CLIP_TOI_DA)))
         if r.get("trong_so_khong_file"):
             from scan_ui import CAU_TRONG_SO_KHONG_FILE
             print(" ", CAU_TRONG_SO_KHONG_FILE.format(n=r["trong_so_khong_file"]))

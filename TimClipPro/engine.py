@@ -4570,10 +4570,14 @@ class Engine:
         cd.khop_tho_dai_nhat = round(max((float(x["khop"]) for x in tho), default=0.0), 1)
         loc.sort(key=lambda x: (x["clip"], x["align"], -x["hash"]))
 
+        # Kho lỗi: clip ngắn chỉ nhận được qua bậc phủ (cần tổng hash) nên 0 kết quả lúc này KHÔNG phải âm tính —
+        # nơi quét đọc cờ này để báo lỗi thay vì lưu «không có» (audit 16/11).
+        self.loi_tong_hash_gop = ""
         try:
             bang_hash = self._bang_tong_hash()
         except Exception as e:  # kho lỗi vẫn phải trả được kết quả chưa kẹp
             bang_hash = ({}, {}, {})
+            self.loi_tong_hash_gop = str(e) or type(e).__name__
             self.canh_bao_gop.append(
                 f"Không đọc được tổng hash trong kho để áp cận trên: {e}"
             )
@@ -4685,10 +4689,11 @@ class Engine:
             ten_clip = os.path.basename(g["clip"])
             gioi_han = gioi_han_cua(g["clip"])
             if gioi_han is None:
-                self.canh_bao_gop.append(
-                    f"Không tra được tổng hash của clip «{ten_clip}»; "
-                    f"giữ kết quả ước tính {hash_uoc}, không áp cận trên."
-                )
+                if not self.loi_tong_hash_gop:   # kho lỗi đã có MỘT cảnh báo chung, không lặp cho từng clip
+                    self.canh_bao_gop.append(
+                        f"Không tra được tổng hash của clip «{ten_clip}»; "
+                        f"giữ kết quả ước tính {hash_uoc}, không áp cận trên."
+                    )
                 hashes = hash_uoc
             else:
                 hashes = min(hash_uoc, gioi_han)
@@ -5784,6 +5789,12 @@ class Engine:
             kq.matches, kq.matches_loai = self._chon_loc(
                 tat_ca, kq.pham_vi_quet_s or tong)
             kq.dat_muc_tieu = self._du_muc_tieu(kq.matches)
+            if getattr(self, "loi_tong_hash_gop", "") and not kq.matches:
+                kq.status = "error"
+                tin = ("Không đọc được kho vân tay lúc tổng hợp kết quả: clip gốc ngắn không thể được nhận nên "
+                       "chưa kết luận được video này không chứa clip gốc — hãy quét lại.")
+                kq.note = "\n".join([x for x in (kq.note, tin) if x])
+                self._bao(progress, p_match1, "⚠️ " + tin)
             self._td(so_dat_chuan=kq.so_dat_nguong,
                      ghi=f"Hợp nhất xong: {len(tat_ca)} đoạn, {kq.so_dat_nguong} đạt chuẩn, "
                          f"chọn {len(kq.matches)} kết quả")

@@ -55,6 +55,9 @@ def _tong_giay_vi_pham(doan) -> int:
     # shortcut: dồn ``matched_s`` về cuối đoạn, lệch tối đa khoảng ``dedup_s`` mỗi lỗ; cần số chính xác thì mang danh sách mảnh vào Match.
     khoang = []
     for d in doan:
+        if getattr(d, "da_tinh_chinh", False):   # D-50: khoảng đo từng giây là chính đoạn vi phạm
+            khoang.append((d.start_s, d.end_s))
+            continue
         cuoi = d.matched_s if d.end_s is None else d.end_s
         khoang.append((cuoi - d.matched_s, cuoi))
     return round(engine.tong_do_dai(khoang))
@@ -117,7 +120,7 @@ def dung_ho_so_v2(bc) -> HoSo:
         ten_clip_goc=d.goc.clip, tieu_de_goc=d.goc.tieu_de, link_goc=d.goc.url,
         tu_hhmmss=bao_cao_v2.hien_thi_moc(d.giay_bat_dau),
         den_hhmmss=bao_cao_v2.hien_thi_moc(d.giay_ket_thuc), link_moc=d.link,
-        do_dai_giay=round(d.matched_s), ty_le=d.ty_le, hashes=d.hashes,
+        do_dai_giay=round(d.end_s - d.start_s if getattr(d, "da_tinh_chinh", False) else d.matched_s), ty_le=d.ty_le, hashes=d.hashes,
     ) for d in (bc.doan if bc.trang_thai == "ok" else ())]
     tong_giay_vi_pham = _tong_giay_vi_pham(bc.doan if bc.trang_thai == "ok" else ())
     thoi_luong = float(bc.thoi_luong_s or 0.0)

@@ -244,6 +244,8 @@ class DoanV2:
     giay_bat_dau: Optional[int]
     giay_ket_thuc: Optional[int]
     link: str
+    # D-50: start_s/end_s là mốc đo từng giây, không phải mốc lượt quét — độ dài đoạn = end_s − start_s, không phải matched_s.
+    da_tinh_chinh: bool = False
 
 
 @dataclass(frozen=True)
@@ -343,7 +345,8 @@ class BaoCaoV2:
                 clip_offset_s=float(x.get("clip_offset_s") or 0.0), hashes=int(x.get("hashes") or 0),
                 ty_le=float(x.get("ty_le") or 0.0), confidence=str(x.get("confidence") or ""),
                 vung=str(x.get("vung") or ""), giay_bat_dau=x.get("giay_bat_dau"),
-                giay_ket_thuc=x.get("giay_ket_thuc"), link=str(x.get("link") or ""))
+                giay_ket_thuc=x.get("giay_ket_thuc"), link=str(x.get("link") or ""),
+                da_tinh_chinh=bool(x.get("da_tinh_chinh")))
                 for x in d.get("doan") or ()),
             so_dat_nguong=int(d.get("so_dat_nguong") or 0),
             co_ket_qua_loai=bool(d.get("co_ket_qua_loai")),
@@ -605,7 +608,8 @@ def dung_bao_cao(
             clip_offset_s=float(getattr(m, "clip_offset_s", 0.0) or 0.0),
             hashes=int(getattr(m, "hashes", 0) or 0), ty_le=float(getattr(m, "ty_le", 0.0) or 0.0),
             confidence=str(getattr(m, "confidence", "") or ""), vung=vung,
-            giay_bat_dau=g0, giay_ket_thuc=g1, link=link_nhay(source_id, source_ref, g0)))
+            giay_bat_dau=g0, giay_ket_thuc=g1, link=link_nhay(source_id, source_ref, g0),
+            da_tinh_chinh=bool(moc)))
     if co_moc_moi:      # engine xếp dòng theo mốc CỦA NÓ; «Đoạn vi phạm 1…5» phải theo mốc hiển thị
         doan.sort(key=lambda d: (d.start_s is None, d.start_s or 0.0))
     so_dat = getattr(kq, "so_dat_nguong", 0)

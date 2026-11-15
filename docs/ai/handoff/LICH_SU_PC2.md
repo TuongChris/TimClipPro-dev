@@ -3,6 +3,14 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-11-12 — thumbnail tên = mã, «Chỉ audio» ra M4A (D-47, nhánh feature/pc2/audio-thumbnail-ma)
+- Thumbnail lưu «<mã>.jpg» (người dùng: bỏ tiêu đề có dấu cách); ảnh tên cũ vẫn tính «đã có». Tab Tải: chọn «🎵 Chỉ audio» đầu tab.
+- Chỉ-tiếng ra «… [mã].audio.m4a» (trước: .webm Opus); test yt-dlp thật (file://) + FFmpeg thật. Nhanh 3737 = 3733/4/0. Gộp `b5d5c3e`, DEV 12/11 09:33 (sao lưu `data_20261112_093309`). Chưa thử YouTube thật.
+- Chiều 12/11 (D-48): MỌI file tải về «Tieu_de_khong_dau_<mã>.đuôi», audio «…_<mã>.m4a», cắt/ghép cũng không dấu cách; «đã có» nhận cả tên cũ. Nhanh 3745 = 3741/4/0.
+### 2026-11-11 — cắt / chỉnh âm / ghép video trong máy (D-46, nhánh feature/pc2/video-trong-may)
+- Tab «🛠️ Video trong máy» (`video_trong_may.py`) + tab Ghép nhận đường dẫn file; file gốc không bao giờ bị sửa (so băm).
+- Thử thật offline 2 video 1080p 90 s (30 + 60 hình/giây): cắt+âm 10 s, chỉ âm 4,8 s, ghép 3 phần 15,8 s; gốc không đổi. Nhanh 3688 = 3684/4/0, chậm 24/24. Gộp `878a7ce`, DEV 16:25.
+- Audit 11/11 chiều (nhánh fix/pc2/audit-1111b): bản nén khớp đặt theo đường dẫn đầy đủ + cỡ + giờ sửa (2 file cùng tên khác thư mục từng lẫn nhau); xoá bản chỉnh âm cũ của lượt hỏng; chỉnh âm MP3/FLAC/WAV/MPG giữ bộ nén hợp vỏ. Nhanh 3694 = 3690/4/0, chậm 24/24. Gộp `c2aa437`, DEV 18:59 (sao lưu `data_20261111_185850`).
 ### 2026-11-11 — thumbnail cả kênh (D-45, nhánh feature/pc2/thumbnail-kenh)
 - Tab «🖼️ Tải thumbnail» thêm link kênh + số mới nhất → `tai_kenh(thumbnail=True)`; ảnh «[mã].jpg» đã có thì bỏ qua.
 - Test giả (AppTest + bỏ qua phần đã có); chưa thử kênh YouTube thật (người dùng thử trên DEV). Nhanh 3675 = 3671/4/0. Gộp `bddfa7c`, DEV 14:32.
