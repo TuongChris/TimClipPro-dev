@@ -3690,8 +3690,11 @@ class Engine:
                                     # quét đọc nên không xoá ở đây — nhớ tên để «Xoá kho» gỡ cả nó (khoá riêng:
                                     # bản cũ đọc ``db_cu`` là một chuỗi).
                                     cu = kho.get("db_cu")
-                                    if cu and cu != kho["db"] and cu not in kho.setdefault("db_cu_khac", []):
-                                        kho["db_cu_khac"].append(cu)
+                                    khac = kho.get("db_cu_khac")
+                                    khac = [x for x in khac if isinstance(x, str)] if isinstance(khac, list) else []
+                                    if isinstance(cu, str) and cu and cu != kho["db"] and cu not in khac:
+                                        khac.append(cu)
+                                    kho["db_cu_khac"] = khac
                                     kho["db_cu"] = kho["db"]
                                     kho["db"] = ten_moi
 
@@ -5792,7 +5795,9 @@ class Engine:
             kq.matches, kq.matches_loai = self._chon_loc(
                 tat_ca, kq.pham_vi_quet_s or tong)
             kq.dat_muc_tieu = self._du_muc_tieu(kq.matches)
-            if getattr(self, "loi_tong_hash_gop", "") and not kq.matches:
+            # Xác minh: nguồn KHÁC khớp không chứng minh đích (clip ngắn cần tổng hash) vắng mặt — như lượt bù hỏng.
+            if getattr(self, "loi_tong_hash_gop", "") and (
+                    not muc_tieu.da_dat(kq.ung_vien_dat) if theo_dich else not kq.matches):
                 kq.status = "error"
                 tin = ("Không đọc được kho vân tay lúc tổng hợp kết quả: clip gốc ngắn không thể được nhận nên "
                        "chưa kết luận được video này không chứa clip gốc — hãy quét lại.")

@@ -239,3 +239,45 @@ def test_cli_kenh_mot_phan_thoat_ma_1(monkeypatch, capsys):
 
 def test_cli_kenh_day_du_thoat_ma_0(monkeypatch):
     _chay_kenh(monkeypatch, {"trang_thai": "DAY_DU", "bo_qua": 3, "moi": 2, "loi": []})   # không ném SystemExit
+
+
+# ---- Review độc lập 16/11 ----
+
+def test_kho_loi_luc_gop_che_do_xac_minh_dich_ngan_khong_thanh_vang_mat(tmp_path):
+    """Xác minh: nguồn KHÁC mạnh vẫn khớp nhưng clip đích ngắn chỉ nhận được qua bậc phủ (cần tổng hash) — kho lỗi thì
+    «đích vắng mặt» chưa được chứng minh (cùng luật với lượt bù tốc độ hỏng)."""
+    from engine import ScanObjective
+
+    e = _engine_clip_ngan(tmp_path)
+    tho = e._match_chunks([])
+    tho[1]["hash"] = 9000                       # goc1 mạnh, bậc tuyệt đối; goc0 (đích) ngắn
+    e._match_chunks = lambda chunks, *a, **k: [dict(x) for x in tho]
+
+    def hong():
+        raise RuntimeError("file kho đang bị khoá")
+
+    e._bang_tong_hash = hong
+    kq = e.scan_youtube("https://youtu.be/abcdefghijk", luu_lich_su=False,
+                        muc_tieu=ScanObjective("verify", nhom_can_du=({"goc0.opus"},)))
+    assert kq.status == "error", (kq.status, kq.note)
+
+
+def test_cli_kenh_chi_con_video_bi_han_che_thoat_ma_0(monkeypatch):
+    """Video hội viên / giới hạn tuổi đã biết bị đếm lại mỗi lượt (MOT_PHAN) nhưng không bao giờ được thử lại nếu không có
+    --thu-lai-han-che: mã 1 ở đây làm lịch chạy tưởng hỏng mãi."""
+    _chay_kenh(monkeypatch, {"trang_thai": "MOT_PHAN", "bo_qua": 3, "moi": 0, "han_che_bo_qua": 2, "loi": []})
+
+
+def test_db_cu_khac_sua_tay_thanh_chuoi_khong_lam_hong_cong_bo(tmp_path, monkeypatch):
+    import json
+
+    from test_xoa_kho_that_bai import _build_khi_file_kho_bi_khoa, _eng, _kho_co_van_tay
+
+    e = _eng(tmp_path)
+    db = _kho_co_van_tay(e, tmp_path)
+    so = json.loads(open(e.kho_file, encoding="utf-8").read())
+    so["danh_sach"][0].update(db_cu="cu_tay.pklz", db_cu_khac="sua_tay.pklz")
+    open(e.kho_file, "w", encoding="utf-8").write(json.dumps(so))
+    _build_khi_file_kho_bi_khoa(e, tmp_path, monkeypatch, db, "clips_tay")
+    kho = e._doc_khos()["danh_sach"][0]
+    assert kho["db"] != db.name and kho["db_cu"] == db.name and kho["db_cu_khac"] == ["cu_tay.pklz"]
