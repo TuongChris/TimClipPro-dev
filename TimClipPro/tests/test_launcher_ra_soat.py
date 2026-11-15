@@ -144,7 +144,8 @@ def test_tao_runtime_dung_wheel_kem_release_va_khong_dat_cwd_vao_sys_path(tmp_pa
     monkeypatch.setattr(launcher.subprocess, "run", lambda argv, **k: goi.append(argv))
     launcher.tao_moi_truong_pip(sys.executable)(_m(du), rel, str(tmp_path / "rt"))
     venv, pip = goi[0], goi[1]
-    assert venv[1:3] == ["-P", "-m"] and pip[1:3] == ["-P", "-m"]
+    # -E: PYTHONHOME/PYTHONPATH của máy (ArcGIS, QGIS…) không lẫn vào venv/pip lúc cập nhật (audit 16/11)
+    assert venv[1:4] == ["-P", "-E", "-m"] and pip[1:4] == ["-P", "-E", "-m"] and goi[2][1:4] == ["-P", "-E", "-m"]
     i = pip.index("--find-links")
     assert pip[i + 1] == os.path.join(rel, "TimClipPro", "wheels")
     assert "--require-hashes" in pip and "--only-binary=:all:" in pip

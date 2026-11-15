@@ -1331,10 +1331,6 @@ class Engine:
             if not isinstance(k.get("thu_muc", ""), str):
                 raise sai(f"mục kho thứ {i} có «thu_muc» không phải đường dẫn")
 
-    def _ghi_khos(self, d: dict) -> None:
-        """Ghi đè TOÀN BỘ sổ đăng ký. Thao tác sửa vài trường phải dùng ``_sua_khos``."""
-        ghi_json_an_toan(self.kho_file, d)
-
     def _sua_khos(self, ham_sua: Callable[[dict], object]):
         """Giao dịch đọc-sửa-ghi trên ``khos.json`` (audit TCP-03).
 

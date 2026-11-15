@@ -8,7 +8,7 @@ import pytest
 
 from channel import ChannelSync, VideoInfo
 from engine import Config, ScanResult
-from luu_tru import LoiDuLieu
+from luu_tru import LoiDuLieu, ghi_json_an_toan
 from sheets import SheetsExporter
 
 
@@ -27,7 +27,7 @@ def test_ten_file_kho_khong_duoc_thoat_data(engine, ten_file):
 def test_xoa_kho_khong_xoa_file_ngoai_data(engine, tmp_path):
     file_ngoai = tmp_path / "ngoai.pklz"
     file_ngoai.write_bytes(b"du lieu phai duoc giu")
-    engine._ghi_khos({
+    ghi_json_an_toan(engine.kho_file, {
         "dang_dung": "Kho loi",
         "danh_sach": [{
             "ten": "Kho loi",

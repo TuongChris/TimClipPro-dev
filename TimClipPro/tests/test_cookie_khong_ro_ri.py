@@ -131,7 +131,7 @@ def test_chi_luu_duong_dan_khong_bao_gio_luu_noi_dung(tmp_path):
     duong_dan = str(_cookie_dung(tmp_path))
     cfg = Config()
     cfg.ytdlp_cookiefile = duong_dan
-    cau_hinh.ghi_cau_hinh(str(tmp_path), cau_hinh.lay_tu_config(cfg))
+    cau_hinh.gop_va_ghi(str(tmp_path), cau_hinh.lay_tu_config(cfg), {})
     tren_dia = (tmp_path / cau_hinh.TEN_FILE).read_text(encoding="utf-8")
     assert BI_MAT not in tren_dia, "nội dung cookie không bao giờ được xuống đĩa"
     assert "cookies_ok.txt" in tren_dia, "đường dẫn thì phải lưu, nếu không mất cấu hình"

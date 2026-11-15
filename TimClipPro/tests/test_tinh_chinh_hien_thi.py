@@ -94,6 +94,19 @@ def test_man_ket_qua_hien_doan_cho_cat_va_ly_do(tmp_path, monkeypatch):
     assert "chưa tinh chỉnh — Âm thanh lặp y hệt" in chu
 
 
+def test_ket_qua_bao_cao_v2_loi_khong_hien_muc_tinh_chinh(tmp_path, monkeypatch):
+    """Audit 16/11: banner ⛔ «không được xuất» nhưng ngay dưới vẫn tải được CSV tinh chỉnh của chính kết quả đó."""
+    import bao_cao_v2
+    from test_app_cau_tom_tat_ket_qua import _man_ket_qua, _ok
+
+    kq = _ok("Video vi phạm thử", "aaaaaaaaaaa")
+    kq.tinh_chinh = [dict(_tc_da(), clip=kq.matches[0].clip)]
+    kq.bao_cao = bao_cao_v2.LoiBaoCaoV2(bao_cao_v2.LOI_TAO, ngoai_le="ValueError")
+    at = _man_ket_qua(tmp_path, monkeypatch, [kq])
+    assert any("Báo cáo V2 của 1 lượt quét" in (x.value or "") for x in at.error), "tiền đề: kết quả mang dấu V2 lỗi"
+    assert not any("Mốc tinh chỉnh" in x.label for x in at.expander)
+
+
 def test_man_ket_qua_khong_co_tinh_chinh_thi_khong_hien_muc(tmp_path, monkeypatch):
     from test_app_cau_tom_tat_ket_qua import _man_ket_qua, _ok
 

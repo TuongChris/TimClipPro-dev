@@ -234,7 +234,7 @@ def test_config_moi_di_qua_duoc_vong_luu_va_nap(tmp_path):
     cfg.ytdlp_sleep_min_s = 2.0
     cfg.ytdlp_sleep_max_s = 4.0
 
-    cau_hinh.ghi_cau_hinh(str(tmp_path), cau_hinh.lay_tu_config(cfg))
+    cau_hinh.gop_va_ghi(str(tmp_path), cau_hinh.lay_tu_config(cfg), {})
     du_lieu = json.loads((tmp_path / cau_hinh.TEN_FILE).read_text(encoding="utf-8"))
 
     moi = Config()

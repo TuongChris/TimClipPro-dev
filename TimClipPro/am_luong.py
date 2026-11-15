@@ -148,7 +148,8 @@ def chuan_hoa(
                 "-c:a",
                 *ma,
                 "-ar",
-                str(tieng.get("sample_rate") or 48000),
+                # Opus chỉ nhận 8/12/16/24/48 kHz: .ogg/.webm Vorbis 44,1 kHz giữ nguyên tần số là libopus từ chối.
+                "48000" if ma is _OPUS else str(tieng.get("sample_rate") or 48000),
                 "-af",
                 loc,
                 dang,

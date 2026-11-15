@@ -185,15 +185,16 @@ def tao_moi_truong_pip(python_goc: str, *, han_s: float = 3600.0):
             raise mu.TuChoiGoi("lock_chua_bam", "Lock chưa có băm gói — không cài runtime chưa xác minh.")
         if not (os.path.isabs(python_goc) and os.path.isfile(python_goc)):
             raise mu.LoiCapNhat("python_goc", "Không thấy Python gốc đã ghi lúc bootstrap.")
-        subprocess.run([python_goc, "-P", "-m", "venv", rt], check=True, timeout=600)
+        # -E: bỏ PYTHONHOME/PYTHONPATH của máy (ArcGIS, QGIS…) — lẫn vào thì mọi bản cập nhật hỏng rồi bị cách ly (audit 16/11).
+        subprocess.run([python_goc, "-P", "-E", "-m", "venv", rt], check=True, timeout=600)
         py = python_runtime({"runtime": rt})
-        pip = [py, "-P", "-m", "pip", "install", "--no-input", "--disable-pip-version-check",
+        pip = [py, "-P", "-E", "-m", "pip", "install", "--no-input", "--disable-pip-version-check",
                "--require-hashes", "--no-deps", "--only-binary=:all:"]
         wheels = os.path.join(rel, "TimClipPro", "wheels")
         if os.path.isdir(wheels):
             pip += ["--find-links", wheels]
         subprocess.run([*pip, "-r", lock], check=True, timeout=han_s)
-        subprocess.run([py, "-P", "-m", "pip", "check"], check=True, timeout=300)
+        subprocess.run([py, "-P", "-E", "-m", "pip", "check"], check=True, timeout=300)
     return tao
 
 

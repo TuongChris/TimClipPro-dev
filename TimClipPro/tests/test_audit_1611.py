@@ -224,3 +224,18 @@ def test_va_metadata_bi_chan_khong_bao_xanh(tmp_path, monkeypatch):
 def test_va_metadata_xong_sach_van_xanh(tmp_path, monkeypatch):
     at = _ket_qua_va_metadata(tmp_path, monkeypatch, {"da_va": 5, "tong": 5, "loi": [], "chan_youtube": ""})
     assert any("Đã vá metadata snapshot cho 5/5" in (x.value or "") for x in at.success)
+
+
+# ---- Mục 17: `cli.py kenh` chưa tải đủ (một phần / đã dừng / có lỗi) phải thoát mã khác 0 ----
+
+def test_cli_kenh_mot_phan_thoat_ma_1(monkeypatch, capsys):
+    import pytest
+
+    with pytest.raises(SystemExit) as e:
+        _chay_kenh(monkeypatch, {"trang_thai": "MOT_PHAN", "bo_qua": 3, "moi": 2, "so_loi": 1, "loi": ["x: lỗi"]})
+    assert e.value.code == 1
+    assert "XONG MỘT PHẦN" in capsys.readouterr().out
+
+
+def test_cli_kenh_day_du_thoat_ma_0(monkeypatch):
+    _chay_kenh(monkeypatch, {"trang_thai": "DAY_DU", "bo_qua": 3, "moi": 2, "loi": []})   # không ném SystemExit

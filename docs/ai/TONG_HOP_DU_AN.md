@@ -147,8 +147,8 @@ k/N) · Chưa kết luận · Đã dừng. Giới hạn: chưa ghi lịch sử, 
 `youtube-doctor` · `dich` (liệt kê hồ sơ đích) · `gui` (chạy người gửi tới khi hết việc).
 
 ### 2.11 Công cụ kiểm riêng
-`kiem_metadata_kho.py`, `kiem_ngay_dang.py`, `kiem_thoi_luong.py`, `lich_su.py --kiem/--khoi-phuc`, `kiem_header.py`,
-`kiem_ngang.py`, `health_check.py`, `launcher.py doctor|update`.
+`kiem_metadata_kho.py`, `kiem_ngay_dang.py`, `kiem_thoi_luong.py`, `lich_su.py --kiem/--khoi-phuc`,
+`health_check.py`, `launcher.py doctor|update`.
 
 ### 2.12 Giới hạn đã biết
 - Chỉ dựa vào âm thanh: video bị thay/đè toàn bộ tiếng thì không tìm được; bù tốc độ không phủ đổi tốc độ > ±6 %.
@@ -219,7 +219,7 @@ app.py (Streamlit)    cli.py (dòng lệnh)        ← lớp giao diện
 | Truy cập YouTube (6) | `ytdlp_chung.py`, `truy_cap_youtube.py`, `youtube_doctor.py`, `giam_sat_tai.py`, `channel.py`, `tien_do_dong_bo.py` |
 | Kho / metadata (7) | `clip_metadata.py`, `publication_date.py`, `kiem_metadata_kho.py`, `kiem_ngay_dang.py`, `kiem_thoi_luong.py`, `danh_sach_video.py`, `don_dep.py` |
 | Báo cáo (3) | `bao_cao_v2.py`, `bang_ngang.py`, `dossier.py` |
-| Google Sheets / outbox (6) | `outbox.py`, `sheet_destinations.py`, `sheets.py`, `kiem_sheet.py`, `kiem_header.py`, `kiem_ngang.py` |
+| Google Sheets / outbox (4) | `outbox.py`, `sheet_destinations.py`, `sheets.py`, `kiem_sheet.py` |
 | Lịch sử / lưu trữ / khoá (5) | `lich_su.py`, `luu_tru.py`, `khoa.py`, `cau_hinh.py`, `nhat_ky.py` |
 | Watch / CLI (4) | `cli.py`, `watch.py`, `chia_watchlist.py`, `thiet_lap_may_phu.py` |
 | Runtime / cập nhật / phát hành (11) | `runtime_paths.py`, `launcher.py`, `bootstrap.py`, `managed_update.py`, `maintenance_gate.py`, `health_check.py`, `release_tool.py`, `uy_quyen_khoa.py`, `cap_nhat.py`, `dong_goi.py`, `dong_goi_may_chay.py` |

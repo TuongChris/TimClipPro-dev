@@ -1483,7 +1483,8 @@ if not job["running"] and (job["results"] or job["error"]):
             st.error("Có nguồn bị lỗi: " + "; ".join(f"{thoat_markdown(x.source_name)} ({thoat_markdown(x.note)})"
                                                       for x in loi))
         bang_ket_qua(res)
-        hien_tinh_chinh(res)
+        # Báo cáo V2 lỗi không được xuất theo bất kỳ đường nào — kể cả CSV tinh chỉnh (audit 16/11).
+        hien_tinh_chinh(bao_cao_v2.tach_loi_bao_cao(res)[0])
     if st.button("🧹 Xóa kết quả, làm việc khác"):
         job.update({"results": [], "error": "", "kind": ""})
         st.rerun()

@@ -82,8 +82,8 @@ def test_cau_hinh_hong_phuc_hoi_tu_bak_phai_co_canh_bao_khoi_dong(tmp_path, monk
     monkeypatch.delenv("TIMCLIP_RUNTIME_MODE", raising=False)
     data_dir = tmp_path / "data"
     data_dir.mkdir()
-    cau_hinh.ghi_cau_hinh(str(data_dir), {"thu_muc_quet_gan_nhat": "lan_1"})
-    cau_hinh.ghi_cau_hinh(str(data_dir), {"thu_muc_quet_gan_nhat": "lan_2"})
+    cau_hinh.gop_va_ghi(str(data_dir), {"thu_muc_quet_gan_nhat": "lan_1"}, {})
+    cau_hinh.gop_va_ghi(str(data_dir), {"thu_muc_quet_gan_nhat": "lan_2"}, {})
     (data_dir / "cau_hinh.json").write_bytes(b"{rac")
 
     e = _eng(tmp_path)

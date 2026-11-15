@@ -111,7 +111,6 @@ def test_man_hinh_tien_do_co_so_lieu_that_khi_job_dang_chay(
     eng._doc_khos = lambda: {"dang_dung": "KhoTest", "danh_sach": [
         {"ten": "KhoTest", "db": Path(eng.db_file).name, "thu_muc": str(kho_gia), "shifts": 4}
     ]}
-    eng._ghi_khos = lambda dang_ky: None
     eng.update_kho = lambda ten, thu_muc: None
 
     controller = at.session_state.fingerprint_controller

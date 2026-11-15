@@ -43,11 +43,6 @@ def doc_cau_hinh(data_dir: str, khi_phuc_hoi: Callable[[str], None] | None = Non
     return du_lieu
 
 
-def ghi_cau_hinh(data_dir: str, du_lieu: dict) -> None:
-    """Ghi cấu hình nguyên tử bằng lớp lưu trữ dùng chung."""
-    ghi_json_an_toan(_duong_dan(data_dir), du_lieu)
-
-
 def gop_va_ghi(data_dir: str, du_lieu: dict, moc: dict) -> dict:
     """Ghi ``du_lieu``, nhưng khoá phiên này KHÔNG đổi so với ``moc`` thì giữ bản trên đĩa: nhiều tab cùng lưu một file,
     tab mở trước không được xoá thay đổi của tab khác. Khoá ngoài ``du_lieu`` vẫn bị bỏ như một lần ghi đủ. Trả bản đã ghi."""

@@ -227,9 +227,9 @@ def tao_moi_truong_launcher(goc: str, python_goc: str, kit_dir: str, *, chay=Non
         if "--hash=sha256:" not in f.read():
             raise LoiBootstrap("launcher-lock.txt chưa có băm gói — không cài gói chưa xác minh.")
     env = os.path.join(goc, "launcher", "env")
-    chay([python_goc, "-P", "-m", "venv", "--clear", env], check=True, timeout=600)
+    chay([python_goc, "-P", "-E", "-m", "venv", "--clear", env], check=True, timeout=600)
     py = os.path.join(env, "Scripts", "python.exe")
-    chay([py, "-P", "-m", "pip", "install", "--no-input", "--disable-pip-version-check", "--require-hashes",
+    chay([py, "-P", "-E", "-m", "pip", "install", "--no-input", "--disable-pip-version-check", "--require-hashes",
           "--only-binary=:all:", "-r", lock], check=True, timeout=1800)
     return py
 

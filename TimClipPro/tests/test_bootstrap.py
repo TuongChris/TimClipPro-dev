@@ -106,7 +106,8 @@ def test_moi_truong_launcher_chi_cai_lock_co_bam(tmp_path):
     py = bs.tao_moi_truong_launcher(str(tmp_path / "goc"), sys.executable, str(kit),
                                     chay=lambda args, **k: goi.append(args))
     assert py.endswith(os.path.join("launcher", "env", "Scripts", "python.exe"))
-    assert goi[0][1:5] == ["-P", "-m", "venv", "--clear"] and "--require-hashes" in goi[1]
+    assert goi[0][1:6] == ["-P", "-E", "-m", "venv", "--clear"] and "--require-hashes" in goi[1]
+    assert goi[1][1:4] == ["-P", "-E", "-m"]
 
 
 def test_launcher_da_chep_chay_doc_lap_chi_voi_file_cua_no(bo):

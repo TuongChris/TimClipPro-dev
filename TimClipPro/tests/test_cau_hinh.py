@@ -7,7 +7,7 @@ from cau_hinh import (
     TEN_FILE,
     ap_vao_config,
     doc_cau_hinh,
-    ghi_cau_hinh,
+    gop_va_ghi,
     lay_tu_config,
 )
 from engine import Config, Engine
@@ -144,7 +144,7 @@ def test_cau_hinh_khong_hop_le_chi_tra_khoa_xung_dot_ve_mac_dinh(tmp_path):
     du_lieu["top_n"] = 3
     du_lieu["ytdlp_cookiefile"] = "C:/khong_ton_tai/cookies_gia.txt"
     du_lieu["kho_dir"] = "C:/khong_ton_tai/kho_gia"
-    ghi_cau_hinh(str(tmp_path / "data"), du_lieu)
+    gop_va_ghi(str(tmp_path / "data"), du_lieu, {})
 
     engine = Engine(root=str(tmp_path))
 

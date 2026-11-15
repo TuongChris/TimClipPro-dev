@@ -167,7 +167,9 @@ def _tao_mac_dinh(path, co_hinh):
 @can_ffmpeg
 @pytest.mark.parametrize(
     "duoi, co_hinh, ma",
-    [(".mp3", False, "mp3"), (".flac", False, "flac"), (".wav", False, "pcm_s16le"), (".mpg", True, "mp2")],
+    [(".mp3", False, "mp3"), (".flac", False, "flac"), (".wav", False, "pcm_s16le"), (".mpg", True, "mp2"),
+     # Audit 16/11: .ogg mặc định = Vorbis 44,1 kHz; nén lại sang Opus mà ép giữ 44100 Hz thì libopus từ chối (chỉ 8/12/16/24/48 kHz).
+     (".ogg", False, "opus")],
 )
 def test_vo_khong_nhan_aac_van_chinh_duoc_ra_file_moi(tmp_path, duoi, co_hinh, ma):
     """Audit 11/11 (2): vỏ MP3/FLAC/MPG không chứa được AAC — FFmpeg «Nothing was written»; WAV chứa AAC thì nhiều phần

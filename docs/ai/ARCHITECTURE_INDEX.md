@@ -85,9 +85,7 @@ chạm file) — không phải audit lại mã. Thêm/xoá/đổi vai trò modul
 | `fingerprint_progress.py` | Progress contract, aggregation, logging and UI-safe job controller. | 593 | `448b467 2026-08-07` |
 | `giam_sat_tai.py` | Giám sát MỘT lượt tải audio của yt-dlp bằng một luồng phụ nhỏ (chu kỳ 1 giây). | 253 | nhánh `fix/pc2/live-progress-smart-marathon` (PC2, 13/10) |
 | `khoa.py` | Khóa liên tiến trình dựa trên cơ chế khóa file của hệ điều hành. | 124 | `448b467 2026-08-07` |
-| `kiem_header.py` | kiem_header.py — Đối chiếu HEADER_NGANG trong code với tiêu đề THẬT trong Google Sheet. | 67 | `448b467 2026-08-07` |
 | `kiem_metadata_kho.py` | Audit metadata kho clip theo chế độ chỉ đọc; chỉ ghi snapshot khi có --apply. | 360 | `8f0558f 2026-10-02` |
-| `kiem_ngang.py` | (không có docstring) | 77 | `448b467 2026-08-07` |
 | `kiem_ngay_dang.py` | Audit và sửa ngày đăng trong clips_meta.json của một kho clip gốc. | 372 | `2cdd1d3 2026-10-03` |
 | `kiem_thoi_luong.py` | Kiểm tra và bổ sung độ dài media thật cho metadata clip gốc. | 193 | `8f0558f 2026-10-02` |
 | `lich_su.py` | Lược đồ ``lichsu.db`` có phiên bản — lịch sử quét gắn với KHO (audit TCP-07). | 424 | `c981450 2026-10-08` |

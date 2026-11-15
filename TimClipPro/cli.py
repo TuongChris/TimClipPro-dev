@@ -499,6 +499,9 @@ def _main():
             print(f"Đã bổ sung metadata tại chỗ cho {r['da_doi_soat']} file có sẵn trên đĩa.")
         _thoat_neu_youtube_chan(r.get("chan_youtube", ""))
         print("Tiếp theo: python cli.py themclip \"%s\"" % a.kho)
+        # Như các lệnh khác: chưa tải đủ (một phần / đã dừng / có video lỗi) → mã 1, file .bat/lịch chạy biết mà làm lại.
+        if r.get("trang_thai") in ("MOT_PHAN", "DA_HUY") or r.get("da_huy") or r.get("so_loi"):
+            raise SystemExit(1)
         return
 
     if a.lenh in ("taodb", "themclip"):
