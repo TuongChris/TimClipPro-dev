@@ -35,10 +35,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 3. Audit toàn repo 06/11: số 1–20 xong (17: giữ `.gs` và `session.log` vì có lý do; Docker đã xoá 08/11 theo người dùng —
    `release_tool.py` vẫn loại tên Dockerfile để build lại bản cũ trùng byte).
    Còn 8 mục nhỏ: báo cáo trong phiên 06/11 (lịch sử chat). PC1 phải cài lại hook. Tạm dừng + lưu giữa chừng khi dựng kho CHƯA làm.
-   Audit 16/11 (`/ponytail-audit`, 20 mục; 1–3 đã sửa): còn 4 vá ngày `--repair-network` không lưu `upload_date_raw`, 5 tên
-   chữ Nhật/Hàn/emoji = «<mã>.mp4» bị tải `_2`, 6 link `/user/` `/c/`, 7 lưu kho không thử lại, 8 hook `installation_id` 32 hex,
-   9 `cau_hinh.json` vượt khung khoá app, 10 vá metadata báo xanh khi bị chặn, 11 ETA lượt bù, 12 tinh chỉnh không `_td`, 13 hàng
-   đợi tiến độ thừa; 14–20 nhỏ (pip `-E`, Vorbis 44,1 kHz→Opus, CSV tinh chỉnh khi V2 lỗi, `kenh` mã thoát, kiem_ngang, mã chết).
+   Audit 16/11 (`/ponytail-audit`, 20 mục + 6 mã thừa): ĐÃ SỬA HẾT, gộp `3101580`, DEV 16/11 03:06 (sao lưu `data_20261116_030552`). PC1 cài lại hook (installation_id 32 hex).
 4. Người dùng: nghiệm thu DEV đợt 2 theo `C:\Dev\pc2_test_runs\2026-10-26_audit_p3\NGHIEM_THU_DEV_DOT2.md` (~15 phút).
 5. Người dùng quyết: P-6 (3 phương án, `…\2026-10-26_audit_p3\P6_PHUONG_AN.md`); P-7 (`P7_THIET_KE.md` cùng thư mục, công
    cụ `C:\Dev\pc2_test_tools\p7_lich_su_bong`, CHƯA chạy dữ liệu thật — chỉ chạy CHỈ ĐỌC khi duyệt); B-13, F-16; 3 ghép
@@ -55,10 +52,13 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 10. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
-### 2026-11-16 — audit toàn repo, sửa mục 1–3 (nhánh fix/pc2/audit-1611)
-- 1 `cli.py kenh` đổ `KeyError 'gio'` khi kênh có video > 2 giờ; 2 kho đọc lỗi lúc `_merge` → 0 kết quả lưu «ok» (âm tính,
-  Watch bỏ qua mãi) + cảnh báo lặp từng clip → nay `error` «hãy quét lại»; 3 hồ sơ khiếu nại dòng đã tinh chỉnh ghi «Độ dài
-  đoạn» = `matched_s` (585 s cạnh 10:59) → `DoanV2.da_tinh_chinh`. Nhanh 3925 = 3921/4/0, chậm 25/25, đột biến 8/8.
+### 2026-11-16 — audit toàn repo, sửa đủ 20 mục + 6 mã thừa (nhánh fix/pc2/audit-1611)
+- Lớn: `cli kenh` KeyError «gio» + mã thoát; kho lỗi lúc `_merge` → «error» (không thành âm tính); hồ sơ dòng tinh
+  chỉnh «Độ dài đoạn» = cuối − đầu; lưu kho thử lại ~11 s + nhớ mọi file cũ (`db_cu_khac`); hook installation_id 32 hex
+  (đã cài lại trên PC2); `cau_hinh.json` ngoài khung không khoá app; ETA lượt bù; tên file chỉ có mã không tải trùng.
+- Nhanh 3945 = 3941/4/0, chậm 25/25, đột biến 8/8 + 18/18. Bằng chứng `C:\Dev\pc2_test_runs\2026-11-16_audit_1_3`.
+- Review độc lập: 3 thật đã sửa (xác minh khi kho lỗi, mã thoát vì video hạn chế, `db_cu_khac` sửa tay). Còn: lượt quét
+  lưu 15/11 22:22–16/11 03:06 có dòng tinh chỉnh → hồ sơ vẫn độ dài cũ, quét lại; hook bỏ sót `installation_id_v3/_v4` (có từ trước).
 ### 2026-11-15 — «Đoạn vi phạm» theo mốc tinh chỉnh (D-50, nhánh feature/pc2/bao-cao-moc-tinh-chinh)
 - Người dùng kiểm tay (job DEV 838): lượt quét hụt 36 s / 8 s cuối hai video gốc (phân vị 95 %); tinh chỉnh (CHỈ ĐỌC audio đã
   tải) ra 0:00–10:59, 1:46:12–1:57:28 = trọn gốc. Người dùng chọn «Dùng mốc tinh chỉnh» → `bao_cao_v2._moc_tinh_chinh`.
