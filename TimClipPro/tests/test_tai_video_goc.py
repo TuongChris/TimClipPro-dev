@@ -923,9 +923,9 @@ def test_ma_da_co_anh_tach_rieng_video(tmp_path):
     (tmp_path / "C [abcdefghij3].webp").write_bytes(b"w")  # ảnh gốc chưa đổi sang jpg: chưa tính
     (tmp_path / "abcdefghij4.JPG").write_bytes(b"a")  # tên ảnh kiểu mới (12/11) = mã
     (tmp_path / "v123456.jpg").write_bytes(b"a")  # VOD Twitch
-    (tmp_path / "abcdefghij5.mp4").write_bytes(b"v")  # không phải ảnh
+    (tmp_path / "abcdefghij5.mp4").write_bytes(b"v")  # không phải ảnh; là VIDEO tên = mã (tiêu đề không có chữ Latin)
     assert tv.ma_da_co(str(tmp_path), anh=True) == {"abcdefghij1", "abcdefghij4", "v123456"}
-    assert tv.ma_da_co(str(tmp_path)) == {"abcdefghij2"}
+    assert tv.ma_da_co(str(tmp_path)) == {"abcdefghij2", "abcdefghij5"}
 
 
 class _YdlAnh:

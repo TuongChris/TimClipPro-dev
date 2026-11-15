@@ -274,13 +274,15 @@ def test_build_cong_bo_sang_file_moi_phien_khac_van_quet_kho_cu(tmp_path, monkey
     da_chan = []
 
     def replace_gia(src, dst, *a, **k):
-        # Windows: một lượt quét ở phiên kia đang mở file kho cũ → os.replace bị từ chối.
-        if not da_chan and os.path.normcase(os.path.abspath(dst)) == os.path.normcase(str(db_cu)):
+        # Windows: một lượt quét ở phiên kia đang mở file kho cũ SUỐT lượt dựng → os.replace bị từ chối cả khi thử lại.
+        if os.path.normcase(os.path.abspath(dst)) == os.path.normcase(str(db_cu)):
             da_chan.append(dst)
             raise PermissionError(32, "The process cannot access the file")
         return that(src, dst, *a, **k)
 
     monkeypatch.setattr(os, "replace", replace_gia)
+    import luu_tru
+    monkeypatch.setattr(luu_tru.time, "sleep", lambda s: None)
     e_b._run_stream = runner_gia(e_b, {"a.opus": 9})
     try:
         e_b.build_database(str(nguon), mode="new")

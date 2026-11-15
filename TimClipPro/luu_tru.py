@@ -181,10 +181,10 @@ def _don_file_tam_mo_coi(duong_dan: str) -> None:
             os.remove(cu)
 
 
-def _thay_the(src: str, dst: str, so_lan: int = 10) -> None:
-    """``os.replace`` có thử lại: trên Windows reader khác đang mở file đích làm
-    replace hỏng tạm thời (WinError 5/32). Hết lượt thì ném lỗi gốc."""
-    cho = 0.05
+def _thay_the(src: str, dst: str, so_lan: int = 10, cho_dau: float = 0.05, cho_toi_da: float = 0.5) -> None:
+    """``os.replace`` có thử lại: trên Windows reader khác, diệt virus, chỉ mục, OneDrive đang mở file đích làm
+    replace hỏng tạm thời (WinError 5/32). Chờ tăng gấp đôi từ ``cho_dau`` tới ``cho_toi_da``. Hết lượt thì ném lỗi gốc."""
+    cho = cho_dau
     for lan in range(so_lan):
         try:
             os.replace(src, dst)
@@ -193,7 +193,7 @@ def _thay_the(src: str, dst: str, so_lan: int = 10) -> None:
             if lan == so_lan - 1:
                 raise
             time.sleep(cho)
-            cho = min(0.5, cho * 2)
+            cho = min(cho_toi_da, cho * 2)
 
 
 def ghi_json_an_toan(

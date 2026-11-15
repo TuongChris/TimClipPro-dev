@@ -21,6 +21,10 @@ _DS = {"_type": "playlist", "id": "UCkenh", "entries": [
     (KENH + "/", KENH + "/videos"),
     (KENH + "/videos", KENH + "/videos"),
     ("https://www.youtube.com/@kenh", "https://www.youtube.com/@kenh/videos"),
+    # Audit 16/11: link kênh kiểu cũ `/user/…`, `/c/…` cũng là gốc kênh (trước đây lỗi «trả về các TAB»).
+    ("https://www.youtube.com/user/KenhCu", "https://www.youtube.com/user/KenhCu/videos"),
+    ("https://www.youtube.com/c/KenhCu/", "https://www.youtube.com/c/KenhCu/videos"),
+    ("https://www.youtube.com/user/KenhCu/shorts", "https://www.youtube.com/user/KenhCu/shorts"),
     ("https://www.youtube.com/playlist?list=PLabc", "https://www.youtube.com/playlist?list=PLabc"),
 ])
 def test_link_kenh_duoc_tro_toi_tab_videos(monkeypatch, vao, ra):

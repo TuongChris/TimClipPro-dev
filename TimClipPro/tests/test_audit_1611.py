@@ -140,3 +140,35 @@ def test_ho_so_dong_tinh_chinh_do_dai_theo_khoang_hien_thi():
         # dòng tinh chỉnh: độ dài = khoảng đang ghi (659,8 s), không phải 584,8 s đo vân tay; dòng chưa tinh chỉnh giữ cũ
         assert [m.do_dai_giay for m in hs.muc] == [660, 631]
         assert hs.tong_giay_vi_pham == 660 + 631
+
+
+# ---- Mục 4: --repair-network phải lưu ngày NGUYÊN BẢN cho cột ngày của báo cáo V2 ----
+
+def test_repair_network_luu_upload_date_raw(tmp_path):
+    import json
+
+    import kiem_ngay_dang
+
+    ten = "00000000 - Clip cu [T_mKh8IUpWw].opus"
+    (tmp_path / ten).write_bytes(b"opus")
+    (tmp_path / "clips_meta.json").write_text(json.dumps({ten: {
+        "id": "T_mKh8IUpWw", "title": "Clip cu", "upload_date": "20250620", "duration": 955.0}}), encoding="utf-8")
+
+    def fetcher(video_id):
+        return {"id": video_id, "upload_date": "20250620", "timestamp": 1750445139}   # VN 21/06
+
+    kiem_ngay_dang.repair(str(tmp_path), "Asia/Ho_Chi_Minh", dung_mang=True, apply=True, gioi_han=0, fetcher=fetcher)
+    meta = json.loads((tmp_path / "clips_meta.json").read_text(encoding="utf-8"))[ten]
+    assert meta["publication_date"] == "20250621"
+    assert meta["upload_date_raw"] == "20250620", "báo cáo V2 chỉ đọc ngày nguyên bản của yt-dlp"
+
+
+# ---- Mục 5: tiêu đề toàn chữ Nhật/Hàn/emoji → tên file chỉ còn «<mã>.đuôi»; vẫn phải nhận là «đã có» ----
+
+def test_ten_file_chi_co_ma_van_la_da_co(tmp_path):
+    from tai_video_goc import ma_da_co
+
+    for ten in ("dQw4w9WgXcQ.mp4", "AbCdEfGhIjK.m4a", "v123456789.mkv", "Tieu_de_ZZZZZZZZZZZ.mp4"):
+        (tmp_path / ten).write_bytes(b"x")
+    assert ma_da_co(str(tmp_path)) == {"dQw4w9WgXcQ", "v123456789", "ZZZZZZZZZZZ"}
+    assert ma_da_co(str(tmp_path), chi_tieng=True) == {"AbCdEfGhIjK"}

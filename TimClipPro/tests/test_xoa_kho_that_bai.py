@@ -225,14 +225,15 @@ def test_giao_dien_xoa_kho_xong_o_xac_nhan_khong_con_tick_cho_kho_khac(tmp_path,
 # kho phải gỡ CẢ file cũ đó: không ai tham chiếu nó nữa, cỡ cả kho (66–315 MB) và nằm lại mãi.
 
 
-def _kho_da_cong_bo_du_phong(e, tmp_path, monkeypatch, ten="A"):
-    """Kho «ten» đi qua đúng nhánh PermissionError của ``build_database`` (audfprint giả)."""
+def _build_khi_file_kho_bi_khoa(e, tmp_path, monkeypatch, bi_khoa, ten_thu_muc):
+    """``build_database`` (audfprint giả) khi file kho ``bi_khoa`` bị giữ SUỐT lượt — qua hết vòng thử lại
+    (``channel._dat_vao_kho``, chờ thật bỏ qua) tới nhánh công bố sang file mới. Trả các lần bị từ chối."""
+    import luu_tru
     from kho_gia import ghi_kho_tu_lenh
 
-    db_cu = _kho_co_van_tay(e, tmp_path, ten)
-    clips = tmp_path / f"clips_{ten}"
+    clips = tmp_path / ten_thu_muc
     clips.mkdir()
-    (clips / "moi.wav").write_bytes(b"fixture")
+    (clips / f"{ten_thu_muc}.wav").write_bytes(b"fixture")
     monkeypatch.setattr(e, "require", lambda **kwargs: None)
     monkeypatch.setattr(e, "_run_stream",
                         lambda command, on_line=None, **kw: (ghi_kho_tu_lenh(command) and 0, []))
@@ -240,14 +241,23 @@ def _kho_da_cong_bo_du_phong(e, tmp_path, monkeypatch, ten="A"):
     da_khoa = []
 
     def replace_bi_khoa(src, dst, *a, **kw):
-        if not da_khoa and os.path.normcase(os.path.abspath(dst)) == os.path.normcase(str(db_cu)):
+        if os.path.normcase(os.path.abspath(dst)) == os.path.normcase(str(bi_khoa)):
             da_khoa.append(dst)
             raise PermissionError(13, "The process cannot access the file", dst)
         return goc_replace(src, dst, *a, **kw)
 
     monkeypatch.setattr(os, "replace", replace_bi_khoa)
+    monkeypatch.setattr(luu_tru.time, "sleep", lambda s: None)
     e.build_database(str(clips), "new")
     monkeypatch.setattr(os, "replace", goc_replace)
+    return da_khoa
+
+
+def _kho_da_cong_bo_du_phong(e, tmp_path, monkeypatch, ten="A"):
+    """Kho «ten» đi qua đúng nhánh PermissionError của ``build_database`` (audfprint giả)."""
+    db_cu = _kho_co_van_tay(e, tmp_path, ten)
+    da_khoa = _build_khi_file_kho_bi_khoa(e, tmp_path, monkeypatch, db_cu, f"clips_{ten}")
+    assert len(da_khoa) == 10, "phải thử lại đủ lượt trước khi sang file mới"
 
     # Tiền đề: đúng nhánh dự phòng đã chạy — kho trỏ sang file mới, file cũ còn nằm đó.
     kho = next(k for k in e._doc_khos()["danh_sach"] if k["ten"] == ten)
@@ -265,6 +275,19 @@ def test_xoa_kho_go_ca_file_cu_cua_nhanh_cong_bo_du_phong(tmp_path, monkeypatch)
     con_lai = sorted(p.name for p in Path(e.data_dir).glob("*.pklz"))
     assert con_lai == [], f"xoá kho vẫn để lại file vân tay mồ côi: {con_lai}"
     assert e.list_khos() == []
+
+
+def test_du_phong_hai_lan_xoa_kho_go_ca_hai_file_cu(tmp_path, monkeypatch):
+    """Audit 16/11: lần dự phòng thứ hai từng ghi đè ``db_cu`` → file kho gốc mất tên trong sổ, «Xoá kho» bỏ sót."""
+    e = _eng(tmp_path)
+    db_cu, db_moi = _kho_da_cong_bo_du_phong(e, tmp_path, monkeypatch)
+    _build_khi_file_kho_bi_khoa(e, tmp_path, monkeypatch, db_moi, "clips_lan2")
+    kho = next(k for k in e._doc_khos()["danh_sach"] if k["ten"] == "A")
+    assert kho["db_cu"] == db_moi.name and kho["db_cu_khac"] == [db_cu.name]
+    assert len(list(Path(e.data_dir).glob("*.pklz"))) == 3
+
+    e.delete_kho("A", xoa_van_tay=True)
+    assert sorted(p.name for p in Path(e.data_dir).glob("*.pklz")) == []
 
 
 def test_xoa_kho_file_cu_dang_bi_giu_thi_chua_xoa_gi(tmp_path, monkeypatch):

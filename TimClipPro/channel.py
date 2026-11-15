@@ -17,6 +17,7 @@ Lưu ý: file này chỉ lo phần TẢI VỀ. Việc tạo vân tay vẫn do en
 from __future__ import annotations
 
 import contextlib
+import functools
 import json
 import math
 import os
@@ -36,7 +37,7 @@ from clip_metadata import (basename_compatible, extract_youtube_id, filename_fal
                            valid_upload_date)
 from khoa import KhoaTienTrinh
 import ytdlp_chung
-from luu_tru import cap_nhat_json, doc_json_an_toan, ghi_json_an_toan, khoa_json
+from luu_tru import _thay_the, cap_nhat_json, doc_json_an_toan, ghi_json_an_toan, khoa_json
 from process_runner import IM_LANG_FFMPEG_S, TRAN_FFPROBE_S, chay_lenh_media
 from publication_date import resolve_publication_date
 from tien_do_dong_bo import GD_LUU, GD_NEN, GD_TRICH_XUAT, GD_XAC_MINH, SoDongBo
@@ -107,17 +108,9 @@ TEN_KHOA_DONG_BO = ".dong_bo_kenh.lock"
 DO_DAI_DUONG_DAN_TOI_DA = 240
 
 
-def _dat_vao_kho(tam: str, dich: str, so_lan: int = 10) -> None:
-    """``os.replace`` có thử lại: phần mềm diệt virus/chỉ mục/OneDrive hay giữ file vừa
-    ghi một nhịp (WinError 32). Hết lượt thử thì ném lỗi — người gọi tự hoàn nguyên."""
-    for lan in range(so_lan):
-        try:
-            os.replace(tam, dich)
-            return
-        except PermissionError:
-            if lan == so_lan - 1:
-                raise
-            time.sleep(min(2.0, 0.1 * (2 ** lan)))
+# Đặt file vừa nén / kho vân tay vừa dựng vào chỗ: thử lại ~11 s (0,1 → 2 s) khi file đích bị giữ. Hết lượt thì ném
+# lỗi — người gọi tự hoàn nguyên. Một vòng thử lại cho cả dự án (``luu_tru._thay_the``), chỉ khác nhịp chờ.
+_dat_vao_kho = functools.partial(_thay_the, cho_dau=0.1, cho_toi_da=2.0)
 
 
 def _so_duong(x) -> float:
@@ -372,8 +365,8 @@ def lam_sach_ten(s: str, max_len: int = 80) -> str:
     return s[:max_len].rstrip(". ") or "khong_ten"
 
 
-# Gốc kênh CHƯA chỉ tab: đường dẫn kết thúc ở `@tên` hoặc `channel/UC…` (cho phép `/` cuối).
-_RE_GOC_KENH = re.compile(r"/(?:@[^/]+|channel/[^/]+)/?$")
+# Gốc kênh CHƯA chỉ tab: đường dẫn kết thúc ở `@tên`, `channel/UC…` hoặc kiểu cũ `user/…`, `c/…` (cho phép `/` cuối).
+_RE_GOC_KENH = re.compile(r"/(?:@[^/]+|(?:channel|c|user)/[^/]+)/?$")
 
 
 def _tro_toi_tab_videos(url: str) -> str:

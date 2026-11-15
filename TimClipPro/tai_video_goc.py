@@ -90,6 +90,10 @@ _RE_MA_CUOI_TEN = re.compile(r"[\[_]([A-Za-z0-9_-]{11}|v\d+)\]?\.(?!m4a$)[^.]+$"
 _RE_TEN_LA_MA = re.compile(r"^([A-Za-z0-9_-]{11}|v\d+)\.jpg$", re.IGNORECASE)
 # File chỉ-tiếng mang thêm «.audio» trước đuôi: «đã có» của video và của chỉ-tiếng không lẫn nhau.
 _RE_MA_CUOI_TEN_TIENG = re.compile(r"[\[_]([A-Za-z0-9_-]{11}|v\d+)(?:\]\.audio\.[^.]+|\.m4a)$", re.IGNORECASE)
+# Tiêu đề không có chữ Latin (Nhật, Hàn, emoji) → tên chỉ còn «<mã>.đuôi». Chỉ thử khi mẫu «…_mã» không khớp: gộp vào một
+# biểu thức thì «Moi_v123456.mp4» khớp từ đầu thành mã «Moi_v123456».
+_RE_TEN_CHI_MA = re.compile(r"^([A-Za-z0-9_-]{11}|v\d+)\.(?!m4a$)[^.]+$", re.IGNORECASE)
+_RE_TEN_CHI_MA_TIENG = re.compile(r"^([A-Za-z0-9_-]{11}|v\d+)\.m4a$", re.IGNORECASE)
 _RE_MA_TWITCH = re.compile(r"^/(?:videos|[^/]+/v(?:ideo)?)/(\d+)/?$")
 # Dưới mức trống này thì không tải video kế: một lượt tải cả kênh qua đêm không được làm đầy ổ.
 TRONG_TOI_THIEU_BYTE = 5 * 10**9
@@ -143,6 +147,7 @@ def ma_da_co(thu_muc: str, chi_tieng: bool = False, anh: bool = False) -> set:
     «[mã].audio.đuôi»), ``anh`` = thumbnail
     «mã.jpg» (hoặc tên cũ «[mã].jpg»). Các loại tách riêng: có video không có nghĩa là đã có thumbnail, và ngược lại."""
     mau = _RE_MA_CUOI_TEN_TIENG if chi_tieng else _RE_MA_CUOI_TEN
+    chi_ma = _RE_TEN_CHI_MA_TIENG if chi_tieng else _RE_TEN_CHI_MA
     try:
         ten = os.listdir(thu_muc)
     except OSError:
@@ -151,7 +156,7 @@ def ma_da_co(thu_muc: str, chi_tieng: bool = False, anh: bool = False) -> set:
         m.group(1)
         for t in ten
         if (t.lower().endswith(".jpg") if anh else not t.lower().endswith(_DUOI_ANH))
-        and (m := (anh and _RE_TEN_LA_MA.match(t)) or mau.search(t))
+        and (m := (_RE_TEN_LA_MA.match(t) or mau.search(t)) if anh else (mau.search(t) or chi_ma.match(t)))
     }
 
 

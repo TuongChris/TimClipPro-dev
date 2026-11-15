@@ -30,7 +30,7 @@ import time
 from dataclasses import dataclass, field
 
 from channel import ChannelSync
-from clip_metadata import extract_youtube_id, filename_fallback_parts
+from clip_metadata import extract_youtube_id, filename_fallback_parts, valid_upload_date
 from luu_tru import LoiDuLieu, cap_nhat_json
 from truy_cap_youtube import PhienYouTube, che_bi_mat
 from publication_date import (
@@ -267,6 +267,9 @@ def repair(
         for k in ("timestamp", "release_timestamp"):
             if isinstance(nguon_du_lieu.get(k), (int, float)) and nguon_du_lieu.get(k):
                 truong[k] = nguon_du_lieu[k]
+        # Ngày NGUYÊN BẢN của yt-dlp (cột ngày báo cáo V2): chỉ khi vừa hỏi YouTube — ``upload_date`` đã lưu là ngày đã quy đổi.
+        if tu_youtube and valid_upload_date(str(nguon_du_lieu.get("upload_date") or "")):
+            truong["upload_date_raw"] = valid_upload_date(str(nguon_du_lieu["upload_date"]))
         entry.update(truong)
         cap_nhat[ten] = truong
 

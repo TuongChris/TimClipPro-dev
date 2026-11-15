@@ -1643,9 +1643,10 @@ class Engine:
                 # của kho khác (sổ sửa tay) thì không bao giờ đụng.
                 dang_dung_o_kho_khac = {k.get("db") for k in d["danh_sach"] if k is not kho}
                 cac_file = [kho["db"]]
-                if (kho.get("db_cu") and kho["db_cu"] != kho["db"]
-                        and kho["db_cu"] not in dang_dung_o_kho_khac):
-                    cac_file.insert(0, kho["db_cu"])
+                for cu in [kho.get("db_cu"), *(kho.get("db_cu_khac") or [])]:
+                    if (isinstance(cu, str) and cu and cu != kho["db"] and cu not in dang_dung_o_kho_khac
+                            and cu not in cac_file):
+                        cac_file.insert(0, cu)
                 for ten_file in cac_file:
                     db = self._duong_dan_db_kho(ten_file)
                     # `_xoa_an_toan` không ném lỗi, chỉ trả False khi file vẫn bị giữ sau các
@@ -3673,9 +3674,9 @@ class Engine:
                 self._day_kho_tam_xuong_dia(db_tam)
                 self._cache_khoa = None
                 try:
-                    os.replace(db_tam, self.db_file)
+                    channel._dat_vao_kho(db_tam, self.db_file)   # thử lại ~11 s trước khi phải sang file mới
                 except PermissionError:
-                    # File cũ đang bị khoá (Windows/diệt virus): công bố sang file MỚI,
+                    # File cũ VẪN bị khoá (lượt quét ở phiên/CLI khác, diệt virus): công bố sang file MỚI,
                     # trỏ đúng kho đã ghim sang đó. Không bao giờ xoá file cũ trước.
                     ten_moi = (
                         f"kho_{self._slug(self.kho_dang_dung or 'kho')}_"
@@ -3689,6 +3690,12 @@ class Engine:
                         def doi_file(d: dict) -> None:
                             for kho in d["danh_sach"]:
                                 if kho["ten"] == ten_kho:
+                                    # Lần dự phòng thứ hai: file cũ của lần trước vẫn có thể đang được một lượt
+                                    # quét đọc nên không xoá ở đây — nhớ tên để «Xoá kho» gỡ cả nó (khoá riêng:
+                                    # bản cũ đọc ``db_cu`` là một chuỗi).
+                                    cu = kho.get("db_cu")
+                                    if cu and cu != kho["db"] and cu not in kho.setdefault("db_cu_khac", []):
+                                        kho["db_cu_khac"].append(cu)
                                     kho["db_cu"] = kho["db"]
                                     kho["db"] = ten_moi
 
