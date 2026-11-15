@@ -180,6 +180,20 @@ def test_khong_co_file_clip_trong_kho_thi_khong_tinh_chinh(tmp_path, monkeypatch
     assert goi == [] and "clip gốc" in kq.tinh_chinh[0]["ly_do"]
 
 
+def test_tinh_chinh_ghi_tien_do_vao_so_cua_lo(tmp_path, monkeypatch):
+    """Audit 16/11: bước tinh chỉnh (tới 3–4,5 phút ở video dài) không ghi sổ tiến độ → sau 180 s giao diện báo
+    «Không có tiến triển … cần kiểm tra» dù vẫn chạy bình thường."""
+    import tien_do_quet
+
+    goi: list = []
+    monkeypatch.setitem(sys.modules, "tinh_chinh_moc", _module_gia(goi))
+    e = _eng(tmp_path)
+    e._so_tien_do = tien_do_quet.SoTienDo()
+    e._so_tien_do.bat_dau_video(1, 1, "u")
+    e._tinh_chinh_ket_qua(_kq_mot_dong(tmp_path), "video.wav", None, time.monotonic())
+    assert e._so_tien_do.anh().khuc_hien_tai == "Tinh chỉnh mốc từng giây 1/1"
+
+
 def test_tham_so_goi_module_dung_hop_dong(tmp_path, monkeypatch):
     goi: list = []
     monkeypatch.setitem(sys.modules, "tinh_chinh_moc", _module_gia(goi))

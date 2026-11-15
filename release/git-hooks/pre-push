@@ -53,7 +53,7 @@ quet_noi_dung() {
       # nhập nhiều tài khoản Google, sheets.googleapis.com/v4/spreadsheets/…).
       if (d ~ /spreadsheets\/(u\/[0-9]+\/)?(d\/)?[0-9a-z_-]{20,}/ ||
           d ~ /(^|[^0-9a-z_+\/-])1[0-9a-z_-]{43}([^0-9a-z_+\/=-]|$)/) bao("link / ID bảng tính 44 ký tự")
-      if (d ~ /installation_id["\047]?[ \t]*[:=][ \t]*["\047]?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/)
+      if (d ~ /installation_id["\047]?[ \t]*[:=][ \t]*["\047]?[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}/)
         bao("định danh cài đặt (installation_id)")
       if (d ~ /^#[ \t]*(netscape[ \t]+)?http[ \t]+cookie[ \t]+file/ ||
           d ~ /^(#httponly_)?[^\t#]+\t(true|false)\t[^\t]*\t(true|false)\t[0-9]+\t[^\t]+\t/) bao("cookie Netscape")

@@ -2,7 +2,7 @@
 """Progress contract, aggregation, logging and UI-safe job controller.
 
 Module này không phụ thuộc Streamlit. Worker chỉ phát ``FingerprintProgress``;
-main thread của UI đọc snapshot/queue và tự quyết định cách hiển thị.
+main thread của UI đọc snapshot/nhật ký gần đây và tự quyết định cách hiển thị.
 """
 
 from __future__ import annotations
@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 import contextlib
 import os
-import queue
 import re
 import sys
 import threading
@@ -110,7 +109,6 @@ class FingerprintProgress:
     active_subprocess_pid: int | None
     last_db_write_at: float | None
     worker_alive: bool = True
-    queue_size: int = 0
     error_category: str = ""
 
     @property
@@ -478,7 +476,8 @@ _SO_DUNG_KHO = SoViecDai()
 
 
 class FingerprintJobController:
-    """Một worker + queue bounded; không gọi API Streamlit từ worker thread."""
+    """Một worker; không gọi API Streamlit từ worker thread. Giao diện đọc ``snapshot()``/``recent()`` (audit 16/11:
+    bỏ hàng đợi sự kiện không ai đọc — ``put`` sau ``get`` lúc đầy còn có thể ném ``queue.Full`` khi bấm Dừng, H#4)."""
 
     @staticmethod
     def dang_chay_cua(engine) -> "FingerprintJobController | None":
@@ -499,9 +498,8 @@ class FingerprintJobController:
         """Phiên đã chép kết quả cuối của ``ctl``: phiên mở sau không nhận lại."""
         _SO_DUNG_KHO.da_nhan(engine, ctl)
 
-    def __init__(self, engine, queue_maxsize: int = 256, recent_maxlen: int = 50):
+    def __init__(self, engine, recent_maxlen: int = 50):
         self.engine = engine
-        self.events: queue.Queue[FingerprintProgress] = queue.Queue(maxsize=queue_maxsize)
         self._recent: deque[FingerprintProgress] = deque(maxlen=recent_maxlen)
         self._state: FingerprintProgress | None = None
         self._thread: threading.Thread | None = None
@@ -515,17 +513,8 @@ class FingerprintJobController:
 
     def publish(self, event: FingerprintProgress) -> None:
         with self._lock:
-            event = replace(event, queue_size=self.events.qsize())
             self._state = event
             self._recent.append(event)
-        try:
-            self.events.put_nowait(event)
-        except queue.Full:
-            try:
-                self.events.get_nowait()
-            except queue.Empty:
-                pass
-            self.events.put_nowait(event)
 
     def start(self, folder: str, mode: str) -> str:
         with self._lock:
@@ -548,11 +537,6 @@ class FingerprintJobController:
             self._running = True
             self._started_mono = time.monotonic()
             self._recent.clear()
-            while not self.events.empty():
-                try:
-                    self.events.get_nowait()
-                except queue.Empty:
-                    break
             self.publish(self._state)
 
             def target() -> None:
@@ -629,18 +613,8 @@ class FingerprintJobController:
             return replace(
                 state,
                 worker_alive=alive if self._thread else self._running,
-                queue_size=self.events.qsize(),
                 elapsed_seconds=max(elapsed, 0.0),
             )
-
-    def drain(self, limit: int = 256) -> list[FingerprintProgress]:
-        drained = []
-        for _ in range(max(0, limit)):
-            try:
-                drained.append(self.events.get_nowait())
-            except queue.Empty:
-                break
-        return drained
 
     def recent(self) -> list[FingerprintProgress]:
         with self._lock:

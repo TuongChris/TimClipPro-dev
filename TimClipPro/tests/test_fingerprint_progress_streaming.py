@@ -207,12 +207,12 @@ def test_khong_tao_hai_job_van_tay_trung_nhau(engine, tmp_path, monkeypatch):
             time.sleep(0.02)
 
 
-def test_worker_khong_goi_streamlit_va_queue_khong_phinh_vo_han(engine, tmp_path, monkeypatch):
-    """Queue bounded: worker phát nhiều event hơn sức chứa cũng không tăng vô hạn."""
+def test_worker_khong_goi_streamlit_va_nhat_ky_khong_phinh_vo_han(engine, tmp_path, monkeypatch):
+    """Nhật ký gần đây có giới hạn: worker phát nhiều event hơn sức chứa cũng không tăng vô hạn."""
     folder = _lap_kho(tmp_path)
     _gan_audfprint_gia(engine, tmp_path, monkeypatch, im_lang=0.0, heartbeat=0.05)
 
-    controller = FingerprintJobController(engine, queue_maxsize=4)
+    controller = FingerprintJobController(engine, recent_maxlen=4)
     ten_luong = []
 
     goc_publish = controller.publish
@@ -225,10 +225,10 @@ def test_worker_khong_goi_streamlit_va_queue_khong_phinh_vo_han(engine, tmp_path
     controller.start(str(folder), "new")
     han = time.monotonic() + 30
     while controller.running and time.monotonic() < han:
-        assert controller.events.qsize() <= 4
+        assert len(controller.recent()) <= 4
         time.sleep(0.02)
 
-    assert controller.events.qsize() <= 4
+    assert len(controller.recent()) <= 4
     assert any(ten.startswith("fingerprint-") for ten in ten_luong), (
         "Event phải được phát từ worker thread riêng, không phải main thread."
     )

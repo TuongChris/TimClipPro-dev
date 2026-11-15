@@ -135,7 +135,6 @@ def _dong_bo_job_van_tay() -> None:
     """Chỉ main Streamlit thread đọc controller và cập nhật session_state."""
     if job.get("kind") != "db" or not job.get("fingerprint_job_id"):
         return
-    fingerprint_controller.drain()
     if job.get("running") and not fingerprint_controller.running:
         job["running"] = False
         job["results"] = fingerprint_controller.result or []
@@ -853,19 +852,26 @@ with st.sidebar:
 
     st.divider()
     st.subheader("⚙️ Tham số")
+
+    def _khung(lo, hi, v):
+        """Khung ô số luôn chứa giá trị đang có: ``cau_hinh.json`` sửa tay (hợp lệ theo ``Config.validate``, CLI vẫn
+        dùng) mà nằm ngoài khung thì Streamlit ném lỗi và trang dừng ngay ở thanh bên (audit 16/11)."""
+        return min(lo, v), max(hi, v)
+
     with st.expander("Mở để tinh chỉnh", expanded=False):
         c = eng.config
-        c.chunk_s = st.number_input("Độ dài mỗi khúc (giây)", 300, 7200, c.chunk_s, 300,
+        c.chunk_s = st.number_input("Độ dài mỗi khúc (giây)", *_khung(300, 7200, c.chunk_s), c.chunk_s, 300,
                                     help="Máy yếu RAM thì giảm xuống 1800.")
-        c.overlap_s = st.number_input("Khúc gối nhau (giây)", 60, 3600, c.overlap_s, 60,
+        c.overlap_s = st.number_input("Khúc gối nhau (giây)", *_khung(60, 3600, c.overlap_s), c.overlap_s, 60,
                                       help="Giá trị đề xuất khi thiếu metadata. Giá trị hiệu lực "
                                            "luôn bị giới hạn bởi trần khúc gối "
                                            f"({c.overlap_max_s} giây).")
-        c.min_hash = st.slider("Số hash tối thiểu", 5, 100, c.min_hash,
+        c.min_hash = st.slider("Số hash tối thiểu", *_khung(5, 100, c.min_hash), c.min_hash,
                                help="Bị báo nhầm → tăng lên. Bỏ sót → giảm xuống.")
-        c.min_match_s = st.slider("Đoạn khớp tối thiểu (giây)", 1.0, 60.0, c.min_match_s, 1.0)
+        c.min_match_s = st.slider("Đoạn khớp tối thiểu (giây)", *_khung(1.0, 60.0, float(c.min_match_s)),
+                                  float(c.min_match_s), 1.0)
         c.ncores = st.slider(
-            "Số nhân CPU", 0, 8, c.ncores,
+            "Số nhân CPU", *_khung(0, 8, c.ncores), c.ncores,
             help="Đặt 0 để tự dò, chừa một nhân cho hệ thống và dùng tối đa 8 nhân.")
         c.shifts_kho = st.number_input(
             "Subframe shifts khi tạo kho", 0, 8, max(0, c.shifts_kho), 1,
@@ -877,12 +883,12 @@ with st.sidebar:
                  "Đặt 0 để dùng hành vi cũ.")
 
         st.markdown("**Chọn lọc kết quả**")
-        c.top_n = st.number_input("Chỉ lấy bao nhiêu kết quả tốt nhất", 1, 50, c.top_n)
+        c.top_n = st.number_input("Chỉ lấy bao nhiêu kết quả tốt nhất", *_khung(1, 50, c.top_n), c.top_n)
         c.min_hash_floor = st.number_input(
-            "Loại hẳn nếu dưới (hash)", 0, 100000, c.min_hash_floor, 100,
+            "Loại hẳn nếu dưới (hash)", *_khung(0, 100000, c.min_hash_floor), c.min_hash_floor, 100,
             help="Kết quả yếu hơn ngưỡng này bị vứt bỏ, không đưa vào báo cáo.")
         c.min_hash_strong = st.number_input(
-            "Coi là bằng chứng mạnh từ (hash)", 0, 200000, c.min_hash_strong, 500,
+            "Coi là bằng chứng mạnh từ (hash)", *_khung(0, 200000, c.min_hash_strong), c.min_hash_strong, 500,
             help="Những kết quả đạt ngưỡng này được ưu tiên chọn trước.")
         c.phan_bo_deu = st.checkbox(
             "Phân bổ đều đầu / giữa / cuối video", c.phan_bo_deu,
@@ -908,12 +914,12 @@ with st.sidebar:
             ct1, ct2 = st.columns(2)
             with ct1:
                 c.quet_tang_dan_tu_gio = st.number_input(
-                    "Chỉ áp dụng cho video dài hơn (giờ)", 0.0, 100.0,
+                    "Chỉ áp dụng cho video dài hơn (giờ)", *_khung(0.0, 100.0, float(c.quet_tang_dan_tu_gio)),
                     float(c.quet_tang_dan_tu_gio), 1.0,
                     help="Video ngắn hơn mốc này vẫn quét trọn một lượt như cũ.")
             with ct2:
                 c.quet_tang_dan_buoc_gio = st.number_input(
-                    "Mỗi lượt quét thêm (giờ)", 0.5, 24.0,
+                    "Mỗi lượt quét thêm (giờ)", *_khung(0.5, 24.0, float(c.quet_tang_dan_buoc_gio)),
                     float(c.quet_tang_dan_buoc_gio), 0.5,
                     help="Phải DÀI HƠN clip gốc dài nhất trong kho đang dùng.")
             # Đặt LỒNG trong «Quét tăng dần» là có chủ đích: tải một phần mà không
@@ -1170,7 +1176,6 @@ _ve_lan_dong_bo()
 
 if job["running"]:
     if job.get("kind") == "db":
-        fingerprint_controller.drain()
         fp = fingerprint_controller.snapshot()
         now = time.time()
         progress_slot = st.empty()
@@ -1230,8 +1235,7 @@ if job["running"]:
         pid = fp.active_subprocess_pid or "—"
         heartbeat_slot.caption(
             f"Cập nhật gần nhất: {cap_nhat} · PID audfprint: {pid} · "
-            f"Clip hiện tại đã chạy: {_thoi_luong(clip_elapsed)} · "
-            f"Queue: {fp.queue_size}/256"
+            f"Clip hiện tại đã chạy: {_thoi_luong(clip_elapsed)}"
         )
         if clip_elapsed is not None and clip_elapsed >= 120:
             st.warning(
@@ -1260,7 +1264,7 @@ if job["running"]:
             fingerprint_controller.cancel()
             st.warning("Đang yêu cầu dừng; chưa đánh dấu đã dừng cho tới khi worker xác nhận.")
         st.caption(
-            "Trang tự làm mới từ queue bounded; worker không gọi Streamlit trực tiếp. "
+            "Trang tự làm mới từ ảnh chụp tiến độ; worker không gọi Streamlit trực tiếp. "
             "Log kỹ thuật: `ketqua/fingerprint.log`."
         )
     elif job.get("kind") == "scan":
@@ -1361,7 +1365,10 @@ if not job["running"] and (job["results"] or job["error"]):
                 st.code("\n".join(r["loi_file"][:50]))
     elif job["kind"] == "metadata_network":
         r = job["results"]
-        st.success(
+        # YouTube chặn giữa chừng / có clip lỗi: chưa vá xong — không báo xanh (audit 16/11; CLI vốn đã đọc ``chan_youtube``).
+        if r.get("chan_youtube"):
+            st.error(f"🚫 YouTube chặn giữa chừng nên đã dừng: {r['chan_youtube']}")
+        (st.warning if r["loi"] or r.get("chan_youtube") else st.success)(
             f"Đã vá metadata snapshot cho {r['da_va']}/{r['tong']} clip; "
             f"không đổi {r['bo_qua']}, lỗi {len(r['loi'])}."
         )

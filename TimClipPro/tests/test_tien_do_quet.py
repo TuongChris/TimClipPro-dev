@@ -82,6 +82,23 @@ def test_eta_chi_khi_du_du_lieu_toc_do(dong_ho):
     assert so.anh().eta_buoc_s is None, "đổi bước: ETA tính lại từ đầu"
 
 
+def test_eta_bo_dem_ve_0_cung_giai_doan_tinh_lai_toc_do(dong_ho):
+    """Audit 16/11: mỗi lượt bù tốc độ đặt bộ đếm khớp về 0 mà vẫn ở GD_KHOP — mẫu của lượt trước làm tốc độ ra quá
+    chậm (mô phỏng: còn ~10 phút mà báo hơn 3 giờ)."""
+    so = tdq.SoTienDo()
+    so.bat_dau_video(1, 1, "u")
+    so.cap_nhat(tdq.GD_KHOP, khop_tong=30, khop_xong=0)
+    for i in range(1, 31):                             # lượt thường: 1 khúc / 20 s, 10 phút
+        dong_ho["now"] += 20
+        so.cap_nhat(khop_xong=i)
+    dong_ho["now"] += 600                               # nghỉ giữa hai lượt
+    so.cap_nhat(khop_tong=30, khop_xong=0)             # lượt bù tốc độ: đếm lại từ 0, CÙNG giai đoạn
+    for i in range(1, 11):                              # lượt bù nhanh hơn: 1 khúc / 3 s
+        dong_ho["now"] += 3
+        so.cap_nhat(khop_xong=i)
+    assert so.anh().eta_buoc_s == pytest.approx(20 * 3.0)
+
+
 def test_canh_bao_theo_giai_doan_va_noi_kem_nhip(dong_ho):
     so = tdq.SoTienDo()
     so.bat_dau_video(1, 1, "u")

@@ -172,3 +172,55 @@ def test_ten_file_chi_co_ma_van_la_da_co(tmp_path):
         (tmp_path / ten).write_bytes(b"x")
     assert ma_da_co(str(tmp_path)) == {"dQw4w9WgXcQ", "v123456789", "ZZZZZZZZZZZ"}
     assert ma_da_co(str(tmp_path), chi_tieng=True) == {"AbCdEfGhIjK"}
+
+
+# ---- Mục 9: cau_hinh.json sửa tay (hợp lệ theo Config.validate) ngoài khung ô số không được khoá giao diện ----
+
+def test_cau_hinh_sua_tay_ngoai_khung_o_so_van_mo_duoc_app(tmp_path, monkeypatch):
+    import json
+    from pathlib import Path
+
+    from streamlit.testing.v1 import AppTest
+
+    data = tmp_path / "data"
+    data.mkdir()
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(data))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    sua_tay = {"top_n": 60, "chunk_s": 10800, "overlap_s": 4000, "min_hash": 3, "ncores": 12,
+               "quet_tang_dan_buoc_gio": 30.0, "quet_tang_dan_tu_gio": 0.0, "min_match_s": 0}
+    (data / "cau_hinh.json").write_text(json.dumps(sua_tay), encoding="utf-8")
+    at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=120).run()
+    assert not at.exception, at.exception
+    c = at.session_state.eng.config
+    assert (c.top_n, c.chunk_s, c.overlap_s, c.min_hash, c.ncores, c.quet_tang_dan_buoc_gio) == (60, 10800, 4000, 3, 12, 30.0), \
+        "giá trị người dùng đặt phải giữ nguyên, không bị kẹp lại"
+
+
+# ---- Mục 10: «Vá metadata thiếu từ YouTube» bị YouTube chặn giữa chừng không được báo xanh ----
+
+def _ket_qua_va_metadata(tmp_path, monkeypatch, r):
+    from pathlib import Path
+
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=120).run()
+    at.session_state.job.update({"running": False, "pct": 1.0, "msg": "", "error": "", "kind": "metadata_network",
+                                 "results": {"snapshot_path": "snap.json", "bo_qua": 0, **r}})
+    at.run()
+    assert not at.exception
+    return at
+
+
+def test_va_metadata_bi_chan_khong_bao_xanh(tmp_path, monkeypatch):
+    at = _ket_qua_va_metadata(tmp_path, monkeypatch, {
+        "da_va": 3, "tong": 500, "loi": [], "chan_youtube": "YouTube nghi là bot — dừng để tránh bị chặn nặng hơn."})
+    assert not any("Đã vá metadata" in (x.value or "") for x in at.success)
+    assert any("Đã vá metadata snapshot cho 3/500" in (x.value or "") for x in at.warning)
+    assert any("nghi là bot" in (x.value or "") for x in at.error)
+
+
+def test_va_metadata_xong_sach_van_xanh(tmp_path, monkeypatch):
+    at = _ket_qua_va_metadata(tmp_path, monkeypatch, {"da_va": 5, "tong": 5, "loi": [], "chan_youtube": ""})
+    assert any("Đã vá metadata snapshot cho 5/5" in (x.value or "") for x in at.success)

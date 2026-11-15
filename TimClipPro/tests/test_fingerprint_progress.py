@@ -171,7 +171,7 @@ def _doi_controller(controller, timeout=3.0):
 
 def test_controller_nhan_event_khi_worker_chua_xong_va_chan_job_trung():
     engine = _EngineGia()
-    controller = FingerprintJobController(engine, queue_maxsize=8)
+    controller = FingerprintJobController(engine)
     job_id = controller.start("D:/fixtures", "new")
 
     assert engine.started.wait(1)
@@ -180,7 +180,7 @@ def test_controller_nhan_event_khi_worker_chua_xong_va_chan_job_trung():
     assert snapshot.worker_alive is True
     assert snapshot.file_name == "một.wav"
     assert snapshot.status == "running"
-    assert controller.drain()
+    assert controller.recent()
     with pytest.raises(RuntimeError, match="job trùng"):
         controller.start("D:/fixtures", "new")
 
@@ -204,12 +204,11 @@ def test_controller_cancel_chi_bao_da_dung_sau_khi_worker_xac_nhan():
     assert controller.result["da_huy"] is True
 
 
-def test_queue_va_recent_log_bi_gioi_han():
-    controller = FingerprintJobController(_EngineGia(), queue_maxsize=3, recent_maxlen=4)
+def test_recent_log_bi_gioi_han():
+    controller = FingerprintJobController(_EngineGia(), recent_maxlen=4)
     event = progress_ban_dau("bounded")
     for index in range(20):
         controller.publish(replace(event, message=f"event-{index}", current=index))
 
-    assert controller.events.qsize() == 3
     assert len(controller.recent()) == 4
     assert controller.snapshot().message == "event-19"

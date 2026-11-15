@@ -161,6 +161,15 @@ def test_them_roi_xoa_o_commit_sau_van_bi_chan_va_khong_in_noi_dung(may):
     assert _git(may, "ls-remote", "private", "refs/heads/fix/pc2/thu").stdout.strip() == ""
 
 
+@pytest.mark.parametrize("dinh_danh", ["3b9d2c1e" + "7a404f00800000000000a0a0", "3b9d2c1e-7a40-4f00-8000-" + "00000000a0a0"])
+def test_installation_id_dang_that_32_hex_bi_chan(may, dinh_danh):
+    """Audit 16/11: máy thật tạo ``uuid4().hex`` (32 ký tự LIỀN) — luật cũ chỉ khớp dạng có gạch nối nên lọt."""
+    _nhanh(may)
+    _commit_file(may, "docs/ket_qua_bootstrap.md", f'installation_id: "{dinh_danh}"\n')
+    rc, out = _day(may, "fix/pc2/thu:fix/pc2/thu")
+    assert rc != 0 and "docs/ket_qua_bootstrap.md: định danh cài đặt" in out, out
+
+
 @pytest.mark.parametrize("ma_hoa", ["utf-16", "utf-16-be"])
 def test_bi_mat_trong_file_utf16_cua_powershell_bi_chan(may, ma_hoa):
     """Audit 09/11: PowerShell 5.1 ghi `>`/Out-File dạng UTF-16 — byte 0 xen giữa mọi ký tự, mẫu nào cũng trượt."""

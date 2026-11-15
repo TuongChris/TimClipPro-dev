@@ -5947,6 +5947,8 @@ class Engine:
                         continue
                     self._bao(progress, 0.95 + 0.05 * vi_tri / max(1, len(thu_tu)),
                               f"Tinh chỉnh mốc từng giây ({vi_tri + 1}/{len(thu_tu)})...")
+                    # Sổ tiến độ của lô: không ghi thì sau 180 s giao diện báo «không có tiến triển» (audit 16/11).
+                    self._td(khuc_hien_tai=f"Tinh chỉnh mốc từng giây {vi_tri + 1}/{len(thu_tu)}")
                     ly_do = self._ly_do_khong_tinh_chinh(m)
                     if ly_do:
                         ra[i] = chua(m, ly_do)

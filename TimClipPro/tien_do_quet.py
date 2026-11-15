@@ -257,6 +257,8 @@ class SoTienDo:
             gia_tri, can = float(a.khop_xong), float(a.khop_tong)
         else:
             return None
+        if self._mau and gia_tri < self._mau[-1][1]:
+            self._mau.clear()       # bộ đếm về 0 trong CÙNG giai đoạn (lượt bù tốc độ): mẫu lượt trước sai tốc độ
         if not self._mau or self._mau[-1][1] != gia_tri:
             self._mau.append((bay_gio, gia_tri))
         dau = next((m for m in self._mau if m[1] < gia_tri), None)
