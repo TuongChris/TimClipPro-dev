@@ -434,6 +434,23 @@ def info_tu_api(video: Mapping) -> dict:
     return info
 
 
+def truong_ngay_tu_api(muc: Mapping, yyyymmdd: str) -> dict:
+    """Trường ngày ghi vào một mục clips_meta khi ngày đăng lấy từ YouTube Data API (D-51; vameta và repair dùng chung).
+
+    ``publication_date`` (clip_metadata đọc trước) = ``yyyymmdd`` đã quy đổi, nhãn ``published_at``. Nhãn cũ
+    ``upload_date`` nghĩa là ``publication_date`` cũ là ngày yt-dlp NGUYÊN VĂN (ngày đăng gốc V2): đổi nhãn thì giữ ngày
+    đó ở ``upload_date_raw`` (nếu chưa có) — đó vẫn là ngày của yt-dlp, không phải của API.
+    """
+    truong = {"publication_date": yyyymmdd, "publication_date_source": "published_at"}
+    nguon = muc.get("publication_date_source")
+    if (isinstance(nguon, str) and nguon.strip() == "upload_date"
+            and not valid_upload_date(muc.get("upload_date_raw"))):
+        cu = valid_upload_date(muc.get("publication_date"))
+        if cu:
+            truong["upload_date_raw"] = cu
+    return truong
+
+
 class ChannelSync:
     """Đồng bộ kênh YouTube về thư mục kho clip gốc."""
 
@@ -727,8 +744,13 @@ class ChannelSync:
                     if video is None:
                         con_lai.append((ten_file, thong_tin))
                         continue
+                    ngay = ngay_dang_tu_info(info_tu_api(video))
+                    if ngay:
+                        # Ngày chính tắc đổi theo, như repair — published_at làm repair coi mục là chắc chắn, bỏ qua.
+                        for truong, gia_tri in truong_ngay_tu_api(thong_tin, ngay).items():
+                            doi(ten_file, thong_tin, truong, gia_tri)
                     ap_dung(ten_file, thong_tin, {
-                        "upload_date": ngay_dang_tu_info(info_tu_api(video)), "duration": video["duration"],
+                        "upload_date": ngay, "duration": video["duration"],
                         "title": video["title"], "published_at": video["published_at"]})
                     da_va += 1
                 can_va = con_lai

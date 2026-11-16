@@ -30,7 +30,7 @@ import time
 from dataclasses import dataclass, field
 
 import youtube_api
-from channel import ChannelSync, info_tu_api
+from channel import ChannelSync, info_tu_api, truong_ngay_tu_api
 from clip_metadata import extract_youtube_id, filename_fallback_parts, valid_upload_date
 from luu_tru import LoiDuLieu, cap_nhat_json
 from truy_cap_youtube import PhienYouTube, che_bi_mat, dong_trang_thai_api
@@ -295,7 +295,7 @@ def repair(
             "upload_date": ket_qua.yyyymmdd,     # tương thích bản đọc cũ
         }
         if video is not None:
-            truong["published_at"] = video["published_at"]
+            truong.update(truong_ngay_tu_api(entry, ket_qua.yyyymmdd), published_at=video["published_at"])
         for k in ("timestamp", "release_timestamp"):
             if video is None and isinstance(nguon_du_lieu.get(k), (int, float)) and nguon_du_lieu.get(k):
                 truong[k] = nguon_du_lieu[k]

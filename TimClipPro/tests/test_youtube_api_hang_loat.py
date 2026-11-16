@@ -436,6 +436,52 @@ def test_muc_da_co_published_at_la_nguon_chac_chan(api_youtube_gia, tmp_path, mo
     assert api_youtube_gia.dem() == 0 and ydl.dem("info") == 0 and kq["da_doi"] == 0
 
 
+def _ngay_v2(muc: dict) -> str:
+    from clip_metadata import source_from_mapping
+    return source_from_mapping({"x.opus": muc}).entries[0].ngay_raw
+
+
+def test_sua_ngay_dang_qua_api_giu_ngay_v2_cua_nhan_upload_date(api_youtube_gia, tmp_path, monkeypatch):
+    """Mục mang nhãn «upload_date» (sync không có timestamp / repair offline cũ): publication_date CHÍNH là ngày yt-dlp
+    nguyên văn = ngày đăng gốc V2. Repair qua API đổi nhãn sang published_at thì không được làm mất ngày V2 đó."""
+    m = _ma(1)
+    truoc = {"id": m, "upload_date": "20260731", "publication_date": "20260731",
+             "publication_date_source": "upload_date", "duration": 100.0}
+    assert _ngay_v2(truoc) == "20260731"
+    _co_tren_api(api_youtube_gia, [m])
+    kho = _kho_ngay(tmp_path, monkeypatch, {f"20260731 - Clip [{m}].opus": truoc})
+
+    kiem_ngay_dang.repair(str(kho), VN, dung_mang=True, apply=True, gioi_han=0)
+
+    sau = _meta(kho)[f"20260731 - Clip [{m}].opus"]
+    assert (sau["publication_date_source"], sau["publication_date"], sau["published_at"]) == (
+        "published_at", NGAY_VN, NGAY_API)
+    assert _ngay_v2(sau) == "20260731", "ngày đăng gốc V2 (UTC của publishedAt) vẫn còn"
+
+
+def test_vameta_qua_api_ghi_ca_publication_date_va_giu_ngay_v2(api_youtube_gia, tmp_path, monkeypatch):
+    """vameta ghi upload_date + published_at từ API thì publication_date (trường chính tắc, clip_metadata đọc trước)
+    cũng phải đổi theo — nếu không, repair coi published_at là chắc chắn và bỏ qua mãi, ngày cũ còn đó."""
+    m = _ma(1)
+    kho = tmp_path / "kho"
+    kho.mkdir()
+    (kho / "clips_meta.json").write_text(json.dumps({f"20260731 - Clip [{m}].opus": {
+        "id": m, "title": "Clip", "upload_date": "20260731", "publication_date": "20260731",
+        "publication_date_source": "upload_date", "duration": None}}), encoding="utf-8")
+    _co_tren_api(api_youtube_gia, [m], duration="PT12M")
+    ydl = _ytdlp(monkeypatch)
+
+    ChannelSync(str(kho), data_dir=str(tmp_path / "data")).va_metadata()
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
+    kq = kiem_ngay_dang.repair(str(kho), VN, dung_mang=True, apply=True, gioi_han=0)
+
+    sau = _meta(kho)[f"20260731 - Clip [{m}].opus"]
+    assert (sau["publication_date"], sau["upload_date"], sau["publication_date_source"], sau["duration"]) == (
+        NGAY_VN, NGAY_VN, "published_at", 720)
+    assert _ngay_v2(sau) == "20260731"
+    assert kq["da_doi"] == 0 and api_youtube_gia.dem() == 1 and ydl.dem("info") == 0
+
+
 def test_kiem_ngay_dang_cli_in_dong_api(tmp_path, monkeypatch, capsys):
     (tmp_path / "kho").mkdir()
     kq = {"khong_doi": 0, "da_doi": 0, "bo_qua": 0, "that_bai": 0, "loi": [], "thay_doi": [], "da_ghi": False,
