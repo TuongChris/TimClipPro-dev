@@ -10,7 +10,9 @@ Mỗi nơi gọi: gom mã -> ``youtube_api.lay_video`` (50 mã một yêu cầu)
 import json
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 
+import pytest
 import yt_dlp
 
 import common_original as co
@@ -524,3 +526,78 @@ def test_lo_nguon_chung_engine_that_quet_bang_thong_tin_api(api_youtube_gia, tmp
     assert kq.trang_thai == co.TIM_THAY
     assert api_youtube_gia.dem() == 1 and ydl.dem("info") == 0 and ydl.dem("tai") == 3
     assert kq.so_lieu["youtube"]["metadata_requests"] == 0
+
+
+# =====================================================================
+#  Nối dây: CLI / giao diện đưa thư mục dữ liệu; CLI in dòng «API YouTube: …» khi lượt có đụng tới API
+# =====================================================================
+
+@pytest.mark.parametrize("dung_api", [True, False])
+def test_cli_vameta_dua_thu_muc_du_lieu_va_in_dong_api(tmp_path, monkeypatch, capsys, dung_api):
+    import cli
+    from engine import thu_muc_data_mac_dinh
+
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
+    nhan = {}
+
+    class ChannelSyncGhi:
+        def __init__(self, kho, **kw):
+            nhan.update(kw)
+            self.phien = _phien_da_dung_api(3) if dung_api else t.PhienYouTube()
+
+        def va_metadata(self, progress=None):
+            return {"tong": 3, "da_va": 3, "bo_qua": 0, "da_them_tu_dia": 0, "loi": []}
+
+    monkeypatch.setattr("sys.argv", ["cli.py", "vameta", "--kho", str(tmp_path / "kho")])
+    monkeypatch.setattr(cli, "ChannelSync", ChannelSyncGhi)
+
+    cli.main()
+
+    ra = capsys.readouterr().out
+    assert nhan["data_dir"] == thu_muc_data_mac_dinh()
+    assert ("API YouTube: 3 video lấy bằng API (~1 đơn vị)" in ra) is dung_api
+    assert dung_api or "API YouTube" not in ra, "không có khoá: không thêm dòng nào"
+
+
+def test_cli_vametak_in_dong_api(monkeypatch, capsys):
+    import cli
+
+    class EngineGhi:
+        def __init__(self):
+            self.config = SimpleNamespace(ncores=1)
+            self.kho_dang_dung = "Kho"
+
+        def va_metadata_thieu(self, progress=None):
+            return {"tong": 3, "da_va": 3, "bo_qua": 0, "loi": [], "chan_youtube": "",
+                    "youtube": _phien_da_dung_api(3).tom_tat()}
+
+    monkeypatch.setattr("sys.argv", ["cli.py", "vametak"])
+    monkeypatch.setattr(cli, "Engine", EngineGhi)
+
+    cli.main()
+
+    assert "API YouTube: 3 video lấy bằng API (~1 đơn vị)" in capsys.readouterr().out
+
+
+def test_app_xem_truoc_kenh_kem_ngay_dua_thu_muc_du_lieu(tmp_path, monkeypatch):
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    nhan = {}
+
+    def list_channel(url, limit=None, **kw):
+        nhan.update(kw)
+        return []
+
+    monkeypatch.setattr(ChannelSync, "list_channel", staticmethod(list_channel))
+    at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=120).run()
+    next(w for w in at.text_input if w.label == "Link kênh YouTube của bạn").input("https://www.youtube.com/@kenh")
+    next(c for c in at.checkbox if c.label.startswith("Lấy cả ngày đăng chính xác")).check()
+    at.run()
+    next(b for b in at.button if b.label == "👀 Xem danh sách video của kênh").click()
+    at.run()
+
+    assert not at.exception
+    assert nhan["lay_ngay_dang"] is True
+    assert Path(nhan["data_dir"]).resolve() == (tmp_path / "data").resolve()

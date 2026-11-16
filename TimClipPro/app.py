@@ -1783,7 +1783,7 @@ with tab0:
             try:
                 ds = ChannelSync.list_channel(
                     kenh_url.strip(), gioi_han or None, lay_ngay_dang=lay_ngay,
-                    cau_hinh_mang=eng.cau_hinh_mang(),
+                    cau_hinh_mang=eng.cau_hinh_mang(), data_dir=eng.data_dir,
                 )
                 st.success(f"Kênh có {len(ds)} video.")
                 thieu_ngay = sum(1 for v in ds if not v.upload_date)
@@ -1895,7 +1895,7 @@ with tab0:
                       "lúc nào; video nào đã có tên thật thì bỏ qua."):
         cs_title = ChannelSync(st.session_state.kho_dir.strip('" '),
                                player_clients=list(eng.config.ytdlp_player_clients),
-                               cau_hinh_mang=eng.cau_hinh_mang())
+                               cau_hinh_mang=eng.cau_hinh_mang(), data_dir=eng.data_dir)
         # Nút Dừng chỉ đặt eng.cancel_event — phải nối vào đây như đồng bộ kênh, không thì
         # bấm Dừng vẫn hỏi YouTube hết kho (audit D-9).
         chay_nen("va_title", cs_title.va_metadata, lay_title=True, phien_youtube=cs_title.phien,

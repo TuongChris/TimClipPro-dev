@@ -35,7 +35,7 @@ from khoa import DangChayRoi
 from luu_tru import LoiDuLieu
 from engine import (Engine, LoiLuuBen, SoKhoHong, liet_ke_media, mo_ta_pham_vi,
                     thu_muc_data_mac_dinh)
-from truy_cap_youtube import LoiTruyCapYouTube
+from truy_cap_youtube import LoiTruyCapYouTube, dong_trang_thai_api
 from ytdlp_chung import CauHinhMang
 
 # Mã thoát cho lịch chạy (Task Scheduler, GiamSat.bat, ChayMayPhu.bat chuyển nguyên mã ra):
@@ -49,6 +49,13 @@ def _thoat_neu_youtube_chan(thong_bao: str) -> None:
     if thong_bao:
         print(f"\nYOUTUBE CHẶN TRUY CẬP: {thong_bao}", file=sys.stderr)
         raise SystemExit(MA_THOAT_YOUTUBE_CHAN)
+
+
+def _in_dong_api(so) -> None:
+    """Dòng «API YouTube: …» (D-51) — không in gì khi lượt không đụng tới API (không có khoá); không đổi mã thoát."""
+    dong = dong_trang_thai_api(so)
+    if dong:
+        print(dong)
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -361,6 +368,7 @@ def _main():
             cs_meta = ChannelSync(
                 a.kho,
                 cau_hinh_mang=CauHinhMang.tu_file_cau_hinh(thu_muc_data_mac_dinh()),
+                data_dir=thu_muc_data_mac_dinh(),     # khoá YouTube Data API nằm cạnh thư mục dữ liệu (D-51)
             )
             ket_qua = cs_meta.va_metadata(in_tien_do)
         print(
@@ -371,6 +379,8 @@ def _main():
         if ket_qua["loi"]:
             print("Lỗi:", *ket_qua["loi"], sep="\n  - ")
         phien_meta = getattr(cs_meta, "phien", None)
+        if phien_meta is not None:
+            _in_dong_api(phien_meta.tom_tat()["api"])
         _thoat_neu_youtube_chan(phien_meta.thong_bao_dung() if phien_meta is not None else "")
         return
 
@@ -392,6 +402,7 @@ def _main():
         )
         if ket_qua["loi"]:
             print("Lỗi:", *ket_qua["loi"][:20], sep="\n  - ")
+        _in_dong_api((ket_qua.get("youtube") or {}).get("api"))
         _thoat_neu_youtube_chan(ket_qua.get("chan_youtube", ""))
         return
 
