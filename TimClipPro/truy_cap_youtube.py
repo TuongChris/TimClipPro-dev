@@ -876,11 +876,12 @@ _LY_DO_GIOI_HAN = frozenset({"rateLimitExceeded", "userRateLimitExceeded", "RATE
 
 
 def _ly_do_google(than: Any) -> set:
-    """``error.errors[].reason``, ``error.status``, ``error.details[].reason`` của thân lỗi Google (đã đọc JSON)."""
+    """``error.errors[].reason`` + ``error.details[].reason`` của thân lỗi Google (đã đọc JSON). ``error.status`` (mã
+    gRPC chuẩn) chỉ lặp lại mã HTTP — không lý do nào trong các bảng trên là một ``status``."""
     loi = than.get("error") if isinstance(than, dict) else None
     if not isinstance(loi, dict):
         return set()
-    ra = {loi.get("status")}
+    ra: set = set()
     for ten in ("errors", "details"):
         if isinstance(loi.get(ten), list):
             ra.update(x.get("reason") for x in loi[ten] if isinstance(x, dict))
