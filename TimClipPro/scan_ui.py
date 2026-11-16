@@ -254,6 +254,9 @@ def tom_tat_tao_van_tay(r: Mapping[str, Any]) -> list:
     giay = float(r.get("giay") or 0)
     tt = trang_thai_tao_van_tay(r)
     if tt == "DA_HUY":
+        if r.get("da_ghi_kho"):     # Dừng giữa lúc dựng kho: các clip đã xong được lưu
+            return [("warning", f"⏹️ Đã dừng: đã lưu {thanh_cong} clip vào kho (đã xử lý {da_xu_ly}/{tong} clip trong "
+                                f"{giay:.0f} giây).")]
         return [("warning", f"⏹️ Đã dừng: đã xử lý {da_xu_ly}/{tong} clip trong {giay:.0f} giây.")]
     if tt == "KHONG_GHI_CO_LOI":
         so_gui = that_bai + thanh_cong

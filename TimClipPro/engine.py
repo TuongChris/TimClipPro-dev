@@ -59,6 +59,7 @@ import outbox
 import runtime_paths
 import sheet_destinations
 import tien_do_quet as tdq
+from audfprint_progress_runner import TEN_CO_DUNG
 from chan_doan_quet import (
     AUDFPRINT_KHONG_RA_MATCH,
     MO_TA_GIAI_DOAN,
@@ -1904,9 +1905,11 @@ class Engine:
         process_name: str = "audfprint",
         include_in_tail: Optional[Callable[[str], bool]] = None,
         heartbeat_seconds: float = 10.0,
+        khi_huy: Optional[Callable[[], bool]] = None,
     ) -> tuple:
         """
-        Chạy lệnh con, đọc stdout từng dòng (để báo tiến độ), hỗ trợ hủy giữa chừng.
+        Chạy lệnh con, đọc stdout từng dòng (để báo tiến độ), hỗ trợ hủy giữa chừng (``khi_huy``: xem
+        ``process_runner.run_observed_process``).
         Trả về (return_code, 30 dòng cuối) — dòng cuối dùng để báo lỗi cho ra hồn.
 
         QUAN TRỌNG — vì sao phải ép UTF-8:
@@ -1932,6 +1935,7 @@ class Engine:
             slow_warning_seconds=120.0,
             include_in_tail=include_in_tail,
             env=env,
+            khi_huy=khi_huy,
         )
         if result.cancelled:
             raise Cancelled()
@@ -2908,9 +2912,10 @@ class Engine:
                     progress=progress,
                     tracker=tracker,
                 )
-        except Cancelled:
+        except Cancelled as exc:
+            ly_do = str(exc)        # «Tạo lại từ đầu» bị Dừng: vì sao phần đã xong không được lưu
             tracker.cancelled(
-                "Đã dừng. Kho vân tay trước job vẫn nguyên; phần chưa ghi không được tính."
+                ly_do or "Đã dừng. Kho vân tay trước job vẫn nguyên; phần chưa ghi không được tính."
             )
             state = tracker.state
             return {
@@ -2923,10 +2928,10 @@ class Engine:
                 "da_huy": True,
                 "loi_file": [x["message"] for x in tracker.errors],
                 "giay": state.elapsed_seconds,
-                "canh_bao": [
+                "canh_bao": [ly_do or (
                     f"{state.success_count} clip đã tính xong trong workspace tạm nhưng "
                     "chưa commit khi hủy; kho trước job vẫn nguyên."
-                ],
+                )],
             }
         except DangChayRoi as exc:
             # "Bận" là tình huống vận hành bình thường, không phải lỗi lập trình: một dòng
@@ -3221,7 +3226,7 @@ class Engine:
                 f"bản thay thế tạo được vân tay: {ke_ten(tap)}.")
 
     def _go_van_tay_cu(self, db_tam: str, lam_moi: set, ds_cu: list, workspace: str,
-                       tracker) -> None:
+                       tracker, khi_huy: Optional[Callable[[], bool]] = None) -> None:
         """Gỡ vân tay CŨ của clip sắp làm mới hoặc đã bị cách ly khỏi KHO TẠM
         (``audfprint remove``).
 
@@ -3242,6 +3247,7 @@ class Engine:
             None,
             logger=tracker.logger,
             process_name="audfprint-remove",
+            khi_huy=khi_huy,
         )
         if rc != 0:
             chi_tiet = "\n".join(duoi[-8:]) or "(không có thông báo nào)"
@@ -3372,6 +3378,7 @@ class Engine:
         # Clip HỮU ÍCH (có hash) của kho hiện tại: để bỏ qua khi bổ sung, và để kiểm
         # kho tạm không làm mất clip đang tốt trước khi thay (audit TCP-02).
         ds_cu: list = DanhSachClip()
+        kho_cu_hong = False
         if db_da_ton_tai:
             try:
                 ds_cu = self._doc_danh_sach_clip(self.db_file)
@@ -3381,6 +3388,7 @@ class Engine:
                         f"{e}. Không bổ sung vào một kho không đọc được — hãy «Tạo mới» "
                         "kho này."
                     ) from e
+                kho_cu_hong = True
                 canh_bao.append(f"{e}. Kho sẽ được tạo lại từ đầu.")
 
         # Bit cố định lúc tạo kho: «Bổ sung» giữ bit của file kho, không theo ô đánh dấu. Thêm clip dài vào kho 16 bit
@@ -3404,6 +3412,9 @@ class Engine:
 
         cu_huu_ich = {self._khoa_duong_dan(c["duong_dan"]) for c in ds_cu
                       if int(c.get("so_hash") or 0) > 0}
+        # Dừng giữa chừng lưu được các clip đã xong khi «Bổ sung» hoặc kho chưa có vân tay dùng được. «Tạo lại từ đầu» một
+        # kho đang có vân tay (hay không đọc được — có thể chỉ bị khoá tạm) thì không: kho đầy đủ không bị thay bằng một phần.
+        luu_khi_dung = mode != "new" or not (cu_huu_ich or kho_cu_hong)
         da_co = cu_huu_ich if mode != "new" else set()
         # Clip ĐÃ có vân tay nhưng FILE bị thay sau lần công bố kho gần nhất (ví dụ đồng
         # bộ kênh vừa tải lại bản tốt cho một file nén dở — audit TCP-10): bỏ qua theo
@@ -3416,6 +3427,8 @@ class Engine:
                 tracker.skipped(path)
             else:
                 can_xu_ly.append(path)
+        # Clip làm mới chạy TRƯỚC: vân tay cũ của nó đã gỡ khỏi kho tạm, Dừng lúc nó chưa xong thì không lưu được gì.
+        can_xu_ly.sort(key=lambda p: self._khoa_duong_dan(p) not in lam_moi)
         # Clip quá dài không tạo vân tay (D-31). Clip đang được LÀM MỚI vẫn xử lý: vân tay cũ của nó sắp bị gỡ, bỏ qua
         # ở đây là mất luôn clip khỏi kho.
         tran_giay = channel.tran_clip_giay(thumuc)
@@ -3548,6 +3561,7 @@ class Engine:
         loi_file = []
         structured_seen = False
         started_paths: set[str] = set()
+        da_xong: set[str] = set()       # clip đã có event clip_finished (thành công hay lỗi)
 
         def key(path: str) -> str:
             return os.path.normcase(os.path.abspath(path))
@@ -3582,6 +3596,7 @@ class Engine:
                     elif event.get("event") == "thong_bao_ram":
                         tracker.thong_bao_ram(str(event.get("message") or ""))
                     elif event.get("event") == "clip_finished" and path:
+                        da_xong.add(key(path))
                         tracker.clip_finished(
                             path,
                             success=event.get("status") == "success",
@@ -3626,12 +3641,30 @@ class Engine:
             except OSError:
                 pass
 
+        co_dung = os.path.join(workspace, TEN_CO_DUNG)
+
+        def xin_dung_luu() -> bool:
+            # Bấm Dừng: nhờ runner thôi phát clip và ghi các clip ĐÃ xong, không giết. Không ghi được cờ → giết như cũ.
+            # Không có gì để lưu (chưa clip nào xong; «Tạo lại từ đầu» kho đang có vân tay mà chưa xong toàn bộ) → giết ngay.
+            if not os.path.exists(co_dung):
+                if not tracker.state.success_count or not (
+                        luu_khi_dung or all(key(p) in da_xong for p in can_xu_ly)):
+                    return False
+                try:
+                    with open(co_dung, "w", encoding="utf-8"):
+                        pass
+                except OSError:
+                    return False
+                tracker.phase("saving", "Đang dừng: lưu các clip đã tạo xong vân tay vào kho, clip đang làm dở bị bỏ...")
+            return True
+
         # --maxtimebits: kho thường định vị đúng tới ~25 phút, kho video dài tới 13,5 giờ (chỉ có tác dụng khi tạo mới)
         tham_so = ["--maxtimebits", str(bits_kho)]
         if shifts_kho > 0:
             tham_so.extend(["--shifts", str(shifts_kho)])
         tham_so.extend(["--list", listfile])
         cong_bo = False
+        con_lai: list = []      # Dừng giữa chừng: clip chưa xong (đang làm dở, chưa tới lượt, chờ thử lại)
         try:
             # Chỉ có clip cần GỠ (đã bị cách ly) mà không có gì để thêm: bỏ bước `add`.
             if can_xu_ly:
@@ -3644,7 +3677,12 @@ class Engine:
                     include_in_tail=lambda line: not line.startswith(
                         "TIMCLIP_FINGERPRINT_EVENT "
                     ),
+                    khi_huy=xin_dung_luu,
                 )
+                if os.path.exists(co_dung):
+                    con_lai = [p for p in can_xu_ly if key(p) not in da_xong]
+                if con_lai and not (luu_khi_dung and tracker.state.success_count):
+                    raise Cancelled()       # không có gì để lưu, hay «Tạo lại từ đầu» chưa xong toàn bộ
                 if rc != 0:
                     chi_tiet = "\n".join(duoi[-12:]) or "(không có thông báo nào)"
                     raise RuntimeError(
@@ -3662,18 +3700,25 @@ class Engine:
 
             if not os.path.isfile(db_tam):
                 raise RuntimeError("audfprint báo thành công nhưng không tạo database tạm.")
+            if con_lai:
+                # Chỉ kiểm phần đã chạy (clip chưa tới lượt không phải clip lỗi). Clip làm mới chưa xong thì vân tay cũ đã
+                # gỡ khỏi kho tạm → `_kiem_kho_tam` từ chối, kho hiện tại giữ nguyên.
+                can_xu_ly = [p for p in can_xu_ly if key(p) in da_xong]
+                lam_moi = lam_moi & {key(p) for p in can_xu_ly}
             # Clip đã bị cách ly: gỡ SAU bước thêm, chỉ khi bản thay thế cùng mã video có
-            # vân tay trong kho tạm (phản biện vòng 3).
+            # vân tay trong kho tạm (phản biện vòng 3). Dừng giữa chừng: để «Bổ sung» sau gỡ (dừng nhanh), có cảnh báo.
             go_hong: set = set()
-            if ung_vien_go:
+            if ung_vien_go and not con_lai:
                 go_hong = self._go_hong_co_ban_thay(ung_vien_go, db_tam)
                 if go_hong:
-                    self._go_van_tay_cu(db_tam, go_hong, ds_cu, workspace, tracker)
+                    # Mọi clip đã xong: bấm Dừng lúc đang gỡ thì để lệnh gỡ (ngắn) chạy hết rồi công bố như thường;
+                    # giết nó là mất cả phần đã xong.
+                    self._go_van_tay_cu(db_tam, go_hong, ds_cu, workspace, tracker, khi_huy=lambda: True)
                     canh_bao.append(
                         f"Gỡ vân tay {len(go_hong)} clip đã bị cách ly vào "
                         f"{channel.THU_MUC_HONG}/ (file nghi hỏng; bản thay thế cùng mã video "
                         f"đã có vân tay): {ke_ten(go_hong)}.")
-                giu_hong |= ung_vien_go - go_hong
+            giu_hong |= ung_vien_go - go_hong
             if giu_hong:
                 canh_bao.append(self._canh_bao_giu_hong(giu_hong, ke_ten))
             # Mã thoát 0 + file tạm tồn tại chưa chứng minh kho DÙNG ĐƯỢC (TCP-02).
@@ -3723,6 +3768,20 @@ class Engine:
                     canh_bao.append(
                         "File vân tay cũ đang bị khóa; đã ghi kết quả vào file mới an toàn."
                     )
+        except Cancelled:
+            if luu_khi_dung or not tracker.state.success_count:
+                raise
+            raise Cancelled(
+                f"Đã dừng «Tạo lại từ đầu» giữa chừng: kho cũ giữ nguyên — mới xong {tracker.state.success_count} clip "
+                f"trên {len(can_xu_ly)}, phần đã làm KHÔNG được lưu, vì «Tạo lại từ đầu» chỉ thay kho đang có vân tay "
+                "khi đã làm xong toàn bộ, không thay bằng một phần.") from None
+        except Exception as e:
+            if not con_lai:
+                raise
+            # Mọi lỗi tới đây đều xảy ra TRƯỚC khi sổ kho trỏ sang file mới: kho cũ còn nguyên.
+            raise RuntimeError(
+                f"Đã dừng nhưng chưa lưu được {tracker.state.success_count} clip vừa tạo xong vân tay — kho trước job "
+                f"vẫn nguyên; bấm «Bổ sung» để làm lại các clip này. Lý do: {e}") from e
         finally:
             shutil.rmtree(workspace, ignore_errors=True)
 
@@ -3758,7 +3817,13 @@ class Engine:
         ))
 
         canh_bao.extend(self._cap_nhat_snapshot_sau_build(mode, thumuc.strip('" ') if mode == "new" else None))
-        tracker.completed()
+        if con_lai:
+            cau = (f"Đã dừng: đã lưu {tracker.state.success_count} clip vừa tạo xong vân tay vào kho; bấm «Bổ sung» để "
+                   f"làm tiếp {len(con_lai)} clip còn lại (clip đang làm dở lúc dừng không được lưu).")
+            canh_bao.append(cau)
+            tracker.cancelled(cau)
+        else:
+            tracker.completed()
         state = tracker.state
         return {
             "so_clip": tong,
@@ -3766,7 +3831,7 @@ class Engine:
             "thanh_cong": state.success_count,
             "bo_qua": state.skipped_count,
             "that_bai": state.failed_count,
-            "da_huy": False,
+            "da_huy": bool(con_lai),
             "loi_file": [*loi_file, *[x["message"] for x in tracker.errors]],
             "giay": state.elapsed_seconds,
             "canh_bao": canh_bao,

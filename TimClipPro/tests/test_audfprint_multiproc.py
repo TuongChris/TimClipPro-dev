@@ -141,7 +141,7 @@ def _ngu_mot_giay():
     time.sleep(1.0)
 
 
-def worker_cham_ma_khoe(analyzer, ket_noi, hashbits, depth, maxtime, duong_dan):
+def worker_cham_ma_khoe(analyzer, ket_noi, hashbits, depth, maxtime, duong_dan, dung=None):
     """Tổng thời gian LÂU HƠN HẲN hạn chót nhưng vẫn trả lời đều đặn từng clip.
 
     Phải ở cấp module vì Windows dùng spawn.
@@ -149,11 +149,11 @@ def worker_cham_ma_khoe(analyzer, ket_noi, hashbits, depth, maxtime, duong_dan):
     _phuc_vu(ket_noi, duong_dan, _ngu_mot_giay)
 
 
-def worker_nhanh_va_khoe(analyzer, ket_noi, hashbits, depth, maxtime, duong_dan):
+def worker_nhanh_va_khoe(analyzer, ket_noi, hashbits, depth, maxtime, duong_dan, dung=None):
     _phuc_vu(ket_noi, duong_dan)
 
 
-def worker_ket_cung(analyzer, ket_noi, hashbits, depth, maxtime, duong_dan):
+def worker_ket_cung(analyzer, ket_noi, hashbits, depth, maxtime, duong_dan, dung=None):
     """Trả lời 3 clip rồi treo VĨNH VIỄN mà KHÔNG đóng pipe.
 
     Không có EOF, nên im lặng là tín hiệu duy nhất — đúng tình huống mà bản cũ

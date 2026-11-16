@@ -150,3 +150,34 @@ def test_cancel_event_dung_process_im_lang():
 
     assert result.cancelled is True
     assert not psutil.pid_exists(result.pid)
+
+
+def test_khi_huy_tra_true_thi_khong_giet_va_cho_tien_trinh_tu_thoat(tmp_path):
+    """Dừng dựng kho mà vẫn giữ phần đã xong: tiến trình con được NHỜ tự dừng (file cờ), không bị giết giữa chừng."""
+    co = tmp_path / "co"
+    cancel = threading.Event()
+    cancel.set()
+    goi = []
+
+    def khi_huy():
+        goi.append(1)
+        co.touch()
+        return True
+
+    ma = f"import os, time\nwhile not os.path.exists({str(co)!r}): time.sleep(0.05)\nprint('da_luu', flush=True)"
+    lines = []
+    result = run_observed_process([sys.executable, "-u", "-c", ma], on_line=lines.append, cancel_event=cancel,
+                                  khi_huy=khi_huy, heartbeat_seconds=0.1)
+
+    assert (result.cancelled, result.returncode, lines) == (False, 0, ["da_luu"])
+    assert goi
+
+
+def test_khi_huy_tra_false_thi_giet_nhu_cu():
+    cancel = threading.Event()
+    cancel.set()
+    result = run_observed_process([sys.executable, "-c", "import time; time.sleep(30)"], cancel_event=cancel,
+                                  khi_huy=lambda: False, heartbeat_seconds=0.1)
+
+    assert result.cancelled is True
+    assert not psutil.pid_exists(result.pid)

@@ -220,7 +220,7 @@ def test_lenh_media_tra_stdout_va_duoi_stderr_co_gioi_han():
 #  Worker audfprint lỗi: không để lại process con
 # ---------------------------------------------------------------------------
 
-def _worker_hong_de_lai_con(analyzer, ket_noi, hashbits, depth, maxtime, path):
+def _worker_hong_de_lai_con(analyzer, ket_noi, hashbits, depth, maxtime, path, dung=None):
     import pathlib
     import subprocess as sp
     import sys as s

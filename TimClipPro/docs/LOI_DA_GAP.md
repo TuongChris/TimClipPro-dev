@@ -825,8 +825,12 @@ clip 18,2 giờ (~27 GB) chạy cùng 7 worker khác, cả RAM lẫn pagefile b�
 giết cả lượt. Triệu chứng người dùng thấy là «HDD bận» nhưng đo thật HDD chỉ 6–7%: đừng đoán từ triệu chứng, nhiều giả thuyết
 hợp lý đã bị số đo bác (`docs/PHAN_TICH_TAI_DUNG_KHO_2026-11.md`).
 Đã sửa: cha phát từng clip theo RAM (`LichTheoRam`), clip lỗi thử lại cuối lượt và KHÔNG vào bảng của worker, lý do thật giữ ở
-`_LOI_GIAI_MA`, clip dài hơn 2 giờ không tải và không tạo vân tay.
+`_LOI_GIAI_MA`, clip dài hơn 2 giờ không tải và không tạo vân tay. 16/11: Dừng giữa chừng giữ các clip ĐÃ xong — engine ghi
+cờ `dung_luu_phan_xong` cạnh `--dbase`, mỗi worker ghi bảng các clip đã `store` (store và báo xong cùng một khoá) rồi thoát,
+kho tạm đi đúng đường kiểm + công bố; «Tạo lại từ đầu» một kho đang có vân tay vẫn giữ kho cũ.
 → Mọi clip đi qua `LichTheoRam`, đừng thêm đường dựng kho thứ hai. Hằng số RAM là số đo, đổi tham số phân tích thì đo lại.
+Tín hiệu từ runner xuống worker đi qua byte chung (`multiprocessing.RawValue`), đừng dùng `multiprocessing.Event`: `set()`
+chờ mọi tiến trình từng ngủ trên nó xác nhận, worker đã nghỉ trước đó không bao giờ xác nhận → treo (đã tái hiện).
 
 **39. Audit toàn repo 06/11/2026: lời hứa trên màn hình lệch việc thật làm (PC2).** Sáu lỗi cùng một kiểu: nút báo «đã gửi yêu cầu
 dừng» khi không còn lượt để dừng (bấm đúp cắt ngang `chay_dong_bo`), «Quét toàn bộ» dừng ở 3 giờ, hook «quét mọi dòng thêm» không
