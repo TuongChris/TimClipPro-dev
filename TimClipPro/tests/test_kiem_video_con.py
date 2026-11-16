@@ -12,6 +12,7 @@ import os
 import sqlite3
 
 import pytest
+from streamlit.testing.v1 import AppTest
 
 import bao_cao_v2
 import kiem_video_con as kv
@@ -20,7 +21,7 @@ import truy_cap_youtube as t
 import youtube_api as ya
 import youtube_api_gia as gia
 from conftest import M
-from engine import ScanResult
+from engine import Engine, ScanResult
 
 CON = "Còn (công khai)"
 KHONG_CON = "Không còn xem được (đã gỡ hoặc riêng tư)"
@@ -184,3 +185,54 @@ def test_dong_bang_mot_dong_moi_video_va_dem_ba_nhom():
                                                                     "2026-11-10 09:00:00")
     assert (bang[3]["Trên YouTube"], bang[3]["Kiểm lúc"]) == ("Chưa kiểm", "")
     assert kv.dem(bang) == {"con": 1, "khong_con": 1, "chua": 2}
+
+
+# ---------------------------------------------------------------- tab «📜 Lịch sử» (AppTest)
+
+APP_PY = os.path.join(os.path.dirname(os.path.abspath(kv.__file__)), "app.py")
+
+
+def _mo_app(tmp_path, monkeypatch):
+    data = tmp_path / "data"
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(data))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    monkeypatch.delenv("TIMCLIP_RUNTIME_MODE", raising=False)
+    _luu(Engine(root=str(tmp_path), data_dir=str(data), out_dir=str(tmp_path / "ketqua")), "vidvipham0A",
+         ten="Video vi phạm A")
+    at = AppTest.from_file(APP_PY, default_timeout=120).run()
+    assert not at.exception
+    return at
+
+
+def _bang(at):
+    return next(d.value for d in at.dataframe if "Trên YouTube" in d.value.columns)
+
+
+def test_tab_lich_su_chua_co_khoa_nut_tat_va_khong_gui_yeu_cau(tmp_path, monkeypatch):
+    tp = gia.lap_transport(monkeypatch)
+    at = _mo_app(tmp_path, monkeypatch)
+    assert at.button(key="kiem_video_con").disabled
+    assert any("khoá YouTube Data API" in c.value and "không kiểm bằng yt-dlp" in c.value for c in at.caption)
+    assert list(_bang(at)["Trên YouTube"]) == ["Chưa kiểm"] and tp.dem() == 0
+
+
+def test_tab_lich_su_bam_kiem_hien_bang_tong_hop_va_chi_goi_mang_khi_bam(api_youtube_gia, tmp_path, monkeypatch):
+    api_youtube_gia.video["vidvipham0A"] = gia.video_gia("vidvipham0A")
+    at = _mo_app(tmp_path, monkeypatch)
+    assert api_youtube_gia.dem() == 0, "vẽ tab không gọi mạng — chỉ nhánh nút"
+    assert any("khoảng 1 đơn vị" in c.value for c in at.caption)
+    nut = at.button(key="kiem_video_con")
+    assert not nut.disabled
+    at = nut.click().run()
+    assert not at.exception
+    assert api_youtube_gia.dem() == 1 and api_youtube_gia.yeu_cau[0].part.endswith(",status")
+    bang = _bang(at)
+    assert list(bang.columns) == ["Video vi phạm", "Link", "Kênh", "Lần quét gần nhất", "Số lần quét", "Trên YouTube",
+                                  "Kiểm lúc", "Lần đầu thấy không còn"]
+    assert (bang.iloc[0]["Video vi phạm"], bang.iloc[0]["Trên YouTube"]) == ("Video vi phạm A", CON)
+    so_lieu = {m.label: m.value for m in at.metric}
+    assert {k: so_lieu.get(k) for k in ("Còn trên YouTube", "Đã gỡ hoặc không còn", "Chưa kiểm được")} == {
+        "Còn trên YouTube": "1", "Đã gỡ hoặc không còn": "0", "Chưa kiểm được": "0"}
+    assert any("Google Sheets không bị đổi" in c.value for c in at.caption)
+    at = at.run()                                   # vẽ lại: bảng đọc từ sổ, không gửi thêm
+    assert api_youtube_gia.dem() == 1 and _bang(at).iloc[0]["Trên YouTube"] == CON

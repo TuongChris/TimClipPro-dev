@@ -22,7 +22,9 @@ import bang_ngang
 import bao_cao_v2
 import common_original as nguon_chung
 import danh_sach_video
+import kiem_video_con
 import lich_su
+import luu_tru
 import maintenance_gate
 import outbox
 import runtime_paths
@@ -33,6 +35,7 @@ import ui_gui_sheets as ui_gui
 from cau_hinh import GIA_TRI_GIAO_DIEN_MAC_DINH
 from clip_metadata import configure_metadata_logging
 import truy_cap_youtube
+import youtube_api
 import ytdlp_chung
 from common_original_jobs import TEN_PHA as TEN_PHA_NGUON_CHUNG
 from common_original_jobs import CommonOriginalJobController, xuat_csv
@@ -2364,6 +2367,47 @@ with tab4:
 # ---------------------------------------------------------------- TAB 5
 with tab5:
     st.subheader("Lịch sử các lần quét")
+    # Video vi phạm còn trên YouTube? (D-51) — CHỈ YouTube Data API, mạng chỉ trong nhánh nút; không tool.lock, outbox,
+    # Google Sheets. Vẽ bảng chỉ đọc lịch sử + sổ kiem_video_con.json.
+    _vi_pham = eng.video_vi_pham()
+    if _vi_pham:
+        _khoa_api = youtube_api.trang_thai_khoa(eng.data_dir)
+        _co_khoa_api = _khoa_api.ma == youtube_api.CO_KHOA
+        if st.button("🔎 Kiểm tra video vi phạm còn trên YouTube", key="kiem_video_con", disabled=not _co_khoa_api):
+            with st.spinner(f"Đang hỏi YouTube Data API về {len(_vi_pham)} video..."):
+                try:
+                    _ket_kv = kiem_video_con.kiem_tra(truy_cap_youtube.PhienYouTube(), eng.data_dir,
+                                                      [v["ma"] for v in _vi_pham])
+                except (luu_tru.LoiDuLieu, OSError) as e:
+                    st.error(f"Không ghi được sổ kết quả kiểm: {thoat_markdown(e)}")
+                else:
+                    _chua_kv = [k for k in _ket_kv.values() if kiem_video_con.nhom(k) == "chua"]
+                    if _chua_kv:
+                        st.warning(f"{len(_chua_kv)}/{len(_ket_kv)} video chưa kiểm được lần này (kết quả kiểm trước "
+                                   "đó vẫn giữ): " + thoat_markdown(" · ".join(dict.fromkeys(_chua_kv))))
+                    else:
+                        st.success(f"Đã kiểm {len(_ket_kv)} video.")
+        if _co_khoa_api:
+            st.caption(f"Mỗi lần kiểm {len(_vi_pham)} video tốn khoảng {kiem_video_con.so_don_vi(len(_vi_pham))} đơn "
+                       "vị hạn mức YouTube Data API (10.000 đơn vị mỗi ngày) — không dùng yt-dlp.")
+        else:
+            st.caption("Nút kiểm cần khoá YouTube Data API — không kiểm bằng yt-dlp. " + thoat_markdown(
+                _khoa_api.ly_do if _khoa_api.ma == youtube_api.SAI_DANG else f"Đặt file khoá ở {_khoa_api.duong_dan}."))
+        try:
+            _so_kv = kiem_video_con.doc_so(eng.data_dir)
+        except luu_tru.LoiDuLieu as e:
+            st.warning(thoat_markdown(e))
+            _so_kv = {}
+        _bang_kv = kiem_video_con.dong_bang(_vi_pham, _so_kv)
+        _dem_kv = kiem_video_con.dem(_bang_kv)
+        _c1, _c2, _c3 = st.columns(3)
+        _c1.metric("Còn trên YouTube", _dem_kv["con"])
+        _c2.metric("Đã gỡ hoặc không còn", _dem_kv["khong_con"])
+        _c3.metric("Chưa kiểm được", _dem_kv["chua"])
+        st.dataframe(pd.DataFrame(_bang_kv), width="stretch", hide_index=True,
+                     column_config={"Link": st.column_config.LinkColumn()})
+        st.caption("Google Sheets không bị đổi — muốn ghi vào cột «Trạng thái» của Sheet thì tự chép.")
+        st.divider()
     jobs = eng.list_jobs(200)
     if len(jobs) >= 200:   # audit 09/11: trước đây lặng lẽ cắt
         st.caption("Chỉ hiện 200 lần quét gần nhất. Các lần cũ hơn vẫn được lưu trong lịch sử, chỉ không hiện ở bảng này.")
