@@ -13,6 +13,7 @@ from pathlib import Path
 import yt_dlp
 
 import engine as engine_module
+import kiem_ngay_dang
 import truy_cap_youtube as t
 import youtube_api_gia as gia
 from channel import ChannelSync
@@ -312,3 +313,129 @@ def test_vametak_fetcher_tiem_vao_khong_goi_api(api_youtube_gia, tmp_path, monke
         "id": vid, "title": "Tiêu đề giả", "upload_date": "20240506", "duration": 321})
 
     assert api_youtube_gia.dem() == 0 and da_goi == ids and r["da_va"] == 3
+
+
+# =====================================================================
+#  kiem_ngay_dang.py --repair-network
+# =====================================================================
+
+def _kho_ngay(tmp_path, monkeypatch, meta) -> Path:
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))    # cấu hình mạng đọc từ thư mục dữ liệu TẠM
+    kho = tmp_path / "kho"
+    kho.mkdir()
+    (kho / "clips_meta.json").write_text(json.dumps(meta), encoding="utf-8")
+    return kho
+
+
+def _meta_ngay(ids) -> dict:
+    return {f"20240101 - Clip [{m}].opus": {"id": m, "upload_date": "20240101", "duration": 100.0} for m in ids}
+
+
+def _muc_ngay(kho, ma) -> dict:
+    return _meta(kho)[f"20240101 - Clip [{ma}].opus"]
+
+
+def test_sua_ngay_dang_60_muc_hai_yeu_cau_api_ghi_published_at(api_youtube_gia, tmp_path, monkeypatch):
+    ids = [_ma(i) for i in range(60)]
+    _co_tren_api(api_youtube_gia, ids)
+    kho = _kho_ngay(tmp_path, monkeypatch, _meta_ngay(ids))
+    ydl = _ytdlp(monkeypatch)
+    da_nghi = []
+    monkeypatch.setattr(kiem_ngay_dang.time, "sleep", da_nghi.append)
+
+    kq = kiem_ngay_dang.repair(str(kho), VN, dung_mang=True, apply=True, gioi_han=0, nghi_giay=1.5)
+
+    assert api_youtube_gia.dem() == 2 and ydl.dem("info") == 0 and da_nghi == []
+    assert (kq["da_doi"], kq["that_bai"]) == (60, 0)
+    m = _muc_ngay(kho, ids[0])
+    assert (m["published_at"], m["publication_date"], m["upload_date"]) == (NGAY_API, NGAY_VN, NGAY_VN)
+    assert m["publication_date_source"] == "published_at", "không gắn nhãn timestamp/upload_date của yt-dlp"
+    assert not {"timestamp", "release_timestamp", "upload_date_raw"} & set(m)
+    # Chạy lại: mục đã có published_at là nguồn chắc chắn — không hỏi lại API lẫn yt-dlp.
+    kiem_ngay_dang.repair(str(kho), VN, dung_mang=True, apply=True, gioi_han=0)
+    assert api_youtube_gia.dem() == 2 and ydl.dem("info") == 0
+    tk = kiem_ngay_dang.audit(str(kho), VN)
+    assert (tk.co_provenance, tk.chi_upload_date, tk.se_doi) == (60, 0, [])
+
+
+def test_sua_ngay_dang_het_han_muc_giua_luot_phan_con_lai_qua_yt_dlp(api_youtube_gia, tmp_path, monkeypatch):
+    ids = [_ma(i) for i in range(60)]
+    _co_tren_api(api_youtube_gia, ids)
+    api_youtube_gia.kich_ban = [None, gia.QUOTA]
+    kho = _kho_ngay(tmp_path, monkeypatch, _meta_ngay(ids))
+    ydl = _ytdlp(monkeypatch)
+    da_nghi = []
+    monkeypatch.setattr(kiem_ngay_dang.time, "sleep", da_nghi.append)
+
+    kq = kiem_ngay_dang.repair(str(kho), VN, dung_mang=True, apply=True, gioi_han=0, nghi_giay=1.5)
+
+    assert api_youtube_gia.dem() == 2 and _hoi_ytdlp(ydl) == ids[50:]
+    assert len(da_nghi) == 10, "chỉ giãn nhịp trước lượt yt-dlp — mục API đã trả lời không nghỉ"
+    assert kq["that_bai"] == 0 and kq["youtube"]["api"]["loai_tat"] == t.API_HET_HAN_MUC
+    assert _muc_ngay(kho, ids[0])["published_at"] == NGAY_API
+    cuoi = _muc_ngay(kho, ids[-1])
+    assert "published_at" not in cuoi and cuoi["upload_date_raw"] == NGAY_YTDLP
+
+
+def test_sua_ngay_dang_yt_dlp_bi_chan_van_sua_muc_api_da_tra_loi(api_youtube_gia, tmp_path, monkeypatch):
+    ids = [_ma(i) for i in range(3)]
+    _co_tren_api(api_youtube_gia, ids[1:])          # mục đầu đi yt-dlp và mở cầu dao; hai mục sau đã có từ API
+    kho = _kho_ngay(tmp_path, monkeypatch, _meta_ngay(ids))
+    ydl = _ytdlp(monkeypatch, info={ids[0]: BOT})
+
+    kq = kiem_ngay_dang.repair(str(kho), VN, dung_mang=True, apply=True, gioi_han=0)
+
+    assert _hoi_ytdlp(ydl) == ids[:1] and kq["that_bai"] == 1 and kq["chan_youtube"]
+    assert kq["da_doi"] == 2 and kq["con_lai"] == 0
+    assert [m for m in ids if "published_at" in _muc_ngay(kho, m)] == ids[1:]
+
+
+def test_sua_ngay_dang_khong_co_khoa_so_luot_yt_dlp_va_nhip_nghi_nhu_cu(tmp_path, monkeypatch):
+    tp = gia.lap_transport(monkeypatch)
+    ids = [_ma(i) for i in range(3)]
+    kho = _kho_ngay(tmp_path, monkeypatch, _meta_ngay(ids))
+    ydl = _ytdlp(monkeypatch)
+    da_nghi = []
+    monkeypatch.setattr(kiem_ngay_dang.time, "sleep", da_nghi.append)
+
+    kiem_ngay_dang.repair(str(kho), VN, dung_mang=True, apply=False, gioi_han=0, nghi_giay=1.5)
+
+    assert tp.dem() == 0 and _hoi_ytdlp(ydl) == ids and da_nghi == [1.5, 1.5]
+
+
+def test_sua_ngay_dang_fetcher_tiem_vao_khong_goi_api(api_youtube_gia, tmp_path, monkeypatch):
+    ids = [_ma(i) for i in range(3)]
+    _co_tren_api(api_youtube_gia, ids)
+    kho = _kho_ngay(tmp_path, monkeypatch, _meta_ngay(ids))
+    da_goi = []
+
+    kiem_ngay_dang.repair(str(kho), VN, dung_mang=True, apply=False, gioi_han=0,
+                          fetcher=lambda vid: da_goi.append(vid) or {"id": vid, "timestamp": 1750445139})
+
+    assert api_youtube_gia.dem() == 0 and da_goi == ids
+
+
+def test_muc_da_co_published_at_la_nguon_chac_chan(api_youtube_gia, tmp_path, monkeypatch):
+    """Mục vameta đã vá bằng API (published_at, không publication_date_source): audit không xếp vào «chỉ có
+    upload_date», repair không hỏi lại."""
+    m = _ma(1)
+    kho = _kho_ngay(tmp_path, monkeypatch, {f"20260801 - Clip [{m}].opus": {
+        "id": m, "upload_date": NGAY_VN, "duration": 100.0, "published_at": NGAY_API}})
+    ydl = _ytdlp(monkeypatch)
+
+    tk = kiem_ngay_dang.audit(str(kho), VN)
+    kq = kiem_ngay_dang.repair(str(kho), VN, dung_mang=True, apply=False, gioi_han=0)
+
+    assert (tk.co_provenance, tk.chi_upload_date) == (1, 0)
+    assert api_youtube_gia.dem() == 0 and ydl.dem("info") == 0 and kq["da_doi"] == 0
+
+
+def test_kiem_ngay_dang_cli_in_dong_api(tmp_path, monkeypatch, capsys):
+    (tmp_path / "kho").mkdir()
+    kq = {"khong_doi": 0, "da_doi": 0, "bo_qua": 0, "that_bai": 0, "loi": [], "thay_doi": [], "da_ghi": False,
+          "dung_som": False, "con_lai": 0, "chan_youtube": "", "youtube": _phien_da_dung_api(2).tom_tat()}
+    monkeypatch.setattr(kiem_ngay_dang, "repair", lambda *a, **k: kq)
+    monkeypatch.setattr("sys.argv", ["kiem_ngay_dang.py", "--kho", str(tmp_path / "kho"), "--repair-network"])
+
+    assert kiem_ngay_dang.main() == 0
+    assert "API YouTube: 2 video lấy bằng API (~1 đơn vị)" in capsys.readouterr().out
