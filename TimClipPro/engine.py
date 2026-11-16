@@ -3206,7 +3206,7 @@ class Engine:
                 f"bản thay thế tạo được vân tay: {ke_ten(tap)}.")
 
     def _go_van_tay_cu(self, db_tam: str, lam_moi: set, ds_cu: list, workspace: str,
-                       tracker) -> None:
+                       tracker, khi_huy: Optional[Callable[[], bool]] = None) -> None:
         """Gỡ vân tay CŨ của clip sắp làm mới hoặc đã bị cách ly khỏi KHO TẠM
         (``audfprint remove``).
 
@@ -3227,6 +3227,7 @@ class Engine:
             None,
             logger=tracker.logger,
             process_name="audfprint-remove",
+            khi_huy=khi_huy,
         )
         if rc != 0:
             chi_tiet = "\n".join(duoi[-8:]) or "(không có thông báo nào)"
@@ -3681,12 +3682,14 @@ class Engine:
                 can_xu_ly = [p for p in can_xu_ly if key(p) in da_xong]
                 lam_moi = lam_moi & {key(p) for p in can_xu_ly}
             # Clip đã bị cách ly: gỡ SAU bước thêm, chỉ khi bản thay thế cùng mã video có
-            # vân tay trong kho tạm (phản biện vòng 3). Đã bấm Dừng thì để «Bổ sung» sau gỡ (cờ huỷ giết lệnh gỡ).
+            # vân tay trong kho tạm (phản biện vòng 3). Bấm Dừng lúc runner chạy: để «Bổ sung» sau gỡ (dừng nhanh).
             go_hong: set = set()
             if ung_vien_go and not os.path.exists(co_dung):
                 go_hong = self._go_hong_co_ban_thay(ung_vien_go, db_tam)
                 if go_hong:
-                    self._go_van_tay_cu(db_tam, go_hong, ds_cu, workspace, tracker)
+                    # Mọi clip đã xong: bấm Dừng lúc đang gỡ thì để lệnh gỡ (ngắn) chạy hết rồi công bố như thường;
+                    # giết nó là mất cả phần đã xong.
+                    self._go_van_tay_cu(db_tam, go_hong, ds_cu, workspace, tracker, khi_huy=lambda: True)
                     canh_bao.append(
                         f"Gỡ vân tay {len(go_hong)} clip đã bị cách ly vào "
                         f"{channel.THU_MUC_HONG}/ (file nghi hỏng; bản thay thế cùng mã video "

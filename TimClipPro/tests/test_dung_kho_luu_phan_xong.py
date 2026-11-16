@@ -196,9 +196,8 @@ def test_dung_khi_moi_clip_da_xong_thi_luu_du_va_bao_hoan_tat(tmp_path):
     assert (r["da_huy"], r["da_ghi_kho"], r["thanh_cong"]) == (False, True, 3)
 
 
-def test_dung_khi_bo_sung_de_viec_go_clip_da_cach_ly_cho_lan_sau(tmp_path):
-    """Lệnh gỡ vân tay clip đã cách ly chạy SAU bước thêm: cờ huỷ còn bật thì nó bị giết và mất cả phần đã xong.
-    Dừng thì chưa gỡ (kho không tệ hơn trước); «Bổ sung» lần sau gỡ như thường."""
+def _kho_co_clip_da_cach_ly(tmp_path):
+    """«Bổ sung»: clip cũ (9 hash) đã bị cách ly vào ``_hong/``; bản thay thế cùng mã video chạy đầu tiên, rồi 2 clip mới."""
     e = _eng(tmp_path)
     nguon = _nguon(tmp_path, 2)
     e.add_kho("A", str(nguon))
@@ -206,18 +205,45 @@ def test_dung_khi_bo_sung_de_viec_go_clip_da_cach_ly_cho_lan_sau(tmp_path):
     ghi_ht(e.db_file, [(str(cu), 9)])
     (nguon / channel.THU_MUC_HONG).mkdir()
     (nguon / channel.THU_MUC_HONG / f"261116-120000_{cu.name}").write_bytes(b"audio hong")
-    (nguon / "Ten moi [abcdefghijk].opus").write_bytes(b"audio")     # bản thay thế cùng mã video, chạy đầu tiên
+    (nguon / "Ten moi [abcdefghijk].opus").write_bytes(b"audio")
+    return e, nguon, cu.name
+
+
+def test_dung_khi_bo_sung_de_viec_go_clip_da_cach_ly_cho_lan_sau(tmp_path):
+    """Dừng lúc runner còn chạy: chưa gỡ vân tay clip đã cách ly (dừng nhanh hơn; kho không tệ hơn trước); «Bổ sung» lần
+    sau gỡ như thường."""
+    e, nguon, cu = _kho_co_clip_da_cach_ly(tmp_path)
     e._run_stream = audfprint_gia(e, xong={0})
 
     r = e.build_database(str(nguon), mode="add")
 
-    assert doc_ht(e.db_file) == {cu.name: 9, "Ten moi [abcdefghijk].opus": 7}
+    assert doc_ht(e.db_file) == {cu: 9, "Ten moi [abcdefghijk].opus": 7}
     assert (r["da_huy"], r["da_ghi_kho"], r["thanh_cong"]) == (True, True, 1)
 
     e._run_stream = audfprint_gia(e)
     r = e.build_database(str(nguon), mode="add")
 
     assert doc_ht(e.db_file) == {"Ten moi [abcdefghijk].opus": 7, "clip_0.opus": 7, "clip_1.opus": 7}
+    assert any("Gỡ vân tay 1 clip đã bị cách ly" in c for c in r["canh_bao"]), r["canh_bao"]
+
+
+def test_dung_luc_dang_go_clip_da_cach_ly_van_luu_moi_clip_da_xong(tmp_path):
+    """Runner đã làm xong mọi clip rồi mới gỡ vân tay clip đã cách ly: bấm Dừng lúc lệnh gỡ (ngắn, có hạn) đang chạy thì
+    để nó chạy xong rồi công bố như thường — giết nó là mất hết các clip đã xong (review 16/11)."""
+    e, nguon, _ = _kho_co_clip_da_cach_ly(tmp_path)
+    chay = audfprint_gia(e)
+
+    def bam_dung_luc_go(lenh, *a, **k):
+        if "remove" in lenh:
+            e.cancel_event.set()                        # người dùng bấm Dừng trong lúc đang gỡ
+        return chay(lenh, *a, **k)
+
+    e._run_stream = bam_dung_luc_go
+
+    r = e.build_database(str(nguon), mode="add")
+
+    assert doc_ht(e.db_file) == {"Ten moi [abcdefghijk].opus": 7, "clip_0.opus": 7, "clip_1.opus": 7}
+    assert (r["da_huy"], r.get("da_ghi_kho"), r["thanh_cong"]) == (False, True, 3)
     assert any("Gỡ vân tay 1 clip đã bị cách ly" in c for c in r["canh_bao"]), r["canh_bao"]
 
 
