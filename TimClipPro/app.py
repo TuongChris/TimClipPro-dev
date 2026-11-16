@@ -288,14 +288,27 @@ def _thu_muc_dang_dong_bo() -> str:
     return tv.thu_muc if tv is not None and tac_vu_nen.la_song_song(tv.kind) else ""
 
 
+@st.fragment(run_every=2)
+def _khung_dong_bo_khac(thu_muc: str, viec: str, chu_luot_trang: list) -> None:
+    """Cảnh báo của ``_canh_bao_dong_bo_khac``: chỉ được gọi khi thư mục đang bị giữ, rồi tự dò lại mỗi 2 giây (phép dò
+    chỉ hỏi, không chờ) mà không vẽ lại cả trang; bên kia xong → vẽ lại cả trang để mở khoá các nút. Lượt vẽ cả trang
+    dùng kết quả dò của trang (``chu_luot_trang``, lấy MỘT lần — mỗi nhịp sau Streamlit gọi lại với chính danh sách đó,
+    đã rỗng): dò lại ngay mà thấy rảnh thì st.rerun giữa lượt làm mất giá trị các ô chưa vẽ tới."""
+    chu = chu_luot_trang.pop() if chu_luot_trang else channel.dang_dong_bo_khac(thu_muc)
+    if chu:
+        st.warning(f"Thư mục này đang được đồng bộ kênh ở một tiến trình KHÁC (cửa sổ Tool khác hoặc lệnh "
+                   f"`cli.py kenh`) — chờ lượt đó xong rồi {viec}. Thông tin khoá: {'; '.join(chu.splitlines())}")
+    else:
+        st.rerun(scope="app")
+
+
 def _canh_bao_dong_bo_khac(thu_muc: str, viec: str) -> bool:
     """Tiến trình KHÁC (cửa sổ Tool khác, ``cli.py kenh``) đang đồng bộ kênh vào ``thu_muc``: cảnh báo kèm thông tin
     chủ khoá, trả True để khoá các nút ghi vào thư mục đó. Lượt của chính tiến trình này (làn D-29) không báo ở đây —
     ``_thu_muc_dang_dong_bo`` lo."""
     chu = channel.dang_dong_bo_khac(thu_muc)
     if chu:
-        st.warning(f"Thư mục này đang được đồng bộ kênh ở một tiến trình KHÁC (cửa sổ Tool khác hoặc lệnh "
-                   f"`cli.py kenh`) — chờ lượt đó xong rồi {viec}. Thông tin khoá: {'; '.join(chu.splitlines())}")
+        _khung_dong_bo_khac(thu_muc, viec, [chu])
     return bool(chu)
 
 

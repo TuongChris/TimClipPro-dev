@@ -252,3 +252,44 @@ def test_giao_dien_canh_bao_va_khoa_nut_khi_tien_trinh_khac_dong_bo(tmp_path, mo
     with KhoaTienTrinh(str(kho / channel.TEN_KHOA_DONG_BO), TEN_DONG_BO):
         at.run()
         assert not _canh_bao(at)
+
+
+def test_khung_canh_bao_tu_do_lai_va_mo_khoa_khi_ben_kia_xong(tmp_path, monkeypatch):
+    """Khung cảnh báo là fragment ``run_every`` 2 giây, chỉ được gọi khi thư mục đang bị giữ. Lượt vẽ cả trang dùng kết
+    quả dò của trang — dò lại mà thấy rảnh thì st.rerun giữa lượt làm mất giá trị các ô chưa vẽ tới. Mỗi nhịp sau dò
+    lại; bên kia xong → vẽ lại cả trang để mở khoá nút, không ai phải bấm gì. AppTest không chạy nhịp ``run_every``:
+    gọi thẳng thân khung như Streamlit gọi lại ở mỗi nhịp (cùng đối số của lượt vẽ cả trang)."""
+    import streamlit
+    from streamlit.testing.v1 import AppTest
+
+    nhip, than = {}, {}
+    fragment_goc = streamlit.fragment
+
+    def fragment_ghi(func=None, **kw):
+        if func is None:
+            return lambda f: fragment_ghi(f, **kw)
+        nhip[func.__name__], than[func.__name__] = kw.get("run_every"), func
+        return fragment_goc(func, **kw)
+
+    monkeypatch.setattr(streamlit, "fragment", fragment_ghi)
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    at = AppTest.from_file(str(APP_PY), default_timeout=120).run()
+    assert not at.exception, at.exception
+    assert nhip.get("_khung_dong_bo_khac") == 2, f"khung cảnh báo phải tự dò lại mỗi 2 giây: {nhip}"
+
+    giu = f"PID: 4242\nTác vụ: {TEN_DONG_BO}"
+    ket_qua_do, goi = [""], []
+    monkeypatch.setattr(channel, "dang_dong_bo_khac", lambda thu_muc: ket_qua_do[0])
+    monkeypatch.setattr(streamlit, "warning", lambda noi_dung: goi.append("cảnh báo"))
+    monkeypatch.setattr(streamlit, "rerun", lambda **kw: goi.append(kw))
+    khung, doi_so = than["_khung_dong_bo_khac"], (str(tmp_path), "đồng bộ", [giu])
+
+    khung(*doi_so)                                  # lượt vẽ cả trang; bên kia xong ngay sau lượt dò của trang
+    assert goi == ["cảnh báo"], "lượt vẽ cả trang không được dò lại rồi st.rerun giữa lượt"
+    ket_qua_do[0] = giu
+    khung(*doi_so)                                  # nhịp 2 giây: bên kia còn giữ
+    assert goi == ["cảnh báo"] * 2, "bên kia còn giữ: nhịp tự làm mới vẫn cảnh báo"
+    ket_qua_do[0] = ""
+    khung(*doi_so)                                  # nhịp kế: bên kia đã xong
+    assert goi == ["cảnh báo"] * 2 + [{"scope": "app"}], "bên kia xong: phải vẽ lại cả trang để mở khoá nút"
