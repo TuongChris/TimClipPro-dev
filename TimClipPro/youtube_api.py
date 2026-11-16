@@ -14,6 +14,7 @@ không giãn nhịp ``sleep_requests_s`` (dành cho bot-check youtube.com), prox
 
 from __future__ import annotations
 
+import html
 import http.client
 import json
 import logging
@@ -380,3 +381,44 @@ def lay_video(phien: tc.PhienYouTube, data_dir: str, ids: Iterable[str], *, canc
     # Dừng / cầu dao mở: nơi gọi cũng không chạy yt-dlp cho các mã đó — không đếm là «lùi về yt-dlp».
     phien.api.ghi_video(len(thong_tin), [lui[m] for m in thieu if lui[m] not in (LY_DO_DA_HUY, LY_DO_CAU_DAO)])
     return KetQuaApi(thong_tin, thieu, "; ".join(dict.fromkeys(lui[m] for m in thieu)))
+
+
+# =====================================================================
+#  search.list
+# =====================================================================
+
+_FIELDS_TIM = "items(id/videoId,snippet(title,channelId,channelTitle,publishedAt))"
+_TRUONG_TIM = ("title", "channelId", "channelTitle", "publishedAt")
+
+
+def _doc_tim(du_lieu: dict) -> list:
+    """Phản hồi ``search.list`` -> [dict] theo thứ tự liên quan; sai dạng → ``_LoiApi``. Tiêu đề / tên kênh của
+    ``search.list`` đã mã hoá HTML (``&amp;``, ``&#39;``), khác ``videos.list`` — giải mã ở đây."""
+    items = du_lieu.get("items", [])
+    if not isinstance(items, list):
+        raise _LoiApi(tc.API_PHAN_HOI_LA)
+    ra = []
+    for muc in items:
+        id_ = muc.get("id") if isinstance(muc, dict) else None
+        ma = id_.get("videoId") if isinstance(id_, dict) else None
+        sn = muc.get("snippet") if isinstance(muc, dict) else None
+        if not (isinstance(ma, str) and _RE_MA.fullmatch(ma) and isinstance(sn, dict)
+                and all(isinstance(sn.get(k), str) for k in _TRUONG_TIM)):
+            raise _LoiApi(tc.API_PHAN_HOI_LA)
+        ra.append({"id": ma, "title": html.unescape(sn["title"]), "channel": html.unescape(sn["channelTitle"]),
+                   "channel_id": sn["channelId"], "published_at": sn["publishedAt"]})
+    return ra
+
+
+def tim_video(phien: tc.PhienYouTube, data_dir: str, q: str, *, thoi_luong: str = "long", sau: str = "") -> tuple:
+    """Video khớp ``q`` bằng ``search.list`` (type=video, order=relevance, tối đa 50 kết quả) — hạn mức RIÊNG 100
+    lượt/ngày, mỗi lần gọi 1 lượt (developers.google.com, 16/11). ``thoi_luong``: ``long`` (trên 20 phút) | ``medium``
+    (4–20 phút) | ``any``; ``sau``: chỉ video đăng từ mốc RFC 3339 này. Trả ``([dict], "")`` hoặc ``([], lý do)``. Lỗi
+    chỉ ghi vào ``phien.api``: nơi gọi dùng phiên RIÊNG cho tìm kiếm, để hết hạn mức tìm kiếm không tắt ``videos.list``
+    (hạn mức khác) của cùng lượt."""
+    params = {"part": "snippet", "type": "video", "q": q, "maxResults": LO_TOI_DA, "videoDuration": thoi_luong,
+              "order": "relevance", "fields": _FIELDS_TIM}
+    if sau:
+        params["publishedAfter"] = sau
+    ket, ly_do = _goi(phien, data_dir, "search", params, doc=_doc_tim)
+    return ket or [], ly_do
