@@ -116,6 +116,21 @@ def audfprint_gia(e, xong=None):
     return chay
 
 
+def ghi_khi_huy(chay):
+    """Bọc ``_run_stream`` giả: ghi lại mỗi lần ``khi_huy`` trả gì (False = process_runner giết ngay)."""
+    tra_ve = []
+
+    def boc(lenh, *a, khi_huy=None, **k):
+        def ghi():
+            tra_ve.append(khi_huy())
+            return tra_ve[-1]
+
+        return chay(lenh, *a, khi_huy=ghi if khi_huy else None, **k)
+
+    boc.tra_ve = tra_ve
+    return boc
+
+
 # ---------------------------------------------------------------------------
 #  1) «Tạo kho» / «Bổ sung» bị Dừng: lưu đúng phần đã xong, «Bổ sung» sau làm tiếp
 # ---------------------------------------------------------------------------
@@ -219,11 +234,25 @@ def test_dung_khi_bo_sung_de_viec_go_clip_da_cach_ly_cho_lan_sau(tmp_path):
 
     assert doc_ht(e.db_file) == {cu: 9, "Ten moi [abcdefghijk].opus": 7}
     assert (r["da_huy"], r["da_ghi_kho"], r["thanh_cong"]) == (True, True, 1)
+    assert any("Giữ vân tay 1 clip đã bị cách ly" in c for c in r["canh_bao"]), r["canh_bao"]
 
     e._run_stream = audfprint_gia(e)
     r = e.build_database(str(nguon), mode="add")
 
     assert doc_ht(e.db_file) == {"Ten moi [abcdefghijk].opus": 7, "clip_0.opus": 7, "clip_1.opus": 7}
+    assert any("Gỡ vân tay 1 clip đã bị cách ly" in c for c in r["canh_bao"]), r["canh_bao"]
+
+
+def test_dung_sau_khi_moi_clip_da_xong_van_go_clip_da_cach_ly(tmp_path):
+    """Dừng lúc runner đang gộp/lưu bảng (mọi clip đã xong): báo «Hoàn tất» thì kho không được giữ cả vân tay clip đã
+    cách ly lẫn bản thay thế cùng mã video (review P3 16/11)."""
+    e, nguon, _ = _kho_co_clip_da_cach_ly(tmp_path)
+    e._run_stream = audfprint_gia(e, xong={0, 1, 2})
+
+    r = e.build_database(str(nguon), mode="add")
+
+    assert doc_ht(e.db_file) == {"Ten moi [abcdefghijk].opus": 7, "clip_0.opus": 7, "clip_1.opus": 7}
+    assert (r["da_huy"], r.get("da_ghi_kho"), r["thanh_cong"]) == (False, True, 3)
     assert any("Gỡ vân tay 1 clip đã bị cách ly" in c for c in r["canh_bao"]), r["canh_bao"]
 
 
@@ -245,6 +274,23 @@ def test_dung_luc_dang_go_clip_da_cach_ly_van_luu_moi_clip_da_xong(tmp_path):
     assert doc_ht(e.db_file) == {"Ten moi [abcdefghijk].opus": 7, "clip_0.opus": 7, "clip_1.opus": 7}
     assert (r["da_huy"], r.get("da_ghi_kho"), r["thanh_cong"]) == (False, True, 3)
     assert any("Gỡ vân tay 1 clip đã bị cách ly" in c for c in r["canh_bao"]), r["canh_bao"]
+
+
+def test_dung_som_khi_bo_sung_chua_clip_nao_xong_thi_giet_ngay(tmp_path):
+    """Chưa clip nào xong thì không có gì để lưu: giết như cũ, không để runner nạp + ghi lại cả kho (review P3 16/11)."""
+    e = _eng(tmp_path)
+    nguon = _nguon(tmp_path, 3)
+    e.add_kho("A", str(nguon))
+    (nguon / "cu.opus").write_bytes(b"audio")
+    ghi_ht(e.db_file, [(str(nguon / "cu.opus"), 9)])
+    truoc = Path(e.db_file).read_bytes()
+    e._run_stream = boc = ghi_khi_huy(audfprint_gia(e, xong=set()))
+
+    r = e.build_database(str(nguon), mode="add")
+
+    assert boc.tra_ve == [False], "chưa clip nào xong: phải giết ngay"
+    assert Path(e.db_file).read_bytes() == truoc
+    assert (r["da_huy"], r.get("da_ghi_kho"), r["thanh_cong"]) == (True, None, 0)
 
 
 def test_dung_truoc_khi_clip_nao_xong_khong_ghi_kho(tmp_path):
@@ -270,14 +316,30 @@ def test_dung_tao_lai_tu_dau_kho_dang_co_van_tay_giu_nguyen_tung_byte(tmp_path):
     ghi_ht(e.db_file, [(str(nguon / "clip_0.opus"), 9)])
     db, so = Path(e.db_file), Path(e.kho_file)
     truoc = (db.read_bytes(), so.read_bytes())
-    e._run_stream = audfprint_gia(e, xong={0, 1})
+    e._run_stream = boc = ghi_khi_huy(audfprint_gia(e, xong={0, 1}))
 
     r = e.build_database(str(nguon), mode="new")
 
+    assert boc.tra_ve == [False], "chưa xong toàn bộ thì phần đã làm không dùng được: giết ngay, không chờ runner lưu"
     assert (db.read_bytes(), so.read_bytes()) == truoc, "kho đầy đủ không được thay bằng một phần"
     assert (r["da_huy"], r.get("da_ghi_kho"), r["thanh_cong"]) == (True, None, 0)
     cau = " ".join(r["canh_bao"])
     assert "«Tạo lại từ đầu»" in cau and "giữ nguyên" in cau and "2 clip" in cau, cau
+
+
+def test_dung_tao_lai_tu_dau_sau_khi_moi_clip_da_xong_thi_cong_bo_ban_day_du(tmp_path):
+    """Dừng lúc runner đang gộp/lưu bảng của một lần «Tạo lại từ đầu» đã làm xong mọi clip: bản mới ĐẦY ĐỦ, không vứt
+    (review P3 16/11)."""
+    e = _eng(tmp_path)
+    nguon = _nguon(tmp_path, 4)
+    e.add_kho("A", str(nguon))
+    ghi_ht(e.db_file, [(str(nguon / "clip_0.opus"), 9)])
+    e._run_stream = audfprint_gia(e, xong={0, 1, 2, 3})
+
+    r = e.build_database(str(nguon), mode="new")
+
+    assert doc_ht(e.db_file) == {f"clip_{i}.opus": 7 for i in range(4)}
+    assert (r["da_huy"], r["da_ghi_kho"], r["thanh_cong"]) == (False, True, 4)
 
 
 @pytest.mark.parametrize("kho_cu, luu", [("chi_ban_ghi_0_hash", True), ("khong_doc_duoc", False)])

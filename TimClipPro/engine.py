@@ -3625,7 +3625,11 @@ class Engine:
 
         def xin_dung_luu() -> bool:
             # Bấm Dừng: nhờ runner thôi phát clip và ghi các clip ĐÃ xong, không giết. Không ghi được cờ → giết như cũ.
+            # Không có gì để lưu (chưa clip nào xong; «Tạo lại từ đầu» kho đang có vân tay mà chưa xong toàn bộ) → giết ngay.
             if not os.path.exists(co_dung):
+                if not tracker.state.success_count or not (
+                        luu_khi_dung or all(key(p) in da_xong for p in can_xu_ly)):
+                    return False
                 try:
                     with open(co_dung, "w", encoding="utf-8"):
                         pass
@@ -3653,12 +3657,12 @@ class Engine:
                     include_in_tail=lambda line: not line.startswith(
                         "TIMCLIP_FINGERPRINT_EVENT "
                     ),
-                    khi_huy=xin_dung_luu if luu_khi_dung else None,
+                    khi_huy=xin_dung_luu,
                 )
                 if os.path.exists(co_dung):
                     con_lai = [p for p in can_xu_ly if key(p) not in da_xong]
-                if con_lai and not tracker.state.success_count:
-                    raise Cancelled()       # chưa clip nào xong: không có gì để lưu
+                if con_lai and not (luu_khi_dung and tracker.state.success_count):
+                    raise Cancelled()       # không có gì để lưu, hay «Tạo lại từ đầu» chưa xong toàn bộ
                 if rc != 0:
                     chi_tiet = "\n".join(duoi[-12:]) or "(không có thông báo nào)"
                     raise RuntimeError(
@@ -3682,9 +3686,9 @@ class Engine:
                 can_xu_ly = [p for p in can_xu_ly if key(p) in da_xong]
                 lam_moi = lam_moi & {key(p) for p in can_xu_ly}
             # Clip đã bị cách ly: gỡ SAU bước thêm, chỉ khi bản thay thế cùng mã video có
-            # vân tay trong kho tạm (phản biện vòng 3). Bấm Dừng lúc runner chạy: để «Bổ sung» sau gỡ (dừng nhanh).
+            # vân tay trong kho tạm (phản biện vòng 3). Dừng giữa chừng: để «Bổ sung» sau gỡ (dừng nhanh), có cảnh báo.
             go_hong: set = set()
-            if ung_vien_go and not os.path.exists(co_dung):
+            if ung_vien_go and not con_lai:
                 go_hong = self._go_hong_co_ban_thay(ung_vien_go, db_tam)
                 if go_hong:
                     # Mọi clip đã xong: bấm Dừng lúc đang gỡ thì để lệnh gỡ (ngắn) chạy hết rồi công bố như thường;
@@ -3694,7 +3698,7 @@ class Engine:
                         f"Gỡ vân tay {len(go_hong)} clip đã bị cách ly vào "
                         f"{channel.THU_MUC_HONG}/ (file nghi hỏng; bản thay thế cùng mã video "
                         f"đã có vân tay): {ke_ten(go_hong)}.")
-                giu_hong |= ung_vien_go - go_hong
+            giu_hong |= ung_vien_go - go_hong
             if giu_hong:
                 canh_bao.append(self._canh_bao_giu_hong(giu_hong, ke_ten))
             # Mã thoát 0 + file tạm tồn tại chưa chứng minh kho DÙNG ĐƯỢC (TCP-02).
@@ -3748,9 +3752,9 @@ class Engine:
             if luu_khi_dung or not tracker.state.success_count:
                 raise
             raise Cancelled(
-                f"Đã dừng «Tạo lại từ đầu» giữa chừng: kho cũ giữ nguyên — {tracker.state.success_count} clip vừa tạo "
-                "xong vân tay KHÔNG được lưu, vì «Tạo lại từ đầu» chỉ thay kho đang có vân tay khi đã làm xong toàn bộ, "
-                "không thay bằng một phần.") from None
+                f"Đã dừng «Tạo lại từ đầu» giữa chừng: kho cũ giữ nguyên — mới xong {tracker.state.success_count} clip "
+                f"trên {len(can_xu_ly)}, phần đã làm KHÔNG được lưu, vì «Tạo lại từ đầu» chỉ thay kho đang có vân tay "
+                "khi đã làm xong toàn bộ, không thay bằng một phần.") from None
         except Exception as e:
             if not con_lai:
                 raise
