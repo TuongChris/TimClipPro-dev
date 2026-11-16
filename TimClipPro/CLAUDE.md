@@ -121,7 +121,8 @@ thời điểm clip bắt đầu; khi chẩn đoán vân tay mới dùng vùng k
   đổi — chỉ `upload_date_raw` là nguyên bản. Có `published_at` (YouTube Data API, D-51) thì ngày lịch UTC của nó
   đứng trước (cùng phép tính; nhãn `youtube_api.published_at` / `clips_meta.published_at`) — không bao giờ ghi
   `published_at` vào `upload_date_raw`. Kho cũ chỉ có ngày quy đổi: để trống kèm lý do, không
-  đoán từ `timestamp`/tên file. Bổ sung qua mạng chỉ cho video gốc ĐÃ CHỌN, mặc định TẮT.
+  đoán từ `timestamp`/tên file. Bổ sung qua mạng chỉ cho video gốc ĐÃ CHỌN: có khoá Data API thì TỰ BẬT, một
+  `youtube_api.lay_video` theo lô (D-58); yt-dlp chỉ khi người dùng bật `bo_sung_ngay_goc` (mặc định TẮT).
 - Mốc hiển thị và `t` của link là CÙNG một giây (`bao_cao_v2.giay_moc`). Không trừ 3 giây, không
   cộng thời lượng gốc vào `end_s` (mốc kết thúc bị cắt bởi `--time-quantile` 0,05 của audfprint —
   sửa là đổi tham số khớp, cần duyệt riêng). Ngoại lệ D-50: lượt bật «Tinh chỉnh mốc từng giây», dòng ĐÃ tinh chỉnh

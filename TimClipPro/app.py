@@ -991,9 +991,12 @@ with st.sidebar:
             "Bổ sung ngày đăng gốc từ YouTube", c.bo_sung_ngay_goc,
             help="Báo cáo ghi ngày đăng NGUYÊN BẢN (upload_date của YouTube, không đổi múi "
                  "giờ). Kho tạo trước bản này chỉ lưu ngày đã quy đổi nên ô ngày video gốc "
-                 "để trống. Bật thì lượt QUÉT YOUTUBE hỏi thêm cho đúng các video gốc được "
-                 "chọn còn thiếu ngày — mỗi video gốc tối đa một lần mỗi lượt, dừng ngay khi "
-                 "YouTube chặn. Thêm request là thêm nguy cơ bị coi là bot, nên mặc định tắt.")
+                 "để trống. Đã có khoá YouTube Data API thì lượt QUÉT YOUTUBE TỰ bổ sung qua "
+                 "API cho các video gốc được chọn còn thiếu ngày (một yêu cầu cho tới 50 video, "
+                 "không dùng yt-dlp) — không cần bật ô này. Ô này = hỏi thêm bằng yt-dlp khi "
+                 "chưa có khoá, hoặc khi API không trả được: mỗi video gốc tối đa một lần mỗi "
+                 "lượt, dừng ngay khi YouTube chặn. Thêm request yt-dlp là thêm nguy cơ bị coi "
+                 "là bot, nên mặc định tắt.")
         st.markdown("**Cookie** — chỉ cần một trong hai cách:")
         c.ytdlp_cookies_browser = st.text_input(
             "Lấy thẳng từ trình duyệt", c.ytdlp_cookies_browser,
