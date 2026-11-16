@@ -15,6 +15,7 @@ import pickle
 import shutil
 import sys
 import tempfile
+import threading
 import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
@@ -56,6 +57,11 @@ NHIP_KIEM_S = 0.5
 # cùng job (kể cả khi Dừng: terminate bỏ qua ``finally`` của runner) và bị ``dondep``/Watch thu
 # hồi nếu crash. Không đặt → %TEMP% hệ thống như cũ, chỉ cho lối gọi trực tiếp (audit C-7).
 BIEN_THU_MUC_BANG_TAM = "TIMCLIP_THU_MUC_BANG_TAM"
+
+# Dừng mà vẫn giữ phần đã xong: engine tạo file này cạnh ``--dbase`` khi người dùng bấm Dừng. Cha thôi phát clip, mọi worker
+# ghi bảng các clip ĐÃ ``store`` rồi thoát ngay (clip đang tính dở bị bỏ), bảng gộp được lưu như lúc xong bình thường.
+TEN_CO_DUNG = "dung_luu_phan_xong"
+_CO_DUNG = None     # main() đặt theo --dbase; gọi thẳng instrumented_multiproc_add thì không có cờ
 
 
 def _thu_muc_bang_tam():
@@ -199,11 +205,12 @@ def _mo_ta_loi(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {str(exc)[:300]}"
 
 
-def _xu_ly_clip(analyzer, ht, filename: str) -> dict:
+def _xu_ly_clip(analyzer, ht, filename: str, khoa=None) -> dict:
     """Tạo vân tay một clip trong worker. ``{}`` = đã chốt kết quả, ``{"loi": ...}`` = chưa ghi gì.
 
     Clip lỗi không vào ``ht``: lần thử lại có thể rơi vào worker khác, ghi tên ở đây sẽ sinh hai bản
     ghi cho một clip (audit C-3). Clip lỗi hẳn vắng khỏi kho nên «Bổ sung» sau vẫn tự thử lại.
+    ``khoa``: ``store`` + báo xong là MỘT bước với lần ghi bảng khi Dừng — clip trong bảng ⇔ đã báo xong.
     """
     started = time.monotonic()
     _emit("clip_started", file=filename, phase="fingerprinting", process_pid=os.getpid())
@@ -216,17 +223,18 @@ def _xu_ly_clip(analyzer, ht, filename: str) -> dict:
     if loi:
         return {"loi": loi.replace(filename, os.path.basename(filename)),
                 "giay": time.monotonic() - started}
-    ht.store(filename, hashes)
-    _emit(
-        "clip_finished",
-        file=filename,
-        status="success" if len(hashes) else "failed",
-        category="" if len(hashes) else "zero_hashes",
-        message="" if len(hashes) else "Không tạo được hash từ audio.",
-        hash_count=len(hashes),
-        elapsed_seconds=time.monotonic() - started,
-        process_pid=os.getpid(),
-    )
+    with khoa or contextlib.nullcontext():
+        ht.store(filename, hashes)
+        _emit(
+            "clip_finished",
+            file=filename,
+            status="success" if len(hashes) else "failed",
+            category="" if len(hashes) else "zero_hashes",
+            message="" if len(hashes) else "Không tạo được hash từ audio.",
+            hash_count=len(hashes),
+            elapsed_seconds=time.monotonic() - started,
+            process_pid=os.getpid(),
+        )
     return {}
 
 
@@ -271,21 +279,48 @@ def cai_dat_theo_doi_giai_ma() -> None:
     _DA_CAI_THEO_DOI_GIAI_MA = True
 
 
-def _worker_ghi_hash_table(analyzer, ket_noi, hashbits, depth, maxtime, duong_dan) -> None:
+def _ghi_bang(ht, duong_dan) -> None:
+    with gzip.open(duong_dan, "wb", compresslevel=1) as fh:
+        pickle.dump(ht, fh, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def _ghi_bang_khi_dung(dung, khoa, ht, ket_noi, duong_dan) -> None:
+    """Luồng phụ của worker: cha đặt ``dung`` (bấm Dừng) → ghi bảng các clip ĐÃ xong rồi thoát NGAY, không chờ clip đang
+    tính — clip đó chưa ``store`` nên không vào bảng. Giữ ``khoa`` tới lúc thoát: luồng chính không store/gửi gì nữa."""
+    while not dung.value:
+        time.sleep(NHIP_KIEM_S)
+    khoa.acquire()
+    try:
+        _ghi_bang(ht, duong_dan)
+        ket_noi.send({"ok": True})
+    except BaseException as exc:  # noqa: BLE001 - phải báo về cha rồi mới thoát
+        with contextlib.suppress(OSError):
+            ket_noi.send({"ok": False, "loi": f"{type(exc).__name__}: {str(exc)[:500]}"})
+    finally:
+        os._exit(0)
+
+
+def _worker_ghi_hash_table(analyzer, ket_noi, hashbits, depth, maxtime, duong_dan, dung=None) -> None:
     """Chạy trong tiến trình con: nhận từng clip từ cha, khi được cho nghỉ thì GHI bảng hash RA FILE.
 
     Pipe chỉ mang tên clip và dict trạng thái nhỏ: bảng ~419 MB qua pipe chính là nguyên nhân treo cứng
-    của bản vendored.
+    của bản vendored. ``dung`` (byte chung, cha đặt 1 khi bấm Dừng): xem ``_ghi_bang_khi_dung``.
     """
     import hash_table
 
     cai_dat_theo_doi_giai_ma()      # spawn: bản vá của cha không đi theo sang con
+    khoa = threading.Lock()         # store/gửi của luồng chính không chen với lần ghi bảng khi Dừng
     try:
         ht = hash_table.HashTable(hashbits=hashbits, depth=depth, maxtime=maxtime)
+        if dung is not None:
+            threading.Thread(target=_ghi_bang_khi_dung, args=(dung, khoa, ht, ket_noi, duong_dan),
+                             daemon=True).start()
         while (filename := ket_noi.recv()) is not None:
-            ket_noi.send(_xu_ly_clip(analyzer, ht, filename))
-        with gzip.open(duong_dan, "wb", compresslevel=1) as fh:
-            pickle.dump(ht, fh, protocol=pickle.HIGHEST_PROTOCOL)
+            kq = _xu_ly_clip(analyzer, ht, filename, khoa)
+            with khoa:
+                ket_noi.send(kq)
+        khoa.acquire()              # không nhả: lần ghi khi Dừng không được chạy sau lần ghi cuối này
+        _ghi_bang(ht, duong_dan)
         ket_noi.send({"ok": True})
     except BaseException as exc:  # noqa: BLE001 - phải báo về cha rồi mới chết
         try:
@@ -474,14 +509,18 @@ def _kiem_nhip(song: list) -> None:
             )
 
 
-def _dieu_phoi(lich: LichTheoRam, workers: list) -> None:
-    """Vòng phát việc của cha, chạy tới khi mọi worker đã ghi xong bảng hash."""
+def _dieu_phoi(lich: LichTheoRam, workers: list, dung=None) -> None:
+    """Vòng phát việc của cha, chạy tới khi mọi worker đã ghi xong bảng hash.
+
+    Thấy file cờ Dừng thì đặt ``dung`` rồi thôi gửi gì cho worker: worker ghi bảng xong là thoát, gửi vào đó là lỗi."""
     from multiprocessing.connection import wait
 
     song = list(workers)
     while song:
+        if dung is not None and not dung.value and _CO_DUNG and os.path.exists(_CO_DUNG):
+            dung.value = 1
         ban = [w for w in song if w.viec]
-        ranh = [w for w in song if not w.viec and not w.dang_nghi]
+        ranh = [] if dung is not None and dung.value else [w for w in song if not w.viec and not w.dang_nghi]
         _phat_viec(lich, ranh, ban)
         if lich.xong and not ban:
             du = ranh
@@ -531,6 +570,9 @@ def instrumented_multiproc_add(analyzer, hash_tab, filename_iter, report, ncores
 
     thu_muc = tempfile.mkdtemp(prefix="timclip_ht_", dir=_thu_muc_bang_tam())
     workers: list = []
+    # Byte chung, không khoá. KHÔNG dùng multiprocessing.Event: set() chờ mọi tiến trình từng ngủ trên nó xác nhận, worker
+    # đã nghỉ (thoát) trước lúc Dừng không bao giờ xác nhận → runner treo.
+    dung = multiprocessing.RawValue("b", 0)
     try:
         for ix in range(min(ncores, len(clips))):
             cha, con = multiprocessing.Pipe()
@@ -538,14 +580,14 @@ def instrumented_multiproc_add(analyzer, hash_tab, filename_iter, report, ncores
             process = multiprocessing.Process(
                 target=_worker_ghi_hash_table,
                 args=(analyzer, con, hash_tab.hashbits, hash_tab.depth,
-                      (1 << hash_tab.maxtimebits), path),
+                      (1 << hash_tab.maxtimebits), path, dung),
             )
             process.start()
             # Cha không được giữ đầu của worker: worker chết phải thành EOF, không phải treo.
             con.close()
             workers.append(_Worker(ix, process, cha, path))
 
-        _dieu_phoi(lich, workers)
+        _dieu_phoi(lich, workers, dung)
 
         for w in workers:
             with gzip.open(w.duong_dan, "rb") as fh:
@@ -665,7 +707,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Runner tự vào một Job Object riêng: chết vì bất kỳ lý do gì thì worker và FFmpeg
     # do nó sinh ra cũng chết theo, không thành process mồ côi (audit TCP-14).
-    global _NHOM_CUA_RUNNER
+    global _NHOM_CUA_RUNNER, _CO_DUNG
     try:
         from process_runner import NhomTienTrinh
 
@@ -680,6 +722,7 @@ def main(argv: list[str] | None = None) -> int:
     dbase = _dbase_trong_lenh(argv[2:])
     if dbase:
         os.environ.setdefault(BIEN_THU_MUC_BANG_TAM, os.path.dirname(os.path.abspath(dbase)))
+        _CO_DUNG = os.path.join(os.path.dirname(os.path.abspath(dbase)), TEN_CO_DUNG)
 
     import audfprint
 
