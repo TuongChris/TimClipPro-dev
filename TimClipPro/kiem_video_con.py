@@ -50,6 +50,9 @@ def _ket_qua(ma: str, kq: youtube_api.KetQuaApi) -> str:
             return KHONG_CON
         if ly_do == youtube_api.LY_DO_SAP_PHAT:
             return CON_TRUC_TIEP
+        # Lý do API tự tắt (truy_cap_youtube.THONG_BAO_API) kèm câu «lượt này lấy bằng yt-dlp» của luồng quét — nút
+        # này KHÔNG lùi về yt-dlp, nên cắt câu đó đi.
+        ly_do = ly_do.split(truy_cap_youtube._LUOT_NAY_YT_DLP)[0].rstrip(" .;")
         return CHUA_KIEM_DUOC.format(ly_do or youtube_api.LY_DO_CHUA_CO_KHOA)
     if v["upload_status"] in _LY_DO_GO:
         return DA_GO.format(_LY_DO_GO[v["upload_status"]])

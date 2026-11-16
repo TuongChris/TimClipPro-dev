@@ -117,12 +117,22 @@ def test_het_han_muc_la_chua_kiem_duoc_va_giu_ket_qua_kiem_truoc(api_youtube_gia
     api_youtube_gia.kich_ban = [gia.QUOTA]
     monkeypatch.setattr(kv, "_bay_gio", lambda: "2026-11-16T11:00:00")
     ket = kv.kiem_tra(_phien(), data, [a, b])
-    het = "Chưa kiểm được — " + t.THONG_BAO_API[t.API_HET_HAN_MUC]
+    het = ket[b]
+    # Nút này KHÔNG lùi về yt-dlp: lý do giữ phần «hết hạn mức», bỏ câu «lấy bằng yt-dlp» của luồng quét.
+    assert het.startswith("Chưa kiểm được — Hết hạn mức YouTube Data API") and "yt-dlp" not in het
     assert ket == {a: het, b: het} and api_youtube_gia.dem() == 2
     assert kv.doc_so(data) == {
         a: {"ket_qua": CON, "kiem_luc": "2026-11-16T10:00:00", "lan_dau_khong_con": "",
             "lan_cuoi_con": "2026-11-16T10:00:00"},
         b: {"ket_qua": het, "kiem_luc": "2026-11-16T11:00:00", "lan_dau_khong_con": "", "lan_cuoi_con": ""}}
+
+
+def test_loi_tam_thoi_3_lan_khong_noi_da_dung_yt_dlp(api_youtube_gia, tmp_path):
+    api_youtube_gia.kich_ban = [gia.SERVER] * 3   # lô 1: lỗi + thử lại lỗi; lô 2: lỗi thứ 3 → API tắt cả lượt
+    ket = kv.kiem_tra(_phien(), str(tmp_path / "data"), [f"vidkiemtr{i:02d}" for i in range(60)])
+    assert set(ket.values()) == {"Chưa kiểm được — " + ya.LY_DO_TAM_THOI,
+                                 "Chưa kiểm được — YouTube Data API lỗi mạng / máy chủ 3 lần liên tiếp"}
+    assert "yt-dlp" not in json.dumps(kv.doc_so(str(tmp_path / "data")), ensure_ascii=False)
 
 
 def test_khong_co_khoa_khong_gui_yeu_cau_nao(monkeypatch, tmp_path):
