@@ -34,6 +34,7 @@ from truy_cap_youtube import (
     phan_loai_loi,
     tom_tat_ky_thuat,
 )
+from youtube_api import ma_video_cho_api
 from ytdlp_chung import (
     PLAYER_CLIENTS_MAC_DINH,
     BoGhiYtdlp,
@@ -305,6 +306,8 @@ def tai_nhieu(
     da_co = ma_da_co(thu_muc, chi_tieng, anh=thumbnail) if bo_qua_da_co else set()
     da_tai: set = set()
     ten_mau = "%(id)s.%(ext)s"  # trong thư mục tạm; tên cuối đặt lúc chuyển ra (tiêu đề không dấu + mã)
+    # Thumbnail video YouTube: ảnh i.ytimg tải thẳng như cả kênh (D-45) — ảnh tĩnh không cần đăng nhập nên bỏ cookie.
+    opts_anh = cau_hinh.bo_cookie().tuy_chon("download", outtmpl=os.path.join(thu_muc, ten_mau)) if thumbnail else None
 
     for i, url in enumerate(links):
         kq = KetQuaTaiVideo(url=url, trang_thai="loi")
@@ -340,6 +343,22 @@ def tai_nhieu(
                 "không tải tiếp để khỏi làm đầy ổ. Giải phóng chỗ rồi bấm lại."
             )
             continue
+        ma_anh = ma_video_cho_api(url) if thumbnail else ""
+        if ma_anh:
+            # Không trích xuất từng video (đo 11/11: ~8 s/ảnh vì giãn nhịp + giải JavaScript); i.ytimg hỏng → trích xuất.
+            bao(i / n, f"Ảnh {i + 1}/{n}: đang tải thumbnail...")
+            try:
+                with yt_dlp.YoutubeDL(opts_anh) as ydl:
+                    anh = _ghi_anh_ytimg(ydl, ma_anh, thu_muc, phien, huy)
+            except DaHuyTaiVideo:
+                kq.trang_thai, kq.ghi_chu = "bo_qua", "Đã dừng theo yêu cầu."
+                continue
+            except Exception:  # noqa: BLE001 — lỗi đã vào phiên (cầu dao, phân loại); lùi về trích xuất bên dưới
+                anh = None
+            if anh:
+                kq.trang_thai, kq.duong_dan, kq.chat_luong = "xong", anh[0], f"ảnh JPG {anh[1]}"
+                da_tai.add(ma)
+                continue
         twitch = None  # (proxy, cookie) khi mở khoá bản cao của Twitch
         if mo_khoa_twitch and mo_khoa_twitch.co() and la_link_twitch(url):
             try:
@@ -569,6 +588,27 @@ def _lay_anh_ytimg(ydl, ma: str) -> Optional[tuple]:
     return None
 
 
+def _ghi_anh_ytimg(ydl, ma: str, thu_muc: str, phien: PhienYouTube, huy: Callable[[], bool]) -> Optional[tuple]:
+    """Ảnh i.ytimg của video ``ma`` (qua ``PhienYouTube.chay``: cầu dao, phân loại lỗi) ghi thành «mã.jpg» trong
+    ``thu_muc``, không ghi đè: ``(đường dẫn, kích thước)``; YouTube không có ảnh → ``None``; Dừng → ``DaHuyTaiVideo``."""
+    phien.dem_yeu_cau("download")
+    anh = phien.chay("download", lambda: _lay_anh_ytimg(ydl, ma), video_id=ma, cancel_event=_CoHuyTuHam(huy),
+                     loi_huy=DaHuyTaiVideo, bo_qua=(DaHuyTaiVideo,))
+    if anh is None:
+        return None
+    dich = _ten_trong(thu_muc, os.path.basename(ydl.prepare_filename({"id": ma, "title": ma, "ext": "jpg"})))
+    phan = dich + ".part"
+    try:
+        with open(phan, "wb") as f:
+            f.write(anh[0])
+        os.replace(phan, dich)
+    finally:
+        if os.path.exists(phan):
+            with contextlib.suppress(OSError):
+                os.remove(phan)
+    return dich, anh[1]
+
+
 def _tai_anh_kenh(
     ds: list,
     thu_muc: str,
@@ -610,36 +650,17 @@ def _tai_anh_kenh(
                 kq.trang_thai, kq.ghi_chu = "bo_qua", "Đã có trong thư mục."
                 continue
             bao(i / n, f"Ảnh {i + 1}/{n}: đang tải thumbnail...")
-            phan = ""
             try:
-                phien.dem_yeu_cau("download")
-                anh = phien.chay(
-                    "download",
-                    lambda v=v: _lay_anh_ytimg(ydl, v.id),
-                    video_id=v.id,
-                    cancel_event=_CoHuyTuHam(huy),
-                    loi_huy=DaHuyTaiVideo,
-                    bo_qua=(DaHuyTaiVideo,),
-                )
+                anh = _ghi_anh_ytimg(ydl, v.id, thu_muc, phien, huy)
                 if anh is None:
                     kq.ghi_chu = "YouTube không có ảnh thumbnail cho video này."
                     continue
-                ten = ydl.prepare_filename({"id": v.id, "title": v.title or v.id, "ext": "jpg"})
-                dich = _ten_trong(thu_muc, os.path.basename(ten))
-                phan = dich + ".part"
-                with open(phan, "wb") as f:
-                    f.write(anh[0])
-                os.replace(phan, dich)
-                kq.trang_thai, kq.duong_dan, kq.chat_luong = "xong", dich, f"ảnh JPG {anh[1]}"
+                kq.trang_thai, kq.duong_dan, kq.chat_luong = "xong", anh[0], f"ảnh JPG {anh[1]}"
             except DaHuyTaiVideo:
                 kq.trang_thai, kq.ghi_chu = "bo_qua", "Đã dừng theo yêu cầu."
             except Exception as e:  # noqa: BLE001 — một ảnh lỗi không làm đứt cả lô
                 f = phan_loai_loi(e, thao_tac="download", video_id=v.id)
                 kq.ghi_chu = che_bi_mat(f.human_message_vi or tom_tat_ky_thuat(e))
-            finally:
-                if phan and os.path.exists(phan):
-                    with contextlib.suppress(OSError):
-                        os.remove(phan)
     bao(1.0, "Xong.")
     return [asdict(k) for k in ket_qua]
 

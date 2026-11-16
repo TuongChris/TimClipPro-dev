@@ -475,7 +475,7 @@ def _main():
             ap.error('Dùng: python cli.py kenh "https://youtube.com/@Kenh" --kho "D:\\KhoClipGoc"')
         cs = ChannelSync(a.kho,
                          player_clients=list(eng.config.ytdlp_player_clients),
-                         cau_hinh_mang=eng.cau_hinh_mang())
+                         cau_hinh_mang=eng.cau_hinh_mang(), data_dir=eng.data_dir)
         with maintenance_gate.vao_cong_cua(eng, "đồng bộ kênh"):
             r = cs.sync(a.muc[0], a.limit, in_tien_do, thu_lai_han_che=a.thu_lai_han_che)
         trang_thai = {"DAY_DU": "XONG", "MOT_PHAN": "XONG MỘT PHẦN", "BI_CHAN": "DỪNG GIỮA CHỪNG",

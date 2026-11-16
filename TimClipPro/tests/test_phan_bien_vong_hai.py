@@ -654,6 +654,7 @@ def test_cli_kenh_kho_dang_dong_bo_thi_bao_ban_khong_traceback(monkeypatch, caps
     class _EngineGia:
         def __init__(self):
             self.config = SimpleNamespace(ncores=1, ytdlp_player_clients=["android"])
+            self.data_dir = str(tmp_path / "data")
 
         def cau_hinh_mang(self):
             return None

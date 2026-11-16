@@ -32,6 +32,15 @@ class YdlGia:
     def __exit__(self, *a):
         return False
 
+    def urlopen(self, url):
+        """i.ytimg.com không có ảnh nào (404): thumbnail theo link lùi về trích xuất yt-dlp (D-51)."""
+        import io
+
+        from yt_dlp.networking.common import Response
+        from yt_dlp.networking.exceptions import HTTPError
+
+        raise HTTPError(Response(io.BytesIO(b""), url, {}, status=404))
+
     def extract_info(self, url, download=True):
         YdlGia.goi.append((url, self.opts))
         ma = url[-11:]
@@ -1021,6 +1030,60 @@ def test_thumbnail_ca_kenh_khong_co_anh_nao(ydl_anh, tmp_path):
     kq = tv.tai_kenh("https://www.youtube.com/@Kenh", str(tmp_path), thumbnail=True)
     assert kq[0]["trang_thai"] == "loi" and "thumbnail" in kq[0]["ghi_chu"]
     assert [k["trang_thai"] for k in kq[1:]] == ["xong", "xong"]
+
+
+# ---- thumbnail theo link (D-51): video YouTube lấy thẳng ảnh i.ytimg như cả kênh, không trích xuất từng video
+class _YdlLinkAnh(YdlGia):
+    """YdlGia (trích xuất = đường lùi, ghi «mã.jpg») + ảnh i.ytimg.com và ``prepare_filename`` của _YdlAnh."""
+
+    urlopen = _YdlAnh.urlopen
+    prepare_filename = _YdlAnh.prepare_filename
+
+
+@pytest.fixture
+def ydl_link_anh(gia, monkeypatch):
+    _YdlAnh.mo, _YdlAnh.thieu = [], set()
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", _YdlLinkAnh)
+    return _YdlAnh
+
+
+def test_thumbnail_theo_link_youtube_tai_thang_anh_khong_trich_xuat(ydl_link_anh, tmp_path):
+    kq = tv.tai_nhieu([URL1, URL2, "https://youtu.be/abcdefghij1"], str(tmp_path), thumbnail=True)
+    assert [k["trang_thai"] for k in kq] == ["xong", "xong", "bo_qua"]   # link thứ ba: cùng video với link đầu
+    assert YdlGia.goi == [], "video YouTube: không trích xuất yt-dlp nào"
+    assert ydl_link_anh.mo == [f"https://i.ytimg.com/vi/{m}/maxresdefault.jpg" for m in ("abcdefghij1", "abcdefghij2")]
+    assert sorted(os.listdir(tmp_path)) == ["abcdefghij1.jpg", "abcdefghij2.jpg"]  # tên = mã (D-47), không còn file dở
+    assert kq[0]["duong_dan"] == str(tmp_path / "abcdefghij1.jpg") and kq[0]["chat_luong"] == "ảnh JPG 1280×720"
+    assert (tmp_path / "abcdefghij2.jpg").read_bytes() == b"abcdefghij2:maxresdefault.jpg"
+
+
+@pytest.mark.parametrize("hong", ["khong_co_anh", "http_403"])
+def test_thumbnail_theo_link_i_ytimg_hong_thi_lui_ve_trich_xuat(ydl_link_anh, tmp_path, monkeypatch, hong):
+    if hong == "khong_co_anh":
+        ydl_link_anh.thieu = {("abcdefghij1", t) for t in ("maxresdefault", "sddefault", "hqdefault")}
+    else:
+        def cam(self, url):
+            import io
+
+            from yt_dlp.networking.common import Response
+            from yt_dlp.networking.exceptions import HTTPError
+
+            raise HTTPError(Response(io.BytesIO(b""), url, {}, status=403))
+        monkeypatch.setattr(_YdlLinkAnh, "urlopen", cam)
+    kq = tv.tai_nhieu([URL1], str(tmp_path), thumbnail=True)
+    assert kq[0]["trang_thai"] == "xong" and kq[0]["chat_luong"] == "ảnh JPG"
+    assert [u for u, _ in YdlGia.goi] == [URL1] and YdlGia.goi[0][1]["writethumbnail"] is True
+    assert os.listdir(tmp_path) == ["abcdefghij1.jpg"]
+
+
+@pytest.mark.parametrize("url, thumbnail, chat_luong", [
+    (TWITCH, True, "ảnh JPG"),                # thumbnail không phải YouTube: trích xuất như cũ
+    (URL1, False, "2160p60 · vp9 + opus"),    # tải VIDEO YouTube: không đụng i.ytimg
+])
+def test_ngoai_thumbnail_youtube_van_trich_xuat_nhu_cu(ydl_link_anh, tmp_path, url, thumbnail, chat_luong):
+    kq = tv.tai_nhieu([url], str(tmp_path), thumbnail=thumbnail)
+    assert kq[0]["trang_thai"] == "xong" and kq[0]["chat_luong"] == chat_luong
+    assert [u for u, _ in YdlGia.goi] == [url] and ydl_link_anh.mo == []
 
 
 # ---- 12/11: tên file tải về không dấu cách, không ký tự đặc biệt (người dùng yêu cầu)
