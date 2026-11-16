@@ -12,9 +12,11 @@ from pathlib import Path
 
 import yt_dlp
 
+import engine as engine_module
 import truy_cap_youtube as t
 import youtube_api_gia as gia
 from channel import ChannelSync
+from test_metadata_integration import _make_engine
 from ytdlp_gia import BOT, YdlKichBan
 
 VN = "Asia/Ho_Chi_Minh"
@@ -229,3 +231,84 @@ def test_xem_truoc_kenh_chi_tiet_tiem_vao_khong_goi_api(api_youtube_gia, tmp_pat
                                   chi_tiet=lambda vid: da_hoi.append(vid) or {"id": vid, "upload_date": "20250102"})
 
     assert api_youtube_gia.dem() == 0 and da_hoi == ids and all(v.upload_date == "20250102" for v in ds)
+
+
+# =====================================================================
+#  vametak — Engine.va_metadata_thieu («🔧 Vá metadata thiếu», cli.py vametak)
+# =====================================================================
+
+def _engine_vametak(tmp_path, monkeypatch, ids):
+    kho = tmp_path / "Kho"
+    kho.mkdir()
+    ten = {m: f"00000000 - Tên {m} [{m}].opus" for m in ids}
+    eng = _make_engine(tmp_path, monkeypatch, {"Kho": kho},
+                       {"Kho": [{"ten": ten[m], "duong_dan": str(kho / ten[m])} for m in ids]}, active="Kho")
+    Path(eng.db_file).write_bytes(b"test-only-not-a-fingerprint-database")
+    lan_ghi = []        # mỗi lần ghi snapshot vá qua mạng: số clip đã vá tới lúc đó
+    ghi_that = engine_module.ghi_json_an_toan
+
+    def ghi(path, du_lieu, *a, **k):
+        if isinstance(du_lieu, dict) and any(isinstance(s, dict) and s.get("kind") == "explicit_network_patch"
+                                             for s in du_lieu.get("sources") or ()):
+            lan_ghi.append(du_lieu["stats"]["network_updated"])
+        return ghi_that(path, du_lieu, *a, **k)
+
+    monkeypatch.setattr(engine_module, "ghi_json_an_toan", ghi)
+    return eng, ten, lan_ghi
+
+
+def test_vametak_60_clip_hai_yeu_cau_api_ghi_snapshot_moi_lo(api_youtube_gia, tmp_path, monkeypatch):
+    ids = [_ma(i) for i in range(60)]
+    _co_tren_api(api_youtube_gia, ids, duration="PT12M")
+    ydl = _ytdlp(monkeypatch)
+    eng, ten, lan_ghi = _engine_vametak(tmp_path, monkeypatch, ids)
+    tien_do = []
+
+    r = eng.va_metadata_thieu(lambda pct, msg: tien_do.append(pct))
+
+    assert api_youtube_gia.dem() == 2 and ydl.dem("info") == 0
+    assert (r["tong"], r["da_va"], r["loi"]) == (60, 60, [])
+    assert lan_ghi == [50, 60], "snapshot ghi MỘT lần mỗi lô 50 clip, không mỗi clip"
+    assert tien_do == [50 / 60, 1.0], "tiến độ báo theo lô API"
+    luu = json.loads(Path(r["snapshot_path"]).read_text(encoding="utf-8"))["clips"][ten[ids[0]]]
+    assert (luu["title"], luu["upload_date"], luu["duration"]) == (f"Video {ids[0]}", NGAY_VN, 720.0)
+    assert r["youtube"]["api"]["video_api"] == 60
+
+
+def test_vametak_het_han_muc_giua_luot_phan_con_lai_qua_yt_dlp(api_youtube_gia, tmp_path, monkeypatch):
+    ids = [_ma(i) for i in range(60)]
+    _co_tren_api(api_youtube_gia, ids)
+    api_youtube_gia.kich_ban = [None, gia.QUOTA]
+    ydl = _ytdlp(monkeypatch)
+    eng, _ten, lan_ghi = _engine_vametak(tmp_path, monkeypatch, ids)
+
+    r = eng.va_metadata_thieu()
+
+    assert api_youtube_gia.dem() == 2 and _hoi_ytdlp(ydl) == ids[50:]
+    assert (r["da_va"], r["loi"]) == (60, [])
+    assert lan_ghi == [50, *range(51, 61)], "lô API: một lần; đường yt-dlp cũ: mỗi clip một lần như trước"
+    assert (r["youtube"]["api"]["video_api"], r["youtube"]["api"]["video_lui"]) == (50, 10)
+
+
+def test_vametak_khong_co_khoa_so_luot_yt_dlp_va_so_lan_ghi_nhu_cu(tmp_path, monkeypatch):
+    tp = gia.lap_transport(monkeypatch)
+    ids = [_ma(i) for i in range(60)]
+    ydl = _ytdlp(monkeypatch)
+    eng, _ten, lan_ghi = _engine_vametak(tmp_path, monkeypatch, ids)
+
+    r = eng.va_metadata_thieu()
+
+    assert tp.dem() == 0 and _hoi_ytdlp(ydl) == ids and r["da_va"] == 60
+    assert lan_ghi == list(range(1, 61))
+
+
+def test_vametak_fetcher_tiem_vao_khong_goi_api(api_youtube_gia, tmp_path, monkeypatch):
+    ids = [_ma(i) for i in range(3)]
+    _co_tren_api(api_youtube_gia, ids)
+    eng, _ten, _lan_ghi = _engine_vametak(tmp_path, monkeypatch, ids)
+    da_goi = []
+
+    r = eng.va_metadata_thieu(fetcher=lambda vid: da_goi.append(vid) or {
+        "id": vid, "title": "Tiêu đề giả", "upload_date": "20240506", "duration": 321})
+
+    assert api_youtube_gia.dem() == 0 and da_goi == ids and r["da_va"] == 3
