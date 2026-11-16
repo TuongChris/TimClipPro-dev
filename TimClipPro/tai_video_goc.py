@@ -668,6 +668,12 @@ def _tai_anh_kenh(
     return [asdict(k) for k in ket_qua]
 
 
+def ly_do_cot_api(ly_do: str) -> str:
+    """Lý do API lỗi cho hai cột «Ngày đăng»/«Lượt xem»: bỏ câu «lấy bằng yt-dlp như cũ» của lõi — ở tab này hai cột
+    chỉ để trống, không có đường lùi yt-dlp."""
+    return "; ".join(x.split(youtube_api.tc._LUOT_NAY_YT_DLP)[0].rstrip(" .;") for x in ly_do.split("; ") if x)
+
+
 def tieu_de_kenh(url_kenh: str, cau_hinh_mang: Optional[CauHinhMang] = None, *,
                  phien: Optional[PhienYouTube] = None, data_dir: Optional[str] = None) -> tuple:
     """Tiêu đề + link + thời lượng mọi video ở tab Videos của kênh, mới nhất trước — MỘT lượt liệt kê nhanh, không tải
@@ -685,6 +691,7 @@ def tieu_de_kenh(url_kenh: str, cau_hinh_mang: Optional[CauHinhMang] = None, *,
     if data_dir is None or youtube_api.trang_thai_khoa(data_dir).ma == youtube_api.CHUA_CO:
         return dong, ""
     api, ly_do = youtube_api.lay_ngay_luot_xem(phien, data_dir, [v.id for v in ds])
+    ly_do = ly_do_cot_api(ly_do)
     for d, v in zip(dong, ds):
         x = api.get(v.id, {})
         # Ngày lịch UTC của publishedAt — cùng luật ngày V2 (D-51), định dạng D-30.

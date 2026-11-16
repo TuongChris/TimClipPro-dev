@@ -3718,7 +3718,12 @@ class Engine:
                         f"Gỡ vân tay {len(go_hong)} clip đã bị cách ly vào "
                         f"{channel.THU_MUC_HONG}/ (file nghi hỏng; bản thay thế cùng mã video "
                         f"đã có vân tay): {ke_ten(go_hong)}.")
-            giu_hong |= ung_vien_go - go_hong
+            if con_lai and ung_vien_go:
+                canh_bao.append(
+                    f"Chưa gỡ vân tay {len(ung_vien_go)} clip đã bị cách ly vào {channel.THU_MUC_HONG}/ vì đã dừng "
+                    f"giữa chừng — chạy lại «Bổ sung» để gỡ: {ke_ten(ung_vien_go)}.")
+            else:
+                giu_hong |= ung_vien_go - go_hong
             if giu_hong:
                 canh_bao.append(self._canh_bao_giu_hong(giu_hong, ke_ten))
             # Mã thoát 0 + file tạm tồn tại chưa chứng minh kho DÙNG ĐƯỢC (TCP-02).
@@ -7033,14 +7038,15 @@ class Engine:
         nhưng một truy vấn cho cả bảng — tab Lịch sử gọi mỗi lần vẽ). Chỉ đọc."""
         with self._db() as c:
             rows = c.execute(
-                "SELECT j.source_id, j.source_name, j.created_at, g.so_lan, b.chinh_sach, b.du_lieu FROM"
+                "SELECT j.source_id, j.source_ref, j.source_name, j.created_at, g.so_lan, b.chinh_sach, b.du_lieu FROM"
                 " (SELECT MAX(id) AS id, COUNT(*) AS so_lan FROM jobs WHERE status = 'ok' AND n_matches > 0"
                 " AND source_id IS NOT NULL AND source_id != '' GROUP BY source_id) g"
                 " JOIN jobs j ON j.id = g.id LEFT JOIN bao_cao_job b ON b.job_id = j.id ORDER BY j.id DESC").fetchall()
         ra = []
         for row in rows:
             ma = bao_cao_v2.ma_video_hop_le(row["source_id"])
-            if not ma:
+            # Chỉ video YouTube: mã VOD Twitch cũng có thể dài 11 ký tự (review P3 16/11).
+            if not ma or youtube_api.ma_video_cho_api(row["source_ref"]) != ma:
                 continue
             # Không có ảnh chụp (lần quét luật cũ) hay ảnh chụp hỏng: để trống kênh, video vẫn có dòng.
             bc = bao_cao_v2.doc_anh_chup_da_luu(row["chinh_sach"], row["du_lieu"])

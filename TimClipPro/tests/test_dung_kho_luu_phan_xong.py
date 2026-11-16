@@ -234,7 +234,9 @@ def test_dung_khi_bo_sung_de_viec_go_clip_da_cach_ly_cho_lan_sau(tmp_path):
 
     assert doc_ht(e.db_file) == {cu: 9, "Ten moi [abcdefghijk].opus": 7}
     assert (r["da_huy"], r["da_ghi_kho"], r["thanh_cong"]) == (True, True, 1)
-    assert any("Giữ vân tay 1 clip đã bị cách ly" in c for c in r["canh_bao"]), r["canh_bao"]
+    assert any("Chưa gỡ vân tay 1 clip đã bị cách ly" in c and "đã dừng giữa chừng" in c for c in r["canh_bao"]), \
+        r["canh_bao"]
+    assert not any("chưa có bản thay thế" in c for c in r["canh_bao"]), r["canh_bao"]
 
     e._run_stream = audfprint_gia(e)
     r = e.build_database(str(nguon), mode="add")

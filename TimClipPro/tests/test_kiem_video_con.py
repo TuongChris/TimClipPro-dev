@@ -246,3 +246,19 @@ def test_tab_lich_su_bam_kiem_hien_bang_tong_hop_va_chi_goi_mang_khi_bam(api_you
     assert any("Google Sheets không bị đổi" in c.value for c in at.caption)
     at = at.run()                                   # vẽ lại: bảng đọc từ sổ, không gửi thêm
     assert api_youtube_gia.dem() == 1 and _bang(at).iloc[0]["Trên YouTube"] == CON
+
+
+def test_job_twitch_khong_vao_danh_sach_kiem(tmp_path):
+    """Review P3 16/11: mã VOD Twitch 11 ký tự lọt kiểm 11 ký tự → bị gửi lên YouTube và ghi «Không còn xem được»."""
+    import sqlite3
+
+    from engine import Engine
+
+    e = Engine(root=str(tmp_path))
+    with sqlite3.connect(e.sqlite_file) as c:
+        for ma, ref in (("abcdefghijk", "https://www.youtube.com/watch?v=abcdefghijk"),
+                        ("12345678901", "https://www.twitch.tv/videos/12345678901")):
+            c.execute("INSERT INTO jobs(created_at, source_type, source_name, source_ref, duration_s, status,"
+                      " n_matches, note, source_id) VALUES('2026-11-16 10:00:00', 'youtube', 't', ?, 1, 'ok', 1, '', ?)",
+                      (ref, ma))
+    assert [v["ma"] for v in e.video_vi_pham()] == ["abcdefghijk"]

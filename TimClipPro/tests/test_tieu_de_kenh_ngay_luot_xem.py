@@ -190,7 +190,7 @@ def test_api_hong_hai_cot_trong_kem_ly_do_danh_sach_van_con(api_youtube_gia, tmp
         api_youtube_gia.video[m] = _video_api(m)
     api_youtube_gia.kich_ban = list(kich_ban)
     dong, ly = tv.tieu_de_kenh(URL_KENH, phien=_phien(), data_dir=str(tmp_path / "data"))
-    assert ly == ly_do
+    assert ly == tv.ly_do_cot_api(ly_do) and tc._LUOT_NAY_YT_DLP not in ly
     assert [(d["Tiêu đề"], d["Ngày đăng"], d["Lượt xem"]) for d in dong] == [(t, "", None) for _m, t, _d in _DS]
     bang = _bang_csv(dong)
     assert bang[0] == COT_DU and [r[4:] for r in bang[1:]] == [["", ""], ["", ""]]
@@ -248,9 +248,20 @@ def test_tab_co_khoa_hien_hai_cot_api_hong_thi_canh_bao(api_youtube_gia, tmp_pat
     at.button(key="lay_tieu_de").click().run()
     assert not at.exception
     cb = canh_bao(at)
-    assert len(cb) == 1 and tc.THONG_BAO_API[tc.API_HET_HAN_MUC] in cb[0]
+    assert len(cb) == 1 and tv.ly_do_cot_api(tc.THONG_BAO_API[tc.API_HET_HAN_MUC]) in cb[0]
+    assert tc._LUOT_NAY_YT_DLP not in cb[0]
     df = bang(at)
     assert list(df.columns) == COT_DU and list(df["Tiêu đề"]) == [t for _m, t, _d in _DS]
     assert list(df["Ngày đăng"]) == ["", ""] and df["Lượt xem"].isna().all()
     assert sorted(e.label for e in at.get("download_button")) == [
         "⬇️ Tải file CSV (mở bằng Excel)", "⬇️ Tải file TXT (chỉ tiêu đề)"]
+
+
+def test_ly_do_loi_api_khong_noi_lay_bang_yt_dlp(api_youtube_gia):
+    """Review P3 16/11: câu chung của lõi («Lượt này lấy thông tin video bằng yt-dlp như cũ») sai với tab này."""
+    import truy_cap_youtube
+    import tai_video_goc
+
+    assert truy_cap_youtube._LUOT_NAY_YT_DLP not in tai_video_goc.ly_do_cot_api(
+        truy_cap_youtube.THONG_BAO_API[truy_cap_youtube.API_HET_HAN_MUC])
+    assert tai_video_goc.ly_do_cot_api(truy_cap_youtube.THONG_BAO_API[truy_cap_youtube.API_HET_HAN_MUC])
