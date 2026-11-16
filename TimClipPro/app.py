@@ -295,6 +295,30 @@ def _thu_muc_dang_dong_bo() -> str:
     return tv.thu_muc if tv is not None and tac_vu_nen.la_song_song(tv.kind) else ""
 
 
+@st.fragment(run_every=2)
+def _khung_dong_bo_khac(thu_muc: str, viec: str, chu_luot_trang: list) -> None:
+    """Cảnh báo của ``_canh_bao_dong_bo_khac``: chỉ được gọi khi thư mục đang bị giữ, rồi tự dò lại mỗi 2 giây (phép dò
+    chỉ hỏi, không chờ) mà không vẽ lại cả trang; bên kia xong → vẽ lại cả trang để mở khoá các nút. Lượt vẽ cả trang
+    dùng kết quả dò của trang (``chu_luot_trang``, lấy MỘT lần — mỗi nhịp sau Streamlit gọi lại với chính danh sách đó,
+    đã rỗng): dò lại ngay mà thấy rảnh thì st.rerun giữa lượt làm mất giá trị các ô chưa vẽ tới."""
+    chu = chu_luot_trang.pop() if chu_luot_trang else channel.dang_dong_bo_khac(thu_muc)
+    if chu:
+        st.warning(f"Thư mục này đang được đồng bộ kênh ở một tiến trình KHÁC (cửa sổ Tool khác hoặc lệnh "
+                   f"`cli.py kenh`) — chờ lượt đó xong rồi {viec}. Thông tin khoá: {'; '.join(chu.splitlines())}")
+    else:
+        st.rerun(scope="app")
+
+
+def _canh_bao_dong_bo_khac(thu_muc: str, viec: str) -> bool:
+    """Tiến trình KHÁC (cửa sổ Tool khác, ``cli.py kenh``) đang đồng bộ kênh vào ``thu_muc``: cảnh báo kèm thông tin
+    chủ khoá, trả True để khoá các nút ghi vào thư mục đó. Lượt của chính tiến trình này (làn D-29) không báo ở đây —
+    ``_thu_muc_dang_dong_bo`` lo."""
+    chu = channel.dang_dong_bo_khac(thu_muc)
+    if chu:
+        _khung_dong_bo_khac(thu_muc, viec, [chu])
+    return bool(chu)
+
+
 def chay_dong_bo(kenh_url: str, kho_dir: str, gioi_han: int | None, thu_lai_han_che: bool,
                  giu_thong_bao: bool = False) -> None:
     """Khởi động đồng bộ kênh ở làn RIÊNG: chạy song song với quét / dựng vân tay. Cờ huỷ RIÊNG của lượt (không phải
@@ -1756,11 +1780,13 @@ with tab0:
         "Thư mục kho clip gốc (ổ D, E... tùy bạn)", st.session_state.kho_dir,
         placeholder=r"D:\KhoClipGoc")
     _thu_muc_dong_bo = st.session_state.kho_dir.strip('" ')
+    _dong_bo_khac = _canh_bao_dong_bo_khac(_thu_muc_dong_bo,
+                                           "đồng bộ, dựng lại danh sách hay lấy lại tên cho thư mục này")
     if _thu_muc_dong_bo and os.path.isdir(_thu_muc_dong_bo):
         _kho_dai = channel.la_kho_video_dai(_thu_muc_dong_bo)
         _bat_dai = st.checkbox(
             f"Kho video dài (nhận video tới {channel.GIAY_CLIP_TOI_DA_KHO_DAI // 3600} giờ)",
-            value=_kho_dai, key=f"kho_video_dai_{_thu_muc_dong_bo}", disabled=dang_dong_bo(),
+            value=_kho_dai, key=f"kho_video_dai_{_thu_muc_dong_bo}", disabled=dang_dong_bo() or _dong_bo_khac,
             help=f"Áp dụng riêng cho thư mục này; thư mục khác vẫn giới hạn {channel.GIO_CLIP_TOI_DA} giờ. Kho video dài "
                  "báo đúng vị trí trong video gốc dài, tối đa 2.047 clip, RAM khoảng 1,5 GB mỗi giờ âm thanh. Kho đã có "
                  "vân tay trước khi bật phải «Tạo lại từ đầu».")
@@ -1821,7 +1847,7 @@ with tab0:
                 st.error(f"Lỗi: {e}")
 
     if st.button("⬇️ Bắt đầu đồng bộ kênh", type="primary",
-                 disabled=not (kenh_url and st.session_state.kho_dir) or dang_dong_bo()):
+                 disabled=not (kenh_url and st.session_state.kho_dir) or dang_dong_bo() or _dong_bo_khac):
         chay_dong_bo(kenh_url, st.session_state.kho_dir, gioi_han or None, thu_lai_han_che)
     if dang_dong_bo():
         st.caption("Đang có một lượt đồng bộ chạy (khung ở đầu trang) — chờ lượt đó xong rồi đồng bộ kênh khác. "
@@ -1880,7 +1906,7 @@ with tab0:
                     st.error(f"Lỗi: {e}")
     with cc2:
         if st.button("🛠️ Dựng lại danh sách đã tải", width="stretch",
-                     disabled=not st.session_state.kho_dir,
+                     disabled=not st.session_state.kho_dir or _dong_bo_khac,
                      help="Dùng khi downloaded.txt bị mất/hỏng, hoặc bạn tự chép file vào kho. "
                           "Chỉ ghi lại file text, KHÔNG đụng vào file audio. File tự chép nên "
                           "đặt tên «YYYYMMDD - Tiêu đề [mã YouTube 11 ký tự].đuôi» hoặc không "
@@ -1907,7 +1933,7 @@ with tab0:
         "báo cáo sẽ hiện tên thật. Đây là tác vụ MẠNG: một lượt hỏi mỗi video."
     )
     if st.button("🌐 Lấy lại tên video thật cho kho này", width="stretch",
-                 disabled=not st.session_state.kho_dir or job["running"] or dang_dong_bo(),
+                 disabled=not st.session_state.kho_dir or job["running"] or dang_dong_bo() or _dong_bo_khac,
                  help="Chỉ lấy thông tin, KHÔNG tải lại video. Chạy lại được bất cứ "
                       "lúc nào; video nào đã có tên thật thì bỏ qua."):
         cs_title = ChannelSync(st.session_state.kho_dir.strip('" '),
@@ -1979,6 +2005,8 @@ with tab1:
                            value=eng.kho_thu_muc,
                            placeholder=r"D:\ClipGocSML",
                            help="Copy đường dẫn từ thanh địa chỉ của File Explorer.")
+    _kho_dong_bo_khac = _canh_bao_dong_bo_khac(thumuc.strip('" '), "tạo lại / bổ sung vân tay cho thư mục này, để "
+                                                                   "không nạp file đang tải dở")
     # Thư mục khác nguồn của kho đã có vân tay: engine từ chối «Bổ sung»; «Tạo lại» THAY toàn bộ vân tay → phải xác
     # nhận. Kho cũ chưa ghi thư mục nguồn: nguồn suy từ đường dẫn lưu trong vân tay (không giả định).
     nguon_kho = canh_bao_nguon_kho(
@@ -1994,11 +2022,11 @@ with tab1:
     c1, c2 = st.columns(2)
     with c1:
         if st.button("🔄 Tạo lại kho từ đầu", type="primary", width="stretch",
-                     disabled=not (thumuc and eng.kho_dang_dung and da_xac_nhan_thay)):
+                     disabled=not (thumuc and eng.kho_dang_dung and da_xac_nhan_thay) or _kho_dong_bo_khac):
             chay_van_tay(thumuc.strip('" '), "new")
     with c2:
         if st.button("➕ Bổ sung clip mới vào kho", width="stretch",
-                     disabled=not (thumuc and eng.kho_dang_dung)):
+                     disabled=not (thumuc and eng.kho_dang_dung) or _kho_dong_bo_khac):
             chay_van_tay(thumuc.strip('" '), "add")
 
     st.divider()
