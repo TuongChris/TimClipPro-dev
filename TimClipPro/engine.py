@@ -2634,6 +2634,7 @@ class Engine:
             raise RuntimeError("; ".join(prepared.errors))
         phien = self.phien_youtube_hien_tai()
 
+        dung_api = fetcher is None      # fetcher tiêm vào (test) thì không bao giờ gọi API
         if fetcher is None:
             bo_ghi = ytdlp_chung.BoGhiYtdlp(phien)
 
@@ -2690,7 +2691,101 @@ class Engine:
             total = len(candidates)
             updated = unchanged = 0
             errors: list[str] = []
-            for index, (name, current) in enumerate(candidates, start=1):
+
+            def ghi_snapshot() -> None:
+                payload = {
+                    "schema_version": 1,
+                    "warehouse": self.kho_dang_dung,
+                    "warehouse_id": self._slug(
+                        self.kho_dang_dung or "mac_dinh"
+                    ),
+                    "database": os.path.basename(self.db_file),
+                    "updated_at": datetime.now().astimezone().isoformat(
+                        timespec="seconds"
+                    ),
+                    "sources": [{
+                        "kind": "explicit_network_patch",
+                        "file": "YouTube metadata API via yt-dlp",
+                    }],
+                    "stats": {
+                        "database_clips": len(self.db_clips()),
+                        "network_updated": updated,
+                        "network_errors": len(errors),
+                    },
+                    "clips": records,
+                }
+                ghi_json_an_toan(snapshot_path, payload)
+
+            def ap_dung(name: str, current, fetched) -> bool:
+                """Gộp một bản metadata trả về vào ``records``; True khi có đổi (nơi gọi ghi snapshot)."""
+                nonlocal updated, unchanged
+                if not isinstance(fetched, dict):
+                    errors.append(f"{basename_compatible(name)}: response không phải object.")
+                    return False
+                raw = {
+                    "id": fetched.get("id") or current.video_id,
+                    "title": fetched.get("title") or "",
+                    "url": fetched.get("url") or f"https://youtu.be/{current.video_id}",
+                    "upload_date": str(fetched.get("upload_date") or ""),
+                    "duration": fetched.get("duration"),
+                }
+                validated = source_from_mapping(
+                    {name: raw},
+                    kind="network_patch",
+                    priority=0,
+                )
+                entry = validated.entries[0] if validated.entries else None
+                if entry is None or entry.video_id != current.video_id:
+                    errors.append(
+                        f"{basename_compatible(name)}: metadata trả về sai identity/schema."
+                    )
+                    return False
+                old = dict(records.get(name) or current.public_dict())
+                patched = dict(old)
+                official = entry.public_dict()
+                replace_inferred = current.resolution_method == "filename_fallback"
+                for field in ("id", "title", "url", "upload_date", "duration"):
+                    value = official.get(field)
+                    if value not in ("", None) and (
+                        replace_inferred or patched.get(field) in ("", None)
+                    ):
+                        patched[field] = value
+                patched["resolution_method"] = (
+                    "video_id"
+                    if all(
+                        patched.get(field) not in ("", None)
+                        for field in ("id", "title", "url", "upload_date", "duration")
+                    )
+                    else current.resolution_method
+                )
+                if patched == old:
+                    unchanged += 1
+                    return False
+                records[name] = patched
+                updated += 1
+                return True
+
+            con_lai = candidates
+            if dung_api:
+                # D-51: MỘT videos.list cho mỗi lô 50 clip, ghi snapshot một lần mỗi lô (không mỗi clip); clip API
+                # không trả lời đi vòng yt-dlp cũ bên dưới.
+                con_lai = []
+                for dau in range(0, total, youtube_api.LO_TOI_DA):
+                    self._check_cancel()
+                    lo = candidates[dau:dau + youtube_api.LO_TOI_DA]
+                    api = youtube_api.lay_video(phien, self.data_dir, [c.video_id for _ten, c in lo],
+                                                cancel_event=self.cancel_event).thong_tin
+                    # Cùng khuôn với fetcher yt-dlp: ngày quy đổi qua resolver cũ (timestamp = publishedAt).
+                    doi = [ap_dung(name, current, {**api[current.video_id], "upload_date": channel.ngay_dang_tu_info(
+                               channel.info_tu_api(api[current.video_id]))})
+                           for name, current in lo if current.video_id in api]
+                    if any(doi):
+                        ghi_snapshot()
+                    con_lai += [(name, current) for name, current in lo if current.video_id not in api]
+                    xong = dau + len(lo) - len(con_lai)
+                    if api and progress:
+                        progress(xong / total, f"[{xong}/{total}] Metadata bằng YouTube Data API")
+            for index, (name, current) in enumerate(con_lai, start=total - len(con_lai) + 1):
                 self._check_cancel()
                 if phien.mo:
                     errors.append(f"{phien.thong_bao_dung()} Còn {total - index + 1} clip "
@@ -2722,72 +2817,8 @@ class Engine:
                         current.video_id,
                         loai,
                     )
-                elif not isinstance(fetched, dict):
-                    errors.append(f"{basename_compatible(name)}: response không phải object.")
-                else:
-                    raw = {
-                        "id": fetched.get("id") or current.video_id,
-                        "title": fetched.get("title") or "",
-                        "url": fetched.get("url") or f"https://youtu.be/{current.video_id}",
-                        "upload_date": str(fetched.get("upload_date") or ""),
-                        "duration": fetched.get("duration"),
-                    }
-                    validated = source_from_mapping(
-                        {name: raw},
-                        kind="network_patch",
-                        priority=0,
-                    )
-                    entry = validated.entries[0] if validated.entries else None
-                    if entry is None or entry.video_id != current.video_id:
-                        errors.append(
-                            f"{basename_compatible(name)}: metadata trả về sai identity/schema."
-                        )
-                    else:
-                        old = dict(records.get(name) or current.public_dict())
-                        patched = dict(old)
-                        official = entry.public_dict()
-                        replace_inferred = current.resolution_method == "filename_fallback"
-                        for field in ("id", "title", "url", "upload_date", "duration"):
-                            value = official.get(field)
-                            if value not in ("", None) and (
-                                replace_inferred or patched.get(field) in ("", None)
-                            ):
-                                patched[field] = value
-                        patched["resolution_method"] = (
-                            "video_id"
-                            if all(
-                                patched.get(field) not in ("", None)
-                                for field in ("id", "title", "url", "upload_date", "duration")
-                            )
-                            else current.resolution_method
-                        )
-                        if patched == old:
-                            unchanged += 1
-                        else:
-                            records[name] = patched
-                            updated += 1
-                            payload = {
-                                "schema_version": 1,
-                                "warehouse": self.kho_dang_dung,
-                                "warehouse_id": self._slug(
-                                    self.kho_dang_dung or "mac_dinh"
-                                ),
-                                "database": os.path.basename(self.db_file),
-                                "updated_at": datetime.now().astimezone().isoformat(
-                                    timespec="seconds"
-                                ),
-                                "sources": [{
-                                    "kind": "explicit_network_patch",
-                                    "file": "YouTube metadata API via yt-dlp",
-                                }],
-                                "stats": {
-                                    "database_clips": len(self.db_clips()),
-                                    "network_updated": updated,
-                                    "network_errors": len(errors),
-                                },
-                                "clips": records,
-                            }
-                            ghi_json_an_toan(snapshot_path, payload)
+                elif ap_dung(name, current, fetched):
+                    ghi_snapshot()
                 if progress:
                     progress(
                         index / total if total else 1.0,

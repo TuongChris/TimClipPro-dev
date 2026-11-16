@@ -29,13 +29,15 @@ import sys
 import time
 from dataclasses import dataclass, field
 
-from channel import ChannelSync
+import youtube_api
+from channel import ChannelSync, info_tu_api, truong_ngay_tu_api
 from clip_metadata import extract_youtube_id, filename_fallback_parts, valid_upload_date
 from luu_tru import LoiDuLieu, cap_nhat_json
-from truy_cap_youtube import PhienYouTube, che_bi_mat
+from truy_cap_youtube import PhienYouTube, che_bi_mat, dong_trang_thai_api
 from publication_date import (
     MUI_GIO_MAC_DINH,
     TRUONG_EPOCH,
+    epoch_tu_published_at,
     format_publication_date,
     ngay_tu_chuoi,
     resolve_publication_date,
@@ -43,6 +45,16 @@ from publication_date import (
 
 # Chỉ nguồn suy từ epoch mới đủ chắc để khỏi hỏi lại YouTube.
 TRUONG_DO_TIN_CAY_CAO = frozenset(TRUONG_EPOCH)
+
+
+def _da_chac_chan(entry: dict) -> bool:
+    """Ngày đã có nguồn ĐỘ TIN CẬY CAO: suy từ epoch, hoặc ``published_at`` của YouTube Data API (có giờ, D-51)."""
+    return (entry.get("publication_date_source") in TRUONG_DO_TIN_CAY_CAO
+            or epoch_tu_published_at(entry.get("published_at")) is not None)
+
+
+def _ma_video(ten: str, entry: dict) -> str:
+    return str(entry.get("id") or "") or (extract_youtube_id(ten) or "")
 
 for _stream in (sys.stdout, sys.stderr):
     try:
@@ -97,14 +109,15 @@ def audit(kho: str, mui_gio: str) -> ThongKe:
         )
         if co_epoch:
             tk.co_epoch_luu_san += 1
-        if entry.get("publication_date_source"):
+        co_nguon = bool(entry.get("publication_date_source")) or _da_chac_chan(entry)
+        if co_nguon:
             tk.co_provenance += 1
 
         ngay_luu = ngay_tu_chuoi(entry.get("publication_date") or entry.get("upload_date"))
         if ngay_luu is None:
             tk.thieu_ngay += 1
             continue
-        if not co_epoch and not entry.get("publication_date_source"):
+        if not co_epoch and not co_nguon:
             tk.chi_upload_date += 1
 
         ket_qua = resolve_publication_date(entry, mui_gio)
@@ -175,12 +188,22 @@ def repair(
     # Một lượt sửa = một phiên YouTube: bị nghi là bot/429 ở clip đầu thì dừng NGAY — trước đây
     # phải đợi đủ ``dung_sau_n_loi`` (25) request hỏng liên tiếp mới dừng.
     phien = PhienYouTube()
+    api: dict = {}      # mã -> dict chuẩn YouTube Data API (D-51); fetcher tiêm vào (test) thì không bao giờ gọi API
     if fetcher is None:
         cau_hinh = _cau_hinh_mang_mac_dinh()
 
         def fetcher(video_id: str) -> dict:
             return ChannelSync.lay_info_video(video_id, cau_hinh.network_timeout_s,
                                               cau_hinh_mang=cau_hinh, phien_youtube=phien)
+
+        if dung_mang:
+            from engine import thu_muc_data_mac_dinh
+
+            # Một yêu cầu API cho 50 mã. --limit đếm cả mục không cần hỏi, nên cắt theo nó chỉ có thể hỏi THỪA vài mã.
+            ma = [_ma_video(ten, e) for ten, e in meta.items() if isinstance(e, dict) and not _da_chac_chan(e)]
+            ma = [m for m in ma if m]
+            api = youtube_api.lay_video(phien, thu_muc_data_mac_dinh(),
+                                        ma[:max(gioi_han, 0)] if gioi_han else ma).thong_tin
 
     khong_doi = da_doi = bo_qua = that_bai = 0
     loi_lien_tiep = 0
@@ -200,38 +223,43 @@ def repair(
             continue
 
         nguon_du_lieu = dict(entry)
-        tu_youtube = False      # True khi nguon_du_lieu là info yt-dlp vừa hỏi lại
-        # Chỉ bỏ qua khi đã có nguồn ĐỘ TIN CẬY CAO (suy từ epoch). Nếu chỉ dựa
+        tu_youtube = False      # True khi nguon_du_lieu là info vừa hỏi lại YouTube (yt-dlp hoặc Data API)
+        video = None            # dict chuẩn YouTube Data API của mục này (đã lấy theo lô ở trên)
+        # Chỉ bỏ qua khi đã có nguồn ĐỘ TIN CẬY CAO (suy từ epoch / published_at). Nếu chỉ dựa
         # trên upload_date thì vẫn phải hỏi lại: chuỗi YYYYMMDD không có giờ nên
         # không thể biết ngày giờ Việt Nam có lệch hay không. Nếu không, một lượt
         # repair offline chạy trước sẽ vô tình khoá luôn những entry cần sửa nhất.
-        da_chac_chan = entry.get("publication_date_source") in TRUONG_DO_TIN_CAY_CAO
+        da_chac_chan = _da_chac_chan(entry)
         if dung_mang and not da_chac_chan:
-            video_id = str(entry.get("id") or "") or (extract_youtube_id(ten) or "")
+            video_id = _ma_video(ten, entry)
             if not video_id:
                 bo_qua += 1
                 continue
-            if phien.mo:
+            video = api.get(video_id)
+            if video is None and phien.mo:
                 dung_som = True
                 break
             da_xu_ly += 1
-            if nghi_giay > 0 and da_xu_ly > 1:
+            if video is None and nghi_giay > 0 and da_xu_ly > 1:
                 time.sleep(nghi_giay)
             if progress:
                 progress(da_xu_ly, ten)
-            try:
-                nguon_du_lieu = fetcher(video_id)
-            except Exception as e:  # noqa: BLE001
-                that_bai += 1
-                loi_lien_tiep += 1
-                phien.ghi_loi(e, "metadata", video_id)
-                loi.append(f"{ten}: {type(e).__name__}: {che_bi_mat(str(e))[:160]}")
-                if loi_lien_tiep >= dung_sau_n_loi:
-                    dung_som = True
-                    break
-                continue
-            phien.ghi_thanh_cong("metadata")
-            loi_lien_tiep = 0
+            if video is not None:
+                nguon_du_lieu = info_tu_api(video)      # đã có từ API: không hỏi yt-dlp, không nghỉ
+            else:
+                try:
+                    nguon_du_lieu = fetcher(video_id)
+                except Exception as e:  # noqa: BLE001
+                    that_bai += 1
+                    loi_lien_tiep += 1
+                    phien.ghi_loi(e, "metadata", video_id)
+                    loi.append(f"{ten}: {type(e).__name__}: {che_bi_mat(str(e))[:160]}")
+                    if loi_lien_tiep >= dung_sau_n_loi:
+                        dung_som = True
+                        break
+                    continue
+                phien.ghi_thanh_cong("metadata")
+                loi_lien_tiep = 0
             tu_youtube = True
         else:
             da_xu_ly += 1
@@ -253,19 +281,23 @@ def repair(
             khong_doi += 1
             continue
 
+        # Nguồn API: nhãn riêng — không gắn timestamp/upload_date (nghĩa «trường của yt-dlp»), không lưu epoch (D-51).
+        nguon_ngay = "published_at" if video is not None else ket_qua.source_field
         if ngay_cu != ket_qua.date:
-            thay_doi.append((ten, ngay_cu, ket_qua.date, ket_qua.source_field))
+            thay_doi.append((ten, ngay_cu, ket_qua.date, nguon_ngay))
             da_doi += 1
         else:
             khong_doi += 1
 
         truong = {
             "publication_date": ket_qua.yyyymmdd,
-            "publication_date_source": ket_qua.source_field or "",
+            "publication_date_source": nguon_ngay or "",
             "upload_date": ket_qua.yyyymmdd,     # tương thích bản đọc cũ
         }
+        if video is not None:
+            truong.update(truong_ngay_tu_api(entry, ket_qua.yyyymmdd), published_at=video["published_at"])
         for k in ("timestamp", "release_timestamp"):
-            if isinstance(nguon_du_lieu.get(k), (int, float)) and nguon_du_lieu.get(k):
+            if video is None and isinstance(nguon_du_lieu.get(k), (int, float)) and nguon_du_lieu.get(k):
                 truong[k] = nguon_du_lieu[k]
         # Ngày NGUYÊN BẢN của yt-dlp (cột ngày báo cáo V2): chỉ khi vừa hỏi YouTube — ``upload_date`` đã lưu là ngày đã quy đổi.
         if tu_youtube and valid_upload_date(str(nguon_du_lieu.get("upload_date") or "")):
@@ -373,6 +405,9 @@ def _main() -> int:
     print(f"Bỏ qua:     {kq['bo_qua']}")
     print(f"Thất bại:   {kq['that_bai']}")
     print(f"Đã ghi:     {kq['da_ghi']}")
+    dong_api = dong_trang_thai_api(kq["youtube"].get("api"))     # rỗng khi lượt không đụng tới API (không có khoá)
+    if dong_api:
+        print(dong_api)
     if kq.get("chan_youtube"):
         print(f"\nDỪNG SỚM: {kq['chan_youtube']} Còn {kq['con_lai']} clip chưa xử lý; chạy lại "
               "đúng lệnh này sau đó — clip đã sửa sẽ được bỏ qua.")

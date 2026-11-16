@@ -31,6 +31,8 @@ from datetime import datetime
 import bao_cao_v2
 import common_original as co
 import maintenance_gate
+import youtube_api
+from channel import info_tu_api, ngay_dang_tu_info
 from clip_metadata import extract_youtube_id
 from engine import _mo_file_text_moi, chu_ky_chinh_sach
 from khoa import DangChayRoi, KhoaTienTrinh
@@ -364,6 +366,11 @@ class CommonOriginalJobController:
         loi_info: list = []
         so_info = 0
         ma_that: dict = {}
+        api: dict = {}
+        if source_type == "youtube":
+            # D-51: MỘT videos.list cho mỗi 50 link; link API trả lời thì không hỏi yt-dlp, không giãn nhịp.
+            api = youtube_api.lay_video(phien, job.data_dir, [m for m in map(youtube_api.ma_video_cho_api, duy_nhat) if m],
+                                        cancel_event=self.engine.cancel_event).thong_tin
         for i, x in enumerate(duy_nhat):
             if self._da_huy():
                 break
@@ -381,21 +388,27 @@ class CommonOriginalJobController:
                 # Bị nghi là bot / 429 / cookie hỏng ở vài link đầu: KHÔNG hỏi tiếp cả lô như máy
                 # spam. Lô kết luận "chưa kết luận" (không phải "không tìm thấy").
                 break
-            if i and float(job.config.ytdlp_sleep_requests_s or 0) > 0:
-                # Giãn nhịp giữa các lần hỏi YouTube (CLAUDE.md mục 6c); huỷ được.
-                if self.engine.cancel_event.wait(float(job.config.ytdlp_sleep_requests_s)):
-                    break
-            so_info += 1
-            try:
-                info = dict(job.youtube_info(x))
-            except Exception as e:  # noqa: BLE001
-                phien.ghi_loi(e, "metadata")
-                loi_info.append(f"{x} ({giai_thich_loi(e).splitlines()[0][:160]})")
-                continue
-            finally:
-                for cb in list(getattr(job, "canh_bao_mang", []) or []):
-                    if cb not in canh_bao:
-                        canh_bao.append(cb)
+            video = api.get(youtube_api.ma_video_cho_api(x))
+            if video is not None:
+                # Cùng khoá với Engine.youtube_info: ngày quy đổi qua resolver cũ; published_at nguyên văn, không có
+                # upload_date_raw (chỉ dành cho ngày yt-dlp nguyên văn).
+                info = {**video, "title_raw": video["title"], "upload_date": ngay_dang_tu_info(info_tu_api(video))}
+            else:
+                if so_info and float(job.config.ytdlp_sleep_requests_s or 0) > 0:
+                    # Giãn nhịp giữa các lần hỏi YouTube bằng yt-dlp (CLAUDE.md mục 6c); huỷ được.
+                    if self.engine.cancel_event.wait(float(job.config.ytdlp_sleep_requests_s)):
+                        break
+                so_info += 1
+                try:
+                    info = dict(job.youtube_info(x))
+                except Exception as e:  # noqa: BLE001
+                    phien.ghi_loi(e, "metadata")
+                    loi_info.append(f"{x} ({giai_thich_loi(e).splitlines()[0][:160]})")
+                    continue
+                finally:
+                    for cb in list(getattr(job, "canh_bao_mang", []) or []):
+                        if cb not in canh_bao:
+                            canh_bao.append(cb)
             ma = str(info.get("id") or "")
             if ma and ma in ma_that:
                 bo_offline += 1
