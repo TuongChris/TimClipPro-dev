@@ -2533,6 +2533,10 @@ with tab_tim:
         st.caption("Mỗi truy vấn = 1 lượt trong hạn mức tìm kiếm 100 lượt/ngày (đặt lại khoảng 14–15 giờ chiều giờ Việt "
                    "Nam). Thời lượng và kênh gốc lấy thêm bằng videos.list — hạn mức riêng 10.000 đơn vị, khoảng 1 đơn vị "
                    "cho 50 video.")
+        # Đọc/ghi st.session_state cũng là điểm nhường: thao tác của người dùng lúc đang tìm chen lượt chạy lại ở điểm
+        # nhường đầu tiên sau tim(). Lấy sẵn dict lưu kết quả ở đây, sau tim() chỉ ghi dict thường — không mất kết quả đã
+        # tốn hạn mức.
+        luu_tim = st.session_state.setdefault("tim_luu", {})
         if st.button(f"🔎 Tìm ({len(chay_tv)} lượt)", key="tim_nut", type="primary",
                      disabled=not (tt_khoa.ma == youtube_api.CO_KHOA and chay_tv)):
             phien_api = truy_cap_youtube.PhienYouTube()   # videos.list; tìm kiếm có phiên riêng (hạn mức riêng)
@@ -2545,13 +2549,13 @@ with tab_tim:
                         st.session_state.tim_kenh_goc[ten_tim] = kenh_goc
                 kq_tim = tim_nghi_van.tim(phien_api, eng.data_dir, chay_tv, phien_tim=truy_cap_youtube.PhienYouTube(),
                                           kenh_goc=kenh_goc, thoi_luong=thoi_luong_tim, sau=sau_tim)
-            canh_bao_kenh = () if kenh_goc else (
-                "Không loại được video của chính kênh gốc" + (f" — {ly_do_kenh}" if ly_do_kenh else "")
-                + ". Kết quả có thể gồm video của bạn.",)
-            st.session_state.tim_lan = st.session_state.get("tim_lan", 0) + 1
-            st.session_state.tim_ket_qua = (ten_tim, kq_tim, canh_bao_kenh + kq_tim.ghi_chu)
-        if st.session_state.get("tim_ket_qua"):
-            kho_kq, kq_tim, ghi_chu_tim = st.session_state.tim_ket_qua
+                canh_bao_kenh = () if kenh_goc else (
+                    "Không loại được video của chính kênh gốc" + (f" — {ly_do_kenh}" if ly_do_kenh else "")
+                    + ". Kết quả có thể gồm video của bạn.",)
+                luu_tim["lan"] = luu_tim.get("lan", 0) + 1
+                luu_tim["ket_qua"] = (ten_tim, kq_tim, canh_bao_kenh + kq_tim.ghi_chu)
+        if luu_tim.get("ket_qua"):
+            kho_kq, kq_tim, ghi_chu_tim = luu_tim["ket_qua"]
             (st.success if kq_tim.da_tim == kq_tim.tong else st.warning)(
                 f"Kho «{kho_kq}»: tìm được {kq_tim.da_tim}/{kq_tim.tong} truy vấn (đã dùng {kq_tim.luot_tim} lượt tìm "
                 f"kiếm) — {len(kq_tim.video)} video"
@@ -2561,7 +2565,7 @@ with tab_tim:
             if kq_tim.video:
                 dong_tim = tim_nghi_van.bang(kq_tim.video, eng.ids_da_quet())
                 su_kien = st.dataframe(
-                    pd.DataFrame(dong_tim, columns=tim_nghi_van.COT), key=f"tim_bang_{st.session_state.tim_lan}",
+                    pd.DataFrame(dong_tim, columns=tim_nghi_van.COT), key=f"tim_bang_{luu_tim['lan']}",
                     on_select="rerun", selection_mode="multi-row", hide_index=True,
                     column_config={"Tiêu đề": st.column_config.TextColumn(width="large"),
                                    "Link": st.column_config.LinkColumn()})

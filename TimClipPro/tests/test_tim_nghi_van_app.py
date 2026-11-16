@@ -84,3 +84,29 @@ def test_tab_tim_hien_ket_qua_va_dua_link_vao_o_quet(api_youtube_gia, tmp_path, 
     assert next(x for x in at.text_area if x.label.startswith("Dán link YouTube")).value == link
     assert "Đã đưa link vào ô «Dán link YouTube»" in _van_ban(at)
     assert api_youtube_gia.dem() == 4, "đưa vào ô quét không gọi mạng, không tự quét"
+
+
+def test_tab_tim_giu_ket_qua_khi_nguoi_dung_cham_widget_luc_dang_tim(api_youtube_gia, tmp_path, monkeypatch):
+    """Người dùng chạm widget khi đang tìm → Streamlit chen lượt chạy lại ở điểm nhường kế tiếp (đọc/ghi st.session_state, thoát spinner).
+    Kết quả đã tốn hạn mức phải được lưu TRƯỚC điểm đó, không thì lượt chạy lại không thấy gì."""
+    from streamlit.runtime.scriptrunner_utils.script_requests import RerunData
+    from streamlit.runtime.scriptrunner_utils.script_run_context import get_script_run_ctx
+
+    vp = _ma(9)
+    for m in (_ma(1), vp):
+        api_youtube_gia.video[m] = gia.video_gia(m)
+    at = _app(tmp_path, monkeypatch)
+    _kho(tmp_path, at, **{"Clip một": _ma(1)})
+    tim_that = tn.tim
+
+    def tim_roi_bi_chen(*a, **k):
+        kq = tim_that(*a, **k)
+        get_script_run_ctx().script_requests.request_rerun(RerunData())   # = người dùng chạm widget lúc này
+        return kq
+
+    monkeypatch.setattr(tn, "tim", tim_roi_bi_chen)
+    api_youtube_gia.kich_ban = [None, _tim((vp, KENH_KHAC))]
+    at.button(key="tim_nut").click().run()
+    assert not at.exception
+    assert [y.endpoint for y in api_youtube_gia.yeu_cau] == ["videos", "search", "videos"]
+    assert any("Khớp bao nhiêu truy vấn" in df.value.columns for df in at.dataframe), "kết quả đã tốn hạn mức bị mất"
