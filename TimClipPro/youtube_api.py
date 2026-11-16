@@ -49,6 +49,7 @@ _TRUONG_SNIPPET = ("title", "channelId", "channelTitle", "publishedAt", "liveBro
 
 # Lý do một mã nằm trong ``thieu`` (ngoài ``truy_cap_youtube.THONG_BAO_API`` khi API đã tắt).
 LY_DO_SAI_KHOA = "Khoá YouTube Data API sai dạng"
+LY_DO_CHUA_CO_KHOA = "Chưa có khoá YouTube Data API"   # chỉ nơi gọi ``_goi`` thấy; ``lay_video`` trả lý do rỗng
 LY_DO_CAU_DAO = "Đã dừng yêu cầu mới tới YouTube (cầu dao của lượt đang mở)"
 LY_DO_DA_HUY = "Đã dừng theo yêu cầu"
 LY_DO_TAM_THOI = "YouTube Data API lỗi mạng / máy chủ tạm thời (đã thử lại một lần)"
@@ -242,12 +243,20 @@ def _gui(url: str, khoa: str, timeout: float) -> dict:
     return du_lieu
 
 
-def _goi(phien: tc.PhienYouTube, khoa: str, endpoint: str, params: dict, *, timeout: float, cancel_event: Any = None,
+def _goi(phien: tc.PhienYouTube, data_dir: str, endpoint: str, params: dict, *, cancel_event: Any = None,
          don_vi: int = 1, doc: Optional[Callable[[dict], Any]] = None) -> tuple:
-    """MỘT yêu cầu API của lượt ``phien`` — dùng chung cho mọi endpoint (``videos``, ``search``…): cầu dao yt-dlp đang mở
-    hay API đã tắt → không gửi; đếm ``don_vi``; lỗi tạm thời thử lại MỘT lần sau 3 s qua hàm chờ huỷ được của phiên.
-    ``doc(du_lieu)`` đọc phản hồi 2xx, ném ``_LoiApi(API_PHAN_HOI_LA)`` khi sai dạng. Trả ``(kết quả, "")`` hoặc
-    ``(None, lý do tiếng Việt)``; lỗi chỉ ghi vào ``phien.api`` — không bao giờ ném lỗi mạng ra nơi gọi."""
+    """MỘT yêu cầu API của lượt ``phien`` — dùng chung cho mọi endpoint (``videos``, ``search``…). Khoá đọc Ở ĐÂY (nơi
+    gọi không bao giờ cầm khoá); chưa có / sai dạng, cầu dao yt-dlp đang mở hay API đã tắt → không gửi; đếm ``don_vi``;
+    lỗi tạm thời thử lại MỘT lần sau 3 s qua hàm chờ huỷ được của phiên. ``doc(du_lieu)`` đọc phản hồi 2xx, ném
+    ``_LoiApi(API_PHAN_HOI_LA)`` khi sai dạng. Trả ``(kết quả, "")`` hoặc ``(None, lý do tiếng Việt)``; lỗi chỉ ghi vào
+    ``phien.api`` — không bao giờ ném lỗi mạng ra nơi gọi."""
+    try:
+        khoa = _doc_khoa_cho(data_dir)
+    except LoiKhoaApi as e:
+        return None, f"{LY_DO_SAI_KHOA}: {e}"
+    if not khoa:
+        return None, LY_DO_CHUA_CO_KHOA
+    timeout = CauHinhMang.tu_file_cau_hinh(data_dir).network_timeout_s
     api = phien.api
     url = GOC_API + endpoint + "?" + urllib.parse.urlencode(params)
     lan = 0
@@ -341,14 +350,13 @@ def lay_video(phien: tc.PhienYouTube, data_dir: str, ids: Iterable[str], *, canc
     if not ma:
         return KetQuaApi({}, (), "")
     try:
-        khoa = _doc_khoa_cho(data_dir)
+        co_khoa = bool(_doc_khoa_cho(data_dir))
     except LoiKhoaApi as e:
         ly_do = f"{LY_DO_SAI_KHOA}: {e}"
         phien.api.ghi_video(0, [ly_do] * len(ma))
         return KetQuaApi({}, tuple(ma), ly_do)
-    if not khoa:
+    if not co_khoa:
         return KetQuaApi({}, tuple(ma), "")
-    timeout = CauHinhMang.tu_file_cau_hinh(data_dir).network_timeout_s
     hop_le = [m for m in ma if isinstance(m, str) and _RE_MA.fullmatch(m)]
     lui = dict.fromkeys(set(ma) - set(hop_le), LY_DO_MA_SAI)
     params = {"part": _PART + (",status" if can_trang_thai else ""),
@@ -356,8 +364,8 @@ def lay_video(phien: tc.PhienYouTube, data_dir: str, ids: Iterable[str], *, canc
     thong_tin: dict = {}
     for i in range(0, len(hop_le), LO_TOI_DA):
         lo = hop_le[i:i + LO_TOI_DA]
-        ket, ly_do = _goi(phien, khoa, "videos", {**params, "id": ",".join(lo)}, timeout=timeout,
-                          cancel_event=cancel_event, doc=lambda du_lieu, lo=lo: _doc_lo(du_lieu, lo, can_trang_thai))
+        ket, ly_do = _goi(phien, data_dir, "videos", {**params, "id": ",".join(lo)}, cancel_event=cancel_event,
+                          doc=lambda du_lieu, lo=lo: _doc_lo(du_lieu, lo, can_trang_thai))
         for m in lo:
             video = None if ket is None else ket.get(m)
             if ket is None:

@@ -492,6 +492,22 @@ def test_khoa_khong_bao_gio_lot_ra(api_youtube_gia, tmp_path, caplog, buoc):
         assert gia.KHOA_GIA not in c and "GiaKhongBiMat" not in c
 
 
+def test_goi_dung_chung_cho_endpoint_khac_khoa_khong_roi_module(api_youtube_gia, tmp_path, monkeypatch):
+    """``_goi`` cho endpoint khác (search.list, part=status… của nhánh khác): khoá đọc BÊN TRONG youtube_api, đơn vị hạn
+    mức theo endpoint, trả JSON thô khi không có ``doc``."""
+    api_youtube_gia.kich_ban = [{"items": [{"id": {"videoId": _ma(1)}}]}]
+    phien, _ = _phien()
+    data = str(tmp_path / "data")
+    ket, ly_do = ya._goi(phien, data, "search", {"part": "snippet", "q": "clip", "type": "video"}, don_vi=100)
+    assert ket == {"items": [{"id": {"videoId": _ma(1)}}]} and ly_do == ""
+    yc = api_youtube_gia.yeu_cau[0]
+    assert yc.endpoint == "search" and yc.key_in_header and yc.params["q"] == "clip"
+    assert phien.tom_tat()["api"]["don_vi"] == 100
+    monkeypatch.setattr(ya, "_doc_khoa_cho", lambda data_dir: "")
+    assert ya._goi(phien, data, "search", {"q": "x"}) == (None, ya.LY_DO_CHUA_CO_KHOA)
+    assert api_youtube_gia.dem() == 1
+
+
 def test_khong_co_khoa_khong_gui_yeu_cau_nao(monkeypatch, tmp_path):
     tp = gia.lap_transport(monkeypatch)
     phien, _ = _phien()
