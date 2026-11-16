@@ -25,16 +25,17 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   tạm; dữ liệu thật chỉ dùng trong app DEV vận hành.
 
 ## Tiếp theo
+0. 16/11: YouTube Data API (D-51) + D-52…D-58 trên `feature/pc2/tong-hop-1611` (nhanh 4265 = 4261/4/0, chậm 25/25) — CHỜ người dùng duyệt gộp `integration/current` + cập nhật DEV. Sau đó người dùng thử: thanh bên «🔐 Kết nối YouTube» báo có khoá, quét 1 video, tab «📊 Thống kê» / «🔎 Tìm video nghi vấn», nút kiểm video còn/gỡ ở «📜 Lịch sử», «📝 Tiêu đề kênh», Dừng khi dựng kho.
 1. Đồng bộ + quét song song (D-29): PR #20 GỘP (`dd111e8`), DEV 8502 cập nhật 27/10 13:04 (sao lưu `data_20261027_130421`).
-   Chờ người dùng thử thật một tab đồng bộ + một tab quét (AppTest không chạy nhịp tự làm mới của fragment). P3 còn mở:
-   giao diện không biết `cli.py kenh` ở tiến trình KHÁC đang đồng bộ cùng thư mục. Kho CoryxKenshin dựng xong 28/10 00:29
+   Chờ người dùng thử thật một tab đồng bộ + một tab quét (AppTest không chạy nhịp tự làm mới của fragment).
+   Kho CoryxKenshin dựng xong 28/10 00:29
    (CLI `--ncores 2`, 1745/1745) — dựng bằng giao diện với 8 worker từng hết RAM. Máy mới: `docs/ai/TIEP_TUC_TREN_MAY_MOI.md`.
 2. Dựng kho theo RAM + bỏ clip > 2 giờ (D-31): PR #23 GỘP (`73c5734`), DEV 8502 cập nhật 06/11 20:16 (sao lưu `data_20261106_201648`).
    Chờ người dùng dựng Kho_Joe_Games (CHƯA có vân tay, thư mục `E:\Kho_Tool_Quet\Kho_Joe_Games`) và đồng bộ thật một kênh để kiểm
    quy tắc 2 giờ (chưa thử YouTube thật).
 3. Audit toàn repo 06/11: số 1–20 xong (17: giữ `.gs` và `session.log` vì có lý do; Docker đã xoá 08/11 theo người dùng —
    `release_tool.py` vẫn loại tên Dockerfile để build lại bản cũ trùng byte).
-   Còn 8 mục nhỏ: báo cáo trong phiên 06/11 (lịch sử chat). PC1 phải cài lại hook. Tạm dừng + lưu giữa chừng khi dựng kho CHƯA làm.
+   8 mục nhỏ 06/11 (tra lại 16/11): 2 đã sửa (`1c5c938`); 6 cần thiết kế/quyết — tràn bảng audfprint 2^20 không cảnh báo, bootstrap --repo máy mới, xoá bộ máy phụ ~777 dòng / nhánh V1 ~140 dòng, tách `_build_database_da_khoa`; 5 ô «Đoạn vi phạm» người dùng giữ như cũ. Dừng dựng kho giữ phần đã xong: D-52.
    Audit 16/11 (`/ponytail-audit`, 20 mục + 6 mã thừa): ĐÃ SỬA HẾT, gộp `3101580`, DEV 16/11 03:06 (sao lưu `data_20261116_030552`). PC1 cài lại hook (installation_id 32 hex).
 4. Người dùng: nghiệm thu DEV đợt 2 theo `C:\Dev\pc2_test_runs\2026-10-26_audit_p3\NGHIEM_THU_DEV_DOT2.md` (~15 phút).
 5. Người dùng quyết: P-6 (3 phương án, `…\2026-10-26_audit_p3\P6_PHUONG_AN.md`); P-7 (`P7_THIET_KE.md` cùng thư mục, công
@@ -52,6 +53,11 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 10. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-11-16 — YouTube Data API + 7 tính năng (nhánh feature/pc2/tong-hop-1611, 11 nhánh việc)
+- D-51 Data API lấy thông tin video (yt-dlp chỉ còn tải), khoá `DevState\secrets\youtube_api_key.txt` (kiểm 200), thăm dò thật
+  20/20 ngày UTC trùng; D-52 Dừng dựng kho giữ phần xong; D-53 Thống kê; D-54 biết tiến trình khác đồng bộ; D-55 kiểm còn/gỡ;
+  D-56 tìm nghi vấn (search.list); D-57 Tiêu đề kênh + ngày/lượt xem; D-58 bổ sung ngày gốc tự bật khi có khoá; 2 mục audit 06/11.
+- Mỗi nhánh review độc lập (P1/P2 đã sửa kèm test). Bằng chứng `C:\Dev\pc2_test_runs\2026-11-16_dot2`, `…_tham_do_ngay`.
 ### 2026-11-16 — audit toàn repo, sửa đủ 20 mục + 6 mã thừa (nhánh fix/pc2/audit-1611)
 - Lớn: `cli kenh` KeyError «gio» + mã thoát; kho lỗi lúc `_merge` → «error» (không thành âm tính); hồ sơ dòng tinh
   chỉnh «Độ dài đoạn» = cuối − đầu; lưu kho thử lại ~11 s + nhớ mọi file cũ (`db_cu_khac`); hook installation_id 32 hex
@@ -70,11 +76,4 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 - 5 vòng phản biện/kiểm độc lập (15/11, `C:\Dev\pc2_test_runs\2026-11-15_p8_vong4|5`): trong mẫu 27 + ngoài mẫu 38 không đổi;
   sai-mà-tự-tin: nhảy nhỏ 27→0, tốc độ lệch 22→0, video tiếng trễ 74→0 (+21 file 40 Mb/s); fuzz 2.100 ca còn 29 (có từ trước,
   `KHOP_TUNG_GIAY.md` «Giới hạn»). Nhanh 3890 = 3886/4/0, chậm 25/25, đột biến 30/30. Gộp `1ec4d3a`, DEV 15/11 06:13 (sao lưu `data_20261115_061317`).
-### 2026-11-11 — audit tổng toàn dự án (Codex GPT-6 Astra chỉ nhận chữ, nhánh fix/pc2/audit-tong-1111)
-- 27 lượt Codex (12 vùng × 2 góc nhìn + Apps Script + mã chết + soát bản sửa), ~78 phát hiện; Claude đọc lại mã từng cái → 20 lỗi
-  thật sửa kèm 30 test đỏ→xanh: che mật khẩu proxy trong log, phục hồi JSON không mất file chính, dựng kho DỪNG khi thư mục con không
-  đọc được, không mất dòng output tiến trình con, ghép lệch nhịp thời gian (đo thật 2+2 s ra 23 s), hook .env/fail-closed/namespace.
-- Phân loại đủ (cả cái KHÔNG sửa + lý do): `C:\Dev\pc2_test_runs\2026-11-11_audit_tong\PHAN_LOAI.md`. Nhanh 3724 = 3720/4/0, chậm 24/24.
-  Gộp `2450682`, DEV 11/11 23:57 (sao lưu `data_20261111_235553`). Hook mới đã cài trên PC2; PC1 cài lại.
-- 12/11: 6 lỗi Apps Script (`3591852`, test Sheet GIẢ bằng Node); NGƯỜI DÙNG dán lại `TOAN_BO_AppsScript.gs` vào Sheet.
-- Mục cũ hơn (2026-11-12 thumbnail tên = mã D-47/D-48; 2026-11-11 video trong máy D-46; 2026-11-11 thumbnail cả kênh D-45; 2026-11-11 Twitch 1440p D-44; 2026-11-10 âm lượng D-43; 2026-11-10 audit phần video mới; 2026-11-09 cắt đoạn D-42; 2026-11-09 tải 4 kết nối D-40; 2026-11-09 ghép video gốc D-39/D-41 + chương QuickTime; 2026-11-09 tiêu đề kênh D-38 + audit 09/11; 2026-11-08 tải video gốc D-37 + review/audit 08/11; 2026-11-07 Codex bước 2 audit 14 + 18; 2026-11-07 Codex review PR #27–#29 D-36; 2026-11-07 đồng bộ nén song song D-35; 2026-11-07 audit số 15, 19, 20; 2026-11-07 kho video dài D-34; 2026-11-07 dựng kho nhường ổ cứng D-33; 2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
+- Mục cũ hơn (2026-11-11 audit tổng Codex; 2026-11-12 thumbnail tên = mã D-47/D-48; 2026-11-11 video trong máy D-46; 2026-11-11 thumbnail cả kênh D-45; 2026-11-11 Twitch 1440p D-44; 2026-11-10 âm lượng D-43; 2026-11-10 audit phần video mới; 2026-11-09 cắt đoạn D-42; 2026-11-09 tải 4 kết nối D-40; 2026-11-09 ghép video gốc D-39/D-41 + chương QuickTime; 2026-11-09 tiêu đề kênh D-38 + audit 09/11; 2026-11-08 tải video gốc D-37 + review/audit 08/11; 2026-11-07 Codex bước 2 audit 14 + 18; 2026-11-07 Codex review PR #27–#29 D-36; 2026-11-07 đồng bộ nén song song D-35; 2026-11-07 audit số 15, 19, 20; 2026-11-07 kho video dài D-34; 2026-11-07 dựng kho nhường ổ cứng D-33; 2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.

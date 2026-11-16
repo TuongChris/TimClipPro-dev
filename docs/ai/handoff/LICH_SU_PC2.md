@@ -3,6 +3,13 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-11-11 — audit tổng toàn dự án (Codex GPT-6 Astra chỉ nhận chữ, nhánh fix/pc2/audit-tong-1111)
+- 27 lượt Codex (12 vùng × 2 góc nhìn + Apps Script + mã chết + soát bản sửa), ~78 phát hiện; Claude đọc lại mã từng cái → 20 lỗi
+  thật sửa kèm 30 test đỏ→xanh: che mật khẩu proxy trong log, phục hồi JSON không mất file chính, dựng kho DỪNG khi thư mục con không
+  đọc được, không mất dòng output tiến trình con, ghép lệch nhịp thời gian (đo thật 2+2 s ra 23 s), hook .env/fail-closed/namespace.
+- Phân loại đủ (cả cái KHÔNG sửa + lý do): `C:\Dev\pc2_test_runs\2026-11-11_audit_tong\PHAN_LOAI.md`. Nhanh 3724 = 3720/4/0, chậm 24/24.
+  Gộp `2450682`, DEV 11/11 23:57 (sao lưu `data_20261111_235553`). Hook mới đã cài trên PC2; PC1 cài lại.
+- 12/11: 6 lỗi Apps Script (`3591852`, test Sheet GIẢ bằng Node); NGƯỜI DÙNG dán lại `TOAN_BO_AppsScript.gs` vào Sheet.
 ### 2026-11-12 — thumbnail tên = mã, «Chỉ audio» ra M4A (D-47, nhánh feature/pc2/audio-thumbnail-ma)
 - Thumbnail lưu «<mã>.jpg» (người dùng: bỏ tiêu đề có dấu cách); ảnh tên cũ vẫn tính «đã có». Tab Tải: chọn «🎵 Chỉ audio» đầu tab.
 - Chỉ-tiếng ra «… [mã].audio.m4a» (trước: .webm Opus); test yt-dlp thật (file://) + FFmpeg thật. Nhanh 3737 = 3733/4/0. Gộp `b5d5c3e`, DEV 12/11 09:33 (sao lưu `data_20261112_093309`). Chưa thử YouTube thật.

@@ -15,6 +15,61 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-58 «Bổ sung ngày đăng gốc» bật mặc định khi có khoá YouTube Data API (người dùng, 2026-11-16) — nới «mặc định TẮT» của REPORT_POLICY_V2 §4
+Có khoá dùng được: bổ sung ngày đăng cho video gốc ĐÃ CHỌN chạy mặc định, theo lô `videos.list` (1 đơn vị/50 video, 0 lượt
+yt-dlp). Không khoá / khoá sai / API tắt: như cũ (TẮT mặc định, tối đa 20 video, qua yt-dlp). Không ghi ngược vào kho.
+Bằng chứng: `06f98da` (`feature/pc2/bo-sung-ngay-goc-api`).
+
+## D-57 «📝 Tiêu đề kênh» thêm «Ngày đăng» + «Lượt xem» khi có khoá API (người dùng, 2026-11-16) — thay phần «không ngày
+đăng/lượt xem» của D-38
+Liệt kê vẫn MỘT lượt yt-dlp như D-38; sau đó `videos.list` theo lô (`part=snippet,statistics`). Ngày = ngày UTC của
+`publishedAt` (D-51) định dạng D-30; lượt xem ẩn → để trống (không ghi 0). Không khoá: bảng, CSV, TXT như cũ từng byte.
+Bằng chứng: `563b070` (`feature/pc2/tieu-de-kenh-ngay-luot-xem`).
+
+## D-56 Tìm video nghi vấn theo tiêu đề clip (2026-11-16)
+Tab mới: chọn kho + clip (hoặc từ khoá) → `search.list` (hạn mức RIÊNG 100 lượt/ngày, Context7 16/11), mặc định video dài
+> 20 phút, loại kênh gốc, đánh dấu video đã quét; người dùng chọn rồi «Đưa vào ô quét YouTube» — không tự quét, không yt-dlp.
+Bằng chứng: `87e88f4` (`feature/pc2/tim-video-nghi-van`).
+
+## D-55 Kiểm video vi phạm còn / đã gỡ (2026-11-16)
+Nút ở tab «📜 Lịch sử»: `videos.list part=status` cho mọi video vi phạm đã tìm thấy (1 đơn vị/50). Còn (công khai /
+không công khai) · Không còn xem được (đã gỡ hoặc riêng tư) · Đã bị gỡ (lý do) · Chưa kiểm được — lý do. KHÔNG lùi về yt-dlp
+(mục đích là không chạm YouTube bằng yt-dlp). Lưu `data/kiem_video_con.json` (luu_tru.cap_nhat_json; lần đầu thấy không
+còn, lần cuối còn); không đổi lược đồ `lichsu.db`, không đổi Sheets. Bằng chứng: `6e85a55` (`feature/pc2/kiem-video-con-tren-youtube`).
+
+## D-54 Giao diện biết tiến trình KHÁC đang đồng bộ một kho (2026-11-16) — đóng mục P3 «cli.py kenh ở tiến trình khác»
+Phép dò không chặn khoá `.dong_bo_kenh.lock` (không lấy khoá, không tạo/xoá file; lỗi I/O không bị coi là đang giữ khoá):
+tab đồng bộ và tab kho cảnh báo + khoá nút xung đột (dựng/«Bổ sung»/«Tạo lại»/đồng bộ/dựng lại danh sách), tự dò lại mỗi
+2 giây khi đang bị giữ; dựng vân tay một kho đang bị tiến trình khác đồng bộ dừng sớm có câu rõ. «Xoá kho» không khoá (không
+chạm thư mục nguồn). Bằng chứng: `6b79cc8` (`fix/pc2/dong-bo-tien-trinh-khac`).
+
+## D-53 Tab «📊 Thống kê» (2026-11-16)
+Chỉ đọc `lichsu.db` (`mode=ro`): tổng lượt quét / video vi phạm / lượt khớp / thời lượng khớp, kênh vi phạm nhiều nhất (từ
+ảnh chụp V2 đọc được; lịch sử luật cũ tính «chưa rõ kênh»), clip bị lấy nhiều nhất, video vi phạm phát hiện lần đầu theo
+tháng (xét cả lịch sử), lọc theo ngày quét. Ảnh chụp V2 hỏng: đếm theo video, không lùi luật cũ. Bằng chứng: `3827739` (`feature/pc2/thong-ke`).
+
+## D-52 Dựng kho: bấm Dừng vẫn lưu các clip đã xong (2026-11-16) — làm phần «Chưa làm: lưu theo lô» của D-31
+«Tạo kho» (kho chưa có vân tay) và «Bổ sung»: Dừng nhờ runner tự dừng (cờ file → byte chung `RawValue`), worker ghi bảng
+của nó rồi thoát; clip đang tính dở không vào bảng. Kho tạm đi đúng đường công bố đã kiểm (`_kiem_kho_tam` → fsync →
+`_dat_vao_kho` → sổ/snapshot); «Bổ sung» sau chỉ làm phần còn lại. «Tạo lại từ đầu» kho đang có vân tay: chỉ thay khi mọi
+clip đã xong, còn lại giữ kho cũ từng byte. Dừng trước khi có clip nào xong: giết ngay như cũ. Chưa làm: checkpoint định kỳ
+(sập máy giữa chừng vẫn mất phần chưa lưu). Bằng chứng: `e53ec1b` (`feature/pc2/dung-kho-luu-theo-lo`); nhanh 3970/4/0, chậm 25/25.
+
+## D-51 YouTube Data API v3 lấy thông tin video; yt-dlp chỉ còn tải (người dùng, 2026-11-16) — thay phần «ngày V2 =
+`upload_date` nguyên bản của yt-dlp» của D-9 / REPORT_POLICY_V2 §4
+Hợp đồng: `TimClipPro/docs/YOUTUBE_DATA_API.md`. Người dùng chốt: ngày đăng theo API; hội viên/giới hạn tuổi vẫn do yt-dlp
+phát hiện lúc tải; không khoá / hết hạn mức / lỗi → tự lùi về yt-dlp, báo rõ. Claude chọn (được uỷ quyền): ngày V2 = ngày
+UTC của `snippet.publishedAt` (cùng phép tính yt-dlp dùng cho `upload_date`; thăm dò thật 16/11: 20/20 video trùng ngày
+yt-dlp đang lưu, dùng giờ VN thì 9/20 lệch +1 ngày); khoá ở đường dẫn cố định `dirname(data_dir)/secrets/youtube_api_key.txt`,
+gửi bằng header, không bao giờ in; lỗi API tách khỏi cầu dao yt-dlp (phiên con `PhienYouTube.api`, chốt tắt theo lượt);
+khoá mới `published_at`, không ghi vào `upload_date_raw`; không đổi `chu_ky_chinh_sach`/`PHIEN_BAN_ANH_CHUP`/`'v2'` (Watch
+không quét lại, ảnh chụp cũ đọc được, rollback an toàn). Dùng API: `youtube_info` (quét, CLI, Watch, «Một video gốc chung»,
+bổ sung ngày gốc), vameta, vametak, `kiem_ngay_dang --repair-network`, xem trước kênh kèm ngày, đồng bộ kênh ghi
+`published_at` sau khi tải; thumbnail theo link lấy thẳng `i.ytimg` (không yt-dlp). Liệt kê kênh vẫn bằng yt-dlp (danh sách
+tải lên của API gồm Shorts + phát trực tiếp). Bằng chứng: `0e13e3b` (`feature/pc2/youtube-data-api`), `43a77f2` (hàng loạt), `5f128b2` (đồng bộ + thumbnail); thăm dò `C:\Dev\pc2_test_runs\2026-11-16_tham_do_ngay`.
+
+Tất cả gộp ở `feature/pc2/tong-hop-1611` (16/11): nhanh 4265 = 4261/4/0, chậm 25/25, ruff sạch; mỗi nhánh có review độc lập (lỗi P1/P2 đã sửa kèm test). Kèm 2 mục audit 06/11 (`1c5c938`: fsync bản nén đồng bộ trước khi vào kho; dừng sớm không kéo phạm vi quét tới cuối vì đuôi không tiếng).
+
 ## D-50 «Đoạn vi phạm» dùng mốc đã tinh chỉnh (người dùng, 2026-11-15) — thay phần «KHÔNG đổi báo cáo V2» của D-49
 Ca thật (người dùng tự kiểm tay): lượt quét báo 00:00:00 – 00:10:23 và 01:46:12 – 01:57:20 cho hai video gốc dài 10:59 và
 11:16 — hụt 36 s và 8 s cuối (mốc cuối của audfprint là phân vị 95 %, `REPORT_POLICY_V2.md` §8). Bước tinh chỉnh đo đúng
