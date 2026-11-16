@@ -257,7 +257,7 @@ def _ghi_meta(thu_muc, meta):
     (thu_muc / "clips_meta.json").write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
 
 
-def test_clip_cua_kho_chi_doc_clips_meta_moi_nhat_truoc(tmp_path):
+def test_clip_cua_kho_chi_doc_clips_meta_moi_nhat_truoc(tmp_path, monkeypatch):
     kho = tmp_path / "kho"
     _ghi_meta(kho, {
         "20260101 - Cu [aaaaaaaaaaa].opus": {"id": "aaaaaaaaaaa", "title": "Clip cũ", "upload_date": "20260101"},
@@ -268,6 +268,7 @@ def test_clip_cua_kho_chi_doc_clips_meta_moi_nhat_truoc(tmp_path):
     assert [(c.tieu_de, c.ma) for c in tn.clip_cua_kho(str(kho))] == [
         ("Clip mới", "bbbbbbbbbbb"), ("Clip cũ", "aaaaaaaaaaa")]
     assert {p.name: p.stat().st_mtime_ns for p in kho.iterdir()} == truoc, "chỉ đọc: không ghi, không tạo file"
+    monkeypatch.chdir(kho)  # kho chưa gán thư mục: không đọc nhầm clips_meta.json ở thư mục đang chạy
     assert tn.clip_cua_kho("") == () and tn.clip_cua_kho(str(tmp_path / "khong_co")) == ()
 
     _ghi_meta(kho, {"20260401 - Them [ddddddddddd].opus": {"id": "ddddddddddd", "title": "Clip vừa đồng bộ"}})
