@@ -424,3 +424,42 @@ def tim_video(phien: tc.PhienYouTube, data_dir: str, q: str, *, thoi_luong: str 
         params["publishedAfter"] = sau
     ket, ly_do = _goi(phien, data_dir, "search", params, doc=_doc_tim)
     return ket or [], ly_do
+
+
+def lay_ngay_luot_xem(phien: tc.PhienYouTube, data_dir: str, ids: Iterable[str], *,
+                      cancel_event: Any = None) -> tuple:
+    """Ngày đăng + lượt xem cho tab «📝 Tiêu đề kênh» (D-38): ``videos.list`` ``part=snippet,statistics``, 50 mã một
+    lượt (1 đơn vị) qua :func:`_goi` — cùng phân loại lỗi, chốt tắt, bộ đếm của ``phien.api``. Trả ``({mã:
+    {"published_at": chuỗi ISO nguyên văn, "view_count": int | None}}, lý do)``: ``view_count`` None = YouTube không trả
+    (ẩn) hay giá trị lạ — không bao giờ 0; mã API không trả thì vắng. Lý do rỗng khi mọi lô xong; không khoá →
+    ``LY_DO_CHUA_CO_KHOA`` (0 yêu cầu); lô hỏng → lý do tiếng Việt của lõi, các lô khác vẫn chạy. Không lùi về yt-dlp."""
+
+    def doc(du_lieu: dict, lo: list) -> dict:
+        items = du_lieu.get("items", [])
+        if not (isinstance(items, list) and all(isinstance(x, dict) and isinstance(x.get("id"), str) for x in items)):
+            raise _LoiApi(tc.API_PHAN_HOI_LA)
+        ra = {}
+        for x in items:
+            if x["id"] not in lo:
+                continue
+            sn, tk = x.get("snippet"), x.get("statistics", {})
+            if not (isinstance(sn, dict) and isinstance(sn.get("publishedAt"), str) and isinstance(tk, dict)):
+                raise _LoiApi(tc.API_PHAN_HOI_LA)
+            xem = tk.get("viewCount")  # Google trả chuỗi; quá 18 chữ số là lạ (int64 của bảng, giới hạn int())
+            ra[x["id"]] = {"published_at": sn["publishedAt"],
+                           "view_count": int(xem) if isinstance(xem, str) and re.fullmatch(r"[0-9]{1,18}", xem)
+                           else None}
+        return ra
+
+    ma = [m for m in dict.fromkeys(ids) if isinstance(m, str) and _RE_MA.fullmatch(m)]  # mã lạ không gửi đi
+    ket_qua: dict = {}
+    ly_do: dict = {}
+    for i in range(0, len(ma), LO_TOI_DA):
+        lo = ma[i:i + LO_TOI_DA]
+        ket, loi = _goi(phien, data_dir, "videos",
+                        {"part": "snippet,statistics", "fields": "items(id,snippet(publishedAt),statistics(viewCount))",
+                         "id": ",".join(lo)}, cancel_event=cancel_event, doc=lambda du_lieu, lo=lo: doc(du_lieu, lo))
+        ket_qua.update(ket or {})
+        ly_do[loi] = None
+    phien.api.ghi_video(len(ket_qua))
+    return ket_qua, "; ".join(x for x in ly_do if x)

@@ -671,8 +671,8 @@ def _kenh_gia(monkeypatch, ds):
 
 def test_tieu_de_kenh_mot_luot_liet_ke_khong_gioi_han(monkeypatch):
     nhan = _kenh_gia(monkeypatch, [("abcdefghij1", "Tập 1: Mở đầu", 3725.9), ("abcdefghij2", "Live", 0.0)])
-    dong = tv.tieu_de_kenh(" https://www.youtube.com/@Kenh ")
-    assert nhan == {"url": "https://www.youtube.com/@Kenh", "limit": None, "co_phien": True}
+    dong, ly_do = tv.tieu_de_kenh(" https://www.youtube.com/@Kenh ")
+    assert nhan == {"url": "https://www.youtube.com/@Kenh", "limit": None, "co_phien": True} and ly_do == ""
     assert dong == [
         {"STT": 1, "Tiêu đề": "Tập 1: Mở đầu", "Link": "https://www.youtube.com/watch?v=abcdefghij1",
          "Thời lượng": "01:02:05"},
@@ -727,7 +727,7 @@ def test_tab_tieu_de_kenh_hien_bang_va_hai_nut_tai(tmp_path, monkeypatch):
     def gia_lap(url, cau_hinh_mang=None, **kw):
         nhan.append(url)
         return [{"STT": 1, "Tiêu đề": "Tập 1", "Link": "https://www.youtube.com/watch?v=abcdefghij1",
-                 "Thời lượng": "00:01:00"}]
+                 "Thời lượng": "00:01:00"}], ""
 
     monkeypatch.setattr(tv, "tieu_de_kenh", gia_lap)
     at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=120).run()
@@ -737,6 +737,14 @@ def test_tab_tieu_de_kenh_hien_bang_va_hai_nut_tai(tmp_path, monkeypatch):
     assert not at.exception and nhan == ["https://www.youtube.com/@Kenh"]
     assert any("1 video" in s.value for s in at.success)
     assert at.session_state.tieu_de_kenh[1][0]["Tiêu đề"] == "Tập 1"
+    # Không khoá YouTube Data API: bảng như cũ + đúng một dòng nhắc nơi đặt khoá để có «Ngày đăng», «Lượt xem».
+    import youtube_api
+
+    nhac = [c.value for c in at.caption if youtube_api.TEN_FILE_KHOA in c.value]
+    assert len(nhac) == 1 and youtube_api.duong_dan_khoa_api(str(tmp_path / "data")) in nhac[0]
+    assert not any("Ngày đăng" in w.value for w in at.warning)
+    assert list(next(d.value for d in at.dataframe if "Thời lượng" in d.value.columns).columns) == [
+        "STT", "Tiêu đề", "Link", "Thời lượng"]
     assert sorted(e.label for e in at.get("download_button")) == [
         "⬇️ Tải file CSV (mở bằng Excel)", "⬇️ Tải file TXT (chỉ tiêu đề)"]
 

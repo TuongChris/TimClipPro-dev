@@ -68,6 +68,11 @@ Claude chọn (người dùng uỷ quyền «phương án tối ưu»): các m�
 - Link dùng được API: `ma_video_cho_api(url) -> str` — chỉ host youtube.com, www./m./music.youtube.com, youtu.be,
   youtube-nocookie.com; mã ĐÚNG 11 ký tự `[A-Za-z0-9_-]` từ `watch?v=`, `youtu.be/`, `/shorts/`, `/live/`, `/embed/`.
   Khác → `''` → đường yt-dlp như cũ (Twitch, kênh, danh sách phát, trang khác).
+- Tab «📝 Tiêu đề kênh»: `lay_ngay_luot_xem(phien, data_dir, ids, *, cancel_event=None) -> (dict, lý do)` —
+  `part=snippet,statistics`, 50 mã/lượt qua `_goi`; `{mã: {"published_at", "view_count": int | None}}`; KHÔNG lùi về
+  yt-dlp (ô để trống). Có khoá → thêm cột «Ngày đăng» (ngày lịch UTC, định dạng D-30) và «Lượt xem» (ẩn → trống,
+  không 0); API lỗi → hai cột trống + một cảnh báo kèm lý do; không khoá → bảng / CSV / TXT y như trước + một dòng
+  nhắc nơi đặt khoá.
 
 ### Ngày đăng
 - Phép đổi đặt trong `publication_date.py` (test cấu trúc cấm `fromtimestamp(` ở module khác):
@@ -105,12 +110,12 @@ Claude chọn (người dùng uỷ quyền «phương án tối ưu»): các m�
 | `feature/pc2/youtube-api-dong-bo-anh` | Đồng bộ kênh: sau các lượt tải, một `videos.list` cho mã vừa tải để ghi `published_at` (không đổi tên file; `bo_sung_video_info` không ghi đè `published_at`); thumbnail theo link của video YouTube lấy thẳng `i.ytimg` (như D-45) thay vì trích xuất yt-dlp |
 | `feature/pc2/kiem-video-con-tren-youtube` | Kiểm video vi phạm còn / đã gỡ (`part=status`); KHÔNG lùi về yt-dlp (mục đích là không chạm YouTube bằng yt-dlp) — lỗi → «Chưa kiểm được — lý do»; lưu JSON trong `data_dir` bằng `luu_tru.cap_nhat_json` (không đổi lược đồ `lichsu.db`); bảng ở tab Lịch sử |
 | `feature/pc2/tim-video-nghi-van` | Tìm video nghi vấn theo tiêu đề clip (`search.list`, hạn mức RIÊNG 100 lượt/ngày), loại kênh gốc, đánh dấu đã quét, đưa vào ô quét |
+| `feature/pc2/tieu-de-kenh-ngay-luot-xem` | Tab «📝 Tiêu đề kênh» (D-38): cột «Ngày đăng» + «Lượt xem» khi có khoá (`lay_ngay_luot_xem`); liệt kê vẫn bằng yt-dlp |
 
 ## Ngoài phạm vi lát này (quyết sau)
 - Liệt kê kênh bằng API: danh sách tải lên gồm cả Shorts và buổi phát trực tiếp (khác nghĩa «tab Videos» của D-38); link
   `/c/` không có trong API.
 - Bật mặc định «Bổ sung ngày đăng gốc» khi có khoá (TimClipPro/CLAUDE.md đòi TẮT mặc định).
-- Ngày / lượt xem trong tab «📝 Tiêu đề kênh» (lý do bỏ của D-38 — mỗi video một lượt hỏi — không còn đúng khi có API).
 - Thăm dò thật khoảng 20 video (cần người dùng duyệt): so `publishedAt` / `actualStartTime` với yt-dlp ở video công chiếu,
   phát trực tiếp, lên lịch, riêng tư rồi công khai.
 - Chính sách lưu dữ liệu API của Google (có thể đòi làm mới / xoá dữ liệu sau khoảng 30 ngày — CHƯA xác minh).

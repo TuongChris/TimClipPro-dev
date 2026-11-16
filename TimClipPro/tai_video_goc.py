@@ -25,8 +25,10 @@ from dataclasses import asdict, dataclass
 from typing import Callable, Optional
 
 import am_luong
+import youtube_api
 from channel import HAN_DON_TAM_CU_S, ChannelSync, _CoHuyTuHam
 from kiem_thoi_luong import hhmmss
+from publication_date import format_publication_date, ngay_utc_tu_published_at
 from truy_cap_youtube import (
     PhienYouTube,
     che_bi_mat,
@@ -568,6 +570,7 @@ def tai_kenh(
 
 
 COT_TIEU_DE = ("STT", "Tiêu đề", "Link", "Thời lượng")
+COT_API = ("Ngày đăng", "Lượt xem")   # chỉ khi có khoá YouTube Data API (D-51)
 
 
 # Thumbnail theo địa chỉ cố định của YouTube, lớn → nhỏ (video cũ không có bản 1280×720).
@@ -666,26 +669,40 @@ def _tai_anh_kenh(
 
 
 def tieu_de_kenh(url_kenh: str, cau_hinh_mang: Optional[CauHinhMang] = None, *,
-                 phien: Optional[PhienYouTube] = None) -> list:
+                 phien: Optional[PhienYouTube] = None, data_dir: Optional[str] = None) -> tuple:
     """Tiêu đề + link + thời lượng mọi video ở tab Videos của kênh, mới nhất trước — MỘT lượt liệt kê nhanh, không tải
-    gì (D-38). Mỗi dòng là dict theo :data:`COT_TIEU_DE`; thời lượng không biết (live) để trống. Kênh bị chặn/không đọc
-    được thì ném lỗi đã phân loại; kênh rỗng → ``RuntimeError``."""
-    ds = ChannelSync.list_channel(str(url_kenh or "").strip(), cau_hinh_mang=cau_hinh_mang,
-                                  phien_youtube=phien or PhienYouTube())
+    gì (D-38). Mỗi dòng là dict theo :data:`COT_TIEU_DE`; thời lượng không biết (live) để trống. Có khoá YouTube Data API
+    cạnh ``data_dir`` (D-51): thêm :data:`COT_API` bằng ``youtube_api.lay_ngay_luot_xem`` — 50 video một yêu cầu, không
+    thêm lượt yt-dlp nào; ô không lấy được để trống. Trả ``(dòng, lý do)``: lý do = vì sao API không lấy được (rỗng khi
+    không có khoá hay lấy đủ) — danh sách không bao giờ mất vì API. Kênh bị chặn/không đọc được thì ném lỗi đã phân
+    loại; kênh rỗng → ``RuntimeError``."""
+    phien = phien or PhienYouTube()
+    ds = ChannelSync.list_channel(str(url_kenh or "").strip(), cau_hinh_mang=cau_hinh_mang, phien_youtube=phien)
     if not ds:
         raise RuntimeError("Kênh không có video nào ở tab Videos.")
-    return [{"STT": i, "Tiêu đề": v.title, "Link": f"https://www.youtube.com/watch?v={v.id}",
+    dong = [{"STT": i, "Tiêu đề": v.title, "Link": f"https://www.youtube.com/watch?v={v.id}",
              "Thời lượng": hhmmss(v.duration) if v.duration > 0 else ""} for i, v in enumerate(ds, 1)]
+    if data_dir is None or youtube_api.trang_thai_khoa(data_dir).ma == youtube_api.CHUA_CO:
+        return dong, ""
+    api, ly_do = youtube_api.lay_ngay_luot_xem(phien, data_dir, [v.id for v in ds])
+    for d, v in zip(dong, ds):
+        x = api.get(v.id, {})
+        # Ngày lịch UTC của publishedAt — cùng luật ngày V2 (D-51), định dạng D-30.
+        d[COT_API[0]] = format_publication_date(ngay_utc_tu_published_at(x.get("published_at")))
+        d[COT_API[1]] = x.get("view_count")    # None = trống (bảng NaN, CSV ô rỗng), không bao giờ 0
+    return dong, ly_do
 
 
 def csv_tieu_de(dong: list) -> bytes:
-    """CSV có BOM (Excel đọc đúng tiếng Việt); ô có thể bị hiểu là công thức (``=`` ``+`` ``-`` ``@``) được chặn."""
+    """CSV có BOM (Excel đọc đúng tiếng Việt); ô có thể bị hiểu là công thức (``=`` ``+`` ``-`` ``@``) được chặn. Có
+    thêm :data:`COT_API` khi dòng có (khoá YouTube Data API)."""
     from engine import o_bang_tinh_an_toan        # engine nặng: chỉ nạp khi xuất file
 
+    cot = COT_TIEU_DE + (COT_API if dong and COT_API[0] in dong[0] else ())
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(COT_TIEU_DE)
-    w.writerows([o_bang_tinh_an_toan(d[c]) for c in COT_TIEU_DE] for d in dong)
+    w.writerow(cot)
+    w.writerows([o_bang_tinh_an_toan(d[c]) for c in cot] for d in dong)
     return buf.getvalue().encode("utf-8-sig")
 
 
