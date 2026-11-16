@@ -101,28 +101,31 @@ def test_quet_lay_thong_tin_bang_api_khong_hoi_ytdlp_anh_chup_v2_theo_published_
         "API YouTube: 1 video lấy bằng API (~1 đơn vị)")
 
 
-def test_het_han_muc_trong_lo_3_video_mot_yeu_cau_api_roi_ytdlp_ca_lo(tmp_path, monkeypatch, api_youtube_gia):
+@pytest.mark.parametrize("loi, ly_do", [(gia.QUOTA, "Hết hạn mức"),
+                                        (gia.KEY_INVALID, "Khoá YouTube Data API không dùng được")])
+def test_het_han_muc_hay_khoa_hong_trong_lo_3_video_mot_yeu_cau_api_roi_ytdlp_ca_lo(tmp_path, monkeypatch,
+                                                                                  api_youtube_gia, loi, ly_do):
     ma = [_ma(i) for i in range(3)]
     ydl = YdlKichBan()
     e = _eng(tmp_path, monkeypatch, ydl)
     monkeypatch.setattr(e, "scan_media", _quet_gia(e))
     for m in ma:
         api_youtube_gia.video[m] = gia.video_gia(m)
-    api_youtube_gia.kich_ban = [gia.QUOTA]
+    api_youtube_gia.kich_ban = [loi]
     ket = list(e.scan_iter([_url(m) for m in ma]))
-    assert api_youtube_gia.dem() == 1, "API tắt tới hết lượt ngay lần hết hạn mức đầu tiên"
+    assert api_youtube_gia.dem() == 1, "API tắt tới hết lượt ngay lần lỗi đầu tiên"
     assert ydl.dem("info") == 3 and [k.status for k in ket] == ["ok"] * 3
     assert [k.bao_cao.ngay_dang.nguon for k in ket] == [v2.NGUON_UPLOAD_DATE] * 3
     phien = e.phien_youtube_cuoi
     so = phien.tom_tat()
     assert so["api"]["tat"] and so["api"]["video_lui"] == 3 and so["api"]["yeu_cau"] == 1
-    # 403 quotaExceeded của API không chạm cầu dao / bộ đếm lỗi của yt-dlp.
+    # 403 quotaExceeded / 400 API_KEY_INVALID của API không chạm cầu dao / bộ đếm lỗi của yt-dlp.
     assert not phien.mo and so["metadata_requests"] == 3
     assert not any(so.get(k) for k in t.NHAN_TRUONG_THAT_BAI)
     # Không vào ghi chú từng kết quả; dòng trạng thái nói rõ lý do.
     assert e.canh_bao_mang == [] and not any("API" in (k.note or "") for k in ket)
     dong = scan_ui.dong_trang_thai_api_youtube(youtube_api.trang_thai_khoa(e.data_dir), phien)
-    assert any(muc == "warning" and "Hết hạn mức" in cau and "3 video lùi về yt-dlp" in cau for muc, cau in dong)
+    assert any(muc == "warning" and ly_do in cau and "3 video lùi về yt-dlp" in cau for muc, cau in dong)
 
 
 def test_khong_co_khoa_lo_quet_y_nhu_cu_khong_mot_yeu_cau_api(tmp_path, monkeypatch):

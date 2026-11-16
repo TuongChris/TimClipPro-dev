@@ -187,7 +187,7 @@ kênh/tab) bị loại; chỉ toàn tab thì báo INVALID_INPUT kèm hướng d�
 | `tests/test_youtube_doctor.py` | mặc định 0 request, `--network` đúng 1 request, không lộ cookie |
 | `tests/test_trang_thai_youtube_ui.py` | câu chữ trạng thái + AppTest không lộ cookie |
 | `tests/test_youtube_api.py` | YouTube Data API: đọc khoá, phân loại lỗi, phiên con tách cầu dao, lô 50, lùi về yt-dlp, khoá không lộ |
-| `tests/test_youtube_api_quet.py` | `youtube_info` qua API (đủ khoá + `published_at`), cùng ngày với yt-dlp, hết hạn mức trong lô 3 video = 1 yêu cầu API rồi yt-dlp, không khoá = y như cũ, link không phải video không hỏi API, dòng API ở CLI / Watch |
+| `tests/test_youtube_api_quet.py` | `youtube_info` qua API (đủ khoá + `published_at`), cùng ngày với yt-dlp, hết hạn mức / khoá hỏng trong lô 3 video = 1 yêu cầu API rồi yt-dlp, không khoá = y như cũ, link không phải video không hỏi API, dòng API ở CLI / Watch |
 
 ## 10. Giới hạn
 
