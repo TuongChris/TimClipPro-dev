@@ -68,6 +68,7 @@ import cat_video_goc
 import ghep_video_goc
 import tai_video_goc
 import video_trong_may
+import youtube_api
 from channel import ChannelSync
 from tien_do_dong_bo import SoDongBo
 from ui_tien_do_dong_bo import dong_ho, dong_hieu_suat, ve_tien_do_dong_bo
@@ -1711,15 +1712,21 @@ with tab_td:
         st.session_state.tieu_de_kenh = None
         with st.spinner("Đang lấy danh sách (không tải gì cả)..."):
             try:
-                st.session_state.tieu_de_kenh = (
-                    url_td.strip(), tai_video_goc.tieu_de_kenh(url_td.strip(), eng.cau_hinh_mang()))
+                st.session_state.tieu_de_kenh = (url_td.strip(), *tai_video_goc.tieu_de_kenh(
+                    url_td.strip(), eng.cau_hinh_mang(), data_dir=eng.data_dir))
             except Exception as e:  # noqa: BLE001 — lỗi YouTube đã phân loại sẵn câu tiếng Việt
                 st.error(f"Lỗi: {e}")
     if st.session_state.get("tieu_de_kenh"):
-        _url_td, _dong_td = st.session_state.tieu_de_kenh
+        _url_td, _dong_td, _ly_do_td = st.session_state.tieu_de_kenh
         st.success(f"Kênh có {len(_dong_td)} video.")
+        if _ly_do_td:
+            st.warning(f"Chưa lấy đủ «Ngày đăng» và «Lượt xem» (ô để trống): {_ly_do_td}")
         st.dataframe(pd.DataFrame(_dong_td), width="stretch", hide_index=True, height=320,
-                     column_config={"Link": st.column_config.LinkColumn()})
+                     column_config={"Link": st.column_config.LinkColumn(),
+                                    "Lượt xem": st.column_config.NumberColumn(format="localized")})
+        if tai_video_goc.COT_API[0] not in _dong_td[0]:
+            st.caption("Muốn có thêm cột «Ngày đăng» và «Lượt xem»: đặt khoá YouTube Data API vào "
+                       f"`{youtube_api.duong_dan_khoa_api(eng.data_dir)}` rồi lấy lại danh sách.")
         _ten_td = tai_video_goc.ten_file_kenh(_url_td)
         c_csv, c_txt = st.columns(2)
         c_csv.download_button("⬇️ Tải file CSV (mở bằng Excel)", tai_video_goc.csv_tieu_de(_dong_td),
