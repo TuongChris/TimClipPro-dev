@@ -100,6 +100,35 @@ def _may_giai_duoc_js_gia(request, monkeypatch):
     monkeypatch.setattr(ytdlp_chung, "kha_nang_js", lambda: gia)
 
 
+@pytest.fixture()
+def khoa_api_that():
+    """Đọc khoá YouTube Data API THẬT theo ``data_dir`` (``youtube_api._doc_khoa_cho``) thay cho «chưa có khoá» mặc định
+    của ``_khong_co_khoa_api_gia`` — chỉ cho test về chính phép đọc khoá (file khoá GIẢ trong tmp_path)."""
+    import youtube_api
+
+    return youtube_api._doc_khoa_cho
+
+
+@pytest.fixture(autouse=True)
+def _khong_co_khoa_api_gia(request, monkeypatch):
+    """Khoá YouTube Data API nằm NGOÀI repo, cạnh ``data_dir`` (D-51) — máy có khoá thật thì test không được gửi yêu cầu
+    API nào. Mặc định GIẢ «chưa có khoá»: mọi đường gọi giữ nguyên đường yt-dlp cũ, 0 yêu cầu API. Test đường API xin
+    fixture ``api_youtube_gia`` (tests/youtube_api_gia.py); test về chính phép đọc khoá xin ``khoa_api_that``."""
+    if "khoa_api_that" in request.fixturenames:
+        return
+    import youtube_api
+
+    monkeypatch.setattr(youtube_api, "_doc_khoa_cho", lambda data_dir: "")
+
+
+@pytest.fixture()
+def api_youtube_gia(tmp_path, monkeypatch):
+    """Khoá GIẢ + YouTube Data API giả thay ``urllib.request.urlopen``; trả ``youtube_api_gia.TransportGia``."""
+    import youtube_api_gia
+
+    return youtube_api_gia.lap_api_gia(tmp_path, monkeypatch)
+
+
 _DATA_CANH_MA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 _DATA_CANH_MA_CO_SAN = os.path.exists(_DATA_CANH_MA)
 

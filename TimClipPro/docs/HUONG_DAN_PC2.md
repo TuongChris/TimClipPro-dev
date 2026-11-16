@@ -17,6 +17,7 @@ kho vân tay, lịch sử, hàng đợi gửi, cookie, khoá Google và cấu h�
 | FFmpeg | Chép `ffmpeg.exe`, `ffprobe.exe` vào `D:\TimClipPro\tools\ffmpeg\bin\` (bản chính thức, có nguồn rõ). |
 | Bộ bootstrap | File zip do chủ dự án chuẩn bị: launcher + `trusted_keys.json` (khoá công khai tin cậy) + `bootstrap.py`. |
 | Khoá Google (tuỳ chọn) | File JSON của tài khoản dịch vụ. Chép bằng kênh riêng (USB) vào `D:\TimClipPro_State\secrets\`. KHÔNG lấy từ PC1 tự động. |
+| Khoá YouTube Data API (tuỳ chọn, D-51) | File văn bản UTF-8 đúng MỘT dòng khoá. Người dùng tự chép (kênh riêng) vào đúng `D:\TimClipPro_State\secrets\youtube_api_key.txt` — vị trí cố định `<state root>\secrets\`, không có ô nhập. Có khoá: tiêu đề, kênh, thời lượng, ngày đăng lấy bằng API, yt-dlp chỉ còn tải; không có: như cũ. Thanh bên «🔐 Kết nối YouTube» và `cli.py youtube-doctor` báo có file / đúng dạng. |
 
 ## 2. Bootstrap
 

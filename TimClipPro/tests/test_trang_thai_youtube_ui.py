@@ -67,6 +67,30 @@ def test_lan_chay_cuoi_cookie_bi_tu_choi():
     assert dong[0][0] == "warning" and "không được YouTube chấp nhận" in dong[0][1]
 
 
+def test_trang_thai_api_youtube_khoa_va_luot_gan_nhat():
+    """D-51: dòng khoá (đọc file mỗi lần vẽ lại, không gọi mạng) + số đo API của lượt gần nhất kèm lý do tắt."""
+    import youtube_api as ya
+
+    duong = r"D:\TimClip\secrets\youtube_api_key.txt"
+    chua = ya.TrangThaiKhoaApi(ya.CHUA_CO, "", duong)
+    assert scan_ui.dong_trang_thai_api_youtube(chua) == [("info", chua.cau)] and duong in chua.cau
+    sai = ya.TrangThaiKhoaApi(ya.SAI_DANG, "File youtube_api_key.txt có nhiều hơn một dòng khoá.", duong)
+    assert scan_ui.dong_trang_thai_api_youtube(sai) == [("warning", sai.cau)]
+    co = ya.TrangThaiKhoaApi(ya.CO_KHOA, "", duong)
+    p = t.PhienYouTube()
+    assert scan_ui.dong_trang_thai_api_youtube(co, p) == [("info", co.cau)], "lượt không đụng API: không thêm dòng"
+    p.api.ghi_yeu_cau()
+    p.api.ghi_thanh_cong()
+    p.api.ghi_video(2)
+    assert scan_ui.dong_trang_thai_api_youtube(co, p)[-1] == (
+        "info", "Lượt gần nhất — API YouTube: 2 video lấy bằng API (~1 đơn vị)")
+    p.api.ghi_yeu_cau()
+    p.api.ghi_loi(t.API_HET_HAN_MUC)
+    p.api.ghi_video(0, [p.api.ly_do_tat])
+    muc, cau = scan_ui.dong_trang_thai_api_youtube(co, p)[-1]
+    assert muc == "warning" and "1 video lùi về yt-dlp — Hết hạn mức" in cau
+
+
 def test_thong_bao_lo_bi_chan_lay_tu_ket_qua():
     p = t.PhienYouTube()
     p.ghi_loi(RuntimeError("ERROR: [youtube] x: HTTP Error 429: Too Many Requests"))
@@ -89,5 +113,6 @@ def test_app_hien_trang_thai_youtube_khong_lo_cookie(tmp_path, monkeypatch):
                    [*at.sidebar.markdown, *at.sidebar.caption, *at.sidebar.success,
                     *at.sidebar.info, *at.sidebar.warning, *at.sidebar.error])
     assert "Trạng thái YouTube" in chu and "đúng cấu trúc" in chu
+    assert "Chưa có khoá YouTube Data API" in chu          # D-51: mặc định của test = máy chưa có khoá
     tat_ca = " ".join(str(getattr(x, "value", "")) for x in at.main) + chu
     assert BI_MAT not in tat_ca

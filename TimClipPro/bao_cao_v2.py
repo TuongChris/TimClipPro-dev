@@ -12,7 +12,8 @@ múi giờ hiển thị, link video gốc dạng ``youtu.be``. V2 đổi bốn �
 2. link nhảy mốc dùng ĐÚNG giây đang hiển thị: ``00:15:15`` ↔ ``t=915``
    (từ 25/10/2026 dạng ``watch?v=<ID>&t=915``, xem ``link_nhay``);
 3. ngày đăng là ``upload_date`` NGUYÊN BẢN của yt-dlp, không quy đổi múi giờ; thiếu thì để
-   thiếu kèm lý do, không đoán từ ``timestamp``/``release_*``/tên file;
+   thiếu kèm lý do, không đoán từ ``timestamp``/``release_*``/tên file (có khoá YouTube Data API
+   — D-51: ngày lịch UTC của ``published_at``, cùng phép tính, đứng trước);
 4. link video gốc ``https://www.youtube.com/watch?v=<ID>`` dựng từ ID đã xác minh.
 
 Vòng đời (xem docs/REPORT_POLICY_V2.md)
@@ -42,7 +43,7 @@ from typing import Any, Iterable, Mapping, Optional
 
 from clip_metadata import YOUTUBE_ID_PATTERN, valid_upload_date, youtube_ids_from_url
 from lich_su import LY_DO_PHAM_VI
-from publication_date import format_publication_date
+from publication_date import format_publication_date, ngay_utc_tu_published_at
 
 CHINH_SACH_V2 = "v2"
 # Chính sách mà job MỚI được ghim. Chỉ ``Engine._ban_sao_cho_job`` đọc hằng này; exporter
@@ -52,6 +53,7 @@ CHINH_SACH_HIEN_HANH = CHINH_SACH_V2
 PHIEN_BAN_ANH_CHUP = 1
 
 NGUON_UPLOAD_DATE = "yt_dlp.upload_date"
+NGUON_PUBLISHED_AT = "youtube_api.published_at"     # D-51: ngày lịch UTC của snippet.publishedAt
 NGUON_TIEU_DE_YTDLP = "yt_dlp.title"
 NGUON_TIEU_DE_TEN_FILE = "ten_file"
 NGUON_TIEU_DE_KHO = "clips_meta"
@@ -161,10 +163,16 @@ class NgayNguon:
 def ngay_tu_info(info: Optional[Mapping]) -> NgayNguon:
     """Ngày đăng NGUYÊN BẢN của video được quét, từ dict ``Engine.youtube_info``.
 
-    Đọc ``upload_date_raw`` — giá trị yt-dlp trả về TRƯỚC khi resolver cũ chọn/quy đổi.
+    ``published_at`` (YouTube Data API, D-51) trước: ngày lịch UTC của nó — đúng phép yt-dlp tính ``upload_date``. Rồi
+    ``upload_date_raw`` — giá trị yt-dlp trả về TRƯỚC khi resolver cũ chọn/quy đổi.
     KHÔNG đọc ``upload_date`` của dict đó: ở tầng wrapper khoá này đã mang ngày quy đổi.
     """
     info = info or {}
+    g = ngay_utc_tu_published_at(info.get("published_at"))
+    if g:
+        return NgayNguon(gia_tri=g, nguon=NGUON_PUBLISHED_AT)
+    if info.get("published_at") and not ngay_hop_le(info.get("upload_date_raw")):
+        return NgayNguon(ly_do_thieu="publishedAt của YouTube Data API không phải ngày hợp lệ")
     if "upload_date_raw" not in info:
         return NgayNguon(ly_do_thieu="thông tin video không có upload_date gốc của yt-dlp")
     tho = info.get("upload_date_raw")

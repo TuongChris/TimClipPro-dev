@@ -44,6 +44,13 @@ truy_cap_youtube.py ── THUẦN: phân loại lỗi, che bí mật, chẩn đ
 - **Phiên = một lượt chạy**: bản Engine ghim của một job tự tạo phiên (scan_iter, scan lẻ, lô nguồn
   chung); Watch mở một phiên cho cả lượt (`Engine.mo_phien_youtube`); mỗi `ChannelSync` một phiên;
   `kiem_ngay_dang.repair` một phiên. Bộ điều phối hỏi `phien.mo` trước MỖI việc mạng.
+- **Phiên con YouTube Data API** (D-51, `youtube_api.py`, hợp đồng `docs/YOUTUBE_DATA_API.md`): `PhienYouTube.api`
+  (`PhienApiYouTube`) — chốt «tắt API tới hết lượt» + số đo RIÊNG (`yeu_cau`, `don_vi`, `video_api`, `video_lui`,
+  `ly_do_tat`; `tom_tat()["api"]`), dùng chung hàm chờ huỷ được của phiên. Lỗi API phân loại riêng
+  (`phan_loai_loi_api`: hết hạn mức / khoá hỏng / giới hạn tốc độ / tạm thời / phản hồi lạ) và KHÔNG BAO GIỜ đi qua
+  `chay`/`phan_loai_loi`/`ghi_loi`/`ghi_thanh_cong`/`dem_yeu_cau`: 403 `quotaExceeded` của API mà vào đó sẽ thành
+  `HTTP_FORBIDDEN` của yt-dlp, và một lượt API thành công sẽ xoá chuỗi lỗi yt-dlp. Cầu dao yt-dlp đang mở thì API cũng
+  không gửi; API tắt thì chỉ API nghỉ — `Engine.youtube_info` lấy các mã `thieu` bằng đường yt-dlp cũ y nguyên.
 
 ## 3. Ma trận lỗi
 
@@ -160,8 +167,13 @@ kênh/tab) bị loại; chỉ toàn tab thì báo INVALID_INPUT kèm hướng d�
 - CLI: mã thoát 0 xong · 1 lỗi · 2 bận · **3 YouTube chặn truy cập**; lỗi vận hành đã phân loại
   không in traceback.
 - `python cli.py youtube-doctor [--network URL]`: chẩn đoán chỉ đọc (yt-dlp, bộ giải JS, JS runtime,
-  cấu hình mạng, cookie dạng số đếm, bảng thử lại, ngưỡng cầu dao); chỉ gọi đúng MỘT request khi
-  người dùng tự đưa `--network`. Không bao giờ gọi Google.
+  cấu hình mạng, cookie dạng số đếm, bảng thử lại, ngưỡng cầu dao, file khoá YouTube Data API — có file / đúng dạng,
+  đường dẫn che thư mục người dùng); chỉ gọi đúng MỘT request khi người dùng tự đưa `--network`. Không bao giờ gọi
+  Google.
+- YouTube Data API (D-51): dưới «Trạng thái YouTube» một dòng khoá (đọc file mỗi lần vẽ lại, không gọi mạng —
+  `scan_ui.dong_trang_thai_api_youtube`) + số đo API của lượt gần nhất «API YouTube: N video lấy bằng API (~U đơn vị)
+  · K video lùi về yt-dlp — <lý do>» (`truy_cap_youtube.dong_trang_thai_api`; cùng dòng ở tóm tắt CLI `youtube` /
+  `kenh` và báo cáo Watch). Không cộng vào `NHAN_TRUONG_THAT_BAI`, không đổi mã thoát 3, không vào ghi chú kết quả.
 
 ## 9. Test
 
@@ -174,6 +186,8 @@ kênh/tab) bị loại; chỉ toàn tab thì báo INVALID_INPUT kèm hướng d�
 | `tests/test_truy_cap_youtube_cli.py` | mã thoát 3, mã 2 giữ nguyên, không traceback |
 | `tests/test_youtube_doctor.py` | mặc định 0 request, `--network` đúng 1 request, không lộ cookie |
 | `tests/test_trang_thai_youtube_ui.py` | câu chữ trạng thái + AppTest không lộ cookie |
+| `tests/test_youtube_api.py` | YouTube Data API: đọc khoá, phân loại lỗi, phiên con tách cầu dao, lô 50, lùi về yt-dlp, khoá không lộ |
+| `tests/test_youtube_api_quet.py` | `youtube_info` qua API (đủ khoá + `published_at`), cùng ngày với yt-dlp, hết hạn mức / khoá hỏng trong lô 3 video = 1 yêu cầu API rồi yt-dlp, không khoá = y như cũ, link không phải video không hỏi API, dòng API ở CLI / Watch |
 
 ## 10. Giới hạn
 

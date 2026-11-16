@@ -92,3 +92,42 @@ def test_cli_goi_youtube_doctor_khong_dung_engine(tmp_path, monkeypatch):
     with pytest.raises(SystemExit) as ei:
         cli.main()
     assert ei.value.code == 0
+
+
+def test_khoa_api_youtube_ngoai_tuyen_che_thu_muc_nguoi_dung(tmp_path, monkeypatch, capsys):
+    """D-51: khối khoá YouTube Data API chỉ đọc file (mặc định của test = chưa có khoá), không gọi Google; đường dẫn
+    che tên người dùng Windows như ghi chú."""
+    import youtube_api
+
+    monkeypatch.setattr(youtube_api, "duong_dan_khoa_api",
+                        lambda d: r"C:\Users\TenRieng\TimClip\secrets\youtube_api_key.txt")
+    data = _data(tmp_path)
+    kq = youtube_doctor.chan_doan(data)
+    assert kq["google"] == "không gọi" and kq["mang"]["da_goi"] is False
+    assert kq["khoa_api_youtube"] == {"duong_dan": r"~\TimClip\secrets\youtube_api_key.txt",
+                                      "co_file": False, "dung_dang": False, "ly_do": ""}
+    assert youtube_doctor.chay(data) == 0
+    ra = capsys.readouterr().out
+    assert "Khoá YouTube Data API: CHƯA có file" in ra and "TenRieng" not in ra
+
+
+@pytest.mark.parametrize("noi_dung, co_file, dung_dang", [
+    ("# chỉ có chú thích\n", True, False),
+    ("AIza" + "GiaKhongBiMat" + "0" * 22 + "\n", True, True),  # gia-khong-bi-mat: đúng dạng, rõ là giả
+])
+def test_khoa_api_youtube_co_file_sai_dang_hay_dung_dang_khong_lo_khoa(tmp_path, monkeypatch, capsys,
+                                                                     khoa_api_that, noi_dung, co_file, dung_dang):
+    import youtube_api
+
+    f = tmp_path / "khoa_thu" / youtube_api.TEN_FILE_KHOA
+    f.parent.mkdir()
+    f.write_text(noi_dung, encoding="utf-8")
+    monkeypatch.setattr(youtube_api, "duong_dan_khoa_api", lambda d: str(f))
+    data = _data(tmp_path)
+    kq = youtube_doctor.chan_doan(data)
+    k = kq["khoa_api_youtube"]
+    assert (k["co_file"], k["dung_dang"], bool(k["ly_do"])) == (co_file, dung_dang, not dung_dang)
+    youtube_doctor.chay(data)
+    ra = capsys.readouterr().out
+    assert ("đúng dạng" if dung_dang else "SAI dạng") in ra
+    assert "GiaKhongBiMat" not in ra + json.dumps(kq, ensure_ascii=False)

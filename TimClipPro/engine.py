@@ -48,6 +48,7 @@ import bao_cao_v2
 import channel
 import cau_hinh
 import truy_cap_youtube
+import youtube_api
 import ytdlp_chung
 import don_dep
 import dossier
@@ -109,7 +110,7 @@ from process_runner import (
     run_observed_process,
     so_huu_hau_due_tien_trinh_nay,
 )
-from publication_date import ghi_log_chan_doan, resolve_publication_date
+from publication_date import epoch_tu_published_at, ghi_log_chan_doan, resolve_publication_date
 
 
 LOGGER_METADATA = logging.getLogger("clip_metadata")
@@ -3782,6 +3783,14 @@ class Engine:
         import yt_dlp
 
         phien = self.phien_youtube_hien_tai()
+        ma_api = youtube_api.ma_video_cho_api(url)
+        if ma_api:
+            # D-51: YouTube Data API trước — phiên con `phien.api`, KHÔNG qua `phien.chay` (lỗi API không chạm cầu dao
+            # yt-dlp). Không khoá / API tắt / lỗi / video sắp phát → mã nằm trong `thieu` → đường yt-dlp cũ bên dưới.
+            video = youtube_api.lay_video(phien, self.data_dir, [ma_api],
+                                          cancel_event=self.cancel_event).thong_tin.get(ma_api)
+            if video is not None:
+                return self._info_tu_api(url, video)
         bo_ghi = ytdlp_chung.BoGhiYtdlp(phien)
 
         def lay(cau_hinh):
@@ -3836,12 +3845,40 @@ class Engine:
             "channel_url": (
                 info.get("channel_url") or info.get("uploader_url") or ""
             ),
-            # Giữ tên khoá cũ nhưng mang giá trị CHÍNH TẮC; `upload_date_raw` để
-            # chẩn đoán, không dùng cho báo cáo.
+            # `upload_date` giữ tên cũ nhưng mang ngày ĐÃ quy đổi (luật cũ, ScanResult); `upload_date_raw` = upload_date
+            # NGUYÊN VĂN của yt-dlp — ngày báo cáo V2 (`bao_cao_v2.ngay_tu_info`) khi không có `published_at`.
             "upload_date": ngay.yyyymmdd,
             "upload_date_raw": str(info.get("upload_date") or ""),
             "publication_date_source": ngay.source_field or "",
             "publication_date_confidence": ngay.confidence,
+            "published_at": "",                 # chỉ YouTube Data API có (D-51) — không bịa
+        }
+
+    @staticmethod
+    def _info_tu_api(url: str, video: dict) -> dict:
+        """Dict ``youtube_info`` từ một video của YouTube Data API (``youtube_api.lay_video``, D-51): CÙNG khoá, cùng
+        nghĩa với đường yt-dlp, ``published_at`` nguyên văn. ``upload_date_raw`` rỗng — khoá đó chỉ mang ngày yt-dlp
+        nguyên văn (bản rollback đọc nó là của yt-dlp). Ngày quy đổi qua resolver hiện có, ``actualStartTime`` đóng vai
+        ``release_timestamp`` của yt-dlp."""
+        moc = {"timestamp": epoch_tu_published_at(video["published_at"])}
+        if "actual_start_time" in video:
+            moc["release_timestamp"] = epoch_tu_published_at(video["actual_start_time"])
+        ngay = resolve_publication_date(moc)
+        ghi_log_chan_doan(video["id"], ngay, moc)
+        return {
+            "id": video["id"],
+            "title": video["title"] or url,
+            "title_raw": video["title"],
+            "duration": video["duration"],
+            "uploader": video["uploader"],
+            "channel": video["channel"],
+            "channel_id": video["channel_id"],
+            "channel_url": video["channel_url"],
+            "upload_date": ngay.yyyymmdd,
+            "upload_date_raw": "",
+            "publication_date_source": ngay.source_field or "",
+            "publication_date_confidence": ngay.confidence,
+            "published_at": video["published_at"],
         }
 
     def _ten_phan_dau(self, video_id: str, gioi_han_giay: float) -> str:

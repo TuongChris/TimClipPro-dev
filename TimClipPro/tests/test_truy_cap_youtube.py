@@ -362,6 +362,7 @@ RO_RI = [
     f"'.youtube.com TRUE / TRUE 0 SID {BI_MAT}'",
     f"password: {BI_MAT}",
     f"LOGIN_INFO={BI_MAT}",
+    f"Dữ liệu lạ trong lỗi: AIza{BI_MAT}{'0' * 10} — hết",  # gia-khong-bi-mat: khoá API Google trần (D-51)
 ]
 
 

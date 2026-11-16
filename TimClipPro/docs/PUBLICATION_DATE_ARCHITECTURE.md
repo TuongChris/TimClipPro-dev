@@ -155,6 +155,21 @@ Video gốc:
 
 Hai luồng dùng **cùng một** resolver và **cùng một** hàm định dạng.
 
+### Nguồn YouTube Data API (D-51, [YOUTUBE_DATA_API.md](YOUTUBE_DATA_API.md))
+
+Có khoá thì `engine.youtube_info()` lấy thông tin bằng `videos.list` (`youtube_api.lay_video`) trước; không khoá, API
+tắt, lỗi hay video sắp phát → đường yt-dlp ở trên y nguyên. API không có `upload_date`/`timestamp` mà có
+`snippet.publishedAt` (ISO 8601) và `liveStreamingDetails.actualStartTime`:
+
+| Ngày | Đường API | Hàm |
+| --- | --- | --- |
+| Quy đổi giờ VN (`upload_date` của dict, `ScanResult.upload_date`, luật cũ) | resolver ở trên với `{"release_timestamp": epoch(actualStartTime) nếu có, "timestamp": epoch(publishedAt)}` | `epoch_tu_published_at` |
+| Nguyên bản (báo cáo V2) | ngày lịch UTC của `publishedAt` — đúng phép yt-dlp tính `upload_date`; nhãn `youtube_api.published_at` (video quét) / `clips_meta.published_at` (video gốc) | `ngay_utc_tu_published_at` |
+
+`published_at` lưu NGUYÊN VĂN (khoá mới); đường API để `upload_date_raw` rỗng — khoá đó chỉ mang chuỗi yt-dlp (bản
+rollback đọc nó là của yt-dlp). Chuỗi không múi giờ, hỏng hay ngoài khoảng `epoch_hop_le` → rỗng, không bịa ngày. Phép
+đổi epoch vẫn chỉ nằm trong `publication_date.py` (test cấu trúc ở §9).
+
 ---
 
 ## 9. Exporter

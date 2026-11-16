@@ -108,9 +108,17 @@ cũ, tên file/mã lưu trữ/khoá vân tay trong kho.
 
 | Video | Nguồn ngày V2 (theo thứ tự) |
 |---|---|
-| Được quét (YouTube) | `youtube_info()["upload_date_raw"]` (chuỗi yt-dlp, đọc TRƯỚC resolver cũ). KHÔNG đọc `upload_date` của dict wrapper — khoá đó đã mang ngày quy đổi |
+| Được quét (YouTube) | (1) `youtube_info()["published_at"]` khi thông tin lấy bằng YouTube Data API (D-51): ngày lịch UTC của `snippet.publishedAt`, nhãn `youtube_api.published_at`; (2) `youtube_info()["upload_date_raw"]` (chuỗi yt-dlp, đọc TRƯỚC resolver cũ; đường API để rỗng — không giả làm yt-dlp). KHÔNG đọc `upload_date` của dict wrapper — khoá đó đã mang ngày quy đổi |
 | Được quét (file) | Không có — ô trống («quét file trên máy — không có ngày đăng YouTube») |
-| Video gốc | (1) `clips_meta.json`: `upload_date_raw` (clip tải từ bản này); (2) `publication_date` khi `publication_date_source == "upload_date"`; (3) ngày đã bổ sung trong job/lượt; (4) bổ sung qua YouTube nếu được bật; (5) thiếu + lý do |
+| Video gốc | (1) `clips_meta.json`: `published_at` (YouTube Data API, D-51; nhãn `clips_meta.published_at`); (2) `upload_date_raw` (clip tải từ bản này); (3) `publication_date` khi `publication_date_source == "upload_date"`; (4) ngày đã bổ sung trong job/lượt; (5) bổ sung qua YouTube nếu được bật (qua `youtube_info`: có khoá thì bằng API); (6) thiếu + lý do |
+
+**Vì sao `published_at` cho cùng ngày với `upload_date` (D-51):** yt-dlp 2026.08.19 tính `upload_date` là ngày lịch
+UTC của mốc đăng; `bao_cao_v2.ngay_tu_info` / `clip_metadata` lấy đúng ngày lịch UTC của `publishedAt`
+(`publication_date.ngay_utc_tu_published_at`) — video đăng bình thường GIỮ NGUYÊN ngày cũ; chỉ có thể lệch ở video lên
+lịch / riêng tư rồi công khai / công chiếu / phát trực tiếp. `publishedAt` hỏng → lùi về `upload_date_raw`, không
+bịa ngày. Không đổi trường `BaoCaoV2`/`GocV2`, `PHIEN_BAN_ANH_CHUP`, `'v2'`, `chu_ky_chinh_sach`: Watch không quét
+lại, ảnh chụp cũ đọc như cũ, bản rollback đọc được ảnh chụp mới (nhãn nguồn chỉ là giá trị chuỗi). Hợp đồng:
+`docs/YOUTUBE_DATA_API.md`.
 
 **Kho hiện có (đo 04/10/2026, chỉ đọc; số liệu ở báo cáo ngoài repo):** hai trong ba kho
 chỉ có ngày đã quy đổi (`timestamp`/`release_timestamp`) cho mọi clip; kho còn lại chỉ một phần

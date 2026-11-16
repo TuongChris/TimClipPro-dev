@@ -36,6 +36,7 @@ import pandas as pd
 import bao_cao_v2
 import outbox
 import truy_cap_youtube as _tc
+import youtube_api
 from channel import GIO_CLIP_TOI_DA
 from common_original import (
     COT_SO_NGUON_CHUNG,
@@ -140,6 +141,20 @@ def dong_trang_thai_youtube(cd: Any, phien: Any = None, js: Any = None) -> list:
             ra.append(("info", "Khi quét: DÙNG cookie đăng nhập — yt-dlp giải thử thách JavaScript bằng "
                                f"{js.mo_ta()}. Đã CẤU HÌNH chưa có nghĩa là YouTube CHẤP NHẬN phiên đăng nhập — kết "
                                "quả mỗi lượt đồng bộ ghi rõ đã xác minh hay chưa."))
+    return ra
+
+
+def dong_trang_thai_api_youtube(tt: Any, phien: Any = None) -> list:
+    """Các dòng ``(mức, câu)`` về YouTube Data API (D-51) cạnh «Trạng thái YouTube» ở thanh bên.
+
+    ``tt``: ``youtube_api.TrangThaiKhoaApi`` (chỉ đọc file khoá — không gọi mạng, không mang khoá). ``phien``: phiên của
+    lượt gần nhất hoặc ``None`` — thêm số đo API của lượt kèm lý do lùi / tắt, chỉ khi lượt có đụng tới API.
+    """
+    ra = [("warning" if tt.ma == youtube_api.SAI_DANG else "info", tt.cau)]
+    so = phien.tom_tat().get("api") if phien is not None else None
+    dong = _tc.dong_trang_thai_api(so)
+    if dong:
+        ra.append(("warning" if so.get("tat") else "info", f"Lượt gần nhất — {dong}"))
     return ra
 
 

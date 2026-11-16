@@ -426,6 +426,8 @@ _KHONG_LAI = r"(?!\[đã ẩn)"           # giá trị đã che thì thôi — g
 
 _RE_PEM = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)",
                      re.S)
+# Khoá API Google (YouTube Data API, D-51) đứng trần, không có «key=» hay header đi kèm.
+_RE_KHOA_API_GOOGLE = re.compile(r"AIza[0-9A-Za-z_-]{35}")
 _RE_DONG_CANH_BAO_COOKIE = re.compile(
     r"(?im)^.*(?:skipping cookie file entry|failed to parse cookie).*$")
 # Lỗi nạp file của `http.cookiejar` (yt-dlp gọi `MozillaCookieJar._really_load`): «invalid Netscape format cookies file
@@ -470,6 +472,7 @@ def che_bi_mat(van_ban: Any) -> str:
     if not s:
         return s
     s = _RE_PEM.sub("[đã ẩn: khoá riêng]", s)
+    s = _RE_KHOA_API_GOOGLE.sub(AN, s)
     s = _RE_DONG_CANH_BAO_COOKIE.sub("[đã ẩn: dòng này chứa nội dung cookie]", s)
     s = _RE_LOI_NAP_COOKIE.sub(lambda m: m.group(1) + " [đã ẩn: đường dẫn và dòng cookie]", s)
     s = _RE_DONG_NETSCAPE.sub("[đã ẩn: dòng cookie]", s)
@@ -836,6 +839,159 @@ def cho_huy_duoc(giay: float, cancel_event: Any = None) -> bool:
             return True
 
 
+# =====================================================================
+#  YouTube Data API v3 (D-51, docs/YOUTUBE_DATA_API.md) — chính sách THUẦN; mạng ở youtube_api.py
+# =====================================================================
+
+API_HET_HAN_MUC = "HET_HAN_MUC"     # hết hạn mức trong ngày của khoá
+API_KHOA_HONG = "KHOA_HONG"         # khoá sai / bị chặn / hết hạn, dự án chưa bật API, 401/403 khác
+API_GIOI_HAN = "GIOI_HAN"           # giới hạn tốc độ, 429
+API_TAM_THOI = "TAM_THOI"           # 5xx, lỗi mạng, thân cụt
+API_PHAN_HOI_LA = "PHAN_HOI_LA"     # 2xx sai dạng, 3xx, 4xx khác
+CAC_LOAI_API = (API_HET_HAN_MUC, API_KHOA_HONG, API_GIOI_HAN, API_TAM_THOI, API_PHAN_HOI_LA)
+
+# Số lỗi LIÊN TIẾP để tắt API tới hết lượt (chỉ API nghỉ, yt-dlp chạy tiếp; lượt sau thử API lại).
+NGUONG_TAT_API = {API_HET_HAN_MUC: 1, API_KHOA_HONG: 1, API_GIOI_HAN: 1, API_TAM_THOI: 3, API_PHAN_HOI_LA: 1}
+CHO_THU_LAI_API_S = 3.0             # lỗi tạm thời: thử lại MỘT lần sau chừng này giây (qua hàm chờ của phiên)
+
+_LUOT_NAY_YT_DLP = "Lượt này lấy thông tin video bằng yt-dlp như cũ"
+THONG_BAO_API = {
+    API_HET_HAN_MUC: (
+        "Hết hạn mức YouTube Data API của khoá trong ngày (mặc định 10.000 đơn vị, đặt lại lúc nửa đêm giờ Thái Bình "
+        f"Dương — khoảng 14–15 giờ chiều giờ Việt Nam). {_LUOT_NAY_YT_DLP}."),
+    API_KHOA_HONG: (
+        "Khoá YouTube Data API không dùng được (sai khoá, khoá bị chặn hoặc hết hạn, hay dự án Google Cloud chưa bật "
+        f"YouTube Data API v3) — kiểm tra khoá trong Google Cloud Console. {_LUOT_NAY_YT_DLP}."),
+    API_GIOI_HAN: f"YouTube Data API đang giới hạn tốc độ yêu cầu. {_LUOT_NAY_YT_DLP}; lượt sau thử API lại.",
+    API_TAM_THOI: f"YouTube Data API lỗi mạng / máy chủ 3 lần liên tiếp. {_LUOT_NAY_YT_DLP}; lượt sau thử API lại.",
+    API_PHAN_HOI_LA: (
+        f"YouTube Data API trả phản hồi không như mong đợi (có thể do proxy / mạng chặn). {_LUOT_NAY_YT_DLP}."),
+}
+
+_LY_DO_HET_HAN_MUC = frozenset({"quotaExceeded", "dailyLimitExceeded"})
+_LY_DO_KHOA_HONG = frozenset({"keyInvalid", "API_KEY_INVALID", "accessNotConfigured", "SERVICE_DISABLED",
+                              "keyExpired", "forbidden"})
+_RE_KHOA_BI_CHAN = re.compile(r"API_KEY_[A-Z_]+_BLOCKED")
+_LY_DO_GIOI_HAN = frozenset({"rateLimitExceeded", "userRateLimitExceeded", "RATE_LIMIT_EXCEEDED"})
+
+
+def _ly_do_google(than: Any) -> set:
+    """``error.errors[].reason`` + ``error.details[].reason`` của thân lỗi Google (đã đọc JSON). ``error.status`` (mã
+    gRPC chuẩn) chỉ lặp lại mã HTTP — không lý do nào trong các bảng trên là một ``status``."""
+    loi = than.get("error") if isinstance(than, dict) else None
+    if not isinstance(loi, dict):
+        return set()
+    ra: set = set()
+    for ten in ("errors", "details"):
+        if isinstance(loi.get(ten), list):
+            ra.update(x.get("reason") for x in loi[ten] if isinstance(x, dict))
+    return {x for x in ra if isinstance(x, str)}
+
+
+def phan_loai_loi_api(ma_http: Optional[int], than: Any = None) -> str:
+    """Loại lỗi YouTube Data API CHỈ theo lý do Google (``reason``) + mã HTTP — không đọc chữ trong ``message``,
+    không giữ thân lỗi thô (có thể chứa số dự án). ``ma_http`` None = không có phản hồi HTTP (lỗi truyền tải); 2xx = phản
+    hồi không đúng dạng mong đợi."""
+    ly_do = _ly_do_google(than)
+    if ly_do & _LY_DO_HET_HAN_MUC:
+        return API_HET_HAN_MUC
+    if ly_do & _LY_DO_KHOA_HONG or any(_RE_KHOA_BI_CHAN.fullmatch(x) for x in ly_do):
+        return API_KHOA_HONG
+    if ly_do & _LY_DO_GIOI_HAN or ma_http == 429:
+        return API_GIOI_HAN
+    if ma_http in (401, 403):
+        return API_KHOA_HONG
+    if ma_http is None or 500 <= ma_http <= 599:
+        return API_TAM_THOI
+    return API_PHAN_HOI_LA
+
+
+class PhienApiYouTube:
+    """Phiên con YouTube Data API của MỘT lượt chạy (``PhienYouTube.api``): chốt «tắt tới hết lượt» + số đo RIÊNG.
+
+    Tách hẳn cầu dao yt-dlp: lỗi API không bao giờ đi qua ``chay``/``ghi_loi``/``ghi_thanh_cong``/``dem_yeu_cau`` của
+    ``PhienYouTube`` (403 sẽ thành HTTP_FORBIDDEN mở cầu dao, một lượt API thành công xoá chuỗi lỗi của yt-dlp). An toàn
+    luồng: D-29 chạy đồng bộ + quét song song trong một tiến trình. Không gọi ngược ``PhienYouTube`` (không lồng khoá).
+    """
+
+    def __init__(self, *, ham_cho: Optional[Callable] = None):
+        self._lock = threading.Lock()
+        self._cho = ham_cho or cho_huy_duoc
+        self._lien_tiep: dict = {}
+        self._tat = ""
+        self._so = {"yeu_cau": 0, "don_vi": 0, "video_api": 0, "video_lui": 0}
+        self._ly_do_lui: dict = {}           # lý do lùi khác nhau, theo thứ tự gặp
+
+    @property
+    def tat(self) -> bool:
+        with self._lock:
+            return bool(self._tat)
+
+    @property
+    def loai_tat(self) -> str:
+        with self._lock:
+            return self._tat
+
+    @property
+    def ly_do_tat(self) -> str:
+        """Câu tiếng Việt vì sao API đã tắt tới hết lượt; rỗng khi còn bật."""
+        return THONG_BAO_API.get(self.loai_tat, "")
+
+    def cho_thu_lai(self, cancel_event: Any = None) -> bool:
+        """Nghỉ trước lần thử lại DUY NHẤT của lỗi tạm thời; ``True`` nếu bị huỷ giữa chừng."""
+        return bool(self._cho(CHO_THU_LAI_API_S, cancel_event))
+
+    def ghi_yeu_cau(self, don_vi: int = 1) -> None:
+        """Ngay trước khi gửi một yêu cầu (mọi yêu cầu, kể cả hỏng, tốn ít nhất 1 đơn vị hạn mức)."""
+        with self._lock:
+            self._so["yeu_cau"] += 1
+            self._so["don_vi"] += int(don_vi)
+
+    def ghi_thanh_cong(self) -> None:
+        with self._lock:
+            self._lien_tiep.clear()
+
+    def ghi_loi(self, loai: str) -> bool:
+        """Ghi một yêu cầu hỏng đã phân loại; ``True`` nếu API đã tắt tới hết lượt (vừa tắt hoặc tắt từ trước)."""
+        with self._lock:
+            so = self._lien_tiep.get(loai, 0) + 1
+            self._lien_tiep[loai] = so
+            if not self._tat and so >= NGUONG_TAT_API.get(loai, 1):
+                self._tat = loai
+                LOGGER.warning("event=youtube.api.off category=%s consecutive=%d", loai, so)
+            return bool(self._tat)
+
+    def ghi_video(self, so_api: int, ly_do_lui: Any = ()) -> None:
+        """``so_api`` video lấy được bằng API; mỗi phần tử của ``ly_do_lui`` = lý do của MỘT video lùi về yt-dlp."""
+        with self._lock:
+            self._so["video_api"] += int(so_api)
+            for ly_do in ly_do_lui:
+                self._so["video_lui"] += 1
+                self._ly_do_lui[ly_do] = None
+
+    def tom_tat(self) -> dict:
+        """Số đo API của lượt — không chứa bí mật (không khoá, không thân lỗi)."""
+        with self._lock:
+            return {**self._so, "tat": bool(self._tat), "loai_tat": self._tat,
+                    "ly_do_tat": THONG_BAO_API.get(self._tat, ""), "ly_do_lui": "; ".join(self._ly_do_lui)}
+
+
+def dong_trang_thai_api(so: Any) -> str:
+    """Dòng «API YouTube: …» (D-51) cho thanh bên / tóm tắt CLI / báo cáo Watch, từ ``PhienYouTube.tom_tat()["api"]``.
+    Rỗng khi lượt không đụng tới API (không có khoá). Không phải lỗi truy cập YouTube: không cộng vào
+    ``NHAN_TRUONG_THAT_BAI``, không đổi mã thoát."""
+    so = so if isinstance(so, dict) else {}
+    n, don_vi, lui = (int(so.get(k) or 0) for k in ("video_api", "don_vi", "video_lui"))
+    if not (n or don_vi or lui):
+        return ""
+    dong = f"API YouTube: {n} video lấy bằng API (~{don_vi} đơn vị)"
+    if lui:
+        dong += f" · {lui} video lùi về yt-dlp"
+        if so.get("ly_do_lui"):
+            dong += f" — {so['ly_do_lui']}"
+    return dong
+
+
 class PhienYouTube:
     """MỘT lượt chạy (một batch, một lượt Watch, một lô nguồn chung, một lượt đồng bộ kênh).
 
@@ -850,6 +1006,8 @@ class PhienYouTube:
         self.nguong = dict(NGUONG_MO if nguong is None else nguong)
         self.ngan_sach = dict(NGAN_SACH if ngan_sach is None else ngan_sach)
         self._cho = ham_cho or cho_huy_duoc
+        # YouTube Data API (D-51): chốt + số đo RIÊNG, cùng hàm chờ huỷ được — lỗi API không chạm cầu dao yt-dlp.
+        self.api = PhienApiYouTube(ham_cho=self._cho)
         self._mo_boi: Optional[YoutubeAccessFailure] = None
         self._so_lan_mo = 0
         self._lien_tiep: dict = {}
@@ -1174,4 +1332,5 @@ class PhienYouTube:
             so["auth_cookies_seen"] = self.cookie_tai_khoan
             so["account_confirmed_by_youtube"] = self.youtube_xac_nhan_tai_khoan
             so["elapsed_s"] = round(time.time() - self.bat_dau, 3)
+        so["api"] = self.api.tom_tat()        # ngoài khoá của phiên: không lồng hai khoá
         return so

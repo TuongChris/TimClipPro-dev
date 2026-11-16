@@ -146,6 +146,33 @@ def ngay_tu_chuoi(gia_tri: Any) -> Optional[date]:
         return None
 
 
+def epoch_tu_published_at(gia_tri: Any) -> Optional[int]:
+    """``snippet.publishedAt`` của YouTube Data API (ISO 8601: «Z», phần giây lẻ, «±hh:mm») -> epoch giây UTC.
+
+    Rỗng / không có múi giờ / sai / ngoài khoảng ``epoch_hop_le`` -> None: không bịa ngày (D-51).
+    """
+    if not isinstance(gia_tri, str) or not gia_tri.strip():
+        return None
+    chuoi = gia_tri.strip()
+    if chuoi[-1] in "Zz":
+        chuoi = chuoi[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(chuoi)
+    except ValueError:
+        return None
+    if dt.utcoffset() is None:
+        return None
+    so, _ = epoch_hop_le(dt.timestamp())
+    return None if so is None else int(so)
+
+
+def ngay_utc_tu_published_at(gia_tri: Any) -> str:
+    """Ngày lịch UTC (``YYYYMMDD``) của ``snippet.publishedAt`` — đúng phép yt-dlp tính ``upload_date`` (ngày UTC), nên
+    video đăng bình thường giữ ngày cũ (D-51). Không đọc được -> ""."""
+    so = epoch_tu_published_at(gia_tri)
+    return "" if so is None else datetime.fromtimestamp(so, timezone.utc).strftime("%Y%m%d")
+
+
 class PublicationDateResolver:
     """Quyết định ngày đăng chính tắc từ metadata, kèm nguồn gốc."""
 

@@ -57,6 +57,8 @@ def test_youtube_info_lay_du_khoa(engine, monkeypatch):
     assert ket_qua.pop("publication_date_confidence") == "high"
     # Báo cáo V2: tiêu đề yt-dlp nguyên văn (rỗng khi thiếu) — khoá THÊM, các khoá cũ y nguyên.
     assert ket_qua.pop("title_raw") == "Video"
+    # D-51: publishedAt của YouTube Data API — đường yt-dlp không có, để rỗng (không bịa).
+    assert ket_qua.pop("published_at") == ""
 
     assert ket_qua == {
         "id": "abc123",
