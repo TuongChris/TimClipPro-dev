@@ -35,7 +35,7 @@ from khoa import DangChayRoi
 from luu_tru import LoiDuLieu
 from engine import (Engine, LoiLuuBen, SoKhoHong, liet_ke_media, mo_ta_pham_vi,
                     thu_muc_data_mac_dinh)
-from truy_cap_youtube import LoiTruyCapYouTube
+from truy_cap_youtube import LoiTruyCapYouTube, dong_trang_thai_api
 from ytdlp_chung import CauHinhMang
 
 # Mã thoát cho lịch chạy (Task Scheduler, GiamSat.bat, ChayMayPhu.bat chuyển nguyên mã ra):
@@ -490,6 +490,9 @@ def _main():
         from ui_tien_do_dong_bo import dong_hieu_suat
         for _muc, cau in dong_hieu_suat(r.get("hieu_suat")):
             print(cau)
+        dong_api = dong_trang_thai_api((r.get("youtube") or {}).get("api"))
+        if dong_api:
+            print(dong_api)
         if r["loi"]:
             print("Lỗi:", *r["loi"][:10], sep="\n  - ")
         if r.get("nghi_hong"):
@@ -613,6 +616,9 @@ def _main():
         print(f"===> Truy cập YouTube: {so['youtube_operations']} thao tác, "
               f"{so['metadata_requests']} lần lấy thông tin, {so['download_attempts']} lượt tải, "
               f"{so['retries']} lần thử lại, {so['skipped_by_breaker']} video chưa quét.")
+        dong_api = dong_trang_thai_api(so.get("api"))     # D-51: không phải lỗi truy cập — không đổi mã thoát
+        if dong_api:
+            print(f"===> {dong_api}")
         _thoat_neu_youtube_chan(phien.thong_bao_dung())
     # Như Watch (audit B-11): quét lỗi hay báo cáo V2 lỗi là lỗi — mã 0 thì script/lịch tưởng đã xong (audit 09/11).
     if ma_gui or loi_bao_cao or any(kq.status != "ok" for kq in ket):

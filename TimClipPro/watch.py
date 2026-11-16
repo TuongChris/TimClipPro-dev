@@ -18,7 +18,7 @@ from don_dep import don_job_quet, don_kho_dem, don_rac_job_tam
 from engine import LoiLuuBen
 from khoa import DangChayRoi, KhoaTienTrinh
 from luu_tru import doc_json_an_toan, ghi_json_an_toan
-from truy_cap_youtube import PhienYouTube
+from truy_cap_youtube import PhienYouTube, dong_trang_thai_api
 from ytdlp_chung import giai_thich_loi
 
 
@@ -138,6 +138,9 @@ class BaoCao:
                 f"429 {so.get('rate_limited', 0)}, 403 {so.get('http_403', 0)}, "
                 f"cần đăng nhập {so.get('auth_failures', 0)}, giới hạn tuổi {so.get('age_restricted', 0)}, "
                 f"chỉ hội viên {so.get('members_only', 0)}")
+        dong_api = dong_trang_thai_api(self.youtube.get("api"))      # D-51
+        if dong_api:
+            cac_dong.append(dong_api)
         if self.loi:
             cac_dong.append("Lỗi:")
             cac_dong.extend(f"- {dong}" for dong in self.loi)

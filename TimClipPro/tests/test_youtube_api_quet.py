@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """YouTube Data API trên đường QUÉT (D-51, docs/YOUTUBE_DATA_API.md): ``Engine.youtube_info`` hỏi API trước, mã trong
-``KetQuaApi.thieu`` đi đường yt-dlp cũ y nguyên; ngày V2 theo ``published_at``; dòng trạng thái API của lượt.
+``KetQuaApi.thieu`` đi đường yt-dlp cũ y nguyên; ngày V2 theo ``published_at``; dòng trạng thái ở thanh bên / CLI / Watch.
 
 Engine, sổ kho, SQLite là thật; yt-dlp giả theo kịch bản (``tests/ytdlp_gia.py``), Data API giả ở tầng ``urlopen``
 (``tests/youtube_api_gia.py``, khoá GIẢ). Không mạng.
@@ -8,11 +8,16 @@ Engine, sổ kho, SQLite là thật; yt-dlp giả theo kịch bản (``tests/ytd
 
 import dataclasses
 import json
+import sys
 
 import pytest
 
 import bao_cao_v2 as v2
+import cli
+import scan_ui
 import truy_cap_youtube as t
+import watch
+import youtube_api
 import youtube_api_gia as gia
 from publication_date import epoch_tu_published_at, resolve_publication_date
 from test_truy_cap_youtube_lo import _eng, _ma, _quet_gia, _url
@@ -116,8 +121,8 @@ def test_het_han_muc_trong_lo_3_video_mot_yeu_cau_api_roi_ytdlp_ca_lo(tmp_path, 
     assert not any(so.get(k) for k in t.NHAN_TRUONG_THAT_BAI)
     # Không vào ghi chú từng kết quả; dòng trạng thái nói rõ lý do.
     assert e.canh_bao_mang == [] and not any("API" in (k.note or "") for k in ket)
-    dong = t.dong_trang_thai_api(so["api"])
-    assert "Hết hạn mức" in dong and "3 video lùi về yt-dlp" in dong
+    dong = scan_ui.dong_trang_thai_api_youtube(youtube_api.trang_thai_khoa(e.data_dir), phien)
+    assert any(muc == "warning" and "Hết hạn mức" in cau and "3 video lùi về yt-dlp" in cau for muc, cau in dong)
 
 
 def test_khong_co_khoa_lo_quet_y_nhu_cu_khong_mot_yeu_cau_api(tmp_path, monkeypatch):
@@ -140,3 +145,43 @@ def test_link_khong_phai_video_youtube_khong_hoi_api(tmp_path, monkeypatch, api_
     e.youtube_info(url)
     assert api_youtube_gia.dem() == 0 and ydl.dem("info") == 1
 
+
+def test_cli_youtube_in_dong_api_het_han_muc_khong_doi_ma_thoat(tmp_path, monkeypatch, capsys, api_youtube_gia):
+    ma = [_ma(1), _ma(2)]
+    e = _eng(tmp_path, monkeypatch, YdlKichBan())
+    monkeypatch.setattr(e, "scan_media", _quet_gia(e))
+    for m in ma:
+        api_youtube_gia.video[m] = gia.video_gia(m)
+    api_youtube_gia.kich_ban = [gia.QUOTA]
+    monkeypatch.setattr(cli, "Engine", lambda: e)
+    monkeypatch.setattr(sys, "argv", ["cli.py", "youtube", *[_url(m) for m in ma]])
+    cli.main()                      # quét xong cả hai: hết hạn mức API KHÔNG phải YouTube chặn (mã 3), không phải lỗi
+    ra = capsys.readouterr().out
+    assert "===> API YouTube: 0 video lấy bằng API (~1 đơn vị) · 2 video lùi về yt-dlp — Hết hạn mức" in ra
+
+
+def test_cli_kenh_in_dong_api_tu_so_do_cua_luot(tmp_path, monkeypatch, capsys):
+    e = _eng(tmp_path, monkeypatch, YdlKichBan())
+    monkeypatch.setattr(cli, "Engine", lambda: e)
+
+    def dong_bo(self, url, limit=None, progress=None, **_kw):
+        return {"trang_thai": "DAY_DU", "bo_qua": 0, "moi": 1, "loi": [],
+                "youtube": {"api": {"video_api": 1, "don_vi": 1, "video_lui": 0}}}
+
+    monkeypatch.setattr(cli.ChannelSync, "sync", dong_bo)
+    monkeypatch.setattr(sys, "argv", ["cli.py", "kenh", "https://www.youtube.com/@kenh",
+                                      "--kho", str(tmp_path / "kho_kenh")])
+    cli.main()
+    assert "API YouTube: 1 video lấy bằng API (~1 đơn vị)" in capsys.readouterr().out
+
+
+def test_bao_cao_watch_co_dong_api_cua_luot(tmp_path, monkeypatch, api_youtube_gia):
+    ma = _ma(1)
+    ydl = YdlKichBan()
+    e = _eng(tmp_path, monkeypatch, ydl)
+    monkeypatch.setattr(e, "scan_media", _quet_gia(e))
+    api_youtube_gia.video[ma] = gia.video_gia(ma)
+    bc = watch.chay_giam_sat(e, watch.WatchList(muc=[watch.MucTheoDoi("link", _url(ma))], kho="A"))
+    assert bc.quet_moi == 1 and ydl.dem("info") == 0 and api_youtube_gia.dem() == 1
+    assert "API YouTube: 1 video lấy bằng API (~1 đơn vị)" in bc.tom_tat()
+    assert "API YouTube" not in watch.BaoCao(youtube={"youtube_operations": 1}).tom_tat()

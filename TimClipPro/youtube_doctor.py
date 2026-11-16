@@ -3,7 +3,8 @@
 
 Mặc định CHỈ ĐỌC và KHÔNG gọi mạng: phiên bản yt-dlp, bộ giải JS đi kèm, JS runtime có trên
 máy, cấu hình mạng thật (``data/cau_hinh.json``), cấu trúc file cookie (chỉ số đếm — không giá
-trị, không tên cookie), bảng thử lại và ngưỡng cầu dao. Không bao giờ gọi Google.
+trị, không tên cookie), bảng thử lại và ngưỡng cầu dao, file khoá YouTube Data API (có file / đúng dạng — không bao
+giờ in khoá). Không bao giờ gọi Google.
 
 ``--network URL`` (người dùng TỰ chạy): hỏi thông tin đúng MỘT video công khai, qua đúng đường
 tuỳ chọn và phân loại lỗi mà tool dùng khi quét — để biết YouTube có đang chặn và cookie có còn
@@ -19,6 +20,7 @@ import shutil
 import sys
 
 import truy_cap_youtube as t
+import youtube_api
 import ytdlp_chung
 from ytdlp_chung import BoGhiYtdlp, CauHinhMang
 
@@ -59,6 +61,14 @@ def _kha_nang_js() -> dict:
             "ejs_phien_ban": kn.ejs_phien_ban, "ly_do": kn.ly_do}
 
 
+def _khoa_api_youtube(data_dir: str) -> dict:
+    """Khoá YouTube Data API (D-51): chỉ đọc file khoá — có file / đúng dạng; không gọi Google, không mang khoá. Đường dẫn
+    che thư mục người dùng (bản chẩn đoán hay được dán đi hỏi)."""
+    tt = youtube_api.trang_thai_khoa(data_dir)
+    return {"duong_dan": t.an_thu_muc_nguoi_dung(tt.duong_dan), "co_file": tt.ma != youtube_api.CHUA_CO,
+            "dung_dang": tt.ma == youtube_api.CO_KHOA, "ly_do": tt.ly_do}
+
+
 def chan_doan(data_dir: str, url_mang: str = "") -> dict:
     """Bản chẩn đoán dạng dict (không bí mật). Chỉ gọi mạng khi có ``url_mang``."""
     ch = CauHinhMang.tu_file_cau_hinh(data_dir)
@@ -92,6 +102,7 @@ def chan_doan(data_dir: str, url_mang: str = "") -> dict:
                                   "yt_dlp_retries": v.yt_dlp_retries}
                               for k, v in t.NGAN_SACH.items()},
         "nguong_cau_dao": dict(t.NGUONG_MO),
+        "khoa_api_youtube": _khoa_api_youtube(data_dir),
         "google": "không gọi",
         "mang": {"da_goi": False},
     }
@@ -182,6 +193,14 @@ def _in(kq: dict) -> None:
     if c.get("hai_nguon"):
         print("  CẢNH BÁO: cấu hình CẢ file cookie lẫn trình duyệt — tool CHỈ dùng file cookie, ô trình duyệt bị bỏ qua.")
     print(f"Cầu dao mở sau: {kq['nguong_cau_dao']}")
+    k = kq["khoa_api_youtube"]
+    if not k["co_file"]:
+        print(f"Khoá YouTube Data API: CHƯA có file {k['duong_dan']} — thông tin video lấy bằng yt-dlp như cũ.")
+    elif not k["dung_dang"]:
+        print(f"Khoá YouTube Data API: có file {k['duong_dan']} nhưng SAI dạng — {k['ly_do']}")
+    else:
+        print(f"Khoá YouTube Data API: có file {k['duong_dan']}, đúng dạng (chưa kiểm với Google — lệnh này không "
+              "gọi mạng).")
     print(f"Google: {kq['google']}")
     mang = kq["mang"]
     if not mang.get("da_goi"):

@@ -33,6 +33,7 @@ import ui_gui_sheets as ui_gui
 from cau_hinh import GIA_TRI_GIAO_DIEN_MAC_DINH
 from clip_metadata import configure_metadata_logging
 import truy_cap_youtube
+import youtube_api
 import ytdlp_chung
 from common_original_jobs import TEN_PHA as TEN_PHA_NGUON_CHUNG
 from common_original_jobs import CommonOriginalJobController, xuat_csv
@@ -53,6 +54,7 @@ from scan_ui import (
     csv_nguon_chung,
     dem_cau_tom_tat,
     df_nguon_chung,
+    dong_trang_thai_api_youtube,
     dong_trang_thai_youtube,
     goi_y_quet_mot_phan,
     huong_dan_kho_sau_dong_bo,
@@ -997,6 +999,10 @@ with st.sidebar:
         for muc_tt, cau_tt in dong_trang_thai_youtube(
                 cd_cookie, getattr(eng, "phien_youtube_cuoi", None),
                 ytdlp_chung.kha_nang_js() if cd_cookie.cau_hinh else None):
+            getattr(st, muc_tt)(cau_tt)
+        # Khoá YouTube Data API (D-51): đọc file khoá mỗi lần vẽ lại — không gọi mạng.
+        for muc_tt, cau_tt in dong_trang_thai_api_youtube(
+                youtube_api.trang_thai_khoa(eng.data_dir), getattr(eng, "phien_youtube_cuoi", None)):
             getattr(st, muc_tt)(cau_tt)
         st.caption("Kiểm sâu hơn (một request tới YouTube): `python cli.py youtube-doctor "
                    "--network <link video công khai>`.")
