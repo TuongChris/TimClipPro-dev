@@ -36,6 +36,7 @@ from typing import Callable, Iterable, Mapping, Optional
 from clip_metadata import (basename_compatible, extract_youtube_id, filename_fallback_parts,
                            valid_upload_date)
 from khoa import KhoaTienTrinh
+import youtube_api
 import ytdlp_chung
 from luu_tru import _thay_the, cap_nhat_json, doc_json_an_toan, khoa_json
 from process_runner import IM_LANG_FFMPEG_S, TRAN_FFPROBE_S, chay_lenh_media
@@ -426,7 +427,8 @@ class ChannelSync:
                  player_clients: Optional[list] = None,
                  cau_hinh_mang: Optional[CauHinhMang] = None,
                  phien_youtube: Optional[PhienYouTube] = None,
-                 theo_doi: Optional[SoDongBo] = None):
+                 theo_doi: Optional[SoDongBo] = None,
+                 data_dir: Optional[str] = None):
         # Mặc định là None chứ KHÔNG phải NETWORK_TIMEOUT_S: nếu để giá trị cứng thì
         # mọi lượt khởi tạo đều ghi đè timeout mà người dùng đã đặt trong cau_hinh.json
         # lên 30 giây, và không cách nào phân biệt "người gọi chỉ định 30" với
@@ -473,6 +475,8 @@ class ChannelSync:
         self.phien = phien_youtube or PhienYouTube()
         # Tiến độ + hiệu suất có cấu trúc của lượt (giao diện đọc ảnh chụp, worker chỉ ghi) — luôn có, kể cả CLI.
         self.theo_doi = theo_doi if theo_doi is not None else SoDongBo()
+        # Thư mục data của Engine — khoá YouTube Data API nằm cạnh nó (D-51). None = không hỏi API (như trước D-51).
+        self.data_dir = data_dir
         # (đường dẫn đã chuẩn hoá, kích thước, mtime_ns, độ dài) của file VỪA kiểm bằng FFprobe rồi đặt vào kho: dùng lại
         # độ dài đó thay cho một lần FFprobe thứ hai trên CHÍNH file ấy (cùng kích thước + mtime = cùng nội dung).
         self._do_dai_vua_kiem: Optional[tuple] = None
@@ -502,7 +506,7 @@ class ChannelSync:
         nên entry do bên kia thêm vào giữa chừng biến mất (audit TCP-03). Ở đây việc
         đọc-gộp-ghi diễn ra dưới cùng một khoá.
 
-        ``thay_ca_entry``: thay nguyên entry (entry mới vừa tải xong).
+        ``thay_ca_entry``: thay nguyên entry (entry mới vừa tải xong) — trừ ``published_at`` của entry cũ (D-51).
         ``chi_khi_chua_co``: chỉ thêm khi key chưa có (seed từ tên file — không bao giờ
         đè dữ liệu thật mà writer khác vừa ghi).
         Mặc định: gộp từng trường vào entry đang có, tạo entry nếu chưa có.
@@ -519,6 +523,9 @@ class ChannelSync:
                     continue
                 if thay_ca_entry or not isinstance(hien_co, dict):
                     meta[ten] = dict(truong)
+                    if isinstance(hien_co, dict) and "published_at" in hien_co:
+                        # Ngày đăng Data API thuộc về MÃ video: tải lại cùng file không làm mất (lượt không khoá/API lỗi).
+                        meta[ten].setdefault("published_at", hien_co["published_at"])
                 else:
                     hien_co.update(truong)
                 so += 1
@@ -1442,6 +1449,7 @@ class ChannelSync:
         ngu_canh = self._ngu_canh_dang_nhap()
         han_che_moi: dict = {}         # video gặp giới hạn tuổi / hội viên ở lượt này → ghi sổ
         da_tai_luot_nay: set = set()   # video tải xong ở lượt này → gỡ khỏi sổ nếu có
+        ten_moi: dict = {}             # mã video tải xong ở lượt này → tên file (khoá clips_meta) — ngày đăng API
         try:
             # File trên đĩa chỉ tính là "đã có" khi đã được xác nhận (audit TCP-10). Trước
             # đây cứ có tên `[ID].opus` là bỏ qua — kể cả file 0 byte do lần nén lỗi để lại.
@@ -1558,6 +1566,7 @@ class ChannelSync:
                     self._mark_done(v.id)
                     kq["moi"] += 1
                     da_tai_luot_nay.add(v.id)
+                    ten_moi[v.id] = os.path.basename(f)
                     byte_nen = None
                     with contextlib.suppress(OSError):
                         byte_nen = os.path.getsize(f)
@@ -1628,6 +1637,12 @@ class ChannelSync:
             if self.phien.mo and not kq["chan_youtube"]:
                 # Cầu dao mở ở chính video cuối cùng: vẫn phải nói rõ cho người dùng.
                 kq["chan_youtube"] = self.phien.thong_bao_dung()
+            if self.data_dir:
+                # SAU mọi lượt tải, ngoài đường tải + nén song song (D-35); cả khi Dừng / cầu dao mở giữa chừng.
+                try:
+                    self._ghi_ngay_dang_api(ten_moi)
+                except Exception as e:  # noqa: BLE001 — chỉ là phần thêm: không làm hỏng lượt đã tải xong
+                    loi.append(f"Không ghi được ngày đăng (YouTube Data API) vào clips_meta.json: {e}")
         finally:
             kq["da_cach_ly"] = list(self._da_cach_ly)
             kq["youtube"] = self.phien.tom_tat()
@@ -1742,6 +1757,22 @@ class ChannelSync:
         so = cap_nhat_json(self.meta_file, gop, mac_dinh={})
         self._mark_done_nhieu(list(viec))
         return so
+
+    def _ghi_ngay_dang_api(self, ten_theo_ma: Mapping) -> None:
+        """MỘT ``youtube_api.lay_video`` (lô 50) cho các video vừa tải → gộp ĐÚNG trường ``published_at`` vào mục
+        ``clips_meta.json`` của chúng (D-51). Tên file, ``upload_date``/``upload_date_raw`` của yt-dlp giữ nguyên; không
+        khoá / API lỗi / cầu dao yt-dlp mở (``lay_video`` tự không gửi) → không ghi gì. Gọi mạng TRƯỚC khi giữ khoá JSON.
+        Không trao cờ Dừng: video đã tải trước khi bấm Dừng vẫn có ngày (một yêu cầu, giới hạn bởi timeout mạng)."""
+        kq = youtube_api.lay_video(self.phien, self.data_dir, list(ten_theo_ma))
+        ngay = {ten_theo_ma[ma]: video["published_at"] for ma, video in kq.thong_tin.items()}
+
+        def gop(meta: dict) -> None:
+            for ten, gia_tri in ngay.items():
+                if isinstance(meta.get(ten), dict):
+                    meta[ten]["published_at"] = gia_tri
+
+        if ngay:
+            cap_nhat_json(self.meta_file, gop, mac_dinh={})
 
     # ---------- khôi phục / đối chiếu ----------
 

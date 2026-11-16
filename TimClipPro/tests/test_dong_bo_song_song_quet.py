@@ -208,6 +208,16 @@ def test_dang_dong_bo_tab_quet_van_dung_duoc_va_hai_nut_dung_khong_dung_nham(gia
     assert _cho(lambda: cancel_dong_bo(), 10.0), "nút Dừng của khung đồng bộ không tới được lượt đồng bộ"
 
 
+def test_dong_bo_mang_thu_muc_data_cua_engine(gia, tmp_path):
+    """D-51: lượt đồng bộ từ giao diện mang thư mục data của Engine — khoá YouTube Data API nằm cạnh nó."""
+    kho = tmp_path / "KhoMoi"
+    kho.mkdir()
+    at = _phien_moi()
+    _bat_dau_dong_bo(at, gia, kho)
+    cs, _ = gia.luot_dong_bo[0]
+    assert cs.data_dir == at.session_state.eng.data_dir
+
+
 def test_dung_dong_bo_khong_dung_lo_quet_va_bat_dau_quet_khong_xoa_cu_bam_dung(gia, tmp_path):
     kho = tmp_path / "KhoMoi"
     kho.mkdir()

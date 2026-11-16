@@ -324,7 +324,7 @@ def chay_dong_bo(kenh_url: str, kho_dir: str, gioi_han: int | None, thu_lai_han_
     so = SoDongBo()
     try:
         cs = ChannelSync(dich, player_clients=list(eng.config.ytdlp_player_clients),
-                         cau_hinh_mang=eng.cau_hinh_mang(), theo_doi=so)
+                         cau_hinh_mang=eng.cau_hinh_mang(), theo_doi=so, data_dir=eng.data_dir)
     except Exception as e:  # noqa: BLE001
         bao("error", f"Chưa đồng bộ được: {e}")
         return

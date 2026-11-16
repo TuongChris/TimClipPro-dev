@@ -9,6 +9,7 @@ import cli
 class _EngineGia:
     def __init__(self):
         self.config = SimpleNamespace(ncores=1, ytdlp_player_clients=())
+        self.data_dir = "D:/DataGia"
 
     def cau_hinh_mang(self):
         return None
