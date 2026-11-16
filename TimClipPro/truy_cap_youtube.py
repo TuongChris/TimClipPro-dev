@@ -889,7 +889,7 @@ def _ly_do_google(than: Any) -> set:
 
 
 def phan_loai_loi_api(ma_http: Optional[int], than: Any = None) -> str:
-    """Loại lỗi YouTube Data API CHỈ theo lý do Google (``reason``/``status``) + mã HTTP — không đọc chữ trong ``message``,
+    """Loại lỗi YouTube Data API CHỈ theo lý do Google (``reason``) + mã HTTP — không đọc chữ trong ``message``,
     không giữ thân lỗi thô (có thể chứa số dự án). ``ma_http`` None = không có phản hồi HTTP (lỗi truyền tải); 2xx = phản
     hồi không đúng dạng mong đợi."""
     ly_do = _ly_do_google(than)
