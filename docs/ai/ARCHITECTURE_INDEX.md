@@ -59,6 +59,7 @@ chạm file) — không phải audit lại mã. Thêm/xoá/đổi vai trò modul
 | `release_tool.py` | Phát hành Stable trên PC1 hoặc PC2: build từ git tree, ký, verify, kiểm sau ký, ZIP feed, bộ kit, lock; khoá mỗi máy (`tao-khoa`), ký/kiểm uỷ quyền | Đổi quy trình phát hành |
 | `uy_quyen_khoa.py` | Ghi danh khoá ký vào trust store của MỘT cài đặt managed theo uỷ quyền có chữ ký (yêu cầu tự ký, ràng buộc cài đặt + trust store, ghi nguyên tử, hoàn tác) | Đổi cách tin khoá mới (`docs/UY_QUYEN_KHOA.md`) |
 | `danh_sach_video.py` | Liệt kê tên video thật của một kho (chỉ đọc, offline) rồi ghi đè lên trang tính riêng | Đổi cách kiểm kê kho / cột danh sách |
+| `thong_ke.py` | THUẦN, CHỈ ĐỌC `lichsu.db` (`mode=ro`): số liệu tab «📊 Thống kê» — lần quét, video vi phạm, đoạn/thời lượng khớp (mỗi cặp video–clip một lần), kênh vi phạm (chỉ từ ảnh chụp V2, đọc theo `doc_anh_chup_da_luu`), clip gốc, theo tháng, lọc ngày quét | Đổi chỉ số / cách đếm thống kê |
 | `app.py` | Giao diện Streamlit 7 tab | Đổi giao diện |
 | `cli.py` | Giao diện dòng lệnh, dùng chung engine | Thêm lệnh tự động hoá |
 | `bao_cao_v2.py` | THUẦN: chính sách báo cáo V2 — ảnh chụp `BaoCaoV2`, mốc/link, URL gốc `watch?v=`, ngày nguyên bản, dòng 34/16 cột + phạm vi; «Đoạn vi phạm» theo mốc đã tinh chỉnh khi có (D-50, `_moc_tinh_chinh`) | Đổi cách trình bày báo cáo lượt quét mới |
