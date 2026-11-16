@@ -6968,6 +6968,30 @@ class Engine:
             rows = c.execute(sql, tham_so).fetchall()
         return {row["source_id"] for row in rows}
 
+    def video_vi_pham(self) -> list:
+        """Video YouTube từng bị thấy vi phạm (lần quét ``ok`` có kết quả) trong TOÀN BỘ lịch sử, mọi kho — mỗi mã một
+        dòng theo lần quét MỚI NHẤT, mới nhất trước: ``ma``, ``tieu_de``, ``lan_quet_cuoi``, ``so_lan_quet`` (số lần quét
+        ``ok`` có kết quả), ``kenh_ten``/``kenh_link`` (ảnh chụp V2 của lần quét đó khi đọc được, như ``bao_cao_cua_job``
+        nhưng một truy vấn cho cả bảng — tab Lịch sử gọi mỗi lần vẽ). Chỉ đọc."""
+        with self._db() as c:
+            rows = c.execute(
+                "SELECT j.source_id, j.source_name, j.created_at, g.so_lan, b.chinh_sach, b.du_lieu FROM"
+                " (SELECT MAX(id) AS id, COUNT(*) AS so_lan FROM jobs WHERE status = 'ok' AND n_matches > 0"
+                " AND source_id IS NOT NULL AND source_id != '' GROUP BY source_id) g"
+                " JOIN jobs j ON j.id = g.id LEFT JOIN bao_cao_job b ON b.job_id = j.id ORDER BY j.id DESC").fetchall()
+        ra = []
+        for row in rows:
+            ma = bao_cao_v2.ma_video_hop_le(row["source_id"])
+            if not ma:
+                continue
+            # Không có ảnh chụp (lần quét luật cũ) hay ảnh chụp hỏng: để trống kênh, video vẫn có dòng.
+            bc = bao_cao_v2.doc_anh_chup_da_luu(row["chinh_sach"], row["du_lieu"])
+            co_bc = isinstance(bc, bao_cao_v2.BaoCaoV2)
+            ra.append({"ma": ma, "tieu_de": row["source_name"] or "", "lan_quet_cuoi": row["created_at"] or "",
+                       "so_lan_quet": row["so_lan"], "kenh_ten": bc.kenh_ten if co_bc else "",
+                       "kenh_link": bc.kenh_link if co_bc else ""})
+        return ra
+
     def job_matches(self, job_id: int) -> list:
         with self._db() as c:
             rows = c.execute("SELECT * FROM matches WHERE job_id=? ORDER BY start_s",

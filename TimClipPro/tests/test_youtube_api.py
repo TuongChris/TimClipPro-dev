@@ -469,6 +469,21 @@ def test_can_trang_thai_them_part_status(api_youtube_gia, tmp_path):
     assert (kq.thong_tin[m]["privacy_status"], kq.thong_tin[m]["upload_status"]) == ("unlisted", "processed")
 
 
+def test_ly_do_tung_ma_tach_vang_sap_phat_lo_loi_va_ma_sai(api_youtube_gia, tmp_path):
+    """Lý do của TỪNG mã trong ``thieu``: nơi gọi KHÔNG lùi về yt-dlp (kiểm video còn trên YouTube) phải tách mã vắng trong
+    phản hồi 200 (riêng tư / đã gỡ) khỏi lô lỗi và video sắp phát / đang phát — ``ly_do_lui`` gộp chung không tách được."""
+    ids = [_ma(i) for i in range(51)]
+    vang, sap = ids[1], ids[2]
+    for m in ids:
+        if m != vang:
+            api_youtube_gia.video[m] = gia.video_gia(m, live="upcoming" if m == sap else "none")
+    api_youtube_gia.kich_ban = [None, gia.QUOTA]
+    kq = ya.lay_video(_phien()[0], str(tmp_path / "data"), ids + ["sai"], can_trang_thai=True)
+    assert kq.thieu == (vang, sap, ids[50], "sai")
+    assert kq.ly_do_tung_ma == {vang: ya.LY_DO_VANG, sap: ya.LY_DO_SAP_PHAT,
+                                ids[50]: t.THONG_BAO_API[t.API_HET_HAN_MUC], "sai": ya.LY_DO_MA_SAI}
+
+
 def test_ma_sai_dang_khong_gui_di(api_youtube_gia, tmp_path):
     m = _ma(1)
     api_youtube_gia.video[m] = gia.video_gia(m)
@@ -540,6 +555,7 @@ def test_khoa_sai_dang_khong_gui_yeu_cau_nao_va_noi_ro(monkeypatch, tmp_path, kh
     kq = ya.lay_video(phien, str(tmp_path / "data"), [_ma(1), _ma(2)])
     assert kq.thong_tin == {} and kq.thieu == (_ma(1), _ma(2)) and tp.dem() == 0
     assert kq.ly_do_lui.startswith(ya.LY_DO_SAI_KHOA) and "nhiều hơn một dòng" in kq.ly_do_lui
+    assert kq.ly_do_tung_ma == dict.fromkeys((_ma(1), _ma(2)), kq.ly_do_lui)
     assert phien.tom_tat()["api"]["video_lui"] == 2 and not phien.api.tat
 
 

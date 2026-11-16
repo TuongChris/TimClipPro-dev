@@ -22,7 +22,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Optional
 
 import truy_cap_youtube as tc
@@ -297,11 +297,13 @@ def _goi(phien: tc.PhienYouTube, data_dir: str, endpoint: str, params: dict, *, 
 class KetQuaApi:
     """``thong_tin``: mã -> dict chuẩn (theo thứ tự hỏi). ``thieu``: mã nơi gọi phải lấy bằng đường yt-dlp CŨ (giữ thứ
     tự, không trùng). ``ly_do_lui``: vì sao có ``thieu`` (tiếng Việt; rỗng khi không có khoá — trạng thái bình thường,
-    không ghi vào ghi chú kết quả)."""
+    không ghi vào ghi chú kết quả). ``ly_do_tung_ma``: lý do của TỪNG mã trong ``thieu`` (rỗng khi không có khoá) — nơi
+    gọi không lùi về yt-dlp (kiểm video còn trên YouTube) tách mã vắng trong phản hồi 200 khỏi lô lỗi."""
 
     thong_tin: dict
     thieu: tuple
     ly_do_lui: str
+    ly_do_tung_ma: dict = field(default_factory=dict)
 
 
 def _video_chuan(muc: dict, can_trang_thai: bool) -> dict:
@@ -354,7 +356,7 @@ def lay_video(phien: tc.PhienYouTube, data_dir: str, ids: Iterable[str], *, canc
     except LoiKhoaApi as e:
         ly_do = f"{LY_DO_SAI_KHOA}: {e}"
         phien.api.ghi_video(0, [ly_do] * len(ma))
-        return KetQuaApi({}, tuple(ma), ly_do)
+        return KetQuaApi({}, tuple(ma), ly_do, dict.fromkeys(ma, ly_do))
     if not co_khoa:
         return KetQuaApi({}, tuple(ma), "")
     hop_le = [m for m in ma if isinstance(m, str) and _RE_MA.fullmatch(m)]
@@ -379,4 +381,4 @@ def lay_video(phien: tc.PhienYouTube, data_dir: str, ids: Iterable[str], *, canc
     thieu = tuple(m for m in ma if m not in thong_tin)
     # Dừng / cầu dao mở: nơi gọi cũng không chạy yt-dlp cho các mã đó — không đếm là «lùi về yt-dlp».
     phien.api.ghi_video(len(thong_tin), [lui[m] for m in thieu if lui[m] not in (LY_DO_DA_HUY, LY_DO_CAU_DAO)])
-    return KetQuaApi(thong_tin, thieu, "; ".join(dict.fromkeys(lui[m] for m in thieu)))
+    return KetQuaApi(thong_tin, thieu, "; ".join(dict.fromkeys(lui[m] for m in thieu)), {m: lui[m] for m in thieu})
