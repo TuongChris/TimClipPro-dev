@@ -8,6 +8,7 @@ chạy được trong lúc nó ghi file. Bất biến:
   ngay) nên lượt đồng bộ thật bắt đầu đúng lúc đó không bao giờ bị từ chối vì nó. File khoá mồ côi (chủ đã chết) = rảnh.
 - Lượt của chính tiến trình này không phải «khác» (làn D-29 do sổ tác vụ nền lo).
 - Dựng vân tay trên thư mục đang bị tiến trình khác đồng bộ dừng TRƯỚC mọi ghi.
+- Giao diện cảnh báo kèm thông tin chủ khoá và khoá các nút ghi vào thư mục đó.
 
 Mọi thứ synthetic: thư mục tạm, tiến trình con chỉ giữ khoá thật, không mạng.
 """
@@ -29,7 +30,14 @@ import khoa
 from khoa import DangChayRoi, KhoaTienTrinh
 
 GOC = Path(__file__).resolve().parents[1]
+APP_PY = GOC / "app.py"
 TEN_DONG_BO = "đồng bộ kênh vào kho này"        # tên tác vụ ``ChannelSync.sync`` ghi vào file khoá
+NHAN_KENH = "Link kênh YouTube của bạn"
+NHAN_KHO = "Thư mục kho clip gốc (ổ D, E... tùy bạn)"
+NHAN_THU_MUC_KHO = "Đường dẫn thư mục chứa video gốc của kho này"
+NUT_GHI_VAO_THU_MUC = ("⬇️ Bắt đầu đồng bộ kênh", "🛠️ Dựng lại danh sách đã tải",
+                       "🌐 Lấy lại tên video thật cho kho này", "🔄 Tạo lại kho từ đầu", "➕ Bổ sung clip mới vào kho")
+CHU_CANH_BAO = "tiến trình KHÁC"
 
 _MA_GIU_KHOA = (
     "import os, time\n"
@@ -163,3 +171,64 @@ def test_dung_van_tay_dung_truoc_moi_ghi_khi_tien_trinh_khac_dong_bo(engine, tmp
             engine.build_database(str(kho), mode)
     assert TEN_DONG_BO in str(loi.value), "phải kèm thông tin tiến trình đang đồng bộ"
     assert anh() == truoc, "phải dừng TRƯỚC mọi ghi (lease cổng bảo trì, tool.lock, sổ kho, vân tay)"
+
+
+# ---------------------------------------------------------------------------------------------------- giao diện
+
+def _o(at, nhan):
+    return next(x for x in at.text_input if x.label == nhan)
+
+
+def _nut(at, nhan):
+    return next(b for b in at.button if b.label == nhan)
+
+
+def _canh_bao(at) -> list:
+    return [str(w.value) for w in at.warning if CHU_CANH_BAO in str(w.value)]
+
+
+def _o_kho_dai(at):
+    return next(c for c in at.checkbox if c.label.startswith("Kho video dài"))
+
+
+def test_giao_dien_canh_bao_va_khoa_nut_khi_tien_trinh_khac_dong_bo(tmp_path, monkeypatch):
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    kho = tmp_path / "Kho"
+    kho.mkdir()
+    at = AppTest.from_file(str(APP_PY), default_timeout=120).run()
+    assert not at.exception, at.exception
+    at.session_state.eng.add_kho("Kho A")
+    at.run()
+    _o(at, NHAN_KENH).set_value("https://www.youtube.com/@KenhGia")
+    _o(at, NHAN_KHO).set_value(str(kho))
+    _o(at, NHAN_THU_MUC_KHO).set_value(str(kho))
+    at.run()
+    assert not _canh_bao(at)
+    assert not _nut(at, "🛠️ Dựng lại danh sách đã tải").disabled
+
+    with _tien_trinh_khac_giu(kho) as pid_con:
+        # Bấm lúc nút còn bật, tiến trình kia bắt đầu đồng bộ ngay trước lượt vẽ: lượt vẽ đó khoá nút nên Streamlit bỏ
+        # cú bấm (chặn ``disabled`` phía máy chủ) — không dựng lại danh sách giữa lúc nó ghi.
+        _nut(at, "🛠️ Dựng lại danh sách đã tải").click().run()
+        assert not at.exception, at.exception
+        assert at.session_state.job.get("kind") != "sua", "đã dựng lại danh sách giữa lúc tiến trình khác đồng bộ"
+        canh_bao = _canh_bao(at)
+        assert len(canh_bao) == 2, canh_bao          # tab đồng bộ kênh + tab quản lý kho
+        assert all(f"PID: {pid_con}" in c and TEN_DONG_BO in c for c in canh_bao), canh_bao
+        for nhan in NUT_GHI_VAO_THU_MUC:
+            assert _nut(at, nhan).disabled, f"«{nhan}» phải bị khoá khi tiến trình khác đang đồng bộ thư mục này"
+        assert _o_kho_dai(at).disabled
+
+    assert _cho(lambda: channel.dang_dong_bo_khac(str(kho)) == "")
+    at.run()
+    assert not _canh_bao(at)
+    for nhan in NUT_GHI_VAO_THU_MUC:
+        assert not _nut(at, nhan).disabled, f"«{nhan}» phải bấm được lại khi lượt kia đã thoát"
+
+    # Khoá do CHÍNH tiến trình này giữ (làn đồng bộ D-29 của giao diện): không báo «tiến trình khác».
+    with KhoaTienTrinh(str(kho / channel.TEN_KHOA_DONG_BO), TEN_DONG_BO):
+        at.run()
+        assert not _canh_bao(at)
