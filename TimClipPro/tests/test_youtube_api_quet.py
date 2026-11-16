@@ -77,6 +77,17 @@ def test_video_da_phat_truc_tiep_ngay_quy_doi_theo_actual_start_time(tmp_path, m
     assert v2.ngay_tu_info(info).gia_tri == "20250620"
 
 
+def test_video_dang_phat_truc_tiep_live_lay_thong_tin_bang_ytdlp_nhu_cu(tmp_path, monkeypatch, api_youtube_gia):
+    """Google gửi ``liveBroadcastContent: live`` cho video đang phát: đường yt-dlp cũ, ngày V2 không theo publishedAt."""
+    ma = _ma(3)
+    ydl = YdlKichBan()
+    e = _eng(tmp_path, monkeypatch, ydl)
+    api_youtube_gia.video[ma] = gia.video_gia(ma, live="live", duration="P0D", published_at=PUBLISHED_AT)
+    info = e.youtube_info(_url(ma))
+    assert (ydl.dem("info"), api_youtube_gia.dem()) == (1, 1)
+    assert info["published_at"] == "" and v2.ngay_tu_info(info).nguon != "youtube_api.published_at"
+
+
 def test_quet_lay_thong_tin_bang_api_khong_hoi_ytdlp_anh_chup_v2_theo_published_at(tmp_path, monkeypatch,
                                                                                     api_youtube_gia):
     ma = _ma(1)

@@ -416,6 +416,17 @@ def test_ma_vang_sap_phat_dang_phat_vao_thieu(api_youtube_gia, tmp_path):
     assert (so["yeu_cau"], so["video_api"], so["video_lui"], so["tat"]) == (1, 2, 3, False)
 
 
+def test_video_dang_phat_truc_tiep_gia_tri_live_cua_google_vao_thieu(api_youtube_gia, tmp_path):
+    """Danh sách giá trị của Google cho ``snippet.liveBroadcastContent`` là ``live``/``none``/``upcoming`` — video ĐANG
+    phát (``live``, ``P0D``) phải lùi về yt-dlp như ``upcoming``, không lấy ngày/thời lượng từ API."""
+    m = _ma(1)
+    api_youtube_gia.video[m] = gia.video_gia(m, live="live", duration="P0D", actual_start="2026-11-16T01:00:00Z")
+    phien, _ = _phien()
+    kq = ya.lay_video(phien, str(tmp_path / "data"), [m])
+    assert kq.thong_tin == {} and kq.thieu == (m,) and kq.ly_do_lui == ya.LY_DO_SAP_PHAT
+    assert api_youtube_gia.dem() == 1 and not phien.api.tat
+
+
 def test_ma_la_trong_items_bi_bo_qua(api_youtube_gia, tmp_path):
     """Mục của mã KHÔNG hỏi bị bỏ qua — kể cả khi trông lạ (không làm tắt API)."""
     m = _ma(1)

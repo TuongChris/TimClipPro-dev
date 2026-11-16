@@ -60,7 +60,7 @@ Claude chọn (người dùng uỷ quyền «phương án tối ưu»): các m�
 - Hàm chính: `lay_video(phien, data_dir, ids, *, cancel_event=None, can_trang_thai=False) -> KetQuaApi` với
   `KetQuaApi(thong_tin: dict[mã, dict chuẩn], thieu: tuple[mã, ...], ly_do_lui: str)`. `thieu` = các mã nơi gọi phải lấy
   bằng đường yt-dlp CŨ, không đổi gì: không có khoá, khoá sai dạng, API tắt, lô lỗi, mã vắng trong phản hồi 200, video
-  `liveBroadcastContent` là `upcoming` hoặc `active`. Không khoá → 0 yêu cầu API, `thieu` = tất cả.
+  `liveBroadcastContent` là `upcoming` hoặc `live` (mã cũng nhận `active`, vô hại). Không khoá → 0 yêu cầu API, `thieu` = tất cả.
 - Dict chuẩn của một video từ API: `id`, `title`, `duration` (giây từ ISO 8601 `contentDetails.duration`; `P0D` hoặc
   thiếu → 0 = chưa biết), `channel` và `uploader` (= `snippet.channelTitle`), `channel_id`, `channel_url`
   (`https://www.youtube.com/channel/<channelId>`), `published_at` (chuỗi ISO NGUYÊN VĂN của `snippet.publishedAt`),
@@ -118,6 +118,6 @@ Claude chọn (người dùng uỷ quyền «phương án tối ưu»): các m�
 ## Sự thật đã tra (Context7 — developers.google.com, 16/11)
 - Hạn mức mặc định 10.000 đơn vị/ngày cho các endpoint thường; `search.list` có hạn mức RIÊNG 100 lượt/ngày; đặt lại
   lúc nửa đêm giờ Thái Bình Dương; mọi yêu cầu (kể cả không hợp lệ) tốn ít nhất 1 đơn vị.
-- `snippet.liveBroadcastContent`: `upcoming` / `active` / `none`; `liveStreamingDetails`: `actualStartTime`,
+- `snippet.liveBroadcastContent`: danh sách giá trị hợp lệ của Google là `live` / `none` / `upcoming` (chữ «active» chỉ có trong câu mô tả — bản tra 16/11 chép nhầm; CHƯA kiểm bằng lượt thật, chờ chủ dự án duyệt); `liveStreamingDetails`: `actualStartTime`,
   `actualEndTime`, `scheduledStartTime`.
 - Khoá DEV kiểm 16/11: HTTP 200 (`C:\Dev\pc2_test_tools\youtube_api\kiem_key.py`, 1 đơn vị).

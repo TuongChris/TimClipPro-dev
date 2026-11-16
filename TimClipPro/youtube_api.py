@@ -344,7 +344,7 @@ def lay_video(phien: tc.PhienYouTube, data_dir: str, ids: Iterable[str], *, canc
               can_trang_thai: bool = False) -> KetQuaApi:
     """Thông tin video bằng ``videos.list`` (tối đa 50 mã một lượt; bỏ trùng, giữ thứ tự). Mã trong ``thieu`` nơi gọi lấy
     bằng đường yt-dlp CŨ: không có khoá (0 yêu cầu, ``ly_do_lui`` rỗng), khoá sai dạng (0 yêu cầu), cầu dao yt-dlp đang mở
-    (0 yêu cầu), API đã tắt, lô lỗi, mã vắng trong phản hồi 200, video ``upcoming``/``active``, mã sai dạng (không gửi).
+    (0 yêu cầu), API đã tắt, lô lỗi, mã vắng trong phản hồi 200, video ``upcoming``/``live``, mã sai dạng (không gửi).
     ``can_trang_thai``: thêm ``part=status`` (``privacy_status``/``upload_status``)."""
     ma = list(dict.fromkeys(ids))
     if not ma:
@@ -372,7 +372,7 @@ def lay_video(phien: tc.PhienYouTube, data_dir: str, ids: Iterable[str], *, canc
                 lui[m] = ly_do
             elif video is None:
                 lui[m] = LY_DO_VANG
-            elif video["live_broadcast_content"] in ("upcoming", "active"):
+            elif video["live_broadcast_content"] in ("upcoming", "live", "active"):  # Google gửi "live"; "active" vô hại
                 lui[m] = LY_DO_SAP_PHAT
             else:
                 thong_tin[m] = video
