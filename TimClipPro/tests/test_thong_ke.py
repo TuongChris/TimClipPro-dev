@@ -135,7 +135,8 @@ def test_loc_theo_ngay_quet_tinh_ca_hai_dau(tmp_path):
     tk = thong_ke.tinh(path, date(2026, 11, 2), date(2026, 11, 13))
     assert (tk.so_lan_quet, tk.so_lan_loi, tk.so_video_vi_pham) == (5, 1, 3)       # A (quét lại), B, F
     assert (tk.so_doan_khop, tk.tong_giay_khop) == (4, 120.0 + 50.0 + 40.0)
-    assert tk.theo_thang == [("2026-11", 3)]
+    # «Phát hiện lần đầu» xét CẢ lịch sử: A thấy từ 05/10 (trước khoảng ngày) nên không là video mới của tháng 11.
+    assert tk.theo_thang == [("2026-11", 2)]
     assert [k["so_video"] for k in tk.kenh] == [2] and tk.video_chua_ro_kenh == 1
     assert tk.anh_chup_khong_doc_duoc == 1
 
@@ -146,6 +147,9 @@ def test_loc_theo_ngay_quet_tinh_ca_hai_dau(tmp_path):
     tk = thong_ke.tinh(path, tu_ngay=date(2026, 11, 14))
     assert (tk.so_lan_quet, tk.so_video_vi_pham, tk.kenh) == (1, 1, [])
     assert (tk.video_chua_ro_kenh, tk.anh_chup_khong_doc_duoc) == (1, 1)
+    assert tk.theo_thang == [("2026-11", 1)]
+    # Ranh giới theo NGÀY, không theo tháng: A thấy 05/10 → từ 06/10 A không còn là video mới.
+    assert thong_ke.tinh(path, tu_ngay=date(2026, 10, 6)).theo_thang == [("2026-11", 3)]
 
 
 def test_anh_chup_v2_khong_co_kenh_la_chua_ro_kenh(tmp_path):
@@ -155,6 +159,22 @@ def test_anh_chup_v2_khong_co_kenh_la_chua_ro_kenh(tmp_path):
     _job(path, "2026-11-01 08:00:00", "vidKKKKKKKK", khop=[("X.opus", 30.0)], anh_chup=_anh_chup())
     tk = thong_ke.tinh(path)
     assert (tk.so_video_vi_pham, tk.kenh, tk.video_chua_ro_kenh, tk.anh_chup_khong_doc_duoc) == (1, [], 1, 0)
+
+
+def test_quet_lai_co_bao_cao_doc_duoc_thi_het_dem_khong_doc_duoc(tmp_path):
+    """Báo cáo V2 không đọc được → người dùng quét lại như lời khuyên: video đã có ảnh chụp đọc được thì không còn bị
+    đếm, dù lần quét hỏng cũ vẫn nằm trong lịch sử. Đếm theo VIDEO, không theo lần quét."""
+    path = str(tmp_path / "lichsu.db")
+    lich_su.dam_bao_luoc_do(path)
+    _job(path, "2026-11-01 08:00:00", "vidAAAAAAAA", khop=[("X.opus", 30.0)], anh_chup="{hong")
+    _job(path, "2026-11-02 08:00:00", "vidBBBBBBBB", khop=[("X.opus", 30.0)], anh_chup="{hong")
+    _job(path, "2026-11-05 08:00:00", "vidAAAAAAAA", khop=[("X.opus", 30.0)], anh_chup=_anh_chup("Kênh Một", "UCmot"))
+    _job(path, "2026-11-06 08:00:00", "vidBBBBBBBB", khop=[("X.opus", 30.0)], anh_chup="{hong")   # quét lại vẫn hỏng
+    tk = thong_ke.tinh(path)
+    assert [k["ten"] for k in tk.kenh] == ["Kênh Một"]
+    assert (tk.video_chua_ro_kenh, tk.anh_chup_khong_doc_duoc) == (1, 1)
+    # Lần quét lại đọc được của A nằm NGOÀI khoảng ngày → trong khoảng đó A vẫn chỉ có báo cáo hỏng.
+    assert thong_ke.tinh(path, den_ngay=date(2026, 11, 4)).anh_chup_khong_doc_duoc == 2
 
 
 def test_luoc_do_rat_cu_khong_source_id_khong_bang_bao_cao(tmp_path):
@@ -209,3 +229,19 @@ def test_tab_thong_ke_hien_so_lieu_va_cap_nhat_sau_lan_quet_moi(tmp_path, monkey
     tab = next(t for t in at.tabs if t.label == "📊 Thống kê")
     so = {m.label: m.value for m in tab.metric}
     assert so["Số lần quét"] == "9" and so["Video vi phạm"] == "6"
+
+    # Quét lại F, G như cảnh báo khuyên → có báo cáo mới đọc được → cảnh báo «không đọc được» phải hết.
+    for ma, clip in (("vidFFFFFFFF", "Y.opus"), ("vidGGGGGGGG", "Z.opus")):
+        _job(db, "2026-11-16 09:00:00", ma, khop=[(clip, 1.0)], anh_chup=_anh_chup("Kênh Hai", "UChai"))
+    at.run()
+    tab = next(t for t in at.tabs if t.label == "📊 Thống kê")
+    assert {m.label: m.value for m in tab.metric}["Số lần quét"] == "11"
+    assert not any("không đọc được" in w.value for w in tab.warning)
+
+    # Khoảng ngày chỉ có lần quét LẠI (F, G thấy từ 13–14/11): không video nào mới → câu giải thích, không vẽ
+    # biểu đồ rỗng.
+    at.date_input(key="tk_tu_ngay").set_value(date(2026, 11, 16)).run()
+    tab = next(t for t in at.tabs if t.label == "📊 Thống kê")
+    assert {m.label: m.value for m in tab.metric}["Video vi phạm"] == "2"
+    assert not tab.get("vega_lite_chart")
+    assert any("Không có video vi phạm mới" in c.value for c in tab.caption)

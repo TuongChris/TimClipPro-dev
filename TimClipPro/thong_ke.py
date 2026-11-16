@@ -9,9 +9,11 @@ Cách đếm — để con số không phình theo số lần quét lại:
 * Mỗi cặp (video vi phạm, clip gốc) tính MỘT lần: số đoạn và số giây lớn nhất trong các lần quét (hai số có thể
   đến từ hai lần quét khác nhau).
 * Kênh vi phạm chỉ nằm trong ảnh chụp báo cáo V2 (``bao_cao_job``); ``jobs``/``matches`` không lưu kênh. Ảnh chụp
-  đọc ĐÚNG luật ``bao_cao_v2.doc_anh_chup_da_luu``: hỏng hay dấu lỗi → bỏ qua, đếm «không đọc được», không đoán
-  kênh từ chỗ khác. Lần quét luật cũ (không có ảnh chụp) → video «chưa rõ kênh».
-* Theo tháng = số video vi phạm phát hiện LẦN ĐẦU (trong khoảng ngày) ở mỗi tháng, theo ngày quét.
+  đọc ĐÚNG luật ``bao_cao_v2.doc_anh_chup_da_luu``: hỏng hay dấu lỗi → bỏ qua, không đoán kênh từ chỗ khác; video
+  CHỈ có ảnh chụp hỏng / dấu lỗi trong khoảng ngày → đếm «không đọc được» (quét lại ra báo cáo đọc được thì thôi
+  đếm). Lần quét luật cũ (không có ảnh chụp) → video «chưa rõ kênh».
+* Theo tháng = video vi phạm theo tháng của lần quét vi phạm ĐẦU TIÊN trong TOÀN BỘ lịch sử; chỉ tính video có lần
+  đầu đó trong khoảng ngày (đã thấy trước «Từ ngày» thì không phải video mới, kể cả cùng tháng).
 
 Gộp bằng SQL (không lặp Python trên từng dòng ``matches``); Python chỉ đọc ảnh chụp của các lần quét vi phạm.
 """
@@ -44,7 +46,7 @@ class ThongKe:
     clip: list = field(default_factory=list)        # {clip, tieu_de, so_video, so_doan, tong_giay}, nhiều video trước
     theo_thang: list = field(default_factory=list)  # [(YYYY-MM, số video phát hiện lần đầu)], đủ mọi tháng ở giữa
     video_chua_ro_kenh: int = 0
-    anh_chup_khong_doc_duoc: int = 0    # số lần quét vi phạm có ảnh chụp V2 hỏng / dấu lỗi
+    anh_chup_khong_doc_duoc: int = 0    # số VIDEO vi phạm chỉ có ảnh chụp V2 hỏng / dấu lỗi, không cái nào đọc được
 
 
 def nhan_thang(thang: str) -> str:
@@ -85,21 +87,25 @@ def tinh(db_path: str, tu_ngay: Optional[date] = None, den_ngay: Optional[date] 
                 dk.append(f"substr(created_at, 1, 10) {so_sanh} ?")
                 tham.append(ngay.isoformat())
         ma = "NULLIF(source_id, ''), " if "source_id" in _cot_jobs(con) else ""   # DB rất cũ chưa có cột này
-        j = (f"j AS (SELECT id, status, created_at, COALESCE({ma}NULLIF(source_ref, ''), NULLIF(source_name, ''),"
-             f" '#' || id) AS vid FROM jobs{' WHERE ' + ' AND '.join(dk) if dk else ''})")
+        j = (f"ja AS (SELECT id, status, created_at, COALESCE({ma}NULLIF(source_ref, ''), NULLIF(source_name, ''),"
+             f" '#' || id) AS vid FROM jobs), j AS (SELECT * FROM ja{' WHERE ' + ' AND '.join(dk) if dk else ''})")
         hang = con.execute(f"WITH {j} SELECT COUNT(*), COALESCE(SUM(status IS NOT 'ok'), 0),"
                            " replace(substr(MIN(created_at), 1, 10), '-', ''),"
                            " replace(substr(MAX(created_at), 1, 10), '-', '') FROM j", tham).fetchone()
         tk.so_lan_quet, tk.so_lan_loi, tk.ngay_dau, tk.ngay_cuoi = hang[0], hang[1], hang[2] or "", hang[3] or ""
         if not _co_bang(con, "matches"):
             return tk
-        vc = (f"WITH {j}, jc AS (SELECT j.vid, m.clip, j.created_at AS luc, COUNT(*) AS n,"
+        vc = (f"WITH {j}, jc AS (SELECT j.vid, m.clip, COUNT(*) AS n,"
               " SUM(COALESCE(m.matched_s, 0)) AS s FROM matches m JOIN j ON j.id = m.job_id"
               " WHERE j.status = 'ok' GROUP BY m.job_id, m.clip),"
-              " vc AS (SELECT vid, clip, MIN(luc) AS luc, MAX(n) AS n, MAX(s) AS s FROM jc GROUP BY vid, clip) ")
+              " vc AS (SELECT vid, clip, MAX(n) AS n, MAX(s) AS s FROM jc GROUP BY vid, clip),"
+              # lần quét vi phạm ĐẦU TIÊN của video trong TOÀN BỘ lịch sử (ja, không lọc ngày)
+              " dau AS (SELECT vid, MIN(created_at) AS luc FROM ja"
+              " WHERE status = 'ok' AND id IN (SELECT job_id FROM matches) GROUP BY vid) ")
         clip = con.execute(vc + "SELECT clip, COUNT(*), SUM(n), SUM(s) FROM vc GROUP BY clip"
                            " ORDER BY COUNT(*) DESC, SUM(s) DESC, clip", tham).fetchall()
-        video = con.execute(vc + "SELECT vid, MIN(luc), SUM(n), SUM(s) FROM vc GROUP BY vid", tham).fetchall()
+        video = con.execute(vc + "SELECT vid, luc, SUM(n), SUM(s) FROM vc JOIN dau USING (vid) GROUP BY vid",
+                            tham).fetchall()
         anh = con.execute(
             f"WITH {j} SELECT j.vid, b.chinh_sach, b.du_lieu FROM j JOIN {BANG_BAO_CAO} b ON b.job_id = j.id"
             " WHERE j.status = 'ok' AND EXISTS (SELECT 1 FROM matches m WHERE m.job_id = j.id)"
@@ -107,12 +113,13 @@ def tinh(db_path: str, tu_ngay: Optional[date] = None, den_ngay: Optional[date] 
     finally:
         con.close()
 
-    kenh_cua_video, ten_kenh, tieu_de = {}, {}, {}
+    kenh_cua_video, ten_kenh, tieu_de, hong, doc_duoc = {}, {}, {}, set(), set()
     for vid, chinh_sach, du_lieu in anh:                    # mới nhất trước: tên kênh / tiêu đề mới nhất thắng
         bc = bao_cao_v2.doc_anh_chup_da_luu(chinh_sach, du_lieu)
         if bao_cao_v2.la_loi_bao_cao(bc):
-            tk.anh_chup_khong_doc_duoc += 1
+            hong.add(vid)
             continue
+        doc_duoc.add(vid)
         khoa = bc.kenh_id or bc.kenh_ten
         if khoa:
             kenh_cua_video.setdefault(vid, khoa)
@@ -121,11 +128,15 @@ def tinh(db_path: str, tu_ngay: Optional[date] = None, den_ngay: Optional[date] 
             if d.goc.tieu_de:
                 tieu_de.setdefault(d.goc.clip, d.goc.tieu_de)
 
+    tk.anh_chup_khong_doc_duoc = len(hong - doc_duoc)  # theo VIDEO: quét lại có báo cáo đọc được thì thôi đếm
+
     gop, dem_thang = {}, Counter()
+    tu = tu_ngay.isoformat() if tu_ngay else ""
     for vid, luc, n, s in video:
         tk.so_doan_khop += n
         tk.tong_giay_khop += s
-        dem_thang[(luc or "")[:7]] += 1
+        if (luc or "")[:10] >= tu:      # lần đầu trước «Từ ngày» = video đã thấy từ trước, không phải mới
+            dem_thang[(luc or "")[:7]] += 1
         khoa = kenh_cua_video.get(vid)
         if khoa is None:
             tk.video_chua_ro_kenh += 1

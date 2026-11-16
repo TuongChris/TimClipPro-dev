@@ -2522,16 +2522,20 @@ with tab_tk:
                            "cũ không lưu kênh), quét file trong máy, YouTube không trả tên kênh, hoặc báo cáo V2 "
                            "không đọc được.")
             if tke.anh_chup_khong_doc_duoc:
-                st.warning(f"⚠️ {tke.anh_chup_khong_doc_duoc} lần quét có báo cáo V2 không đọc được — bỏ qua khi "
-                           "tính kênh (đoạn khớp của chúng vẫn được tính). Quét lại các video đó để có báo cáo mới.")
+                st.warning(f"⚠️ {tke.anh_chup_khong_doc_duoc} video vi phạm chỉ có báo cáo V2 không đọc được — chưa "
+                           "rõ kênh (đoạn khớp của chúng vẫn được tính). Quét lại các video đó để có báo cáo mới.")
             st.markdown("**🎬 Clip gốc bị dùng nhiều nhất**")
             st.dataframe(pd.DataFrame([{
                 "Clip gốc": c["clip"], "Tên video gốc (lúc quét)": c["tieu_de"], "Video vi phạm": c["so_video"],
                 "Đoạn khớp": c["so_doan"], "Thời lượng khớp": hhmmss(c["tong_giay"]),
             } for c in tke.clip]), width="stretch", hide_index=True)
             st.markdown("**📈 Video vi phạm phát hiện lần đầu theo tháng**")
-            st.bar_chart(pd.DataFrame({"Tháng": [thong_ke.nhan_thang(t) for t, _ in tke.theo_thang],
-                                       "Video vi phạm mới": [n for _, n in tke.theo_thang]}),
-                         x="Tháng", y="Video vi phạm mới", sort=False)
+            if tke.theo_thang:
+                st.bar_chart(pd.DataFrame({"Tháng": [thong_ke.nhan_thang(t) for t, _ in tke.theo_thang],
+                                           "Video vi phạm mới": [n for _, n in tke.theo_thang]}),
+                             x="Tháng", y="Video vi phạm mới", sort=False)
+            else:
+                st.caption("Không có video vi phạm mới trong khoảng ngày đã chọn: các video trên đã được phát hiện "
+                           "từ trước «Từ ngày quét».")
         else:
             st.info("Chưa thấy video vi phạm nào" + (" trong khoảng ngày đã chọn." if tk_tu or tk_den else "."))
