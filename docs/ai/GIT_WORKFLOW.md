@@ -80,6 +80,12 @@ chỗ khác bị bỏ qua — báo người dùng). Thử bằng ref CHƯA có t
 phải in «pre-push: CHẶN»; `git push --dry-run private HEAD:refs/heads/fix/pc2/thu-hook` phải qua. Test tự động:
 `TimClipPro/tests/test_git_hook_pre_push.py`, `test_git_hook_pre_push_quet_bi_mat.py` (repo tạm). Bản hook mới chỉ có
 hiệu lực sau khi CÀI LẠI trên từng máy (người dùng duyệt) — bản đã cài là ảnh chụp.
+Cài lại từ remote (không checkout, không đổi cây làm việc nào — PC1: mọi worktree dùng chung `.git` với production), Git
+Bash, KHÔNG PowerShell (5.1 `>` ghi UTF-16 → hook hỏng):
+`git fetch private; H="$(git rev-parse --path-format=absolute --git-path hooks)"; cp "$H/pre-push" "$H/pre-push.cu" 2>/dev/null; git show private/integration/current:release/git-hooks/pre-push > "$H/pre-push"`.
+Kiểm: `git show private/integration/current:release/git-hooks/pre-push | cmp - "$H/pre-push" && head -c2 "$H/pre-push"`
+→ `#!`; `grep -c 'installation_id(_v' "$H/pre-push"` → `1`; hooksPath rỗng + 2 lệnh `--dry-run` như trên (máy PC1 thử
+`fix/pc1/thu-hook`). Sai bước nào → `cp "$H/pre-push.cu" "$H/pre-push"` rồi báo người dùng.
 
 ## Pull Request, review, gộp (máy nào cũng làm)
 1. PR: `gh pr create --repo TuongChris/TimClipPro-dev --base integration/current --head <nhánh> --title … --body-file …`.

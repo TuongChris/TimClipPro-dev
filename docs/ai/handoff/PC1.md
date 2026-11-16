@@ -12,16 +12,15 @@ sang `docs/ai/handoff/LICH_SU_PC1.md`. Không ghi bí mật, link Sheet thật, 
   15 worktree cũ `ToolQuet\Tool_Quet_*` của các vòng trước — dọn = việc riêng, cần duyệt.
 - Bằng chứng mỗi vòng (ngoài Git): `D:\TimClipPro_<Vòng>\<thời điểm>\checkpoints\CHECKPOINT.md`.
 - Remote: `private` (`TimClipPro-dev`, PUBLIC) để push; `origin` (PUBLIC) chỉ fetch — push bị chặn bằng pushurl giả.
-  Hook `pre-push` dùng chung (`release/git-hooks/pre-push`): CHƯA cài trên PC1 (đề xuất, một lệnh `cp`).
+  Hook `pre-push` dùng chung (`release/git-hooks/pre-push`): cài LẠI theo «Tiếp theo» 2.
 - Cổng: production `ChayTool.bat` dùng 8501; PC1 không chạy server Development.
 
 ## Tiếp theo
-1. (LẦN CUỐI PC1 bắt buộc) Khi người dùng báo «PC2 đã gửi yêu cầu ghi danh khoá …»: chạy
-   `D:\TimClipPro_PC2Authority\20261014_222039\scripts\p_ky_uy_quyen_pc1.sh chuan-bi feature/pc2/khoa-ky-pc2` (kiểm
-   yêu cầu tự ký, trust store PC2 = byte bộ kit `a37dc9b6…`, khoá đang tin = `8aa5…`) → người dùng nhấp đúp
-   `KY_UY_QUYEN_PC2.bat` (gõ 8 ký tự cuối khoá PC2 + mật khẩu khoá PC1) → `… sau-ky` (kiem-uy-quyen, commit) → đẩy
-   `feature/pc1/uy-quyen-pc2` (người dùng duyệt). Sau bước này PC1 không còn bắt buộc cho phát hành.
-2. Đề xuất người dùng duyệt: bật ruleset GitHub (`release/github/`); cài hook dùng chung trên PC1.
+1. ĐÃ XONG 15/10: uỷ quyền khoá PC2 (`feature/pc1/uy-quyen-pc2` = `889ec35`); PC1 không còn bắt buộc cho phát hành.
+2. Cài lại hook `pre-push` (người dùng yêu cầu 16/11; bản ≥ `bae6eda` chặn installation_id 32 hex + `_v3/_v4`): Git Bash,
+   KHÔNG PowerShell; trong worktree `D:\TimClipPro_Dev\<tên>`, làm đúng «Cài lại từ remote» ở `GIT_WORKFLOW.md` mục «Hook
+   pre-push» (sao lưu → `git show` → kiểm → hooksPath rỗng → 2 lệnh `--dry-run`). Hook nằm ở `.git` CHUNG với production
+   `Tool_Quet`: chỉ ảnh hưởng `git push`, không đổi mã/dữ liệu. Ghi kết quả vào nhật ký. Ruleset GitHub: vẫn chờ duyệt.
 3. Còn từ trước: tái audit độc lập `e49340d`; C7 (bằng chứng Stable PC2); sao lưu khoá ký (`KEY_BACKUP =
    DEFERRED_BY_USER`); dọn worktree cũ + sandbox `D:\` (~11 GB vòng 1.1.1, ~2 GB vòng này) khi người dùng bảo.
 
