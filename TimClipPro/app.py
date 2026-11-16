@@ -10,6 +10,7 @@ Dữ liệu KHÔNG đi đâu cả — server chỉ lắng nghe ở localhost tr�
 """
 
 import os
+import sqlite3
 import threading
 import time
 import uuid
@@ -28,6 +29,7 @@ import outbox
 import runtime_paths
 import sheet_destinations
 import tac_vu_nen
+import thong_ke
 import ui_cap_nhat
 import ui_gui_sheets as ui_gui
 from cau_hinh import GIA_TRI_GIAO_DIEN_MAC_DINH
@@ -1492,10 +1494,10 @@ if not job["running"] and (job["results"] or job["error"]):
 #  Các tab chức năng
 # =====================================================================
 
-tab0, tab_tai, tab_anh, tab_kenh, tab_ghep, tab_may, tab_td, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+tab0, tab_tai, tab_anh, tab_kenh, tab_ghep, tab_may, tab_td, tab1, tab2, tab3, tab4, tab5, tab6, tab_tk = st.tabs(
     ["📥 Đồng bộ kênh gốc", "⬇️ Tải video gốc", "🖼️ Tải thumbnail", "📺 Tải cả kênh", "🎞️ Ghép video gốc",
      "🛠️ Video trong máy", "📝 Tiêu đề kênh", "🎬 Kho clip gốc", "📋 Danh sách video trong kho",
-     "▶️ Quét YouTube", "📁 Quét file trong máy", "📜 Lịch sử", "📤 Gửi Google Sheets"])
+     "▶️ Quét YouTube", "📁 Quét file trong máy", "📜 Lịch sử", "📤 Gửi Google Sheets", "📊 Thống kê"])
 
 # ---------------------------------------------------------------- TẢI VIDEO GỐC / THUMBNAIL / CẢ KÊNH
 def _o_thu_muc_tai(nhan: str, khoa: str) -> str:
@@ -2473,3 +2475,63 @@ with tab5:
 # ---------------------------------------------------------------- TAB 6
 with tab6:
     ui_gui.ve_tab(eng)
+
+# ---------------------------------------------------------------- THỐNG KÊ (chỉ đọc lịch sử)
+@st.cache_data(max_entries=16, show_spinner=False)
+def _thong_ke(duong_dan: str, chu_ky: tuple, tu_ngay, den_ngay) -> thong_ke.ThongKe:
+    """Mọi tab vẽ lại sau MỖI cú bấm: chỉ tính lại khi lichsu.db đổi hoặc đổi khoảng ngày. ``chu_ky`` = (mtime, cỡ)
+    của file — journal mặc định của SQLite (không WAL) ghi thẳng vào file DB mỗi lần commit."""
+    return thong_ke.tinh(duong_dan, tu_ngay, den_ngay)
+
+
+with tab_tk:
+    st.subheader("Thống kê vi phạm")
+    st.caption("Chỉ đọc lịch sử quét trên máy này — không quét lại, không hỏi YouTube.")
+    c_tu, c_den = st.columns(2)
+    tk_tu = c_tu.date_input("Từ ngày quét", value=None, format="DD/MM/YYYY", key="tk_tu_ngay")
+    tk_den = c_den.date_input("Đến ngày quét", value=None, format="DD/MM/YYYY", key="tk_den_ngay")
+    try:
+        tk_file = os.stat(eng.sqlite_file)
+        tke = _thong_ke(eng.sqlite_file, (tk_file.st_mtime_ns, tk_file.st_size), tk_tu, tk_den)
+    except (OSError, sqlite3.Error) as e:   # vd. lịch sử đang bị khoá lâu: báo gọn thay vì traceback
+        tke = None
+        st.error(f"Chưa đọc được lịch sử để thống kê ({type(e).__name__}: {e}). Thử lại sau ít phút.")
+    if tke is not None and not tke.so_lan_quet:
+        st.info("Chưa có lần quét nào" + (" trong khoảng ngày đã chọn." if tk_tu or tk_den else "."))
+    elif tke is not None:
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.metric("Số lần quét", tke.so_lan_quet, help="Tính cả lần quét lỗi / đã huỷ.")
+        m2.metric("Lỗi / đã huỷ", tke.so_lan_loi)
+        m3.metric("Video vi phạm", tke.so_video_vi_pham, help="Video có ít nhất một đoạn khớp clip gốc.")
+        m4.metric("Đoạn khớp", tke.so_doan_khop)
+        m5.metric("Tổng thời lượng khớp", hhmmss(tke.tong_giay_khop))
+        st.caption(f"Lần quét đầu: {format_publication_date(tke.ngay_dau) or '—'} · gần nhất: "
+                   f"{format_publication_date(tke.ngay_cuoi) or '—'}. Quét lại một video không làm tăng số liệu: mỗi "
+                   "cặp video vi phạm – clip gốc tính một lần (lần quét khớp nhiều nhất). Lần quét lỗi / đã huỷ không "
+                   "tính vào vi phạm.")
+        if tke.so_video_vi_pham:
+            st.markdown("**📺 Kênh vi phạm nhiều nhất**")
+            if tke.kenh:
+                st.dataframe(pd.DataFrame([{
+                    "Kênh": k["ten"], "Link kênh": k["link"], "Video vi phạm": k["so_video"],
+                    "Đoạn khớp": k["so_doan"], "Thời lượng khớp": hhmmss(k["tong_giay"]),
+                } for k in tke.kenh]), width="stretch", hide_index=True,
+                    column_config={"Link kênh": st.column_config.LinkColumn()})
+            if tke.video_chua_ro_kenh:
+                st.caption(f"{tke.video_chua_ro_kenh} video vi phạm chưa rõ kênh: lần quét trước báo cáo V2 (lịch sử "
+                           "cũ không lưu kênh), quét file trong máy, YouTube không trả tên kênh, hoặc báo cáo V2 "
+                           "không đọc được.")
+            if tke.anh_chup_khong_doc_duoc:
+                st.warning(f"⚠️ {tke.anh_chup_khong_doc_duoc} lần quét có báo cáo V2 không đọc được — bỏ qua khi "
+                           "tính kênh (đoạn khớp của chúng vẫn được tính). Quét lại các video đó để có báo cáo mới.")
+            st.markdown("**🎬 Clip gốc bị dùng nhiều nhất**")
+            st.dataframe(pd.DataFrame([{
+                "Clip gốc": c["clip"], "Tên video gốc (lúc quét)": c["tieu_de"], "Video vi phạm": c["so_video"],
+                "Đoạn khớp": c["so_doan"], "Thời lượng khớp": hhmmss(c["tong_giay"]),
+            } for c in tke.clip]), width="stretch", hide_index=True)
+            st.markdown("**📈 Video vi phạm phát hiện lần đầu theo tháng**")
+            st.bar_chart(pd.DataFrame({"Tháng": [thong_ke.nhan_thang(t) for t, _ in tke.theo_thang],
+                                       "Video vi phạm mới": [n for _, n in tke.theo_thang]}),
+                         x="Tháng", y="Video vi phạm mới", sort=False)
+        else:
+            st.info("Chưa thấy video vi phạm nào" + (" trong khoảng ngày đã chọn." if tk_tu or tk_den else "."))

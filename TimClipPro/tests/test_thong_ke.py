@@ -14,9 +14,14 @@ import sqlite3
 from datetime import date
 from types import SimpleNamespace
 
+from streamlit.testing.v1 import AppTest
+
 import bao_cao_v2 as v2
+import engine as engine_mod
 import lich_su
 import thong_ke
+
+APP_PY = os.path.join(os.path.dirname(os.path.abspath(engine_mod.__file__)), "app.py")
 
 
 def _anh_chup(kenh_ten: str = "", kenh_id: str = "", tieu_de_clip: dict | None = None) -> str:
@@ -170,3 +175,28 @@ def test_nhan_thang_va_du_thang_qua_nam():
     assert thong_ke._du_thang({"2027-02": 2, "": 1, "2026-12": 1}) == [
         ("2026-12", 1), ("2027-01", 0), ("2027-02", 2), ("", 1)]
 
+
+def test_tab_thong_ke_hien_so_lieu_va_cap_nhat_sau_lan_quet_moi(tmp_path, monkeypatch):
+    data = tmp_path / "data"
+    data.mkdir()
+    db = str(data / "lichsu.db")
+    _kich_ban(db)
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(data))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    monkeypatch.delenv("TIMCLIP_RUNTIME_MODE", raising=False)
+
+    at = AppTest.from_file(APP_PY, default_timeout=120).run()
+    assert not at.exception
+    tab = next(t for t in at.tabs if t.label == "📊 Thống kê")
+    so = {m.label: m.value for m in tab.metric}
+    assert so["Số lần quét"] == "8" and so["Video vi phạm"] == "5" and so["Đoạn khớp"] == "7"
+    assert so["Tổng thời lượng khớp"] == "00:04:35"
+    assert len(tab.dataframe) == 2                      # kênh + clip gốc
+    assert any("không đọc được" in w.value for w in tab.warning)
+
+    # Số liệu được nhớ giữa các lần vẽ lại trang, nhưng lần quét mới lưu vào lịch sử phải hiện ngay.
+    _job(db, "2026-11-15 09:00:00", "vidHHHHHHHH", khop=[("X.opus", 1.0)])
+    at.run()
+    tab = next(t for t in at.tabs if t.label == "📊 Thống kê")
+    so = {m.label: m.value for m in tab.metric}
+    assert so["Số lần quét"] == "9" and so["Video vi phạm"] == "6"
