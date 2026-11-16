@@ -426,6 +426,8 @@ _KHONG_LAI = r"(?!\[đã ẩn)"           # giá trị đã che thì thôi — g
 
 _RE_PEM = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)",
                      re.S)
+# Khoá API Google (YouTube Data API, D-51) đứng trần, không có «key=» hay header đi kèm.
+_RE_KHOA_API_GOOGLE = re.compile(r"AIza[0-9A-Za-z_-]{35}")
 _RE_DONG_CANH_BAO_COOKIE = re.compile(
     r"(?im)^.*(?:skipping cookie file entry|failed to parse cookie).*$")
 # Lỗi nạp file của `http.cookiejar` (yt-dlp gọi `MozillaCookieJar._really_load`): «invalid Netscape format cookies file
@@ -470,6 +472,7 @@ def che_bi_mat(van_ban: Any) -> str:
     if not s:
         return s
     s = _RE_PEM.sub("[đã ẩn: khoá riêng]", s)
+    s = _RE_KHOA_API_GOOGLE.sub(AN, s)
     s = _RE_DONG_CANH_BAO_COOKIE.sub("[đã ẩn: dòng này chứa nội dung cookie]", s)
     s = _RE_LOI_NAP_COOKIE.sub(lambda m: m.group(1) + " [đã ẩn: đường dẫn và dòng cookie]", s)
     s = _RE_DONG_NETSCAPE.sub("[đã ẩn: dòng cookie]", s)

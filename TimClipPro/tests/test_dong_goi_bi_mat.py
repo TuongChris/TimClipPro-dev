@@ -20,6 +20,7 @@ MARKER_COOKIE = "TIMCLIP-SYNTH-COOKIE-7f3a"
 MARKER_KHOA = "TIMCLIP-SYNTH-KEY-91c2"
 MARKER_ENV = "TIMCLIP-SYNTH-ENV-55d0"
 MARKER_NGOAI = "TIMCLIP-SYNTH-OUTSIDE-0b8e"
+MARKER_API = "AIza" + "TimclipSynthApi" + "0" * 20  # gia-khong-bi-mat (khoá YouTube Data API giả, D-51)
 PEM = (
     "-----BEGIN PRIVATE KEY-----\n" + MARKER_KHOA + "\n-----END PRIVATE KEY-----\n"
 )
@@ -59,6 +60,9 @@ def _du_an_co_bi_mat(goc):
     }))
     _ghi(goc / "ghi_chu" / "may_chu.txt", "khoá cũ:\n" + PEM)
     _ghi(goc / "khoa_rieng.pem", PEM)
+    # Khoá API trần (D-51) trong file dữ liệu tên vô hại — chỉ nội dung lộ ra.
+    _ghi(goc / "ghi_chu" / "cau_hinh_api.txt", "khoá:\n" + MARKER_API + "\n")
+    _ghi(goc / "youtube_api_key.txt", MARKER_API + "\n")
 
 
 KY_VONG_NGUON = {
@@ -70,7 +74,7 @@ KY_VONG_NGUON = {
     "tests/test_cookie_khong_ro_ri.py",
     "requirements.txt",
 }
-MARKERS = (MARKER_COOKIE, MARKER_KHOA, MARKER_ENV, MARKER_NGOAI)
+MARKERS = (MARKER_COOKIE, MARKER_KHOA, MARKER_ENV, MARKER_NGOAI, MARKER_API)
 
 
 def _noi_dung_zip(duong_dan) -> dict:
@@ -146,9 +150,25 @@ def test_symlink_toi_file_bi_mat_khong_bi_dong_goi(tmp_path):
     "khoa_rieng.pem",
     "khoa.KEY",
     "chung_chi.p12",
+    "TimClipPro/youtube_api_key.txt",
+    "youtube_api_key.txt",
+    "docs/youtube_api_key.txt",
 ])
 def test_ten_hoac_thanh_phan_duong_dan_nhay_cam_bi_tu_choi(duong_dan):
     assert dong_goi.nen_lay(duong_dan) is False
+
+
+@pytest.mark.parametrize("ma_hoa", ["utf-8", "utf-16"])
+def test_noi_dung_khoa_api_google_tran_bi_bat(tmp_path, ma_hoa):
+    """Khoá API Google trần trong file dữ liệu tên vô hại (D-51) — cả UTF-16 của Notepad «Unicode» — bị chặn ở bộ lọc
+    lẫn hậu kiểm ZIP độc lập."""
+    du_lieu = ("ghi chú\n" + MARKER_API + "\n").encode(ma_hoa)
+    assert dong_goi.ly_do_noi_dung_nhay_cam(du_lieu)
+    ra = tmp_path / "goi_tay.zip"
+    with zipfile.ZipFile(ra, "w") as z:
+        z.writestr("docs/ghi_chu.txt", du_lieu)
+    assert any("docs/ghi_chu.txt" in dong for dong in dong_goi.kiem_zip_doc_lap(str(ra)))
+    assert dong_goi.ly_do_noi_dung_nhay_cam(("AIza" + "ngan").encode()) == ""
 
 
 @pytest.mark.parametrize("duong_dan", [

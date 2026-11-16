@@ -52,6 +52,8 @@ khoa_rieng*
 # nên khoá thứ hai, bản .bak, file tải về chưa đổi tên hay cookie ở gốc/docs/release đều lọt `git add -A`.
 google_key*
 khoa_google*
+# Khoá YouTube Data API (D-51): chỗ đúng là <thư mục cha của data>\secrets\ — bản chép nhầm vào repo cũng bị chặn.
+youtube_api_key*
 *service*account*.json
 credentials.json
 client_secret*.json

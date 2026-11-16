@@ -43,6 +43,9 @@ BIEN_THE_BI_MAT = [
     "release/google_key.json",
     "cookies.txt",                                     # cookie ở gốc repo
     "docs/cookies.txt",
+    "TimClipPro/youtube_api_key.txt",                  # khoá YouTube Data API (D-51) chép nhầm cạnh mã
+    "youtube_api_key.txt",
+    "docs/youtube_api_key.txt",
 ]
 
 

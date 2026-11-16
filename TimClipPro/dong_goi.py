@@ -43,7 +43,7 @@ CAM = {"google_key.json", "credentials.json", "token.json", "client_secret.json"
        ".env", "secrets.toml"}
 TU_KHOA_NHAY_CAM = (
     "credential", "secret", "token", "private_key", "google_key",
-    "service_account", "service-account", "serviceaccount",
+    "service_account", "service-account", "serviceaccount", "youtube_api_key",
 )
 # Đuôi file khoá/chứng thư: không bao giờ là mã nguồn của dự án này.
 DUOI_KHOA = {".pem", ".key", ".p12", ".pfx", ".ppk", ".jks", ".keystore", ".kdbx"}
@@ -93,6 +93,7 @@ MAU_NOI_DUNG_NHAY_CAM = (
     ("service account", re.compile(r'"type"\s*:\s*"service_account"')),
     ("client secret", re.compile(r'"client_secret"\s*:')),
     ("refresh token", re.compile(r'"refresh_token"\s*:')),
+    ("khoá API Google", re.compile(r"AIza[0-9A-Za-z_-]{35}")),
     ("cookie Netscape", re.compile(r"(?im)^#\s*(?:netscape\s+)?http\s+cookie\s+file")),
     ("dòng cookie", re.compile(
         r"(?m)^[^\t#\r\n]+\t(?:TRUE|FALSE)\t[^\t\r\n]*\t(?:TRUE|FALSE)\t\d+\t[^\t\r\n]+\t")),
