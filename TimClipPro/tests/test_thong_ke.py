@@ -148,6 +148,15 @@ def test_loc_theo_ngay_quet_tinh_ca_hai_dau(tmp_path):
     assert (tk.video_chua_ro_kenh, tk.anh_chup_khong_doc_duoc) == (1, 1)
 
 
+def test_anh_chup_v2_khong_co_kenh_la_chua_ro_kenh(tmp_path):
+    """Ảnh chụp V2 đọc được mà kênh rỗng (quét file trong máy, YouTube không trả kênh): không thành dòng kênh trống."""
+    path = str(tmp_path / "lichsu.db")
+    lich_su.dam_bao_luoc_do(path)
+    _job(path, "2026-11-01 08:00:00", "vidKKKKKKKK", khop=[("X.opus", 30.0)], anh_chup=_anh_chup())
+    tk = thong_ke.tinh(path)
+    assert (tk.so_video_vi_pham, tk.kenh, tk.video_chua_ro_kenh, tk.anh_chup_khong_doc_duoc) == (1, [], 1, 0)
+
+
 def test_luoc_do_rat_cu_khong_source_id_khong_bang_bao_cao(tmp_path):
     path = str(tmp_path / "lichsu.db")
     con = sqlite3.connect(path)

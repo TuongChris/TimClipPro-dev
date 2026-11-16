@@ -6,7 +6,8 @@ Cách đếm — để con số không phình theo số lần quét lại:
 * Lần quét = mọi dòng ``jobs`` có ngày quét trong khoảng, kể cả lỗi/đã huỷ (huỷ cũng lưu ``status = error``).
 * Vi phạm chỉ tính từ lần quét ``ok`` có ít nhất một dòng ``matches``. Một video = ``source_id`` (mã YouTube),
   không có thì ``source_ref`` (link / đường dẫn file), rồi ``source_name``.
-* Mỗi cặp (video vi phạm, clip gốc) tính MỘT lần, theo lần quét có nhiều đoạn / nhiều giây khớp nhất.
+* Mỗi cặp (video vi phạm, clip gốc) tính MỘT lần: số đoạn và số giây lớn nhất trong các lần quét (hai số có thể
+  đến từ hai lần quét khác nhau).
 * Kênh vi phạm chỉ nằm trong ảnh chụp báo cáo V2 (``bao_cao_job``); ``jobs``/``matches`` không lưu kênh. Ảnh chụp
   đọc ĐÚNG luật ``bao_cao_v2.doc_anh_chup_da_luu``: hỏng hay dấu lỗi → bỏ qua, đếm «không đọc được», không đoán
   kênh từ chỗ khác. Lần quét luật cũ (không có ảnh chụp) → video «chưa rõ kênh».

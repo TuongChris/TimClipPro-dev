@@ -2507,8 +2507,8 @@ with tab_tk:
         m5.metric("Tổng thời lượng khớp", hhmmss(tke.tong_giay_khop))
         st.caption(f"Lần quét đầu: {format_publication_date(tke.ngay_dau) or '—'} · gần nhất: "
                    f"{format_publication_date(tke.ngay_cuoi) or '—'}. Quét lại một video không làm tăng số liệu: mỗi "
-                   "cặp video vi phạm – clip gốc tính một lần (lần quét khớp nhiều nhất). Lần quét lỗi / đã huỷ không "
-                   "tính vào vi phạm.")
+                   "cặp video vi phạm – clip gốc tính một lần (số đoạn và số giây lớn nhất trong các lần quét). Lần "
+                   "quét lỗi / đã huỷ không tính vào vi phạm.")
         if tke.so_video_vi_pham:
             st.markdown("**📺 Kênh vi phạm nhiều nhất**")
             if tke.kenh:
