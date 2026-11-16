@@ -6502,7 +6502,7 @@ class Engine:
     def goc_bao_cao_v2(self, clip: str, *, cho_bo_sung: bool) -> "bao_cao_v2.GocV2":
         """Thông tin video gốc theo báo cáo V2 cho MỘT clip — dùng cho video gốc được BÁO
         CÁO của lô nguồn chung (không bao giờ cho mọi ứng viên). ``cho_bo_sung``: lô quét
-        YouTube; vẫn phải được người dùng bật ``bo_sung_ngay_goc`` mới hỏi mạng."""
+        YouTube; hỏi mạng khi có khoá Data API hoặc người dùng bật ``bo_sung_ngay_goc`` (D-58)."""
         try:
             meta = self.clip_metadata_resolver().resolve(clip)
         except Exception:  # noqa: BLE001
@@ -6513,10 +6513,13 @@ class Engine:
     def _bo_sung_ngay_goc(self, metas: dict, *, cho_phep: bool, nhat_ky: list) -> dict:
         """``{clip: NgayNguon}`` cho video gốc ĐÃ CHỌN mà kho không có ngày nguyên bản.
 
-        Chỉ hỏi YouTube khi ``cho_phep`` (đúng lượt quét YouTube thường) VÀ người dùng bật
-        ``bo_sung_ngay_goc``. Mỗi mã video hỏi tối đa một lần trong job / lượt Watch (bộ nhớ
-        dùng chung), có trần số lần, giãn nhịp, huỷ được, và không gửi gì khi cầu dao YouTube
-        của lượt đang mở. Hỏi thất bại (video gốc bị gỡ, mạng…) KHÔNG đụng tới kết quả khớp:
+        Chỉ hỏi YouTube khi ``cho_phep`` (đúng lượt quét YouTube thường). Có khoá YouTube Data API
+        dùng được (D-58): TỰ BẬT — một ``youtube_api.lay_video`` theo lô (50 mã/yêu cầu) cho mọi mã
+        còn thiếu, không giãn nhịp, không tính vào trần; mã API không trả được chỉ đi đường yt-dlp
+        khi người dùng bật ``bo_sung_ngay_goc``. Không khoá (hay khoá sai dạng): như cũ — chỉ khi bật
+        ``bo_sung_ngay_goc``, từng mã qua ``youtube_info``. Mỗi mã video hỏi tối đa một lần trong job
+        / lượt Watch (bộ nhớ dùng chung), có trần, giãn nhịp, huỷ được, và không gửi gì khi cầu dao
+        YouTube của lượt đang mở. Hỏi thất bại (video gốc bị gỡ, mạng…) KHÔNG đụng tới kết quả khớp:
         chỉ ghi lý do thiếu ngày. Không bao giờ ghi ngược vào ``clips_meta.json``.
         """
         can: dict = {}
@@ -6533,8 +6536,20 @@ class Engine:
             return ket
         bo_nho = self._bo_nho_ngay_goc
         bat = bool(cho_phep and self.config.bo_sung_ngay_goc)
+        tu_api: dict = {}
+        if cho_phep and youtube_api.trang_thai_khoa(self.data_dir).ma == youtube_api.CO_KHOA:
+            chua = [ma for ma in can if bo_nho is None or ma not in bo_nho.ket_qua]
+            kq_api = youtube_api.lay_video(self.phien_youtube_hien_tai(), self.data_dir, chua,
+                                           cancel_event=self.cancel_event)
+            for ma, video in kq_api.thong_tin.items():
+                tu_api[ma] = ngay = bao_cao_v2.ngay_tu_info(video)
+                nhat_ky.append((ma, "co_ngay" if ngay.gia_tri else ngay.ly_do_thieu))
+                if bo_nho is not None:
+                    bo_nho.ket_qua[ma] = ngay
+            LOGGER_SCAN.info("event=report_v2.original_date_api asked=%d ok=%d", len(chua),
+                             len(kq_api.thong_tin))
         for ma, ds_clip in can.items():
-            ngay = bo_nho.ket_qua.get(ma) if bo_nho is not None else None
+            ngay = tu_api.get(ma) or (bo_nho.ket_qua.get(ma) if bo_nho is not None else None)
             if ngay is None and bat:
                 ngay = self._hoi_ngay_goc_co_kiem_soat(ma, bo_nho, nhat_ky)
             if ngay is not None:

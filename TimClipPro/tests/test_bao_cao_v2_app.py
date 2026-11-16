@@ -52,6 +52,7 @@ def test_cong_tac_bo_sung_ngay_goc_mac_dinh_tat(tmp_path, monkeypatch):
     at = AppTest.from_file(str(APP_PY), default_timeout=120).run()
     o = next(c for c in at.sidebar.checkbox if c.label == "Bổ sung ngày đăng gốc từ YouTube")
     assert o.value is False and at.session_state.eng.config.bo_sung_ngay_goc is False
+    assert "API" in o.help and "yt-dlp" in o.help      # D-58: có khoá thì tự bổ sung qua API
     at = o.check().run()
     assert at.session_state.eng.config.bo_sung_ngay_goc is True
 

@@ -110,7 +110,7 @@ cũ, tên file/mã lưu trữ/khoá vân tay trong kho.
 |---|---|
 | Được quét (YouTube) | (1) `youtube_info()["published_at"]` khi thông tin lấy bằng YouTube Data API (D-51): ngày lịch UTC của `snippet.publishedAt`, nhãn `youtube_api.published_at`; (2) `youtube_info()["upload_date_raw"]` (chuỗi yt-dlp, đọc TRƯỚC resolver cũ; đường API để rỗng — không giả làm yt-dlp). KHÔNG đọc `upload_date` của dict wrapper — khoá đó đã mang ngày quy đổi |
 | Được quét (file) | Không có — ô trống («quét file trên máy — không có ngày đăng YouTube») |
-| Video gốc | (1) `clips_meta.json`: `published_at` (YouTube Data API, D-51; nhãn `clips_meta.published_at`); (2) `upload_date_raw` (clip tải từ bản này); (3) `publication_date` khi `publication_date_source == "upload_date"`; (4) ngày đã bổ sung trong job/lượt; (5) bổ sung qua YouTube nếu được bật (qua `youtube_info`: có khoá thì bằng API); (6) thiếu + lý do |
+| Video gốc | (1) `clips_meta.json`: `published_at` (YouTube Data API, D-51; nhãn `clips_meta.published_at`); (2) `upload_date_raw` (clip tải từ bản này); (3) `publication_date` khi `publication_date_source == "upload_date"`; (4) ngày đã bổ sung trong job/lượt; (5) có khoá Data API: bổ sung qua API theo lô (D-58, nhãn `youtube_api.published_at`); (6) bổ sung qua yt-dlp nếu được bật; (7) thiếu + lý do |
 
 **Vì sao `published_at` cho cùng ngày với `upload_date` (D-51):** yt-dlp 2026.08.19 tính `upload_date` là ngày lịch
 UTC của mốc đăng; `bao_cao_v2.ngay_tu_info` / `clip_metadata` lấy đúng ngày lịch UTC của `publishedAt`
@@ -126,12 +126,20 @@ clip có ngày tương đương nguyên bản. Ngày quy đổi không suy ngư�
 nên V2 để trống — `ngay_kho_quy_doi` vẫn nằm trong ảnh chụp để chẩn đoán, không bao giờ hiển thị
 như ngày nguyên bản.
 
-**Bổ sung qua YouTube** (`Config.bo_sung_ngay_goc`, mặc định TẮT; ô «Bổ sung ngày đăng gốc từ
-YouTube» ở thanh bên): chỉ lượt QUÉT YOUTUBE thường, chỉ video gốc ĐÃ CHỌN (Top-N) còn thiếu
-ngày; lô nguồn chung chỉ video gốc ĐƯỢC BÁO CÁO. Mỗi mã video hỏi tối đa một lần trong job /
-lượt Watch (`_BoNhoNgayGoc`), trần `bo_sung_ngay_goc_toi_da` (20), giãn nhịp
-`ytdlp_sleep_requests_s`, đi qua `youtube_info` → `PhienYouTube` (phân loại lỗi, thử lại hữu
-hạn, cầu dao); cầu dao mở hoặc đã bấm Dừng thì không gửi gì. Video gốc bị gỡ/lỗi mạng KHÔNG
+**Bổ sung qua YouTube** (`Engine._bo_sung_ngay_goc`): chỉ lượt QUÉT YOUTUBE thường, chỉ video gốc ĐÃ CHỌN (Top-N)
+còn thiếu ngày; lô nguồn chung chỉ video gốc ĐƯỢC BÁO CÁO. Mỗi mã video hỏi tối đa một lần trong job / lượt Watch
+(`_BoNhoNgayGoc`); cầu dao mở hoặc đã bấm Dừng thì không gửi gì.
+- **Có khoá YouTube Data API dùng được** (`youtube_api.trang_thai_khoa(...).ma == CO_KHOA`, D-58): TỰ BẬT, không cần ô
+  nào. Mọi mã còn thiếu đi MỘT `youtube_api.lay_video` (50 mã/yêu cầu, 1 đơn vị); ngày = ngày lịch UTC của
+  `published_at`, nhãn `youtube_api.published_at`. Không giãn nhịp, không tính vào trần. Mã trong `KetQuaApi.thieu`
+  (hết hạn mức, API tắt, video vắng / sắp phát…) chỉ đi đường yt-dlp dưới đây khi người dùng bật ô; không thì để
+  trống với lý do của kho.
+- **yt-dlp** (`Config.bo_sung_ngay_goc`, mặc định TẮT; ô «Bổ sung ngày đăng gốc từ YouTube» ở thanh bên = «hỏi thêm
+  bằng yt-dlp khi chưa có khoá / API không trả được»): trần `bo_sung_ngay_goc_toi_da` (20), giãn nhịp
+  `ytdlp_sleep_requests_s`, đi qua `youtube_info` → `PhienYouTube` (phân loại lỗi, thử lại hữu hạn, cầu dao). Không
+  khoá hoặc khoá sai dạng: chỉ đường này, y như trước D-58.
+
+Video gốc bị gỡ/lỗi mạng KHÔNG
 đổi kết quả khớp và không đặt `loi_truy_cap` của lượt quét — chỉ ghi lý do thiếu ngày. Không
 ghi ngược vào `clips_meta.json`, không có cache trên đĩa (ngày đã bổ sung nằm trong ảnh chụp).
 
