@@ -40,6 +40,8 @@ app.py (Streamlit UI)   cli.py (dòng lệnh)   ← lớp giao diện, thay đư
 6. **Mọi thao tác mạng YouTube chạy qua `PhienYouTube.chay()` của LƯỢT đang chạy** (mục 17).
    Không tự viết vòng thử lại hay `time.sleep`, không `if "bot" in str(e)` ở nơi gọi — hiểu lỗi
    chỉ ở `truy_cap_youtube.phan_loai_loi`. Vòng lặp nhiều video hỏi `phien.mo` trước mỗi việc mạng.
+   YouTube Data API (D-51, `youtube_api.py`) đi qua phiên con `PhienYouTube.api`, KHÔNG BAO GIỜ qua `chay()`/
+   `phan_loai_loi`/`ghi_loi`/`ghi_thanh_cong`/`dem_yeu_cau` (403 của API sẽ mở cầu dao yt-dlp); khoá chỉ đọc ở đó.
 
 ## Kiến thức nghiệp vụ quan trọng (đã kiểm chứng bằng thực nghiệm)
 
@@ -116,7 +118,9 @@ thời điểm clip bắt đầu; khi chẩn đoán vân tay mới dùng vùng k
 - Ảnh chụp lưu ở bảng RIÊNG `bao_cao_job` (lịch sử phiên bản 2) — KHÔNG thêm cột vào `jobs`
   (golden so `SELECT * FROM jobs`, bản rollback đọc theo tên cột).
 - Ngày V2 = `upload_date` NGUYÊN BẢN của yt-dlp. `youtube_info()["upload_date"]` là ngày ĐÃ quy
-  đổi — chỉ `upload_date_raw` là nguyên bản. Kho cũ chỉ có ngày quy đổi: để trống kèm lý do, không
+  đổi — chỉ `upload_date_raw` là nguyên bản. Có `published_at` (YouTube Data API, D-51) thì ngày lịch UTC của nó
+  đứng trước (cùng phép tính; nhãn `youtube_api.published_at` / `clips_meta.published_at`) — không bao giờ ghi
+  `published_at` vào `upload_date_raw`. Kho cũ chỉ có ngày quy đổi: để trống kèm lý do, không
   đoán từ `timestamp`/tên file. Bổ sung qua mạng chỉ cho video gốc ĐÃ CHỌN, mặc định TẮT.
 - Mốc hiển thị và `t` của link là CÙNG một giây (`bao_cao_v2.giay_moc`). Không trừ 3 giây, không
   cộng thời lượng gốc vào `end_s` (mốc kết thúc bị cắt bởi `--time-quantile` 0,05 của audfprint —

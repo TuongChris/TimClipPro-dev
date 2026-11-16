@@ -18,6 +18,7 @@ Nhánh mặc định = `integration/current` (mã đã kiểm, đang chạy th�
 | Dữ liệu DEV: kho vân tay `*.pklz`, `lichsu.db`, `khos.json`, `cau_hinh.json` (~0,8 GB) | `C:\Dev\TimClipPro_DevState\data`; bản sao lưu `D:\TimClipPro_Dev_SaoLuu\data_<giờ>` | Chép bản sao lưu mới nhất ra ổ CÁ NHÂN trước khi xoá máy; hoặc dựng lại (đồng bộ kênh + tạo vân tay: nhiều giờ) |
 | Audio các kho gốc (~75 GB: Cory, Flamingo, Joe, MSA, Papa Meat, SML, Ms Rachel, Danny) | `E:\Kho_Tool_Quet\Kho_*` (mỗi kho có `downloaded.txt`, `clips_meta.json`) | Ổ cá nhân; hoặc đồng bộ kênh tải lại (chỉ tải phần thiếu) |
 | Khoá Google service account `google_key*.json` | thư mục mã + `DevState\secrets` | Tạo khoá MỚI trong Google Cloud Console; xoá khoá cũ |
+| Khoá YouTube Data API `youtube_api_key.txt` (D-51) | `C:\Dev\TimClipPro_DevState\secrets\youtube_api_key.txt` (vị trí CỐ ĐỊNH: `<thư mục cha của data>\secrets\`) | Tạo khoá API MỚI trong Google Cloud Console (bật YouTube Data API v3, giới hạn khoá chỉ cho API đó), lưu một dòng UTF-8 vào `<thư mục cha của data>\secrets\youtube_api_key.txt`; kiểm bằng `python cli.py youtube-doctor`. Chưa có khoá thì tool lấy thông tin video bằng yt-dlp như cũ |
 | Cookie YouTube `cookies.txt` | `E:\cookies.txt` | Xuất lại từ trình duyệt đã đăng nhập ở máy mới |
 | Khoá ký phát hành PC2 `d02702dd741c3e4f` | `C:\TimClipPro_KhoaPhatHanh` (chỉ người dùng đọc) | Không cần để phát triển; khoá PC1 `8aa5baa6c8f225f9` vẫn được tin. Không mang theo → thu hồi khỏi `release/trusted_keys.json` bằng PR riêng |
 | `CLAUDE.local.md` (ghi chú riêng máy) | gốc clone | Tạo lại từ `docs/ai/CLAUDE.local.md.mau` (mục 3) |
@@ -70,5 +71,6 @@ Nhánh mặc định = `integration/current` (mã đã kiểm, đang chạy th�
 ## 5. Trước khi rời máy công ty (chủ dự án tự làm)
 - Chép ra ổ cá nhân: bản sao lưu DEV mới nhất (`D:\TimClipPro_Dev_SaoLuu\data_<giờ mới nhất>`) và (tuỳ) audio `E:\Kho_Tool_Quet`.
 - GitHub → repo → Settings → Deploy keys: xoá khoá «PC2 PC_Office» (có quyền GHI). Trên máy công ty: `gh auth logout`.
-- Google Cloud Console: xoá khoá service account đã đặt trên máy công ty. Đăng xuất Google/YouTube trong trình duyệt máy công ty.
+- Google Cloud Console: xoá khoá service account VÀ khoá YouTube Data API (`youtube_api_key.txt`, D-51) đã đặt trên máy
+  công ty (APIs & Services → Credentials → xoá khoá). Đăng xuất Google/YouTube trong trình duyệt máy công ty.
 - Khoá ký PC2 không mang theo → báo Claude ở máy mới làm PR thu hồi khỏi `release/trusted_keys.json`.
