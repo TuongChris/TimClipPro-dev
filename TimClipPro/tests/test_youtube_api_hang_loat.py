@@ -8,16 +8,20 @@ Mỗi nơi gọi: gom mã -> ``youtube_api.lay_video`` (50 mã một yêu cầu)
 """
 
 import json
+import threading
 from pathlib import Path
 
 import yt_dlp
 
+import common_original as co
 import engine as engine_module
 import kiem_ngay_dang
 import truy_cap_youtube as t
 import youtube_api_gia as gia
 from channel import ChannelSync
 from test_metadata_integration import _make_engine
+from test_nguon_chung_jobs import A, EngineGia, _chay
+from test_truy_cap_youtube_lo import _chay_lo, _eng, _quet_gia
 from ytdlp_gia import BOT, YdlKichBan
 
 VN = "Asia/Ho_Chi_Minh"
@@ -439,3 +443,84 @@ def test_kiem_ngay_dang_cli_in_dong_api(tmp_path, monkeypatch, capsys):
 
     assert kiem_ngay_dang.main() == 0
     assert "API YouTube: 2 video lấy bằng API (~1 đơn vị)" in capsys.readouterr().out
+
+
+# =====================================================================
+#  «Một video gốc chung» — chuẩn bị lô (common_original_jobs._chuan_bi)
+# =====================================================================
+
+class _SuKienGhiCho(threading.Event):
+    """``cancel_event`` của engine giả: ghi lại mỗi lần giãn nhịp (``wait``) thay vì ngủ thật."""
+
+    def __init__(self):
+        super().__init__()
+        self.cho = []
+
+    def wait(self, timeout=None):
+        self.cho.append(timeout)
+        return self.is_set()
+
+
+def _engine_lo(tmp_path, ids):
+    eng = EngineGia(tmp_path, {m: {"dai": 1000, "clips": {A: 0.1}} for m in ids})
+    eng.cancel_event = eng.job.cancel_event = _SuKienGhiCho()
+    eng.config.ytdlp_sleep_requests_s = 0.5
+    return eng
+
+
+def _hoi_info(eng) -> list:
+    return [x[1].rsplit("/", 1)[-1] for x in eng.nhat_ky if x[0] == "info"]
+
+
+def _ids_lo(n: int) -> list:
+    return [f"v{i:02d}aaaaaaaa" for i in range(n)]
+
+
+def test_lo_nguon_chung_52_video_hai_yeu_cau_api_khong_hoi_yt_dlp_khong_gian_nhip(api_youtube_gia, tmp_path):
+    ids = _ids_lo(52)
+    _co_tren_api(api_youtube_gia, ids)
+    eng = _engine_lo(tmp_path, ids)
+
+    _ctl, kq = _chay(eng, [f"https://youtu.be/{m}" for m in ids])
+
+    assert api_youtube_gia.dem() == 2 and _hoi_info(eng) == [] and eng.cancel_event.cho == []
+    assert len(eng.info_nhan) >= 52 and all(eng.info_nhan), "lượt quét dùng thông tin API đã lấy sẵn"
+    assert kq.so_lieu["so_lan_lay_thong_tin"] == 0 and kq.so_lieu["youtube"]["api"]["video_api"] == 52
+
+
+def test_lo_nguon_chung_het_han_muc_giua_luot_phan_con_lai_qua_yt_dlp(api_youtube_gia, tmp_path):
+    ids = _ids_lo(52)
+    _co_tren_api(api_youtube_gia, ids)
+    api_youtube_gia.kich_ban = [None, gia.QUOTA]
+    eng = _engine_lo(tmp_path, ids)
+
+    _ctl, kq = _chay(eng, [f"https://youtu.be/{m}" for m in ids])
+
+    assert api_youtube_gia.dem() == 2 and _hoi_info(eng) == ids[50:]
+    assert eng.cancel_event.cho == [0.5], "chỉ giãn nhịp GIỮA hai lượt yt-dlp"
+    assert kq.so_lieu["so_lan_lay_thong_tin"] == 2 and kq.tong == 52
+
+
+def test_lo_nguon_chung_khong_co_khoa_so_luot_va_gian_nhip_nhu_cu(tmp_path, monkeypatch):
+    tp = gia.lap_transport(monkeypatch)
+    ids = _ids_lo(3)
+    eng = _engine_lo(tmp_path, ids)
+
+    _chay(eng, [f"https://youtu.be/{m}" for m in ids])
+
+    assert tp.dem() == 0 and _hoi_info(eng) == ids and eng.cancel_event.cho == [0.5, 0.5]
+
+
+def test_lo_nguon_chung_engine_that_quet_bang_thong_tin_api(api_youtube_gia, tmp_path, monkeypatch):
+    """Engine thật: dict từ API đủ khoá mà ``_scan_youtube`` đọc — quét và tải như cũ, không hỏi thông tin bằng yt-dlp."""
+    ids = [_ma(i) for i in range(3)]
+    _co_tren_api(api_youtube_gia, ids)
+    ydl = YdlKichBan()
+    e = _eng(tmp_path, monkeypatch, ydl)
+    monkeypatch.setattr(e, "scan_media", _quet_gia(e))
+
+    kq = _chay_lo(e, [f"https://youtu.be/{m}" for m in ids]).result
+
+    assert kq.trang_thai == co.TIM_THAY
+    assert api_youtube_gia.dem() == 1 and ydl.dem("info") == 0 and ydl.dem("tai") == 3
+    assert kq.so_lieu["youtube"]["metadata_requests"] == 0
