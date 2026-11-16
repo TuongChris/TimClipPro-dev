@@ -379,4 +379,5 @@ def test_lich_su_bao_ro_v2_loi_khong_cho_tai_khong_noi_la_ban_cu(tmp_path, monke
     assert "Báo cáo V2" in " ".join(str(x.value) for x in at.error)
     assert "Lần quét cũ (trước báo cáo V2)" not in chu
     assert [el.proto.label for el in at.get("download_button")] == []
-    assert any("Clip gốc" in d.value.columns for d in at.dataframe)   # dữ liệu khớp vẫn xem được
+    tab_ls = next(t for t in at.tabs if t.label == "📜 Lịch sử")   # tab «📊 Thống kê» cũng có bảng «Clip gốc»
+    assert any("Clip gốc" in d.value.columns for d in tab_ls.dataframe)   # dữ liệu khớp vẫn xem được
