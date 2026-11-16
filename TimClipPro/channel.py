@@ -36,10 +36,11 @@ from typing import Callable, Iterable, Mapping, Optional
 from clip_metadata import (basename_compatible, extract_youtube_id, filename_fallback_parts,
                            valid_upload_date)
 from khoa import KhoaTienTrinh
+import youtube_api
 import ytdlp_chung
 from luu_tru import _thay_the, cap_nhat_json, doc_json_an_toan, khoa_json
 from process_runner import IM_LANG_FFMPEG_S, TRAN_FFPROBE_S, chay_lenh_media
-from publication_date import resolve_publication_date
+from publication_date import epoch_tu_published_at, resolve_publication_date
 from tien_do_dong_bo import GD_LUU, GD_NEN, GD_TRICH_XUAT, GD_XAC_MINH, SoDongBo
 from truy_cap_youtube import (
     AGE_RESTRICTED,
@@ -419,6 +420,20 @@ def bo_sung_video_info(v: VideoInfo, info: Mapping | None) -> VideoInfo:
     )
 
 
+def info_tu_api(video: Mapping) -> dict:
+    """Dict chuẩn của ``youtube_api.lay_video`` -> dạng ``info`` yt-dlp cho các đường đọc info cũ (D-51).
+
+    Ngày quy đổi giờ VN vẫn qua resolver cũ: ``release_timestamp`` = ``actualStartTime`` (nếu có), ``timestamp`` =
+    ``publishedAt``. Không có ``upload_date``: ``upload_date_raw`` chỉ mang ngày yt-dlp nguyên văn.
+    """
+    info = dict(video)
+    for khoa, nguon in (("timestamp", "published_at"), ("release_timestamp", "actual_start_time")):
+        so = epoch_tu_published_at(video.get(nguon))
+        if so is not None:
+            info[khoa] = so
+    return info
+
+
 class ChannelSync:
     """Đồng bộ kênh YouTube về thư mục kho clip gốc."""
 
@@ -426,7 +441,8 @@ class ChannelSync:
                  player_clients: Optional[list] = None,
                  cau_hinh_mang: Optional[CauHinhMang] = None,
                  phien_youtube: Optional[PhienYouTube] = None,
-                 theo_doi: Optional[SoDongBo] = None):
+                 theo_doi: Optional[SoDongBo] = None,
+                 data_dir: Optional[str] = None):
         # Mặc định là None chứ KHÔNG phải NETWORK_TIMEOUT_S: nếu để giá trị cứng thì
         # mọi lượt khởi tạo đều ghi đè timeout mà người dùng đã đặt trong cau_hinh.json
         # lên 30 giây, và không cách nào phân biệt "người gọi chỉ định 30" với
@@ -471,6 +487,8 @@ class ChannelSync:
         # Một đối tượng = một lượt (một nút bấm, một lệnh CLI): một cầu dao. YouTube chặn ở video
         # đầu thì không gửi thêm request nào cho hàng trăm video còn lại.
         self.phien = phien_youtube or PhienYouTube()
+        # Thư mục dữ liệu của lượt: khoá YouTube Data API nằm cạnh nó (D-51). None = không dùng API, đường yt-dlp cũ.
+        self.data_dir = data_dir
         # Tiến độ + hiệu suất có cấu trúc của lượt (giao diện đọc ảnh chụp, worker chỉ ghi) — luôn có, kể cả CLI.
         self.theo_doi = theo_doi if theo_doi is not None else SoDongBo()
         # (đường dẫn đã chuẩn hoá, kích thước, mtime_ns, độ dài) của file VỪA kiểm bằng FFprobe rồi đặt vào kho: dùng lại
@@ -627,6 +645,7 @@ class ChannelSync:
             }
 
         co_huy = _CoHuyTuHam(cancel_check)
+        hoi_api = fetcher is None and bool(self.data_dir)   # fetcher tiêm vào (test) thì không bao giờ gọi API
         if fetcher is None:
             def fetcher(video_id: str) -> dict:
                 info = ChannelSync.lay_info_video(
@@ -679,8 +698,46 @@ class ChannelSync:
             thong_tin[truong] = gia_tri
             thay_doi.setdefault(ten_file, {})[truong] = gia_tri
 
+        def ap_dung(ten_file: str, thong_tin: dict, moi: Mapping) -> None:
+            upload_date = moi.get("upload_date")
+            duration = moi.get("duration")
+            if upload_date and upload_date != "00000000":
+                doi(ten_file, thong_tin, "upload_date", str(upload_date))
+            if duration:
+                doi(ten_file, thong_tin, "duration", duration)
+            if lay_title:
+                tieu_de = str(moi.get("title") or "").strip()
+                if tieu_de:
+                    doi(ten_file, thong_tin, "title", tieu_de)
+                elif ten_file in moi_seed:
+                    doi(ten_file, thong_tin, "title", "")
+            if moi.get("published_at"):
+                # Ngày đăng của YouTube Data API, ISO nguyên văn (D-51) — KHÔNG ghi vào upload_date_raw (của yt-dlp).
+                doi(ten_file, thong_tin, "published_at", moi["published_at"])
+
         try:
-            for i, (ten_file, thong_tin) in enumerate(can_va, start=1):
+            if hoi_api:
+                # D-51: MỘT videos.list cho mỗi 50 mã; mục API trả lời thì không hỏi yt-dlp, phần còn lại đi vòng cũ.
+                api = youtube_api.lay_video(
+                    self.phien, self.data_dir, [str(muc.get("id")) for _ten, muc in can_va if muc.get("id")],
+                    cancel_event=co_huy).thong_tin
+                con_lai = []
+                for ten_file, thong_tin in can_va:
+                    video = api.get(str(thong_tin.get("id") or ""))
+                    if video is None:
+                        con_lai.append((ten_file, thong_tin))
+                        continue
+                    ap_dung(ten_file, thong_tin, {
+                        "upload_date": ngay_dang_tu_info(info_tu_api(video)), "duration": video["duration"],
+                        "title": video["title"], "published_at": video["published_at"]})
+                    da_va += 1
+                can_va = con_lai
+                if thay_doi:
+                    self.cap_nhat_meta(thay_doi)
+                    thay_doi.clear()
+                if da_va and progress:
+                    progress(da_va / tong_can_va, f"[{da_va}/{tong_can_va}] Đã lấy metadata bằng YouTube Data API")
+            for i, (ten_file, thong_tin) in enumerate(can_va, start=da_va + 1):
                 video_id = thong_tin.get("id") or ""
                 if co_huy.is_set():
                     # Bấm Dừng: không gửi request kế; như cầu dao mở, mục còn lại để lần sau.
@@ -696,19 +753,7 @@ class ChannelSync:
                 try:
                     if not video_id:
                         raise RuntimeError("Thiếu ID video.")
-                    moi = fetcher(video_id)
-                    upload_date = moi.get("upload_date")
-                    duration = moi.get("duration")
-                    if upload_date and upload_date != "00000000":
-                        doi(ten_file, thong_tin, "upload_date", str(upload_date))
-                    if duration:
-                        doi(ten_file, thong_tin, "duration", duration)
-                    if lay_title:
-                        tieu_de = str(moi.get("title") or "").strip()
-                        if tieu_de:
-                            doi(ten_file, thong_tin, "title", tieu_de)
-                        elif ten_file in moi_seed:
-                            doi(ten_file, thong_tin, "title", "")
+                    ap_dung(ten_file, thong_tin, fetcher(video_id))
                     if len(thay_doi) >= CHU_KY_GHI:
                         self.cap_nhat_meta(thay_doi)
                         thay_doi.clear()
@@ -818,6 +863,7 @@ class ChannelSync:
         progress: Optional[Callable] = None,
         cau_hinh_mang: Optional[CauHinhMang] = None,
         phien_youtube: Optional[PhienYouTube] = None,
+        data_dir: Optional[str] = None,
     ) -> list:
         """
         Lấy danh sách video của kênh mà CHƯA tải gì.
@@ -831,7 +877,8 @@ class ChannelSync:
 
         ``lay_ngay_dang=True`` bổ sung ngày đăng/thời lượng bằng **một request mỗi
         video còn thiếu** — chính xác nhưng chậm tỉ lệ với số video; đừng bật cho kênh
-        hàng nghìn video.
+        hàng nghìn video. Có ``data_dir`` + khoá YouTube Data API thì một yêu cầu API cho
+        50 video; video API không trả lời mới đi vòng một-request-mỗi-video (D-51).
 
         ``sync()`` KHÔNG cần bật cờ này: ``_tai_va_nen()`` lấy metadata thật ngay
         trong lượt tải, không tốn thêm request nào.
@@ -912,6 +959,12 @@ class ChannelSync:
 
         lay_chi_tiet = chi_tiet or _lay_mac_dinh
         con_thieu = [i for i, v in enumerate(ds) if not v.upload_date]
+        if chi_tiet is None and data_dir:
+            api = youtube_api.lay_video(phien, data_dir, [ds[i].id for i in con_thieu]).thong_tin
+            for i in con_thieu:
+                if ds[i].id in api:
+                    ds[i] = bo_sung_video_info(ds[i], info_tu_api(api[ds[i].id]))
+            con_thieu = [i for i in con_thieu if ds[i].id not in api]
         for thu_tu, i in enumerate(con_thieu, start=1):
             if phien.mo:
                 # Cầu dao mở: không hỏi thêm. Mục còn lại giữ ngày rỗng (hiện là thiếu, không bịa).
