@@ -58,7 +58,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   (đã cài lại trên PC2); `cau_hinh.json` ngoài khung không khoá app; ETA lượt bù; tên file chỉ có mã không tải trùng.
 - Nhanh 3945 = 3941/4/0, chậm 25/25, đột biến 8/8 + 18/18. Bằng chứng `C:\Dev\pc2_test_runs\2026-11-16_audit_1_3`.
 - Review độc lập: 3 thật đã sửa (xác minh khi kho lỗi, mã thoát vì video hạn chế, `db_cu_khac` sửa tay). Còn: lượt quét
-  lưu 15/11 22:22–16/11 03:06 có dòng tinh chỉnh → hồ sơ vẫn độ dài cũ, quét lại; hook bỏ sót `installation_id_v3/_v4` (có từ trước).
+  lưu 15/11 22:22–16/11 03:06 có dòng tinh chỉnh → hồ sơ vẫn độ dài cũ, quét lại. Hook nay chặn cả `installation_id_v3/_v4` (16/11, cài lại trên PC2; PC1 cài lại).
 ### 2026-11-15 — «Đoạn vi phạm» theo mốc tinh chỉnh (D-50, nhánh feature/pc2/bao-cao-moc-tinh-chinh)
 - Người dùng kiểm tay (job DEV 838): lượt quét hụt 36 s / 8 s cuối hai video gốc (phân vị 95 %); tinh chỉnh (CHỈ ĐỌC audio đã
   tải) ra 0:00–10:59, 1:46:12–1:57:28 = trọn gốc. Người dùng chọn «Dùng mốc tinh chỉnh» → `bao_cao_v2._moc_tinh_chinh`.
