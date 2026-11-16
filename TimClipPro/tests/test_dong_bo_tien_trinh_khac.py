@@ -153,6 +153,26 @@ def test_loi_doc_khac_khong_bi_coi_la_dang_bi_giu(tmp_path, monkeypatch):
     assert ket_qua == ""
 
 
+@pytest.mark.skipif(not sys.platform.startswith("win"), reason="nhánh đọc byte 0 là của Windows")
+@pytest.mark.parametrize("doc_duoc_byte1", [False, True], ids=["loi_io", "khoa_that"])
+def test_loi_quyen_chi_la_khoa_khi_doc_duoc_byte1_ngoai_vung_khoa(tmp_path, monkeypatch, doc_duoc_byte1):
+    """CRT của Windows đổi cả lỗi I/O (Win32 19–36 và 65: ổ chưa sẵn sàng, CRC, lỗi đọc…) thành EACCES y như vùng đang
+    bị khoá. Khoá chỉ phủ byte 0: byte 1 đọc được mới là khoá; byte 1 cũng lỗi là lỗi đọc — không khoá nhầm nút."""
+    duong = tmp_path / channel.TEN_KHOA_DONG_BO
+    duong.write_bytes(f"\nPID: 4242\nTác vụ: {TEN_DONG_BO}\n".encode("utf-8"))
+    doc_that = os.read
+
+    def doc(fd, n):
+        if doc_duoc_byte1 and os.lseek(fd, 0, os.SEEK_CUR) >= 1:
+            return doc_that(fd, n)
+        raise PermissionError(errno.EACCES, "Permission denied")     # cùng một lỗi cho vùng bị khoá và ổ hỏng
+
+    with monkeypatch.context() as m:
+        m.setattr(os, "read", doc)
+        ket_qua = khoa.chu_khoa_dang_giu(str(duong))
+    assert ket_qua == (f"PID: 4242\nTác vụ: {TEN_DONG_BO}" if doc_duoc_byte1 else "")
+
+
 # ---------------------------------------------------------------------------------------------------- engine
 
 @pytest.mark.parametrize("mode", ["new", "add"])

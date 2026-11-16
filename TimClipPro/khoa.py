@@ -139,7 +139,14 @@ def chu_khoa_dang_giu(path: str) -> str:
             fcntl.flock(fd, fcntl.LOCK_UN)
         return ""
     except (PermissionError, BlockingIOError):
-        pass
+        if sys.platform.startswith("win"):
+            # CRT cũng đổi lỗi I/O (Win32 19–36, 65: ổ chưa sẵn sàng, CRC, lỗi đọc…) thành EACCES như vùng bị khoá.
+            # Khoá chỉ phủ byte 0: đọc được byte 1 mới là khoá; byte 1 cũng lỗi = lỗi đọc, không kết luận «đang bị giữ».
+            try:
+                os.lseek(fd, 1, os.SEEK_SET)
+                os.read(fd, 1)
+            except OSError:
+                return ""
     except OSError:
         return ""                           # lỗi đọc khác (ổ mạng rớt…): không kết luận «đang bị giữ»
     finally:
