@@ -34,6 +34,7 @@ import ui_cap_nhat
 import ui_gui_sheets as ui_gui
 from cau_hinh import GIA_TRI_GIAO_DIEN_MAC_DINH
 from clip_metadata import configure_metadata_logging
+import tim_nghi_van
 import truy_cap_youtube
 import youtube_api
 import ytdlp_chung
@@ -1500,10 +1501,10 @@ if not job["running"] and (job["results"] or job["error"]):
 #  Các tab chức năng
 # =====================================================================
 
-tab0, tab_tai, tab_anh, tab_kenh, tab_ghep, tab_may, tab_td, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+tab0, tab_tai, tab_anh, tab_kenh, tab_ghep, tab_may, tab_td, tab1, tab2, tab3, tab4, tab5, tab6, tab_tim = st.tabs(
     ["📥 Đồng bộ kênh gốc", "⬇️ Tải video gốc", "🖼️ Tải thumbnail", "📺 Tải cả kênh", "🎞️ Ghép video gốc",
      "🛠️ Video trong máy", "📝 Tiêu đề kênh", "🎬 Kho clip gốc", "📋 Danh sách video trong kho",
-     "▶️ Quét YouTube", "📁 Quét file trong máy", "📜 Lịch sử", "📤 Gửi Google Sheets"])
+     "▶️ Quét YouTube", "📁 Quét file trong máy", "📜 Lịch sử", "📤 Gửi Google Sheets", "🔎 Tìm video nghi vấn"])
 
 # ---------------------------------------------------------------- TẢI VIDEO GỐC / THUMBNAIL / CẢ KÊNH
 def _o_thu_muc_tai(nhan: str, khoa: str) -> str:
@@ -2285,12 +2286,13 @@ with tab2:
                                    st.session_state.sheet_link, width="stretch")
 
 # ---------------------------------------------------------------- TAB 3
+O_LINK_QUET_YT = "quet_yt_links"  # tab «🔎 Tìm video nghi vấn» ghi link vào ô này
 with tab3:
     st.subheader("Quét video YouTube dài")
     st.caption("Hệ thống chỉ tải RIÊNG phần audio (video 30 tiếng ≈ 1–2 GB thay vì vài chục GB). "
                "Đứt mạng cứ chạy lại — sẽ tải tiếp từ chỗ dừng.")
 
-    links_text = st.text_area("Dán link YouTube — mỗi dòng một link", height=160,
+    links_text = st.text_area("Dán link YouTube — mỗi dòng một link", height=160, key=O_LINK_QUET_YT,
                               placeholder="https://www.youtube.com/watch?v=xxxxxxxxxxx\n"
                                           "https://youtu.be/yyyyyyyyyyy")
     links = [x.strip() for x in links_text.splitlines()
@@ -2522,3 +2524,104 @@ with tab5:
 # ---------------------------------------------------------------- TAB 6
 with tab6:
     ui_gui.ve_tab(eng)
+
+
+# ---------------------------------------------------------------- TÌM VIDEO NGHI VẤN (D-51)
+def _dua_vao_o_quet(links: list) -> None:
+    # Callback chạy TRƯỚC lượt vẽ lại, lúc ô link của tab «▶️ Quét YouTube» chưa được tạo — ghi session_state được.
+    st.session_state[O_LINK_QUET_YT] = tim_nghi_van.noi_link(st.session_state.get(O_LINK_QUET_YT, ""), links)
+    st.session_state.tim_da_dua = True
+
+
+with tab_tim:
+    st.subheader("Tìm video nghi vấn theo tiêu đề clip gốc")
+    st.caption("Tìm trên YouTube (YouTube Data API) các video có tiêu đề giống tiêu đề clip gốc của kho — chỉ TÌM, không "
+               "tải, không quét. Chọn video muốn kiểm rồi đưa sang tab «▶️ Quét YouTube».")
+    tt_khoa = youtube_api.trang_thai_khoa(eng.data_dir)
+    if tt_khoa.ma == youtube_api.SAI_DANG:
+        st.error(f"Khoá YouTube Data API không dùng được: {tt_khoa.ly_do} (file ở `{tt_khoa.duong_dan}`)")
+    elif tt_khoa.ma != youtube_api.CO_KHOA:
+        st.warning("Tìm video nghi vấn cần khoá YouTube Data API: đặt file khoá (một dòng, bắt đầu bằng «AIza») ở "
+                   f"`{tt_khoa.duong_dan}` rồi tải lại trang (F5).")
+    if not khos:
+        st.warning("Chưa có kho nào — tạo ở tab «Kho clip gốc».")
+    else:
+        tens_tim = [k["ten"] for k in khos]
+        ten_tim = st.selectbox("Kho", tens_tim, key="tim_kho",
+                               index=tens_tim.index(eng.kho_dang_dung) if eng.kho_dang_dung in tens_tim else 0)
+        if ten_tim != eng.kho_dang_dung:
+            st.info(f"Tab «▶️ Quét YouTube» quét bằng kho đang dùng ở thanh bên («{eng.kho_dang_dung}»), cột «Đã quét "
+                    f"chưa» cũng tính theo kho đó — muốn quét với kho «{ten_tim}», đổi kho ở thanh bên.")
+        clips_tim = tim_nghi_van.clip_cua_kho(next(k.get("thu_muc") or "" for k in khos if k["ten"] == ten_tim))
+        theo_khoa = {c.khoa: c for c in clips_tim}
+        if not clips_tim:
+            st.caption(f"Kho «{ten_tim}» chưa có tiêu đề clip nào trong `clips_meta.json` — vẫn tìm được bằng ô «Truy vấn "
+                       "thêm» bên dưới.")
+        chon_tim = st.multiselect(f"Clip lấy tiêu đề để tìm ({len(clips_tim)} clip, mới nhất trước)", list(theo_khoa),
+                                  default=list(theo_khoa)[:tim_nghi_van.TOI_DA_MAC_DINH],
+                                  format_func=lambda k: theo_khoa[k].tieu_de, key=f"tim_clip::{ten_tim}")
+        them_tim = st.text_area("Truy vấn thêm (tuỳ chọn) — mỗi dòng một truy vấn", key="tim_them", height=80,
+                                placeholder="SML compilation 10 hours")
+        c_tl, c_td, c_ng = st.columns(3)
+        with c_tl:
+            thoi_luong_tim = st.radio("Thời lượng video", list(tim_nghi_van.NHAN_THOI_LUONG),
+                                      format_func=tim_nghi_van.NHAN_THOI_LUONG.get, key="tim_thoi_luong")
+        with c_td:
+            toi_da_tim = st.number_input("Tối đa số truy vấn mỗi lần bấm", 1, tim_nghi_van.TOI_DA,
+                                         tim_nghi_van.TOI_DA_MAC_DINH, key="tim_toi_da")
+        with c_ng:
+            sau_tim = st.date_input("Chỉ video đăng từ ngày (bỏ trống = mọi lúc)", value=None, format="DD/MM/YYYY",
+                                    key="tim_sau")
+        clip_chon = [theo_khoa[k] for k in chon_tim]
+        ds_tv = tim_nghi_van.tao_truy_van(clip_chon, them_tim)
+        chay_tv = ds_tv[:int(toi_da_tim)]
+        if len(ds_tv) > len(chay_tv):
+            st.caption(f"Có {len(ds_tv)} truy vấn — chỉ chạy {len(chay_tv)} truy vấn đầu (tăng «Tối đa số truy vấn» hoặc "
+                       "bỏ bớt clip).")
+        st.caption("Mỗi truy vấn = 1 lượt trong hạn mức tìm kiếm 100 lượt/ngày (đặt lại khoảng 14–15 giờ chiều giờ Việt "
+                   "Nam). Thời lượng và kênh gốc lấy thêm bằng videos.list — hạn mức riêng 10.000 đơn vị, khoảng 1 đơn vị "
+                   "cho 50 video.")
+        # Đọc/ghi st.session_state cũng là điểm nhường: thao tác của người dùng lúc đang tìm chen lượt chạy lại ở điểm
+        # nhường đầu tiên sau tim(). Lấy sẵn dict lưu kết quả ở đây, sau tim() chỉ ghi dict thường — không mất kết quả đã
+        # tốn hạn mức.
+        luu_tim = st.session_state.setdefault("tim_luu", {})
+        if st.button(f"🔎 Tìm ({len(chay_tv)} lượt)", key="tim_nut", type="primary",
+                     disabled=not (tt_khoa.ma == youtube_api.CO_KHOA and chay_tv)):
+            phien_api = truy_cap_youtube.PhienYouTube()   # videos.list; tìm kiếm có phiên riêng (hạn mức riêng)
+            with st.spinner(f"Đang tìm {len(chay_tv)} truy vấn trên YouTube..."):
+                kenh_goc, ly_do_kenh = st.session_state.setdefault("tim_kenh_goc", {}).get(ten_tim), ""
+                if kenh_goc is None:
+                    kenh_goc, ly_do_kenh = tim_nghi_van.kenh_cua_kho(
+                        phien_api, eng.data_dir, [c.ma for c in clip_chon + list(clips_tim)])
+                    if kenh_goc:
+                        st.session_state.tim_kenh_goc[ten_tim] = kenh_goc
+                kq_tim = tim_nghi_van.tim(phien_api, eng.data_dir, chay_tv, phien_tim=truy_cap_youtube.PhienYouTube(),
+                                          kenh_goc=kenh_goc, thoi_luong=thoi_luong_tim, sau=sau_tim)
+                canh_bao_kenh = () if kenh_goc else (
+                    "Không loại được video của chính kênh gốc" + (f" — {ly_do_kenh}" if ly_do_kenh else "")
+                    + ". Kết quả có thể gồm video của bạn.",)
+                luu_tim["lan"] = luu_tim.get("lan", 0) + 1
+                luu_tim["ket_qua"] = (ten_tim, kq_tim, canh_bao_kenh + kq_tim.ghi_chu)
+        if luu_tim.get("ket_qua"):
+            kho_kq, kq_tim, ghi_chu_tim = luu_tim["ket_qua"]
+            (st.success if kq_tim.da_tim == kq_tim.tong else st.warning)(
+                f"Kho «{kho_kq}»: tìm được {kq_tim.da_tim}/{kq_tim.tong} truy vấn (đã dùng {kq_tim.luot_tim} lượt tìm "
+                f"kiếm) — {len(kq_tim.video)} video"
+                + (f", đã bỏ {kq_tim.bo_kenh_goc} video của kênh gốc" if kq_tim.bo_kenh_goc else "") + ".")
+            for g in ghi_chu_tim:
+                st.warning(g)
+            if kq_tim.video:
+                dong_tim = tim_nghi_van.bang(kq_tim.video, eng.ids_da_quet())
+                su_kien = st.dataframe(
+                    pd.DataFrame(dong_tim, columns=tim_nghi_van.COT), key=f"tim_bang_{luu_tim['lan']}",
+                    on_select="rerun", selection_mode="multi-row", hide_index=True,
+                    column_config={"Tiêu đề": st.column_config.TextColumn(width="large"),
+                                   "Link": st.column_config.LinkColumn()})
+                st.caption("Bấm ô đầu dòng để chọn video. «Đã quét chưa» = đã kiểm xong với kho đang dùng (có kết quả, "
+                           "hoặc đã quét trọn mà không thấy) — cùng cách tính với Giám sát.")
+                links_tim = [dong_tim[i]["Link"] for i in su_kien.selection.rows]
+                st.button(f"➡️ Đưa {len(links_tim)} video đã chọn vào ô quét YouTube", key="tim_dua",
+                          on_click=_dua_vao_o_quet, args=(links_tim,), disabled=not links_tim)
+                if st.session_state.pop("tim_da_dua", 0):
+                    st.success("Đã đưa link vào ô «Dán link YouTube» — mở tab «▶️ Quét YouTube» để quét (tool không tự "
+                               "quét). Link đã có sẵn trong ô thì không thêm lại.")
