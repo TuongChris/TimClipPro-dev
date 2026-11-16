@@ -373,14 +373,36 @@ def test_khong_co_do_dai_tham_chieu_thi_khong_dong_dau(tmp_path):
 
 
 @can_ffmpeg
-def test_doi_ten_vao_kho_that_bai_thi_hoan_nguyen(tmp_path, monkeypatch):
+def test_ban_nen_xuong_dia_truoc_khi_doi_ten_vao_kho(tmp_path, monkeypatch):
+    """Audit 06/11 mục 1: FFmpeg ghi bản nén KHÔNG fsync. Đổi tên vào kho khi dữ liệu còn trong cache rồi mất điện
+    → file cụt/toàn số 0 đúng kích thước, và dấu ``xac_nhan_tep`` (đã fsync) tin nó mãi."""
+    cs = _cs(tmp_path)
+    thu_tu = []
+    dat_goc = channel._dat_vao_kho
+
+    def dat(tam, dich):
+        thu_tu.append(("dat", tam))
+        dat_goc(tam, dich)
+
+    monkeypatch.setattr(channel, "day_xuong_dia", lambda p: thu_tu.append(("fsync", p)))
+    monkeypatch.setattr(channel, "_dat_vao_kho", dat)
+    r = cs.sync("kenh")
+
+    assert r["moi"] == 1, r
+    assert [buoc for buoc, _ in thu_tu] == ["fsync", "dat"], thu_tu
+    assert thu_tu[0][1] == thu_tu[1][1], "phải đẩy xuống đĩa đúng file sắp đặt vào kho"
+
+
+@can_ffmpeg
+@pytest.mark.parametrize("buoc", ["day_xuong_dia", "_dat_vao_kho"])
+def test_doi_ten_vao_kho_that_bai_thi_hoan_nguyen(tmp_path, monkeypatch, buoc):
     cs = _cs(tmp_path)
     Path(cs.dest, TEN).write_bytes(b"x" * 3000)              # bản cũ hỏng, cùng tên
 
-    def bi_giu(tam, dich, so_lan=10):
+    def bi_giu(*a, **k):
         raise PermissionError(32, "The process cannot access the file")
 
-    monkeypatch.setattr(channel, "_dat_vao_kho", bi_giu)
+    monkeypatch.setattr(channel, buoc, bi_giu)
     r1 = cs.sync("kenh")
 
     assert len(r1["loi"]) == 1 and r1["da_cach_ly"] == []

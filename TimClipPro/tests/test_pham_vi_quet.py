@@ -268,6 +268,21 @@ def test_top1_dung_som_khong_duoc_ghi_la_da_quet_toan_video(tmp_path):
     assert "dừng sớm" in e.list_jobs()[0]["note"].lower()
 
 
+def test_dung_som_tren_file_het_tieng_truoc_hinh_khong_keo_pham_vi_toi_cuoi(tmp_path):
+    """Audit 06/11 mục 2: đuôi không tiếng là ĐÃ KIỂM, nhưng không được kéo phạm vi đã quét tới cuối video khi
+    lượt quét dừng sớm — Top-N chia vùng và cửa sổ tinh chỉnh theo ``pham_vi_quet_s``."""
+    e, da_hoi = _eng_top1(tmp_path)
+    e.do_dai_am_thanh = lambda p: 14400.0 - 0.02
+    media = tmp_path / "q.wav"
+    media.write_bytes(b"x")
+
+    kq = e.scan_media(str(media))
+
+    assert len(da_hoi) == 1, "điều kiện test: chỉ khúc đầu được khớp"
+    assert kq.pham_vi_quet_s == 3600.0
+    assert kq.quet_mot_phan and kq.ly_do_pham_vi == "dung_som"
+
+
 def test_bao_cao_ngang_va_doc_mang_pham_vi_ma_khong_them_cot(tmp_path):
     import dataclasses
 

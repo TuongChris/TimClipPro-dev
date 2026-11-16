@@ -96,6 +96,7 @@ from khoa import DangChayRoi, KhoaTienTrinh
 from luu_tru import (
     LoiDuLieu,
     cap_nhat_json,
+    day_xuong_dia,
     doc_json_an_toan,
     ghi_json_an_toan,
     ten_file_hop_le,
@@ -3037,31 +3038,10 @@ class Engine:
                 "để tránh ghi nhầm kho. Hãy chạy lại."
             )
 
-    @staticmethod
-    def _day_kho_tam_xuong_dia(db_tam: str) -> None:
-        """Đẩy kho tạm xuống đĩa TRƯỚC khi công bố (audit C-1).
-
-        ``database.pklz`` do tiến trình con audfprint ghi (``gzip.open`` + ``pickle.dump``,
-        không fsync); việc đọc lại ở ``_kiem_kho_tam`` không đẩy trang bẩn xuống đĩa. Đổi
-        tên khi dữ liệu còn trong cache rồi mất điện → kho cụt/toàn số 0 trong khi kho cũ
-        đã bị thay và sổ đăng ký (đã fsync) trỏ tới nó. Chuẩn ghi nguyên tử của dự án:
-        file tạm + flush + ``os.fsync`` + ``os.replace``. Windows ``FlushFileBuffers`` cần
-        quyền ghi nên mở ``r+b`` (không đổi byte nào).
-
-        Diệt virus/sao lưu hay mở file vừa ghi xong bằng handle chỉ-đọc (không share ghi)
-        → ``r+b`` bị từ chối TẠM: thử lại tăng dần như ``_xoa_an_toan`` thay vì bỏ cả job
-        dựng kho nhiều giờ (audit WR-7). Hết lượt vẫn ném lỗi — không công bố khi chưa bền.
-        """
-        so_lan = 6
-        for i in range(so_lan):
-            try:
-                with open(db_tam, "r+b") as f:
-                    os.fsync(f.fileno())
-                return
-            except PermissionError:
-                if i == so_lan - 1:
-                    raise
-                time.sleep(0.4 * (i + 1))   # 0.4s, 0.8s, 1.2s... (~8 s tổng)
+    # Đẩy kho tạm xuống đĩa TRƯỚC khi công bố (audit C-1): ``database.pklz`` do tiến trình con audfprint ghi
+    # (``gzip.open`` + ``pickle.dump``, không fsync); đọc lại ở ``_kiem_kho_tam`` không đẩy trang bẩn xuống đĩa.
+    # Giữ tên cũ: test thay ``_day_kho_tam_xuong_dia`` trên đối tượng Engine.
+    _day_kho_tam_xuong_dia = staticmethod(day_xuong_dia)
 
     def _kiem_kho_tam(self, db_tam: str, sub: str, cu_huu_ich: set,
                       can_xu_ly: list, *, lam_moi: frozenset = frozenset(),
@@ -5903,12 +5883,17 @@ class Engine:
                 loi.append((a, a + dai))
             else:
                 khoang.append((a, min(a + dai, tong)))
+        da_quet = max((b for _, b in khoang), default=0.0)
         if pv.het_am_thanh and pv.het_am_thanh < tong:
             # Sau khi luồng tiếng kết thúc không còn gì để so khớp: đã kiểm, không phải lỗi.
             khoang.append((float(pv.het_am_thanh), float(tong)))
         kq.vung_da_khop = hop_khoang(khoang)
         kq.vung_loi = tru_khoang(loi, kq.vung_da_khop)
         kq.pham_vi_quet_s = max((b for _, b in kq.vung_da_khop), default=0.0)
+        if da_quet < pv.het_am_thanh - DUNG_SAI_PHU_S:
+            # Dừng trước khi hết tiếng (audit 06/11 mục 2): đuôi không tiếng vẫn là đã kiểm, nhưng không nối phần đã
+            # quét tới cuối video — Top-N chia vùng và cửa sổ tinh chỉnh theo PHẦN ĐÃ QUÉT.
+            kq.pham_vi_quet_s = da_quet
 
     def _tinh_chinh_ket_qua(self, kq: "ScanResult", path: str, progress: Optional[Callable],
                             t_bat_dau: float) -> None:

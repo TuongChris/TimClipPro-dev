@@ -37,7 +37,7 @@ from clip_metadata import (basename_compatible, extract_youtube_id, filename_fal
                            valid_upload_date)
 from khoa import KhoaTienTrinh
 import ytdlp_chung
-from luu_tru import _thay_the, cap_nhat_json, doc_json_an_toan, khoa_json
+from luu_tru import _thay_the, cap_nhat_json, day_xuong_dia, doc_json_an_toan, khoa_json
 from process_runner import IM_LANG_FFMPEG_S, TRAN_FFPROBE_S, chay_lenh_media
 from publication_date import resolve_publication_date
 from tien_do_dong_bo import GD_LUU, GD_NEN, GD_TRICH_XUAT, GD_XAC_MINH, SoDongBo
@@ -1302,6 +1302,9 @@ class ChannelSync:
                 ban_hong = (self._luu_vao_hong(dich, v.id, giu_ban_goc=True)
                             if os.path.exists(dich) else "")
                 try:
+                    # FFmpeg ghi bản nén không fsync: bền TRƯỚC khi đổi tên, không thì mất điện để lại file cụt đúng
+                    # kích thước mà dấu ``xac_nhan_tep`` tin mãi (audit 06/11 mục 1). Lỗi → hoàn nguyên như đổi tên lỗi.
+                    day_xuong_dia(tam)
                     _dat_vao_kho(tam, dich)
                 except OSError as e:
                     if ban_hong:

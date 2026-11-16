@@ -196,6 +196,28 @@ def _thay_the(src: str, dst: str, so_lan: int = 10, cho_dau: float = 0.05, cho_t
             cho = min(cho_toi_da, cho * 2)
 
 
+def day_xuong_dia(path: str) -> None:
+    """Đẩy file do tiến trình KHÁC ghi (audfprint, FFmpeg — không fsync) xuống đĩa TRƯỚC khi đổi tên/công bố.
+
+    Đổi tên khi dữ liệu còn trong cache rồi mất điện → file cụt/toàn số 0 đúng kích thước trong khi sổ (đã fsync)
+    trỏ tới nó (audit C-1, audit 06/11 mục 1). Chuẩn ghi nguyên tử của dự án: file tạm + flush + ``os.fsync`` +
+    ``os.replace``. Windows ``FlushFileBuffers`` cần quyền ghi nên mở ``r+b`` (không đổi byte nào).
+
+    Diệt virus/sao lưu hay mở file vừa ghi xong bằng handle chỉ-đọc (không share ghi) → ``r+b`` bị từ chối TẠM: thử
+    lại tăng dần như ``Engine._xoa_an_toan`` thay vì bỏ cả việc (audit WR-7). Hết lượt vẫn ném lỗi — không công bố khi chưa bền.
+    """
+    so_lan = 6
+    for i in range(so_lan):
+        try:
+            with open(path, "r+b") as f:
+                os.fsync(f.fileno())
+            return
+        except PermissionError:
+            if i == so_lan - 1:
+                raise
+            time.sleep(0.4 * (i + 1))   # 0.4s, 0.8s, 1.2s... (~8 s tổng)
+
+
 def ghi_json_an_toan(
     path: str,
     du_lieu: Any,
