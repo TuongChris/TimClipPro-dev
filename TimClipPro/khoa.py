@@ -115,3 +115,33 @@ class KhoaTienTrinh:
                 pass
         finally:
             f.close()
+
+
+def chu_khoa_dang_giu(path: str) -> str:
+    """Thông tin chủ khoá (``KhoaTienTrinh.thong_tin_chu_khoa``) nếu có handle đang giữ khoá byte 0 của ``path`` — kể cả
+    handle khác của chính tiến trình này; "" nếu rảnh hoặc chưa có file. Chỉ HỎI: không chờ, không tạo/ghi/xoá file.
+    File khoá mồ côi (chủ đã chết, HĐH đã nhả khoá) = rảnh."""
+    try:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_BINARY", 0))
+    except OSError:
+        return ""
+    try:
+        if sys.platform.startswith("win"):
+            # Vùng byte 0 đang bị khoá: đọc báo lỗi quyền NGAY. Không lấy khoá → lượt lấy khoá thật đúng lúc đó không
+            # bao giờ bị từ chối vì phép hỏi này.
+            os.read(fd, 1)
+        else:
+            import fcntl
+
+            # shortcut: flock không hỏi được mà không lấy — khoá CHUNG rồi nhả ngay; lượt lấy khoá thật rơi đúng khe vài
+            # micro-giây đó bị DangChayRoi. Chỉ ngoài Windows (Tool chạy trên Windows); cần thì đọc /proc/locks.
+            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        return ""
+    except (PermissionError, BlockingIOError):
+        pass
+    except OSError:
+        return ""                           # lỗi đọc khác (ổ mạng rớt…): không kết luận «đang bị giữ»
+    finally:
+        os.close(fd)
+    return KhoaTienTrinh(path).thong_tin_chu_khoa

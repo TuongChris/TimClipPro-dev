@@ -35,7 +35,7 @@ from typing import Callable, Iterable, Mapping, Optional
 
 from clip_metadata import (basename_compatible, extract_youtube_id, filename_fallback_parts,
                            valid_upload_date)
-from khoa import KhoaTienTrinh
+from khoa import KhoaTienTrinh, chu_khoa_dang_giu
 import ytdlp_chung
 from luu_tru import _thay_the, cap_nhat_json, doc_json_an_toan, khoa_json
 from process_runner import IM_LANG_FFMPEG_S, TRAN_FFPROBE_S, chay_lenh_media
@@ -288,6 +288,16 @@ def dat_kho_video_dai(thu_muc: str, bat: bool) -> None:
 
 def tran_clip_giay(thu_muc: str) -> int:
     return GIAY_CLIP_TOI_DA_KHO_DAI if la_kho_video_dai(thu_muc) else GIAY_CLIP_TOI_DA
+
+
+def dang_dong_bo_khac(thu_muc: str) -> str:
+    """Tiến trình KHÁC (``cli.py kenh``, cửa sổ Tool khác) đang đồng bộ kênh vào ``thu_muc``: thông tin chủ khoá; "" nếu
+    không. Chỉ HỎI, không giữ khoá — lượt đồng bộ vẫn có thể bắt đầu ngay sau đó. Lượt của chính tiến trình này (làn
+    đồng bộ D-29 của giao diện) không tính: giao diện biết nó qua sổ tác vụ nền."""
+    if not thu_muc:
+        return ""
+    chu = chu_khoa_dang_giu(os.path.join(thu_muc, TEN_KHOA_DONG_BO))
+    return "" if chu.startswith(f"PID: {os.getpid()}\n") else chu
 
 
 def loc_file_qua_dai(paths: Iterable[str], tran_giay: int = GIAY_CLIP_TOI_DA) -> set:
