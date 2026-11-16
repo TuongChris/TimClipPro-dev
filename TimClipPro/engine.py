@@ -2860,6 +2860,14 @@ class Engine:
         # sau đó không được chạm tới job này (audit TCP-01).
         job = self._ban_sao_cho_job()
         try:
+            # Tiến trình KHÁC đang đồng bộ kênh vào chính thư mục này (D-29): dừng TRƯỚC cổng bảo trì / tool.lock, chưa
+            # ghi gì. Chỉ hỏi, không giữ khoá đồng bộ — thứ tự khoá không đổi.
+            dong_bo = channel.dang_dong_bo_khac(thumuc)
+            if dong_bo:
+                raise DangChayRoi(
+                    f"Thư mục «{thumuc}» đang được đồng bộ kênh ở một tiến trình khác (cửa sổ Tool khác hoặc lệnh "
+                    "cli.py kenh) — chờ lượt đó xong rồi tạo/bổ sung vân tay, để không nạp file đang tải dở. Chưa ghi "
+                    f"gì. Thông tin khóa: {dong_bo}")
             with self.khoa_tac_vu("dựng kho vân tay"):
                 return job._build_database_da_khoa(
                     thumuc,

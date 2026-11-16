@@ -7,6 +7,7 @@ chạy được trong lúc nó ghi file. Bất biến:
 - Thăm dò chỉ HỎI: không chờ, không tạo/xoá/ghi file, không lấy khoá (Windows: chỉ đọc byte 0 — vùng đang bị khoá báo lỗi
   ngay) nên lượt đồng bộ thật bắt đầu đúng lúc đó không bao giờ bị từ chối vì nó. File khoá mồ côi (chủ đã chết) = rảnh.
 - Lượt của chính tiến trình này không phải «khác» (làn D-29 do sổ tác vụ nền lo).
+- Dựng vân tay trên thư mục đang bị tiến trình khác đồng bộ dừng TRƯỚC mọi ghi.
 
 Mọi thứ synthetic: thư mục tạm, tiến trình con chỉ giữ khoá thật, không mạng.
 """
@@ -25,7 +26,7 @@ import pytest
 
 import channel
 import khoa
-from khoa import KhoaTienTrinh
+from khoa import DangChayRoi, KhoaTienTrinh
 
 GOC = Path(__file__).resolve().parents[1]
 TEN_DONG_BO = "đồng bộ kênh vào kho này"        # tên tác vụ ``ChannelSync.sync`` ghi vào file khoá
@@ -142,3 +143,23 @@ def test_loi_doc_khac_khong_bi_coi_la_dang_bi_giu(tmp_path, monkeypatch):
         m.setattr(os, "read", doc_hong)
         ket_qua = khoa.chu_khoa_dang_giu(str(duong))
     assert ket_qua == ""
+
+
+# ---------------------------------------------------------------------------------------------------- engine
+
+@pytest.mark.parametrize("mode", ["new", "add"])
+def test_dung_van_tay_dung_truoc_moi_ghi_khi_tien_trinh_khac_dong_bo(engine, tmp_path, mode):
+    kho = tmp_path / "Kho"
+    kho.mkdir()
+    data = Path(engine.data_dir)
+
+    def anh() -> list:
+        return sorted((str(p.relative_to(data)), p.stat().st_size, p.stat().st_mtime_ns)
+                      for p in data.rglob("*") if p.is_file())
+
+    truoc = anh()
+    with _tien_trinh_khac_giu(kho):
+        with pytest.raises(DangChayRoi, match="đang được đồng bộ kênh") as loi:
+            engine.build_database(str(kho), mode)
+    assert TEN_DONG_BO in str(loi.value), "phải kèm thông tin tiến trình đang đồng bộ"
+    assert anh() == truoc, "phải dừng TRƯỚC mọi ghi (lease cổng bảo trì, tool.lock, sổ kho, vân tay)"
