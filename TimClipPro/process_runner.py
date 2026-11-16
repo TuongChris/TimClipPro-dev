@@ -326,8 +326,12 @@ def run_observed_process(
     tail_lines: int = 30,
     include_in_tail: Optional[Callable[[str], bool]] = None,
     env: Optional[dict[str, str]] = None,
+    khi_huy: Optional[Callable[[], bool]] = None,
 ) -> ProcessResult:
-    """Chạy process mà không block trên ``readline`` khi stdout im lặng."""
+    """Chạy process mà không block trên ``readline`` khi stdout im lặng.
+
+    ``khi_huy``: gọi mỗi vòng khi ``cancel_event`` bật; trả True = đã nhờ tiến trình con tự dừng (dựng kho lưu phần đã
+    xong) nên KHÔNG giết, chờ nó tự thoát."""
     started = time.monotonic()
     last_output = started
     output: queue.Queue[str | None] = queue.Queue(maxsize=HANG_DOI_DONG)
@@ -390,7 +394,7 @@ def run_observed_process(
     try:
         while True:
             now = time.monotonic()
-            if cancel_event and cancel_event.is_set():
+            if cancel_event and cancel_event.is_set() and not (khi_huy and khi_huy()):
                 cancelled = True
                 nhom.ket_thuc()
                 break
