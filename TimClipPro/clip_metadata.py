@@ -21,6 +21,8 @@ from datetime import datetime
 from typing import Iterable, Mapping, Optional
 from urllib.parse import parse_qs, urlparse
 
+from publication_date import ngay_utc_tu_published_at
+
 
 YOUTUBE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{11}$")
 # Mã video trong TÊN FILE chỉ nằm ở hậu tố ``[ID].đuôi`` — đúng ngữ pháp bộ tải
@@ -175,7 +177,8 @@ class MetadataEntry:
     warnings: tuple[str, ...] = ()
     origin_method: str = ""
     # Báo cáo V2 (docs/REPORT_POLICY_V2.md): ngày đăng NGUYÊN BẢN của yt-dlp chỉ khi entry
-    # nói rõ nguồn gốc — ``upload_date_raw`` (ghi từ bản này) hoặc ``publication_date``
+    # nói rõ nguồn gốc — ``published_at`` (YouTube Data API, D-51: ngày lịch UTC của nó),
+    # ``upload_date_raw`` (ghi từ bản này) hoặc ``publication_date``
     # với ``publication_date_source == "upload_date"``. Ngày đã quy đổi múi giờ KHÔNG bao
     # giờ vào đây. ``nguon_ngay`` = ``publication_date_source`` (để báo vì sao thiếu).
     ngay_raw: str = ""
@@ -391,8 +394,11 @@ def source_from_mapping(
         # khoá) hay từ tên file. Không đổi bất kỳ trường cũ nào ở trên.
         nguon_ngay = raw_value.get("publication_date_source")
         nguon_ngay = nguon_ngay.strip() if isinstance(nguon_ngay, str) else ""
-        ngay_raw, nguon_ngay_raw = _valid_upload_date(raw_value.get("upload_date_raw")), ""
+        # D-51: ``published_at`` (YouTube Data API, nguyên văn) trước — ngày lịch UTC, đúng phép yt-dlp tính upload_date.
+        ngay_raw, nguon_ngay_raw = ngay_utc_tu_published_at(raw_value.get("published_at")), ""
         if ngay_raw:
+            nguon_ngay_raw = "clips_meta.published_at"
+        elif ngay_raw := _valid_upload_date(raw_value.get("upload_date_raw")):
             nguon_ngay_raw = "clips_meta.upload_date_raw"
         elif nguon_ngay == "upload_date":
             ngay_raw = _valid_upload_date(raw_value.get("publication_date"))

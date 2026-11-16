@@ -138,6 +138,26 @@ def test_ngay_hong_hoac_thieu_khong_doan(tho, ly_do):
     assert ly_do in ngay.ly_do_thieu
 
 
+def test_ngay_published_at_cua_api_dung_truoc_upload_date_raw():
+    """D-51: ngày lịch UTC của publishedAt — đúng phép yt-dlp tính upload_date; ``upload_date`` đã quy đổi bị bỏ qua."""
+    ngay = v2.ngay_tu_info({"published_at": "2025-06-20T18:45:39Z", "upload_date_raw": "",
+                            "upload_date": "20250621"})
+    assert (ngay.gia_tri, ngay.nguon) == ("20250620", "youtube_api.published_at")
+    assert ngay.hien_thi() == "June 20, 2025"
+    assert v2.ngay_tu_info({"published_at": "2026-07-31T20:00:34+00:00",
+                            "upload_date_raw": "20260731"}).nguon == "youtube_api.published_at"
+
+
+@pytest.mark.parametrize("pa", ["", None, "2025-06-20", "khong-phai-ngay"])
+def test_published_at_rong_hoac_hong_lui_ve_upload_date_raw_khong_bia(pa):
+    assert v2.ngay_tu_info({"published_at": pa, "upload_date_raw": "20250620"}) == v2.NgayNguon(
+        gia_tri="20250620", nguon=v2.NGUON_UPLOAD_DATE)
+    thieu = v2.ngay_tu_info({"published_at": pa, "upload_date_raw": ""})
+    assert thieu.gia_tri == "" and thieu.ly_do_thieu
+    if pa:
+        assert "publishedAt" in thieu.ly_do_thieu, "đừng đổ cho yt-dlp khi ngày đến từ API"
+
+
 # ---------------------------------------------------------------------------
 #  Tiêu đề nguồn
 # ---------------------------------------------------------------------------
@@ -191,6 +211,22 @@ def test_goc_upload_date_raw_moi_thang():
                            "publication_date": "20250313",
                            "publication_date_source": "timestamp",
                            "upload_date_raw": "20250312", "duration": 10.0})
+    g = v2.goc_tu_metadata(ten, meta)
+    assert (g.ngay_dang.gia_tri, g.ngay_dang.nguon) == ("20250312", "clips_meta.upload_date_raw")
+
+
+def test_goc_published_at_cua_api_trong_clips_meta_dung_truoc_upload_date_raw():
+    meta, ten = _resolver({"id": "goc00000001", "title": "T", "upload_date": "20250621",
+                           "publication_date": "20250621", "publication_date_source": "timestamp",
+                           "published_at": "2025-06-20T18:45:39Z", "upload_date_raw": "20250619",
+                           "duration": 10.0})
+    g = v2.goc_tu_metadata(ten, meta)
+    assert (g.ngay_dang.gia_tri, g.ngay_dang.nguon) == ("20250620", "clips_meta.published_at")
+
+
+def test_goc_published_at_hong_lui_ve_upload_date_raw():
+    meta, ten = _resolver({"id": "goc00000001", "title": "T", "upload_date": "20250313",
+                           "published_at": "khong-phai-ngay", "upload_date_raw": "20250312", "duration": 10.0})
     g = v2.goc_tu_metadata(ten, meta)
     assert (g.ngay_dang.gia_tri, g.ngay_dang.nguon) == ("20250312", "clips_meta.upload_date_raw")
 
