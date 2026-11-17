@@ -25,6 +25,8 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   tạm; dữ liệu thật chỉ dùng trong app DEV vận hành.
 
 ## Tiếp theo
+0b. 17/11: giữ tab đang mở khi xong việc (nhánh `fix/pc2/giu-tab-dang-mo`; nhanh 4286 = 4282/4/0). Người dùng thử trên DEV:
+   mở tab bất kỳ (vd «▶️ Quét YouTube»), chạy xong một việc → tab không còn nhảy về «📥 Đồng bộ kênh gốc».
 0a. 17/11: «✂️ Bỏ các đoạn» (D-59) GỘP `7d7b528`, DEV 17/11 09:13 (sao lưu `data_20261117_091254`) — người dùng
    thử video thật 17/11: ĐẠT (video ra đúng). Xong.
 0. 16/11: YouTube Data API (D-51) + D-52…D-58 trên `feature/pc2/tong-hop-1611` (nhanh 4265 = 4261/4/0, chậm 25/25) — GỘP `0390784`, DEV 8502 cập nhật 16/11 13:05 (sao lưu `data_20261116_130446`), khoá DEV nhận «CO_KHOA». Người dùng thử: thanh bên «🔐 Kết nối YouTube» báo có khoá, quét 1 video, tab «📊 Thống kê» / «🔎 Tìm video nghi vấn», nút kiểm video còn/gỡ ở «📜 Lịch sử», «📝 Tiêu đề kênh», Dừng khi dựng kho. Worktree đã dọn 16/11 (24 cái tạm + cũ, đều đã gộp): còn `Tool_Quet`, `TimClipPro_VanHanh` (DEV), `TimClipPro_CookieFix` (venv test chuẩn).
@@ -55,6 +57,11 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 10. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-11-17 — giữ tab đang mở khi xong việc (nhánh fix/pc2/giu-tab-dang-mo)
+- Nguyên nhân: khối trạng thái/kết quả vẽ TRÊN `st.tabs` đổi số phần tử → hàng tab đổi vị trí → trình duyệt dựng lại,
+  về tab đầu (tái hiện bằng app thử + playwright: Ba → Mot). Sửa: mọi thứ phía trên nằm trong khung `_khu_tren`
+  (diff -w = 6 dòng). Không dùng `st.tabs(key, on_change="rerun")`: đổi tab sẽ chạy lại cả trang, ngắt việc đang
+  chạy trong trang (vd đẩy Sheets). Test vị trí hàng tab (đỏ 0→3 trước khi sửa). Nhanh 4286 = 4282/4/0.
 ### 2026-11-17 — bỏ nhiều đoạn rồi nối phần còn lại (D-59, nhánh feature/pc2/bo-nhieu-doan)
 - `cat_video_goc.doc_ds_doan` (đọc danh sách đoạn kiểu người dùng gõ) + `bo_doan` (một lượt FFmpeg trim/atrim + concat,
   nén lại một lần, kiểm độ dài, «.loi» khi lệch); `cat_mot` và `bo_doan` dùng chung phần kiểm + chỉnh âm lượng.

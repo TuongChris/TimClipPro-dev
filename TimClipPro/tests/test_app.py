@@ -238,3 +238,27 @@ def test_doi_kho_giai_thich_thay_vi_de_man_hinh_trong(tmp_path, monkeypatch):
 
     assert any("vừa đổi sang kho «KhoB»" in i.value for i in at.info)
     assert any("vẫn còn" in i.value for i in at.info)
+
+
+def _vi_tri_hang_tab(at) -> int:
+    """Vị trí của hàng tab chính trong thân trang (AppTest)."""
+    vi_tri = [i for i, nut in at.main.children.items() if getattr(nut, "type", "") == "tab_container"]
+    assert len(vi_tri) == 1, vi_tri
+    return vi_tri[0]
+
+
+def test_hang_tab_giu_vi_tri_khi_khoi_trang_thai_doi(tmp_path, monkeypatch):
+    """Xong việc → khối kết quả/lỗi hiện TRÊN hàng tab. Nếu số phần tử phía trên đổi, hàng tab đổi vị trí và
+    trình duyệt dựng lại nó → nhảy về tab đầu «📥 Đồng bộ kênh gốc» (người dùng báo 17/11). Mọi thứ phía trên nằm
+    trong MỘT khung nên vị trí hàng tab không đổi."""
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    at = AppTest.from_file(str(APP_PY), default_timeout=120).run()
+    assert not at.exception
+    truoc = _vi_tri_hang_tab(at)
+    at.session_state.job.update({"running": False, "results": [], "error": "lỗi giả để khối trạng thái hiện",
+                                 "kind": ""})
+    at.run()
+    assert not at.exception
+    assert any("lỗi giả" in (e.value or "") for e in at.error)
+    assert _vi_tri_hang_tab(at) == truoc

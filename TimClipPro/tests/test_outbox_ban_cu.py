@@ -104,7 +104,13 @@ def test_app_ban_cu_hien_canh_bao_noi(monkeypatch):
 def test_app_goi_canh_bao_ban_cu_o_cap_trang():
     app = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app.py"),
                encoding="utf-8").read()
-    assert "\nui_cap_nhat.canh_bao_ban_cu()\n" in app.replace("\r\n", "\n")
+    import ast
+
+    # Cấp TRANG (lệnh ở thân module, kể cả trong ``with _khu_tren:`` — khung cố định phía trên hàng tab), không nằm
+    # trong hàm hay tab nào.
+    cap_trang = [n for n in ast.parse(app).body if not isinstance(n, (ast.FunctionDef, ast.ClassDef))]
+    assert any(isinstance(c, ast.Call) and ast.unparse(c.func) == "ui_cap_nhat.canh_bao_ban_cu"
+               for n in cap_trang for c in ast.walk(n))
 
 
 def test_app_dang_kiem_suc_khoe_chua_bao_mo_lai(tmp_path, monkeypatch):

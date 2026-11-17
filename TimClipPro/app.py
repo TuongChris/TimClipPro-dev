@@ -201,8 +201,13 @@ def _dong_bo_tac_vu_nen(chi_dong_bo: bool = False) -> None:
 
 
 _dong_bo_tac_vu_nen()
+# MỌI thứ vẽ ở thân trang phía trên hàng tab nằm trong khung này: số dòng trong khung đổi (đang chạy → kết quả →
+# trống) thì hàng tab vẫn ở cùng vị trí, trình duyệt không dựng lại nó → giữ nguyên tab đang mở (trước đây xong
+# việc là nhảy về tab đầu — người dùng báo 17/11).
+_khu_tren = st.container()
 # Bản cài managed: bản mới đã kích hoạt mà cửa sổ này còn chạy bản cũ → cảnh báo nổi ở đầu trang.
-ui_cap_nhat.canh_bao_ban_cu()
+with _khu_tren:
+    ui_cap_nhat.canh_bao_ban_cu()
 # Gửi Google Sheets: hàng đợi BỀN trong lichsu.db + MỘT người gửi nền mỗi tiến trình (không đọc
 # st.session_state). Còn việc chờ từ lần chạy trước (tắt app, mất điện) thì gửi tiếp ngay.
 ui_gui.dam_bao_nguoi_gui(eng)
@@ -1202,328 +1207,329 @@ def _form_dong_bo_song_song() -> None:
         st.rerun()                             # vẽ lại ngay: lời từ chối hiện trong ô đồng bộ
 
 
-_ve_lan_dong_bo()
+with _khu_tren:
+    _ve_lan_dong_bo()
 
 
-# =====================================================================
-#  Khi có tác vụ đang chạy: chỉ hiện màn hình tiến độ
-# =====================================================================
+    # =====================================================================
+    #  Khi có tác vụ đang chạy: chỉ hiện màn hình tiến độ
+    # =====================================================================
 
-if job["running"]:
-    if job.get("kind") == "db":
-        fp = fingerprint_controller.snapshot()
-        now = time.time()
-        progress_slot = st.empty()
-        status_slot = st.empty()
-        metrics_slot = st.empty()
-        file_slot = st.empty()
-        heartbeat_slot = st.empty()
-        log_slot = st.empty()
+    if job["running"]:
+        if job.get("kind") == "db":
+            fp = fingerprint_controller.snapshot()
+            now = time.time()
+            progress_slot = st.empty()
+            status_slot = st.empty()
+            metrics_slot = st.empty()
+            file_slot = st.empty()
+            heartbeat_slot = st.empty()
+            log_slot = st.empty()
 
-        st.header("🔊 Đang tạo vân tay clip gốc")
-        progress_slot.progress(
-            fp.percent,
-            text=(
-                f"Đã hoàn tất {fp.processed_count} / {fp.total} — "
-                f"{fp.percent * 100:.1f}%"
-                if fp.total
-                else "Đang chuẩn bị danh sách clip..."
-            ),
-        )
-        status_slot.info(
-            f"**Công đoạn:** {TEN_PHASE.get(fp.phase, fp.phase)}  \n"
-            f"{thoat_markdown(fp.message)}"   # tên clip = chữ ngoài (audit 09/11)
-        )
-        if fp.file_name:
-            file_slot.markdown(
-                f"**Clip hiện tại ({fp.current}/{fp.total}):** {thoat_markdown(fp.file_name)}"
+            st.header("🔊 Đang tạo vân tay clip gốc")
+            progress_slot.progress(
+                fp.percent,
+                text=(
+                    f"Đã hoàn tất {fp.processed_count} / {fp.total} — "
+                    f"{fp.percent * 100:.1f}%"
+                    if fp.total
+                    else "Đang chuẩn bị danh sách clip..."
+                ),
             )
+            status_slot.info(
+                f"**Công đoạn:** {TEN_PHASE.get(fp.phase, fp.phase)}  \n"
+                f"{thoat_markdown(fp.message)}"   # tên clip = chữ ngoài (audit 09/11)
+            )
+            if fp.file_name:
+                file_slot.markdown(
+                    f"**Clip hiện tại ({fp.current}/{fp.total}):** {thoat_markdown(fp.file_name)}"
+                )
+            else:
+                file_slot.markdown("**Clip hiện tại:** đang xác định...")
+
+            with metrics_slot.container():
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Đã tính xong", fp.success_count)
+                m2.metric("Đã tồn tại", fp.skipped_count)
+                m3.metric("Lỗi", fp.failed_count)
+                m4.metric("Đã xử lý", f"{fp.processed_count}/{fp.total}")
+                t1, t2, t3, t4 = st.columns(4)
+                t1.metric("Đã chạy", _thoi_luong(fp.elapsed_seconds))
+                t2.metric(
+                    "Tốc độ trung bình",
+                    f"{fp.rate_per_minute:.1f} clip/phút"
+                    if fp.rate_per_minute is not None
+                    else "Đang tính...",
+                )
+                t3.metric("ETA", _thoi_luong(fp.eta_seconds))
+                t4.metric(
+                    "Worker",
+                    "Đang hoạt động" if fp.worker_alive else "Đã dừng",
+                )
+
+            cap_nhat = datetime.fromtimestamp(fp.updated_at).strftime("%H:%M:%S")
+            clip_elapsed = (
+                now - fp.current_clip_started_at
+                if fp.current_clip_started_at is not None
+                else None
+            )
+            pid = fp.active_subprocess_pid or "—"
+            heartbeat_slot.caption(
+                f"Cập nhật gần nhất: {cap_nhat} · PID audfprint: {pid} · "
+                f"Clip hiện tại đã chạy: {_thoi_luong(clip_elapsed)}"
+            )
+            if clip_elapsed is not None and clip_elapsed >= 120:
+                st.warning(
+                    "Clip hiện tại đang xử lý lâu hơn bình thường. "
+                    "Worker/subprocess vẫn hoạt động; phần trăm không được tăng giả."
+                )
+            elif now - fp.last_progress_at >= 15 and fp.worker_alive:
+                st.warning(
+                    "Chưa có event mới trong 15 giây, nhưng worker vẫn sống. "
+                    "Đang chờ subprocess hoặc thao tác ghi file."
+                )
+
+            recent = fingerprint_controller.recent()[-20:]
+            if recent:
+                log_slot.code("\n".join(
+                    f"{datetime.fromtimestamp(event.updated_at):%H:%M:%S} "
+                    f"{event.status:<16} {event.message}"
+                    for event in recent
+                ))
+
+            if st.button(
+                "⏹️ Dừng lại",
+                type="secondary",
+                disabled=fp.status == "cancel_requested",
+            ):
+                fingerprint_controller.cancel()
+                st.warning("Đang yêu cầu dừng; chưa đánh dấu đã dừng cho tới khi worker xác nhận.")
+            st.caption(
+                "Trang tự làm mới từ ảnh chụp tiến độ; worker không gọi Streamlit trực tiếp. "
+                "Log kỹ thuật: `ketqua/fingerprint.log`."
+            )
+        elif job.get("kind") == "scan":
+            anh = scan_controller.snapshot()
+            if not scan_controller.running:
+                job["running"] = False
+                job["results"] = scan_controller.results()
+                job["error"] = scan_controller.error
+                # Bấm Dừng: engine không nhận video kế → các nguồn sau KHÔNG có kết quả nào. Chép cờ dừng + danh
+                # sách chưa quét vào job NGAY lúc chép kết quả (ảnh chụp SAU khi lô đã dừng): màn kết quả phải nói
+                # lô đã dừng và video nào chưa quét, kể cả ở tab nhận lại lô (audit F-5).
+                anh_cuoi = scan_controller.snapshot()
+                job["lo_da_dung"] = anh_cuoi.cancelled
+                job["chua_quet"] = chua_quet_cua_lo(anh_cuoi, len(job["results"]))
+
+            st.header("🔍 Đang quét video")
+            # Chỉ số đo THẬT (ui_tien_do_quet): thanh lô đếm video đã xong; bước hiện tại chỉ có thanh
+            # khi có mẫu số đo được; nhịp sống tách khỏi tiến triển; nhật ký ngắn ngay trên trang.
+            ui_tien_do_quet.ve_tien_do_lo(
+                st, anh, TEN_PHASE_QUET,
+                gio=lambda t: datetime.fromtimestamp(t).strftime("%H:%M:%S"))
+
+            st.dataframe(
+                build_scan_status_dataframe(anh.videos, ui_gui.trang_thai_viec_lo(eng, anh.lo_id)),
+                width="stretch", hide_index=True, height=260,
+            )
+            if anh.lo_id:
+                st.caption(ui_gui.mo_ta_lo(eng, anh.dich_gui, anh.lo_id))
+            ui_gui.banner_lo_dang_chay(eng, anh.dich_id, anh.dich_gui, job.get("tab_quet", ""))
+            if st.button("⏹️ Dừng lại", type="secondary", disabled=anh.cancelled):
+                scan_controller.cancel()
+                st.warning("Đã gửi yêu cầu dừng; kết quả đã xong vẫn được giữ.")
+        elif job.get("kind") == "nguon_chung":
+            anh = common_controller.snapshot()
+            if not common_controller.running:
+                job["running"] = False
+                job["results"] = [common_controller.result] if common_controller.result else []
+                job["error"] = common_controller.error
+                CommonOriginalJobController.da_nhan(eng, common_controller)   # phiên mở sau không hiện lại
+
+            st.header("🧩 Đang tìm video gốc chung cho cả lô")
+            # Đếm theo LƯỢT: lượt bổ sung chạy trên video đã có lượt — đếm video thì N/N = 100% (audit F-6).
+            gia_tri, chu = tien_do_nguon_chung(anh)
+            st.progress(gia_tri, text=chu)
+            b1, b2, b3, b4 = st.columns(4)
+            b1.metric("Giai đoạn", TEN_PHA_NGUON_CHUNG.get(anh.pha, anh.pha))
+            b2.metric("Đã xác minh", f"{anh.so_xac_minh}/{anh.tong}" if anh.ung_vien else "—")
+            b3.metric("Đang quét", f"Video {anh.video_dang_quet}" if anh.video_dang_quet else "—")
+            b4.metric("Đã chạy", _thoi_luong(anh.elapsed_seconds))
+            if anh.ung_vien:
+                st.info(f"**Video gốc đang xét:** {thoat_markdown(anh.ung_vien_tieu_de)}  \n`{anh.ung_vien}`")
+            if anh.message:
+                st.caption(thoat_markdown(anh.message))   # có tiêu đề YouTube (audit 09/11)
+            st.dataframe(build_nguon_chung_status_dataframe(anh.videos), width="stretch",
+                         hide_index=True, height=260)
+            st.caption("Trong lúc lô chạy, Giám sát tự động và tạo kho phải chờ — kho vân tay "
+                       "phải giữ nguyên suốt lô thì kết luận «không có» mới có nghĩa.")
+            if st.button("⏹️ Dừng lại", type="secondary", disabled=anh.cancelled,
+                         key="dung_nguon_chung"):
+                common_controller.cancel()
+                st.warning("Đã gửi yêu cầu dừng; bằng chứng đã có vẫn được giữ.")
         else:
-            file_slot.markdown("**Clip hiện tại:** đang xác định...")
-
-        with metrics_slot.container():
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Đã tính xong", fp.success_count)
-            m2.metric("Đã tồn tại", fp.skipped_count)
-            m3.metric("Lỗi", fp.failed_count)
-            m4.metric("Đã xử lý", f"{fp.processed_count}/{fp.total}")
-            t1, t2, t3, t4 = st.columns(4)
-            t1.metric("Đã chạy", _thoi_luong(fp.elapsed_seconds))
-            t2.metric(
-                "Tốc độ trung bình",
-                f"{fp.rate_per_minute:.1f} clip/phút"
-                if fp.rate_per_minute is not None
-                else "Đang tính...",
-            )
-            t3.metric("ETA", _thoi_luong(fp.eta_seconds))
-            t4.metric(
-                "Worker",
-                "Đang hoạt động" if fp.worker_alive else "Đã dừng",
-            )
-
-        cap_nhat = datetime.fromtimestamp(fp.updated_at).strftime("%H:%M:%S")
-        clip_elapsed = (
-            now - fp.current_clip_started_at
-            if fp.current_clip_started_at is not None
-            else None
-        )
-        pid = fp.active_subprocess_pid or "—"
-        heartbeat_slot.caption(
-            f"Cập nhật gần nhất: {cap_nhat} · PID audfprint: {pid} · "
-            f"Clip hiện tại đã chạy: {_thoi_luong(clip_elapsed)}"
-        )
-        if clip_elapsed is not None and clip_elapsed >= 120:
-            st.warning(
-                "Clip hiện tại đang xử lý lâu hơn bình thường. "
-                "Worker/subprocess vẫn hoạt động; phần trăm không được tăng giả."
-            )
-        elif now - fp.last_progress_at >= 15 and fp.worker_alive:
-            st.warning(
-                "Chưa có event mới trong 15 giây, nhưng worker vẫn sống. "
-                "Đang chờ subprocess hoặc thao tác ghi file."
-            )
-
-        recent = fingerprint_controller.recent()[-20:]
-        if recent:
-            log_slot.code("\n".join(
-                f"{datetime.fromtimestamp(event.updated_at):%H:%M:%S} "
-                f"{event.status:<16} {event.message}"
-                for event in recent
-            ))
-
-        if st.button(
-            "⏹️ Dừng lại",
-            type="secondary",
-            disabled=fp.status == "cancel_requested",
-        ):
-            fingerprint_controller.cancel()
-            st.warning("Đang yêu cầu dừng; chưa đánh dấu đã dừng cho tới khi worker xác nhận.")
-        st.caption(
-            "Trang tự làm mới từ ảnh chụp tiến độ; worker không gọi Streamlit trực tiếp. "
-            "Log kỹ thuật: `ketqua/fingerprint.log`."
-        )
-    elif job.get("kind") == "scan":
-        anh = scan_controller.snapshot()
-        if not scan_controller.running:
-            job["running"] = False
-            job["results"] = scan_controller.results()
-            job["error"] = scan_controller.error
-            # Bấm Dừng: engine không nhận video kế → các nguồn sau KHÔNG có kết quả nào. Chép cờ dừng + danh
-            # sách chưa quét vào job NGAY lúc chép kết quả (ảnh chụp SAU khi lô đã dừng): màn kết quả phải nói
-            # lô đã dừng và video nào chưa quét, kể cả ở tab nhận lại lô (audit F-5).
-            anh_cuoi = scan_controller.snapshot()
-            job["lo_da_dung"] = anh_cuoi.cancelled
-            job["chua_quet"] = chua_quet_cua_lo(anh_cuoi, len(job["results"]))
-
-        st.header("🔍 Đang quét video")
-        # Chỉ số đo THẬT (ui_tien_do_quet): thanh lô đếm video đã xong; bước hiện tại chỉ có thanh
-        # khi có mẫu số đo được; nhịp sống tách khỏi tiến triển; nhật ký ngắn ngay trên trang.
-        ui_tien_do_quet.ve_tien_do_lo(
-            st, anh, TEN_PHASE_QUET,
-            gio=lambda t: datetime.fromtimestamp(t).strftime("%H:%M:%S"))
-
-        st.dataframe(
-            build_scan_status_dataframe(anh.videos, ui_gui.trang_thai_viec_lo(eng, anh.lo_id)),
-            width="stretch", hide_index=True, height=260,
-        )
-        if anh.lo_id:
-            st.caption(ui_gui.mo_ta_lo(eng, anh.dich_gui, anh.lo_id))
-        ui_gui.banner_lo_dang_chay(eng, anh.dich_id, anh.dich_gui, job.get("tab_quet", ""))
-        if st.button("⏹️ Dừng lại", type="secondary", disabled=anh.cancelled):
-            scan_controller.cancel()
-            st.warning("Đã gửi yêu cầu dừng; kết quả đã xong vẫn được giữ.")
-    elif job.get("kind") == "nguon_chung":
-        anh = common_controller.snapshot()
-        if not common_controller.running:
-            job["running"] = False
-            job["results"] = [common_controller.result] if common_controller.result else []
-            job["error"] = common_controller.error
-            CommonOriginalJobController.da_nhan(eng, common_controller)   # phiên mở sau không hiện lại
-
-        st.header("🧩 Đang tìm video gốc chung cho cả lô")
-        # Đếm theo LƯỢT: lượt bổ sung chạy trên video đã có lượt — đếm video thì N/N = 100% (audit F-6).
-        gia_tri, chu = tien_do_nguon_chung(anh)
-        st.progress(gia_tri, text=chu)
-        b1, b2, b3, b4 = st.columns(4)
-        b1.metric("Giai đoạn", TEN_PHA_NGUON_CHUNG.get(anh.pha, anh.pha))
-        b2.metric("Đã xác minh", f"{anh.so_xac_minh}/{anh.tong}" if anh.ung_vien else "—")
-        b3.metric("Đang quét", f"Video {anh.video_dang_quet}" if anh.video_dang_quet else "—")
-        b4.metric("Đã chạy", _thoi_luong(anh.elapsed_seconds))
-        if anh.ung_vien:
-            st.info(f"**Video gốc đang xét:** {thoat_markdown(anh.ung_vien_tieu_de)}  \n`{anh.ung_vien}`")
-        if anh.message:
-            st.caption(thoat_markdown(anh.message))   # có tiêu đề YouTube (audit 09/11)
-        st.dataframe(build_nguon_chung_status_dataframe(anh.videos), width="stretch",
-                     hide_index=True, height=260)
-        st.caption("Trong lúc lô chạy, Giám sát tự động và tạo kho phải chờ — kho vân tay "
-                   "phải giữ nguyên suốt lô thì kết luận «không có» mới có nghĩa.")
-        if st.button("⏹️ Dừng lại", type="secondary", disabled=anh.cancelled,
-                     key="dung_nguon_chung"):
-            common_controller.cancel()
-            st.warning("Đã gửi yêu cầu dừng; bằng chứng đã có vẫn được giữ.")
-    else:
-        st.header("⏳ Đang xử lý...")
-        st.progress(job["pct"], text=f"{job['pct']*100:.0f}%")
-        st.info(job["msg"] or "Đang khởi động...")
-        if st.button("⏹️ Dừng lại", type="secondary"):
-            _huy_tac_vu_nen()
-            st.warning("Đã gửi yêu cầu dừng, chờ một chút...")
-        st.caption("Cửa sổ này tự cập nhật. Bạn có thể để yên và làm việc khác, "
-                   "nhưng đừng đóng cửa sổ đen phía sau.")
-    if job.get("kind") in ("scan", "db", "nguon_chung") and not dang_dong_bo():
-        _form_dong_bo_song_song()
-    time.sleep(0.75)
-    st.rerun()
-
-# Tác vụ vừa xong → hiện kết quả
-if not job["running"] and (job["results"] or job["error"]):
-    # Lô quét lỗi CẤP LÔ giữa chừng (vd. ``LoiLuuBen``: đĩa đầy, ``lichsu.db`` bị khoá) vẫn giữ kết quả các video
-    # đã xong trước đó (đã lưu lịch sử/xếp hàng gửi): báo lỗi NHƯNG vẫn hiện chúng — MANAGED_RUNTIME_DESIGN §3
-    # «kết quả vẫn trả về UI» (audit F-9). Tác vụ khác lỗi thì chỉ báo lỗi như cũ.
-    loi_lo_quet_co_ket_qua = bool(job["error"]) and job["kind"] == "scan" and bool(job["results"])
-    if job["error"] and not loi_lo_quet_co_ket_qua:
-        st.error(f"Lỗi: {job['error']}")
-    elif job["kind"] == "db":
-        r = job["results"]
-        # Tiêu đề theo KẾT QUẢ THẬT (scan_ui.tom_tat_tao_van_tay, audit F-4): bổ sung mà mọi clip mới đều lỗi → kho
-        # không ghi → đỏ, không «✅ Hoàn tất».
-        for muc_vt, cau_vt in tom_tat_tao_van_tay(r):
-            getattr(st, muc_vt)(cau_vt)
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Tạo mới", r.get("thanh_cong", r.get("da_xu_ly", 0)))
-        m2.metric("Đã tồn tại", r.get("bo_qua", 0))
-        m3.metric("Lỗi", r.get("that_bai", len(r.get("loi_file", []))))
-        if r.get("canh_bao"):
-            st.warning("\n\n".join(r["canh_bao"]))
-        if r.get("loi_file"):
-            with st.expander(f"⚠️ {len(r['loi_file'])} file có vấn đề — bấm xem"):
-                st.code("\n".join(r["loi_file"][:50]))
-    elif job["kind"] == "metadata_network":
-        r = job["results"]
-        # YouTube chặn giữa chừng / có clip lỗi: chưa vá xong — không báo xanh (audit 16/11; CLI vốn đã đọc ``chan_youtube``).
-        if r.get("chan_youtube"):
-            st.error(f"🚫 YouTube chặn giữa chừng nên đã dừng: {r['chan_youtube']}")
-        (st.warning if r["loi"] or r.get("chan_youtube") else st.success)(
-            f"Đã vá metadata snapshot cho {r['da_va']}/{r['tong']} clip; "
-            f"không đổi {r['bo_qua']}, lỗi {len(r['loi'])}."
-        )
-        if r["loi"]:
-            with st.expander(f"⚠️ {len(r['loi'])} clip chưa vá được"):
-                st.code("\n".join(r["loi"][:50]))
-        st.caption(f"Snapshot: `{r['snapshot_path']}`")
-    elif job["kind"] == "va_title":
-        r = job["results"]
-        if r.get("da_huy"):
-            st.warning(
-                f"⏹️ Đã dừng theo yêu cầu: đã hỏi YouTube tên thật cho {r['da_va']}/{r['tong']} "
-                f"video, lỗi {len(r['loi'])}. Phần đã lấy được đã lưu; bấm lại nút để chạy tiếp "
-                "những video còn lại."
-            )
-        else:
-            st.success(
-                f"✅ Đã hỏi YouTube tên thật cho {r['da_va']}/{r['tong']} video; "
-                f"bỏ qua {r['bo_qua']} video đã có tên đúng, lỗi {len(r['loi'])}."
-            )
-        if r.get("da_them_tu_dia"):
-            st.caption(f"Bổ sung {r['da_them_tu_dia']} mục mới vào `clips_meta.json` "
-                       "từ các file có sẵn trên đĩa.")
-        if r["loi"]:
-            with st.expander(f"⚠️ {len(r['loi'])} video chưa lấy được tên"):
-                st.code("\n".join(r["loi"][:50]))
-            st.caption("Những video này giữ tên suy từ tên file và vẫn bị đánh dấu "
-                       "«cần kiểm tra» ở tab «Danh sách video trong kho».")
-        st.info("Mở tab «📋 Danh sách video trong kho» và bấm xem lại để thấy tên mới.")
-    elif job["kind"] == "nguon_chung":
-        hien_ket_qua_nguon_chung(job["results"][0])
-    elif job["kind"] == "tai_video":
-        r = job["results"]
-        _r_tai = [k for k in r if not k.get("la_dong_ghep")]  # dòng «🎞️ Video ghép» không phải một video tải
-        _dem = {t: sum(1 for k in _r_tai if k["trang_thai"] == t) for t in ("xong", "bo_qua", "loi")}
-        _viec = "xử lý" if _r_tai and all(k.get("la_file_may") for k in _r_tai) else "tải"  # tab «Video trong máy»
-        (st.success if not (_dem["loi"] or any(k["trang_thai"] == "loi" for k in r)) else st.warning)(
-            f"Đã {_viec} {_dem['xong']}/{len(_r_tai)} — bỏ qua {_dem['bo_qua']}, lỗi {_dem['loi']}.")
-
-        def _dong_tai(k: dict) -> str:
-            if k["trang_thai"] == "xong":
-                return (f"✅ **{thoat_markdown(k['tieu_de'] or k['url'])}** — {thoat_markdown(k['chat_luong'])}"
-                        + (f"  \n{thoat_markdown(k['duong_dan'])}" if k["duong_dan"] else "")
-                        + (f"  \n⚠️ {thoat_markdown(k['ghi_chu'])}" if k["ghi_chu"] else ""))
-            return (f"{'⏭️' if k['trang_thai'] == 'bo_qua' else '❌'} {thoat_markdown(k['url'])}  \n"
-                    f"{thoat_markdown(k['ghi_chu'])}")
-
-        # Cả kênh có thể hàng trăm dòng: lỗi luôn hiện, phần còn lại gom vào ô mở rộng.
-        for k in r:
-            if k["trang_thai"] == "loi" or len(r) <= 20:
-                st.markdown(_dong_tai(k))
-        if len(r) > 20:
-            with st.expander(f"Xem {_dem['xong'] + _dem['bo_qua']} video đã tải / bỏ qua"):
-                st.markdown("\n\n".join(_dong_tai(k) for k in r if k["trang_thai"] != "loi"))
-    elif job["kind"] == "sua":
-        r = job["results"]
-        st.success(f"✅ Đã dựng lại danh sách: {r['tren_dia']} video thực có trên đĩa "
-                   f"(trước đó archive ghi {r['archive_cu']}).")
-        if r["ma_bi_thieu"]:
-            st.info(f"Bổ sung {len(r['ma_bi_thieu'])} video có file nhưng archive quên ghi.")
-        if r["ma_bi_ghi_thua"]:
-            st.warning(f"Có {len(r['ma_bi_ghi_thua'])} mã trong archive nhưng KHÔNG thấy file "
-                       "— chúng sẽ được tải lại ở lần đồng bộ tới.")
-    else:
-        res = job["results"]
-        if loi_lo_quet_co_ket_qua:
-            st.error(f"Lỗi: {job['error']}")
-            st.info(f"Lô dừng giữa chừng vì lỗi trên. Kết quả của {len(res)} video đã quét xong TRƯỚC lỗi vẫn ở "
-                    "bên dưới; các video còn lại chưa có kết quả — quét lại chúng sau khi xử lý lỗi.")
-        tong_match = sum(len(x.matches) for x in res)
-        tong_loai = sum(len(getattr(x, "matches_loai", [])) for x in res)
-        loi = [x for x in res if x.status != "ok"]
-        # Batch bị dừng vì YouTube chặn (bot-check, 429…): nói to, trước mọi thứ khác — các
-        # video «Chưa quét» KHÔNG phải âm tính và không được tính là đã quét.
-        bi_chan = thong_bao_youtube_chan(res)
-        if bi_chan:
-            st.error("🚫 " + bi_chan)
-        # Người dùng bấm Dừng: nói ở cấp LÔ, trước mọi con số — video chưa quét không được lẫn vào
-        # «… nguồn đã quét» như một lô đã chạy hết (audit F-5).
-        da_dung = thong_bao_lo_da_dung(bool(job.get("lo_da_dung")), job.get("chua_quet") or ())
-        if da_dung:
-            st.warning(da_dung)
-
-        # Không có kết quả thì PHẢI nói mất ở tầng nào. Trước đây chỗ này chỉ nói
-        # "không tìm thấy" và khuyên hạ ngưỡng xuống 60% của kết quả mạnh nhất —
-        # lời khuyên đó tạo dương tính giả: với video chỉ chứa nhạc hiệu dùng chung
-        # của kênh, hạ ngưỡng sẽ biến một đoạn 9 giây thành "bằng chứng vi phạm".
-        if tong_match == 0:
-            bao_cao_khong_co_ket_qua(res)
-        elif tong_loai:
-            st.caption(f"ℹ️ Đã loại {tong_loai} ứng viên chưa đạt tiêu chí chấp nhận "
-                       "khỏi báo cáo.")
-
-        if tong_match:
-            # Đếm theo đúng bảng/CSV bên dưới; «nguồn đã quét» chỉ gồm nguồn quét ra kết quả — cầu dao,
-            # huỷ, tải hỏng đã nằm ở dòng «Có nguồn bị lỗi» (audit F-10, review P3); toàn bộ
-            # bằng chứng nằm trong kết quả báo cáo V2 lỗi thì không có câu xanh — banner ⛔ của bảng giải thích.
-            so_bang_chung, so_da_quet = dem_cau_tom_tat(res)
-            if so_bang_chung:
-                st.success(f"✅ Đã chọn **{so_bang_chung}** bằng chứng tốt nhất "
-                           f"từ {so_da_quet} nguồn đã quét.")
-            # Bị đổi tốc độ là dấu hiệu né nhận dạng có chủ ý — người dùng cần biết
-            # để đưa vào hồ sơ khiếu nại, và để hiểu vì sao mốc thời gian hơi lệch.
-            for x in res:
-                cd = getattr(x, "chan_doan", None)
-                if cd is not None and cd.toc_do_tim_duoc:
-                    st.info(
-                        f"🔎 **{thoat_markdown(x.source_name)}** chỉ khớp sau khi bù tốc độ — "
-                        f"{cd.toc_do_tim_duoc}. Video này nhiều khả năng đã bị "
-                        "chỉnh tốc độ để né nhận dạng bản quyền.")
-        if loi:
-            st.error("Có nguồn bị lỗi: " + "; ".join(f"{thoat_markdown(x.source_name)} ({thoat_markdown(x.note)})"
-                                                      for x in loi))
-        bang_ket_qua(res)
-        # Báo cáo V2 lỗi không được xuất theo bất kỳ đường nào — kể cả CSV tinh chỉnh (audit 16/11).
-        hien_tinh_chinh(bao_cao_v2.tach_loi_bao_cao(res)[0])
-    if st.button("🧹 Xóa kết quả, làm việc khác"):
-        job.update({"results": [], "error": "", "kind": ""})
+            st.header("⏳ Đang xử lý...")
+            st.progress(job["pct"], text=f"{job['pct']*100:.0f}%")
+            st.info(job["msg"] or "Đang khởi động...")
+            if st.button("⏹️ Dừng lại", type="secondary"):
+                _huy_tac_vu_nen()
+                st.warning("Đã gửi yêu cầu dừng, chờ một chút...")
+            st.caption("Cửa sổ này tự cập nhật. Bạn có thể để yên và làm việc khác, "
+                       "nhưng đừng đóng cửa sổ đen phía sau.")
+        if job.get("kind") in ("scan", "db", "nguon_chung") and not dang_dong_bo():
+            _form_dong_bo_song_song()
+        time.sleep(0.75)
         st.rerun()
-    st.divider()
+
+    # Tác vụ vừa xong → hiện kết quả
+    if not job["running"] and (job["results"] or job["error"]):
+        # Lô quét lỗi CẤP LÔ giữa chừng (vd. ``LoiLuuBen``: đĩa đầy, ``lichsu.db`` bị khoá) vẫn giữ kết quả các video
+        # đã xong trước đó (đã lưu lịch sử/xếp hàng gửi): báo lỗi NHƯNG vẫn hiện chúng — MANAGED_RUNTIME_DESIGN §3
+        # «kết quả vẫn trả về UI» (audit F-9). Tác vụ khác lỗi thì chỉ báo lỗi như cũ.
+        loi_lo_quet_co_ket_qua = bool(job["error"]) and job["kind"] == "scan" and bool(job["results"])
+        if job["error"] and not loi_lo_quet_co_ket_qua:
+            st.error(f"Lỗi: {job['error']}")
+        elif job["kind"] == "db":
+            r = job["results"]
+            # Tiêu đề theo KẾT QUẢ THẬT (scan_ui.tom_tat_tao_van_tay, audit F-4): bổ sung mà mọi clip mới đều lỗi → kho
+            # không ghi → đỏ, không «✅ Hoàn tất».
+            for muc_vt, cau_vt in tom_tat_tao_van_tay(r):
+                getattr(st, muc_vt)(cau_vt)
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Tạo mới", r.get("thanh_cong", r.get("da_xu_ly", 0)))
+            m2.metric("Đã tồn tại", r.get("bo_qua", 0))
+            m3.metric("Lỗi", r.get("that_bai", len(r.get("loi_file", []))))
+            if r.get("canh_bao"):
+                st.warning("\n\n".join(r["canh_bao"]))
+            if r.get("loi_file"):
+                with st.expander(f"⚠️ {len(r['loi_file'])} file có vấn đề — bấm xem"):
+                    st.code("\n".join(r["loi_file"][:50]))
+        elif job["kind"] == "metadata_network":
+            r = job["results"]
+            # YouTube chặn giữa chừng / có clip lỗi: chưa vá xong — không báo xanh (audit 16/11; CLI vốn đã đọc ``chan_youtube``).
+            if r.get("chan_youtube"):
+                st.error(f"🚫 YouTube chặn giữa chừng nên đã dừng: {r['chan_youtube']}")
+            (st.warning if r["loi"] or r.get("chan_youtube") else st.success)(
+                f"Đã vá metadata snapshot cho {r['da_va']}/{r['tong']} clip; "
+                f"không đổi {r['bo_qua']}, lỗi {len(r['loi'])}."
+            )
+            if r["loi"]:
+                with st.expander(f"⚠️ {len(r['loi'])} clip chưa vá được"):
+                    st.code("\n".join(r["loi"][:50]))
+            st.caption(f"Snapshot: `{r['snapshot_path']}`")
+        elif job["kind"] == "va_title":
+            r = job["results"]
+            if r.get("da_huy"):
+                st.warning(
+                    f"⏹️ Đã dừng theo yêu cầu: đã hỏi YouTube tên thật cho {r['da_va']}/{r['tong']} "
+                    f"video, lỗi {len(r['loi'])}. Phần đã lấy được đã lưu; bấm lại nút để chạy tiếp "
+                    "những video còn lại."
+                )
+            else:
+                st.success(
+                    f"✅ Đã hỏi YouTube tên thật cho {r['da_va']}/{r['tong']} video; "
+                    f"bỏ qua {r['bo_qua']} video đã có tên đúng, lỗi {len(r['loi'])}."
+                )
+            if r.get("da_them_tu_dia"):
+                st.caption(f"Bổ sung {r['da_them_tu_dia']} mục mới vào `clips_meta.json` "
+                           "từ các file có sẵn trên đĩa.")
+            if r["loi"]:
+                with st.expander(f"⚠️ {len(r['loi'])} video chưa lấy được tên"):
+                    st.code("\n".join(r["loi"][:50]))
+                st.caption("Những video này giữ tên suy từ tên file và vẫn bị đánh dấu "
+                           "«cần kiểm tra» ở tab «Danh sách video trong kho».")
+            st.info("Mở tab «📋 Danh sách video trong kho» và bấm xem lại để thấy tên mới.")
+        elif job["kind"] == "nguon_chung":
+            hien_ket_qua_nguon_chung(job["results"][0])
+        elif job["kind"] == "tai_video":
+            r = job["results"]
+            _r_tai = [k for k in r if not k.get("la_dong_ghep")]  # dòng «🎞️ Video ghép» không phải một video tải
+            _dem = {t: sum(1 for k in _r_tai if k["trang_thai"] == t) for t in ("xong", "bo_qua", "loi")}
+            _viec = "xử lý" if _r_tai and all(k.get("la_file_may") for k in _r_tai) else "tải"  # tab «Video trong máy»
+            (st.success if not (_dem["loi"] or any(k["trang_thai"] == "loi" for k in r)) else st.warning)(
+                f"Đã {_viec} {_dem['xong']}/{len(_r_tai)} — bỏ qua {_dem['bo_qua']}, lỗi {_dem['loi']}.")
+
+            def _dong_tai(k: dict) -> str:
+                if k["trang_thai"] == "xong":
+                    return (f"✅ **{thoat_markdown(k['tieu_de'] or k['url'])}** — {thoat_markdown(k['chat_luong'])}"
+                            + (f"  \n{thoat_markdown(k['duong_dan'])}" if k["duong_dan"] else "")
+                            + (f"  \n⚠️ {thoat_markdown(k['ghi_chu'])}" if k["ghi_chu"] else ""))
+                return (f"{'⏭️' if k['trang_thai'] == 'bo_qua' else '❌'} {thoat_markdown(k['url'])}  \n"
+                        f"{thoat_markdown(k['ghi_chu'])}")
+
+            # Cả kênh có thể hàng trăm dòng: lỗi luôn hiện, phần còn lại gom vào ô mở rộng.
+            for k in r:
+                if k["trang_thai"] == "loi" or len(r) <= 20:
+                    st.markdown(_dong_tai(k))
+            if len(r) > 20:
+                with st.expander(f"Xem {_dem['xong'] + _dem['bo_qua']} video đã tải / bỏ qua"):
+                    st.markdown("\n\n".join(_dong_tai(k) for k in r if k["trang_thai"] != "loi"))
+        elif job["kind"] == "sua":
+            r = job["results"]
+            st.success(f"✅ Đã dựng lại danh sách: {r['tren_dia']} video thực có trên đĩa "
+                       f"(trước đó archive ghi {r['archive_cu']}).")
+            if r["ma_bi_thieu"]:
+                st.info(f"Bổ sung {len(r['ma_bi_thieu'])} video có file nhưng archive quên ghi.")
+            if r["ma_bi_ghi_thua"]:
+                st.warning(f"Có {len(r['ma_bi_ghi_thua'])} mã trong archive nhưng KHÔNG thấy file "
+                           "— chúng sẽ được tải lại ở lần đồng bộ tới.")
+        else:
+            res = job["results"]
+            if loi_lo_quet_co_ket_qua:
+                st.error(f"Lỗi: {job['error']}")
+                st.info(f"Lô dừng giữa chừng vì lỗi trên. Kết quả của {len(res)} video đã quét xong TRƯỚC lỗi vẫn ở "
+                        "bên dưới; các video còn lại chưa có kết quả — quét lại chúng sau khi xử lý lỗi.")
+            tong_match = sum(len(x.matches) for x in res)
+            tong_loai = sum(len(getattr(x, "matches_loai", [])) for x in res)
+            loi = [x for x in res if x.status != "ok"]
+            # Batch bị dừng vì YouTube chặn (bot-check, 429…): nói to, trước mọi thứ khác — các
+            # video «Chưa quét» KHÔNG phải âm tính và không được tính là đã quét.
+            bi_chan = thong_bao_youtube_chan(res)
+            if bi_chan:
+                st.error("🚫 " + bi_chan)
+            # Người dùng bấm Dừng: nói ở cấp LÔ, trước mọi con số — video chưa quét không được lẫn vào
+            # «… nguồn đã quét» như một lô đã chạy hết (audit F-5).
+            da_dung = thong_bao_lo_da_dung(bool(job.get("lo_da_dung")), job.get("chua_quet") or ())
+            if da_dung:
+                st.warning(da_dung)
+
+            # Không có kết quả thì PHẢI nói mất ở tầng nào. Trước đây chỗ này chỉ nói
+            # "không tìm thấy" và khuyên hạ ngưỡng xuống 60% của kết quả mạnh nhất —
+            # lời khuyên đó tạo dương tính giả: với video chỉ chứa nhạc hiệu dùng chung
+            # của kênh, hạ ngưỡng sẽ biến một đoạn 9 giây thành "bằng chứng vi phạm".
+            if tong_match == 0:
+                bao_cao_khong_co_ket_qua(res)
+            elif tong_loai:
+                st.caption(f"ℹ️ Đã loại {tong_loai} ứng viên chưa đạt tiêu chí chấp nhận "
+                           "khỏi báo cáo.")
+
+            if tong_match:
+                # Đếm theo đúng bảng/CSV bên dưới; «nguồn đã quét» chỉ gồm nguồn quét ra kết quả — cầu dao,
+                # huỷ, tải hỏng đã nằm ở dòng «Có nguồn bị lỗi» (audit F-10, review P3); toàn bộ
+                # bằng chứng nằm trong kết quả báo cáo V2 lỗi thì không có câu xanh — banner ⛔ của bảng giải thích.
+                so_bang_chung, so_da_quet = dem_cau_tom_tat(res)
+                if so_bang_chung:
+                    st.success(f"✅ Đã chọn **{so_bang_chung}** bằng chứng tốt nhất "
+                               f"từ {so_da_quet} nguồn đã quét.")
+                # Bị đổi tốc độ là dấu hiệu né nhận dạng có chủ ý — người dùng cần biết
+                # để đưa vào hồ sơ khiếu nại, và để hiểu vì sao mốc thời gian hơi lệch.
+                for x in res:
+                    cd = getattr(x, "chan_doan", None)
+                    if cd is not None and cd.toc_do_tim_duoc:
+                        st.info(
+                            f"🔎 **{thoat_markdown(x.source_name)}** chỉ khớp sau khi bù tốc độ — "
+                            f"{cd.toc_do_tim_duoc}. Video này nhiều khả năng đã bị "
+                            "chỉnh tốc độ để né nhận dạng bản quyền.")
+            if loi:
+                st.error("Có nguồn bị lỗi: " + "; ".join(f"{thoat_markdown(x.source_name)} ({thoat_markdown(x.note)})"
+                                                          for x in loi))
+            bang_ket_qua(res)
+            # Báo cáo V2 lỗi không được xuất theo bất kỳ đường nào — kể cả CSV tinh chỉnh (audit 16/11).
+            hien_tinh_chinh(bao_cao_v2.tach_loi_bao_cao(res)[0])
+        if st.button("🧹 Xóa kết quả, làm việc khác"):
+            job.update({"results": [], "error": "", "kind": ""})
+            st.rerun()
+        st.divider()
 
 
 # =====================================================================
