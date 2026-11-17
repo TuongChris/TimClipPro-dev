@@ -25,7 +25,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   tạm; dữ liệu thật chỉ dùng trong app DEV vận hành.
 
 ## Tiếp theo
-0a. 17/11: «✂️ Bỏ các đoạn» (D-59) trên `feature/pc2/bo-nhieu-doan` — nhanh 4285 = 4281/4/0. Người dùng thử trên DEV: tab
+0a. 17/11: «✂️ Bỏ các đoạn» (D-59) trên `feature/pc2/bo-nhieu-doan` — nhanh 4285 = 4281/4/0; GỘP `7d7b528`, DEV 17/11 09:13 (sao lưu `data_20261117_091254`). Người dùng thử trên DEV: tab
    «🛠️ Video trong máy» (hoặc «⬇️ Tải video gốc»), dán danh sách đoạn cần bỏ, xem video ra (chỗ nối, độ dài, thời gian chạy).
 0. 16/11: YouTube Data API (D-51) + D-52…D-58 trên `feature/pc2/tong-hop-1611` (nhanh 4265 = 4261/4/0, chậm 25/25) — GỘP `0390784`, DEV 8502 cập nhật 16/11 13:05 (sao lưu `data_20261116_130446`), khoá DEV nhận «CO_KHOA». Người dùng thử: thanh bên «🔐 Kết nối YouTube» báo có khoá, quét 1 video, tab «📊 Thống kê» / «🔎 Tìm video nghi vấn», nút kiểm video còn/gỡ ở «📜 Lịch sử», «📝 Tiêu đề kênh», Dừng khi dựng kho. Worktree đã dọn 16/11 (24 cái tạm + cũ, đều đã gộp): còn `Tool_Quet`, `TimClipPro_VanHanh` (DEV), `TimClipPro_CookieFix` (venv test chuẩn).
 1. Đồng bộ + quét song song (D-29): PR #20 GỘP (`dd111e8`), DEV 8502 cập nhật 27/10 13:04 (sao lưu `data_20261027_130421`).
