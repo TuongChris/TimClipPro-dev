@@ -386,3 +386,157 @@ def test_cat_lai_video_twitch_khong_tai_lai(tmp_path, monkeypatch):
     k = cv.tai_doan([tw], str(tmp_path / "ra"), tu_s=1, den_s=3)[0]
     assert k["trang_thai"] == "xong", k
     assert os.path.basename(k["duong_dan"]).startswith("Phat_lai_v12345678901_")  # tên cũ «[mã]» vẫn nhận ra
+
+
+# ---------------------------------------------------------------- bỏ các đoạn rồi nối phần còn lại (D-59, 17/11)
+@pytest.mark.parametrize(
+    "vb, ds",
+    [
+        # đúng kiểu người dùng gõ 17/11
+        ("0:04:12 - 0:05:24, 0:07:11 - 0:09:01, 0:30:11 - 0:31:18, 0:45:12 - 0:45:21, 1:01:02 - 1:01:11",
+         [(252, 324), (431, 541), (1811, 1878), (2712, 2721), (3662, 3671)]),
+        ("1:01:02-1:01:11\n0:04:12 – 0:05:24\n", [(252, 324), (3662, 3671)]),  # mỗi dòng một đoạn, lộn thứ tự
+        ("0:05:24,0:07:11; 1:00,5 - 1:02", [(324, 431), (60.5, 62)][::-1]),  # phẩy liền: hai mốc; «1:00,5» = 60,5 s
+        ("10 - 20, 15 - 30, 30 - 31, 40 - 41", [(10, 31), (40, 41)]),  # chồng/chạm nhau → gộp
+        ("", []),
+        ("  \n ", []),
+    ],
+)
+def test_doc_ds_doan(vb, ds):
+    assert cv.doc_ds_doan(vb) == [(float(a), float(b)) for a, b in ds]
+
+
+@pytest.mark.parametrize(
+    "vb, loi",
+    [
+        ("0:04:12 - 0:05:24, 0:07:11", "3 mốc"),
+        ("0:05:24 - 0:04:12", "phải sau"),
+        ("0:04:12 đến 0:05:24", "Không đọc được «đến»"),
+        ("0:75 - 0:80", "không hợp lệ"),
+        ("1:2:3:4 - 2:00:00", "Không đọc được"),
+    ],
+)
+def test_doc_ds_doan_sai_bao_loi(vb, loi):
+    with pytest.raises(ValueError, match=loi):
+        cv.doc_ds_doan(vb)
+
+
+def test_phan_giu():
+    assert cv._phan_giu([(10.0, 20.0), (30.0, 40.0)], 60.0) == [(0.0, 10.0), (20.0, 30.0), (40.0, None)]
+    assert cv._phan_giu([(0.0, 5.0), (5.02, 9.0)], 9.03) == []  # mẩu < 1 khung hình không giữ; bỏ tới hết
+    assert cv._phan_giu([(0.0, 60.0)], 60.0) == []
+
+
+def _tao_danh_dau(path, giay=20, chi_hinh=False):
+    """Hình: độ sáng khung N = 8·(N mod 32), nén KHÔNG mất dữ liệu; tiếng: giây k của gốc là âm 300 + 20k Hz."""
+    tieng = [] if chi_hinh else ["-f", "lavfi", "-i", f"aevalsrc=0.5*sin(2*PI*(300+20*floor(t))*t):s=48000:d={giay}"]
+    subprocess.run(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i",
+         f"color=c=black:s=64x48:r=30:d={giay},geq=lum='8*mod(N,32)':cb=128:cr=128", *tieng,
+         "-c:v", "libx264", "-preset", "veryfast", "-qp", "0", "-pix_fmt", "yuv420p", "-c:a", "aac", str(path)],
+        check=True,
+    )
+    return str(path)
+
+
+def _khung_ra(path):
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-map", "0:v", "-f", "rawvideo", "-pix_fmt", "yuv420p",
+                          "-"], capture_output=True, check=True).stdout
+    sang = np.frombuffer(raw, np.uint8).reshape(-1, 64 * 48 * 3 // 2)[:, : 64 * 48].mean(axis=1)
+    return np.round(sang / 8).astype(int) % 32
+
+
+@can_ffmpeg
+def test_bo_doan_dung_tung_khung_hinh_va_tieng_xoa_video_tron(tmp_path, monkeypatch):
+    """Bỏ 3 đoạn (mốc lẻ, lệch lưới khung) qua đường tải theo link: MỌI khung hình của video ra là đúng khung gốc dự kiến,
+    tiếng mỗi khúc đúng giây gốc → không thừa/thiếu khung, hình–tiếng khớp ở chỗ nối; video trọn bị xoá."""
+    _gia_tai(monkeypatch, _tao_danh_dau(tmp_path / "nguon.mp4"))
+    ds = cv.doc_ds_doan("0:02 - 0:04.4, 0:07.1 - 0:09, 0:15.25 - 0:15.5")
+    ra = tmp_path / "ra"
+    k = cv.tai_doan([URL[0]], str(ra), ds_bo=ds)[0]
+    assert k["trang_thai"] == "xong", k
+    assert os.path.basename(k["duong_dan"]) == "Tieu_de_abcdefghij0_abcdefghij0_bo_3_doan.mp4"
+    assert "Đã bỏ 3 đoạn" in k["ghi_chu"] and "nối 4 phần" in k["ghi_chu"]
+    assert os.listdir(ra) == [os.path.basename(k["duong_dan"])]  # video trọn + thư mục tạm đã xoá
+    giu = [(0, 2), (4.4, 7.1), (9, 15.25), (15.5, 20)]
+    ky_vong = [n for a, b in giu for n in range(600) if a <= n / 30 < b]
+    khung = _khung_ra(k["duong_dan"])
+    assert len(khung) == len(ky_vong)
+    assert (khung == np.array(ky_vong) % 32).all()
+    moc_ra = 0.0
+    for a, b in giu:
+        for t in np.arange(a, b - 0.2, 0.25):
+            if abs(t + 0.1 - round(t + 0.1)) > 0.15:  # không sát chỗ đổi tần số của gốc
+                assert _tan_so(k["duong_dan"], moc_ra + t - a, 0.2) == pytest.approx(300 + 20 * int(t + 0.1), abs=8)
+        moc_ra += b - a
+    assert float(_probe(k["duong_dan"])["format"]["duration"]) == pytest.approx(moc_ra, abs=0.06)
+
+
+@can_ffmpeg
+def test_bo_doan_chi_tieng_va_chi_hinh(tmp_path):
+    k = cv.bo_doan(_tao(tmp_path / "a.m4a", chi_tieng=True), str(tmp_path / "ra"), [(3.0, 5.0)])
+    assert k["trang_thai"] == "xong", k
+    assert k["duong_dan"].endswith("a_bo_1_doan.m4a")
+    p = _probe(k["duong_dan"])
+    assert [s["codec_type"] for s in p["streams"]] == ["audio"]
+    assert float(p["format"]["duration"]) == pytest.approx(8.0, abs=0.06)
+    assert _tan_so(k["duong_dan"], 3.05, 0.15) == pytest.approx(880, abs=40)  # nối 0–3 (440 Hz) với 5–10 (880 Hz)
+    k = cv.bo_doan(_tao_danh_dau(tmp_path / "h.mp4", giay=6, chi_hinh=True), str(tmp_path / "ra"), [(1.0, 2.0)])
+    assert k["trang_thai"] == "xong", k
+    assert [s["codec_type"] for s in _probe(k["duong_dan"])["streams"]] == ["video"]
+    assert len(_khung_ra(k["duong_dan"])) == 150
+
+
+@can_ffmpeg
+def test_bo_doan_vuot_do_dai_hoac_phu_kin_thi_bao_loi(tmp_path):
+    src = _tao(tmp_path / "nguon.mp4")
+    k = cv.bo_doan(src, str(tmp_path / "ra"), [(2.0, 3.0), (8.0, 12.0)], giu="File gốc giữ nguyên.")
+    assert k["trang_thai"] == "loi" and "chỉ dài 00:00:10" in k["ghi_chu"] and "00:00:08–00:00:12" in k["ghi_chu"]
+    k = cv.bo_doan(src, str(tmp_path / "ra"), [(0.0, 10.0)])
+    assert k["trang_thai"] == "loi" and "phủ kín" in k["ghi_chu"]
+    assert not (tmp_path / "ra").exists() or not os.listdir(tmp_path / "ra")
+
+
+def test_bo_doan_va_cat_mot_cung_luc_bao_loi_truoc_khi_tai(tmp_path, monkeypatch):
+    goi = _gia_tai(monkeypatch, "khong_dung")
+    with pytest.raises(ValueError, match="Chỉ chọn một việc"):
+        cv.tai_doan([URL[0]], str(tmp_path), tu_s=1, den_s=5, ds_bo=[(2.0, 3.0)])
+    assert goi == {}
+
+
+def test_tab_tai_video_bo_cac_doan_goi_tai_doan(tmp_path, monkeypatch):
+    """AppTest: điền «Bỏ các đoạn» → tai_doan nhận ds_bo đã đọc; điền thêm «Từ»/«Đến» → nút tắt + báo chỉ chọn một."""
+    import time
+    from pathlib import Path
+
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    goi = []
+
+    def gia(links, thu_muc, cau_hinh_mang=None, *, tu_s, den_s, ds_bo, progress=None, cancel_check=None, **kw):
+        goi.append((tu_s, den_s, ds_bo))
+        return [{"url": links[0], "trang_thai": "xong", "duong_dan": "x.mp4", "tieu_de": "Video đã bỏ đoạn",
+                 "chat_luong": "", "ghi_chu": ""}]
+
+    monkeypatch.setattr(cv, "tai_doan", gia)
+    at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=120).run()
+    next(t for t in at.text_area if t.label.startswith("Link video")).input(URL[0]).run()
+    next(t for t in at.text_input if t.label == "Thư mục lưu video").input(str(tmp_path / "v")).run()
+    at.text_area(key="bo_tai").input("0:04:12 - 0:05:24, 0:07:11 - 0:09:01").run()
+    assert any("Bỏ 2 đoạn (tổng 00:03:02)" in c.value for c in at.caption)
+    at.text_input(key="tu_tai").input("1:00").run()
+    at.text_input(key="den_tai").input("2:00").run()
+    assert at.button(key="bat_dau_tai_video").disabled
+    assert any("Chỉ chọn một việc" in e.value for e in at.error)
+    at.text_input(key="tu_tai").input("").run()
+    at.text_input(key="den_tai").input("").run()
+    at.button(key="bat_dau_tai_video").click().run()
+    for _ in range(50):
+        if goi and not at.session_state.job["running"]:
+            break
+        time.sleep(0.1)
+    at.run()
+    assert not at.exception
+    assert goi == [(None, None, [(252.0, 324.0), (431.0, 541.0)])]

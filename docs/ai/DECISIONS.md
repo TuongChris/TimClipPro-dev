@@ -15,6 +15,16 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-59 Bỏ nhiều đoạn rồi nối phần còn lại thành video mới (người dùng, 2026-11-17)
+Ô «✂️ Bỏ các đoạn» ở tab «⬇️ Tải video gốc» (tải trọn rồi bỏ, như D-42) và «🛠️ Video trong máy» (D-46): dán
+«0:04:12 - 0:05:24, 0:07:11 - 0:09:01…» (phẩy/chấm phẩy/xuống dòng; chồng nhau thì gộp; chọn MỘT trong «Từ/Đến» và
+«Bỏ các đoạn»). Một lượt FFmpeg `trim`/`atrim` + `concat`, nén lại MỘT lần như D-42 (H.264 crf 18 veryfast + AAC 192k)
+→ đúng từng khung hình, hình–tiếng khớp ở chỗ nối; KHÔNG làm cách nhanh `-c copy` (lệch tới khung hình chính, người
+dùng chọn chính xác). Kiểm độ dài ra = gốc − đoạn bỏ (nới 0,05 s mỗi phần nối), lệch → «.loi»; file gốc không đổi;
+chương/phụ đề gốc bỏ. Giá: nén lại cả phần còn lại (ước ~8–12 phút cho 1 giờ 1080p theo số đo D-41). Không làm
+«giữ nhiều đoạn», file mốc từng phần (chưa cần). Mã: `cat_video_goc.doc_ds_doan`/`bo_doan`. Bằng chứng: test video
+đánh dấu từng khung + từng giây tiếng (0 khung/khúc tiếng sai nguồn); nhanh 4285 = 4281/4/0.
+
 ## D-58 «Bổ sung ngày đăng gốc» bật mặc định khi có khoá YouTube Data API (người dùng, 2026-11-16) — nới «mặc định TẮT» của REPORT_POLICY_V2 §4
 Có khoá dùng được: bổ sung ngày đăng cho video gốc ĐÃ CHỌN chạy mặc định, theo lô `videos.list` (1 đơn vị/50 video, 0 lượt
 yt-dlp). Không khoá / khoá sai / API tắt: như cũ (TẮT mặc định, tối đa 20 video, qua yt-dlp). Không ghi ngược vào kho.

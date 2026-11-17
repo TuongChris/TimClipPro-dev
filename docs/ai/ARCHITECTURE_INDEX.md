@@ -38,7 +38,7 @@ chạm file) — không phải audit lại mã. Thêm/xoá/đổi vai trò modul
 | `channel.py` | Đồng bộ kênh YouTube → kho audio nén + `clips_meta.json` | Đổi cách tải/nén/đặt tên |
 | `am_luong.py` | Đưa âm lượng file đã tải về mức YouTube -14 LUFS (`loudnorm` hai lượt, hình chép nguyên) + `doc_ffprobe` dùng chung (D-43) | Đổi mức/đỉnh âm lượng, mã hoá tiếng |
 | `video_trong_may.py` | Cắt đoạn / chỉnh âm lượng video có sẵn trong máy (D-46), file gốc không bao giờ bị sửa | Đổi luồng xử lý file trong máy |
-| `cat_video_goc.py` | Tải theo link rồi cắt chính xác một đoạn «Từ … Đến …» (nén lại đoạn cắt, kiểm độ dài) (D-42) | Đổi cách cắt, định dạng đoạn ra, cách đọc mốc |
+| `cat_video_goc.py` | Tải theo link rồi cắt chính xác một đoạn «Từ … Đến …» (nén lại đoạn cắt, kiểm độ dài) (D-42); bỏ nhiều đoạn rồi nối phần còn lại (`bo_doan`, D-59; dùng chung với tab «Video trong máy») | Đổi cách cắt, định dạng đoạn ra, cách đọc mốc |
 | `ghep_video_goc.py` | Ghép video gốc theo link thành một video dài (nối không nén lại) + file mốc CSV + mốc chương (D-39) | Đổi định dạng tải chung, cách kiểm thông số, cột file mốc |
 | `tai_video_goc.py` | Tải video gốc theo link hoặc cả kênh (chọn chất lượng tối đa), tải thumbnail JPG; hộp thoại chọn thư mục (D-37); danh sách tiêu đề kênh ra CSV/TXT (D-38) | Đổi định dạng/cách đặt tên file tải |
 | `ytdlp_chung.py` | Tuỳ chọn yt-dlp dùng chung: cookie, giãn nhịp, đường lui player client, diễn giải lỗi; cookie chỉ dùng khi máy giải được thử thách JavaScript (`kha_nang_js`: Node.js ≥ 22 + gói yt-dlp-ejs đúng bản yt-dlp ghim → `js_runtimes`); `MoKhoaTwitch` (D-44: Twitch 1440p — trích qua proxy + cookie twitch.tv, tải thẳng) | Đổi bất cứ thứ gì liên quan yt-dlp; nâng yt-dlp thì nâng yt-dlp-ejs CÙNG lúc |

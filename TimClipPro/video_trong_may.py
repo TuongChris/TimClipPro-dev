@@ -79,17 +79,21 @@ def xu_ly(
     *,
     tu_s: Optional[float] = None,
     den_s: Optional[float] = None,
+    ds_bo: Optional[list] = None,
     chuan_hoa_am: bool = False,
     progress: Optional[Callable[[float, str], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
     **_kw,
 ) -> list:
-    """Cắt đoạn [``tu_s``, ``den_s``) và/hoặc chỉnh âm lượng từng file vào ``thu_muc``. Trả list dict như
-    :func:`tai_video_goc.tai_nhieu` (thêm ``la_file_may``). Tham số thứ ba + ``_kw`` (mạng, phiên…) bỏ qua: không dùng mạng."""
-    if tu_s is None and not chuan_hoa_am:
+    """Cắt đoạn [``tu_s``, ``den_s``) — hoặc bỏ các đoạn ``ds_bo`` rồi nối phần còn lại — và/hoặc chỉnh âm lượng từng file
+    vào ``thu_muc``. Trả list dict như :func:`tai_video_goc.tai_nhieu` (thêm ``la_file_may``). Tham số thứ ba + ``_kw``
+    (mạng, phiên…) bỏ qua: không dùng mạng."""
+    if tu_s is None and not ds_bo and not chuan_hoa_am:
         raise ValueError(
-            "Chọn ít nhất một việc: cắt đoạn («Từ»/«Đến») hoặc chỉnh âm lượng."
+            "Chọn ít nhất một việc: cắt đoạn («Từ»/«Đến»), bỏ các đoạn hoặc chỉnh âm lượng."
         )
+    if ds_bo and tu_s is not None:
+        raise ValueError("Chỉ chọn một việc: cắt lấy một đoạn («Từ»/«Đến») hoặc bỏ các đoạn.")
     if tu_s is not None and not (den_s is not None and 0 <= tu_s < den_s):
         raise ValueError("Mốc «Đến» phải sau mốc «Từ» (và «Từ» không âm).")
     bao = progress or (lambda _p, _m: None)
@@ -120,13 +124,14 @@ def xu_ly(
         def bao_i(phan: float, cau: str, i=i) -> None:
             bao(min((i + phan) / n, 1.0), cau)
 
-        if tu_s is not None:
+        if tu_s is not None or ds_bo:
             k.update(
-                cv.cat_mot(
+                cv.cat_hoac_bo(
                     f,
                     thu_muc,
                     tu_s,
                     den_s,
+                    ds_bo,
                     chuan_hoa_am=chuan_hoa_am,
                     huy=huy,
                     bao=bao_i,

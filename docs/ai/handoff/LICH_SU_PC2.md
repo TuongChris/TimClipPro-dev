@@ -3,6 +3,17 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-11-15 — «Đoạn vi phạm» theo mốc tinh chỉnh (D-50, nhánh feature/pc2/bao-cao-moc-tinh-chinh)
+- Người dùng kiểm tay (job DEV 838): lượt quét hụt 36 s / 8 s cuối hai video gốc (phân vị 95 %); tinh chỉnh (CHỈ ĐỌC audio đã
+  tải) ra 0:00–10:59, 1:46:12–1:57:28 = trọn gốc. Người dùng chọn «Dùng mốc tinh chỉnh» → `bao_cao_v2._moc_tinh_chinh`.
+- Review độc lập 11 tác tử: 5 thật đã sửa (cờ giới hạn TỪNG MÉP, nhãn vùng, xếp đoạn, bảng lịch sử). Nhanh 3920 = 3916/4/0,
+  chậm 25/25, đột biến 34/34. Gộp `47d4bc9`, DEV 15/11 22:22; bằng chứng `C:\Dev\pc2_test_runs\2026-11-15_d50`.
+### 2026-11-14/15 — tinh chỉnh mốc từng giây (D-49 = P-8 «1 và 2», nhánh feature/pc2/khop-tung-giay)
+- Nghiên cứu 14/11 → việc 2 mốc theo độ trôi (`1d8b6d9`, S7b −5,98 s → đúng); việc 1 `tinh_chinh_moc.py` + ống nối engine, ô
+  «🎯 Tinh chỉnh mốc từng giây (thử nghiệm)» TẮT mặc định, không đổi V2/Sheets/lịch sử/Watch (bật/tắt trùng từng trường).
+- 5 vòng phản biện/kiểm độc lập (15/11, `C:\Dev\pc2_test_runs\2026-11-15_p8_vong4|5`): trong mẫu 27 + ngoài mẫu 38 không đổi;
+  sai-mà-tự-tin: nhảy nhỏ 27→0, tốc độ lệch 22→0, video tiếng trễ 74→0 (+21 file 40 Mb/s); fuzz 2.100 ca còn 29 (có từ trước,
+  `KHOP_TUNG_GIAY.md` «Giới hạn»). Nhanh 3890 = 3886/4/0, chậm 25/25, đột biến 30/30. Gộp `1ec4d3a`, DEV 15/11 06:13 (sao lưu `data_20261115_061317`).
 ### 2026-11-11 — audit tổng toàn dự án (Codex GPT-6 Astra chỉ nhận chữ, nhánh fix/pc2/audit-tong-1111)
 - 27 lượt Codex (12 vùng × 2 góc nhìn + Apps Script + mã chết + soát bản sửa), ~78 phát hiện; Claude đọc lại mã từng cái → 20 lỗi
   thật sửa kèm 30 test đỏ→xanh: che mật khẩu proxy trong log, phục hồi JSON không mất file chính, dựng kho DỪNG khi thư mục con không

@@ -248,3 +248,57 @@ def test_tab_video_trong_may_goi_xu_ly(tmp_path, monkeypatch):
     }
     chu = " ".join(e.value for e in [*at.markdown, *at.warning, *at.success])
     assert "Đã xử lý 1/1" in chu
+
+
+# ---------------------------------------------------------------- bỏ các đoạn (D-59, 17/11)
+@can_ffmpeg
+def test_bo_doan_file_trong_may_giu_nguyen_file_goc(tmp_path):
+    goc = _tao(tmp_path / "Phim hay.mp4", giay=10)
+    bam = _bam(goc)
+    k = vm.xu_ly([goc], str(tmp_path / "ra"), ds_bo=[(1.0, 2.5), (6.0, 7.0)])[0]
+    assert k["trang_thai"] == "xong", k
+    assert k["duong_dan"].endswith("Phim_hay_bo_2_doan.mp4")
+    assert _dai(k["duong_dan"]) == pytest.approx(7.5, abs=0.1)
+    assert _bam(goc) == bam
+
+
+def test_bo_doan_va_tu_den_cung_luc_bao_loi(tmp_path):
+    with pytest.raises(ValueError, match="Chỉ chọn một việc"):
+        vm.xu_ly([str(tmp_path / "a.mp4")], str(tmp_path), tu_s=1, den_s=2, ds_bo=[(3.0, 4.0)])
+
+
+def test_tab_video_trong_may_bo_cac_doan(tmp_path, monkeypatch):
+    import time
+    from pathlib import Path
+
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    f = tmp_path / "a.mp4"
+    f.write_bytes(b"x")
+    goi = {}
+
+    def xu_ly_gia(files, thu_muc, cau_hinh_mang=None, *, tu_s, den_s, ds_bo, chuan_hoa_am, progress, cancel_check,
+                  **kw):
+        goi.update(tu_s=tu_s, ds_bo=ds_bo, chuan_hoa_am=chuan_hoa_am)
+        return [{"url": files[0], "trang_thai": "xong", "duong_dan": thu_muc + "/a_bo_1_doan.mp4", "tieu_de": "a",
+                 "chat_luong": "file trong máy", "ghi_chu": "", "la_file_may": True}]
+
+    monkeypatch.setattr(vm, "xu_ly", xu_ly_gia)
+    at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=120).run()
+    next(t for t in at.text_area if t.label.startswith("Đường dẫn video trong máy")).input(str(f)).run()
+    next(t for t in at.text_input if t.label == "Thư mục lưu kết quả").input(str(tmp_path / "ra")).run()
+    at.checkbox(key="am_may").uncheck().run()
+    at.text_area(key="bo_may").input("0:04:12 0:05:24 xx").run()
+    assert at.button(key="bat_dau_xu_ly_may").disabled
+    assert any("Không đọc được «xx»" in e.value for e in at.error)
+    at.text_area(key="bo_may").input("1:01:02 - 1:01:11").run()
+    at.button(key="bat_dau_xu_ly_may").click().run()
+    for _ in range(50):
+        if goi and not at.session_state.job["running"]:
+            break
+        time.sleep(0.1)
+    at.run()
+    assert not at.exception
+    assert goi == {"tu_s": None, "ds_bo": [(3662.0, 3671.0)], "chuan_hoa_am": False}

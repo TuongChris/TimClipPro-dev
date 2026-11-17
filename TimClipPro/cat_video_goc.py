@@ -5,6 +5,9 @@ Tải trọn qua :func:`tai_video_goc.tai_nhieu` (4 kết nối, cùng đường
 :data:`THU_MUC_TAM`, rồi cắt bằng FFmpeg có NÉN LẠI đoạn cắt (``-ss`` trước ``-i`` + mã hoá lại = đúng từng khung hình;
 cắt ``-c copy`` chỉ dừng được ở khung hình chính, lệch vài giây). Đoạn ra được kiểm độ dài; đúng thì xoá video trọn
 (người dùng chọn chỉ giữ đoạn cắt), sai/lỗi thì giữ video trọn trong thư mục tạm để bấm lại khỏi tải lại.
+
+«Bỏ các đoạn» (D-59, 17/11): ngược lại với cắt một đoạn — bỏ NHIỀU đoạn rồi nối phần còn lại thành video mới, MỘT lượt
+FFmpeg (``trim``/``atrim`` + ``concat``, nén lại một lần như cắt) → đúng từng khung hình, hình–tiếng khớp ở mọi chỗ nối.
 """
 
 from __future__ import annotations
@@ -25,6 +28,12 @@ THU_MUC_TAM = ".timclip_cat"
 # Đoạn ra lệch độ dài yêu cầu quá mức này thì không tin (≈ 1 khung hình 30 fps + làm tròn khung tiếng).
 LECH_DO_DAI_TOI_DA_S = 0.06
 _SO = re.compile(r"\d+(\.\d+)?")
+# Một mốc trong danh sách đoạn. Phần lẻ «,5» chỉ khi KHÔNG có «:» theo sau: «0:05:24,0:07:11» là hai mốc, không phải
+# «0:05:24,0» + «:07:11».
+_MOC_TRONG_DS = re.compile(r"\d+(?::\d+){0,2}(?:[.,]\d+(?![\d:]))?")
+_PHAN_CACH_DS = re.compile(r"[\s,;\-–—]*")
+# Phần giữ lại ngắn hơn mức này (dưới ~1 khung hình) coi như bỏ luôn: không có khung hình nào để nối.
+DOAN_GIU_TOI_THIEU_S = 0.05
 
 
 def doc_moc(van_ban: str) -> Optional[float]:
@@ -50,6 +59,42 @@ def doc_moc(van_ban: str) -> Optional[float]:
     return giay
 
 
+def doc_ds_doan(van_ban: str) -> list:
+    """«0:04:12 - 0:05:24, 0:07:11 - 0:09:01» (phẩy, chấm phẩy hoặc mỗi dòng một đoạn) → ``[(252.0, 324.0), …]`` xếp
+    theo thời gian, đoạn chồng/chạm nhau gộp làm một; rỗng → ``[]``; sai → ``ValueError`` (câu tiếng Việt)."""
+    s = str(van_ban or "")
+    moc = [m.group() for m in _MOC_TRONG_DS.finditer(s)]
+    thua = _MOC_TRONG_DS.sub(" ", s)
+    if not _PHAN_CACH_DS.fullmatch(thua):
+        la = re.sub(r"[\s,;\-–—]+", " ", thua).strip()
+        raise ValueError(
+            f"Không đọc được «{la}» trong danh sách đoạn — mỗi đoạn gõ «Từ - Đến» (vd. 0:04:12 - 0:05:24), các đoạn "
+            "cách nhau bằng dấu phẩy hoặc xuống dòng."
+        )
+    if len(moc) % 2:
+        raise ValueError(f"Danh sách có {len(moc)} mốc — mỗi đoạn cần đủ hai mốc «Từ - Đến».")
+    ds = []
+    for tu_vb, den_vb in zip(moc[::2], moc[1::2]):
+        tu, den = doc_moc(tu_vb), doc_moc(den_vb)
+        if den <= tu:
+            raise ValueError(f"Đoạn {tu_vb} - {den_vb}: mốc «Đến» phải sau mốc «Từ».")
+        ds.append((tu, den))
+    gop: list = []
+    for tu, den in sorted(ds):
+        if gop and tu <= gop[-1][1]:
+            gop[-1] = (gop[-1][0], max(gop[-1][1], den))
+        else:
+            gop.append((tu, den))
+    return gop
+
+
+def mo_ta_ds_doan(ds_bo: list) -> str:
+    """«Bỏ 2 đoạn (tổng 00:03:02): 00:04:12–00:05:24, 00:07:11–00:09:01» — câu xác nhận cho giao diện."""
+    tong = sum(b - a for a, b in ds_bo)
+    return (f"Bỏ {len(ds_bo)} đoạn (tổng {moc_hien(tong)}): "
+            + ", ".join(f"{moc_hien(a)}–{moc_hien(b)}" for a, b in ds_bo))
+
+
 def moc_hien(giay: float, cach: str = ":") -> str:
     """00:01:23 hoặc 00:01:23,5 — giữ phần lẻ của giây (``hhmmss`` bỏ mất); ``cach="."`` cho tên file Windows."""
     giay = round(giay, 3)  # làm tròn MỘT lần: 59,9996 → 60 (không thành «00:00:59,»)
@@ -60,7 +105,7 @@ def moc_hien(giay: float, cach: str = ":") -> str:
 
 
 def _do(path: str) -> tuple:
-    """(độ dài giây, có luồng hình không — ảnh bìa đính kèm không tính)."""
+    """(độ dài giây, có luồng hình không — ảnh bìa đính kèm không tính, có luồng tiếng không)."""
     d = am_luong.doc_ffprobe(path)
     hinh = next(
         (
@@ -71,7 +116,28 @@ def _do(path: str) -> tuple:
         ),
         None,
     )
-    return float((d.get("format") or {}).get("duration") or 0), hinh is not None
+    tieng = any(s.get("codec_type") == "audio" for s in d.get("streams", []))
+    return float((d.get("format") or {}).get("duration") or 0), hinh is not None, tieng
+
+
+_MA_HOA = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p"]
+_MA_HOA_TIENG = ["-c:a", "aac", "-b:a", "192k", "-sn", "-dn", "-map_chapters", "-1", "-movflags", "+faststart"]
+
+
+def _chay_ra_file(lenh: list, dang: str, dich: str, *, huy, khi_tien_do):
+    """Chạy FFmpeg ghi ``dang`` rồi mới đổi tên thành ``dich``; hỏng/dừng thì xoá file dở."""
+    r = chay_lenh_media(
+        lenh,
+        cancel_event=_CoHuyTuHam(huy),
+        im_lang_toi_da_s=IM_LANG_FFMPEG_S,
+        theo_doi_tien_do=True,
+        khi_tien_do=khi_tien_do,
+    )
+    if not r.cancelled and r.returncode == 0 and os.path.isfile(dang):
+        os.replace(dang, dich)
+    elif os.path.exists(dang):
+        os.remove(dang)
+    return r
 
 
 def _cat(
@@ -79,23 +145,8 @@ def _cat(
 ):
     """Cắt [tu, den) có nén lại (H.264 crf 18 + AAC; chỉ tiếng thì AAC). Ghi file tạm rồi mới đổi tên."""
     dang = dich + ".dang" + os.path.splitext(dich)[1]
-    hinh = (
-        [
-            "-map",
-            "0:v:0",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "18",
-            "-pix_fmt",
-            "yuv420p",
-        ]
-        if co_hinh
-        else ["-vn"]
-    )
-    r = chay_lenh_media(
+    hinh = ["-map", "0:v:0", *_MA_HOA] if co_hinh else ["-vn"]
+    return _chay_ra_file(
         [
             "ffmpeg",
             "-hide_banner",
@@ -111,28 +162,58 @@ def _cat(
             *hinh,
             "-map",
             "0:a:0?",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            "-sn",
-            "-dn",
-            "-map_chapters",
-            "-1",
-            "-movflags",
-            "+faststart",
+            *_MA_HOA_TIENG,
             dang,
         ],
-        cancel_event=_CoHuyTuHam(huy),
-        im_lang_toi_da_s=IM_LANG_FFMPEG_S,
-        theo_doi_tien_do=True,
+        dang,
+        dich,
+        huy=huy,
         khi_tien_do=khi_tien_do,
     )
-    if not r.cancelled and r.returncode == 0 and os.path.isfile(dang):
-        os.replace(dang, dich)
-    elif os.path.exists(dang):
-        os.remove(dang)
-    return r
+
+
+def _phan_giu(ds_bo: list, do_dai: float) -> list:
+    """Các phần GIỮ lại khi bỏ ``ds_bo`` (đã xếp, đã gộp): ``[(từ, đến | None = tới hết video)]``."""
+    giu, t = [], 0.0
+    for tu, den in ds_bo:
+        if tu - t >= DOAN_GIU_TOI_THIEU_S:
+            giu.append((t, tu))
+        t = max(t, den)
+    if do_dai - t >= DOAN_GIU_TOI_THIEU_S:
+        giu.append((t, None))
+    return giu
+
+
+def _bo(nguon: str, dich: str, giu: list, co_hinh: bool, co_tieng: bool, *, huy, khi_tien_do):
+    """Nối các phần ``giu`` của ``nguon`` thành ``dich`` trong MỘT lượt FFmpeg (giải mã cả video, nén lại một lần)."""
+    dang = dich + ".dang" + os.path.splitext(dich)[1]
+    # shortcut: đồ thị lọc nằm trên dòng lệnh (~120 ký tự/phần, Windows tối đa 32.767) → khoảng 250 đoạn; cần hơn thì
+    # chuyển sang file đồ thị lọc.
+    do_thi, vao = [], ""
+    for i, (a, b) in enumerate(giu):
+        het = f":end={b:.3f}" if b is not None else ""
+        if co_hinh:
+            do_thi.append(f"[0:v:0]trim=start={a:.3f}{het},setpts=PTS-STARTPTS[v{i}]")
+            vao += f"[v{i}]"
+        if co_tieng:
+            do_thi.append(f"[0:a:0]atrim=start={a:.3f}{het},asetpts=PTS-STARTPTS[a{i}]")
+            vao += f"[a{i}]"
+    ra = ("[v]" if co_hinh else "") + ("[a]" if co_tieng else "")
+    do_thi.append(f"{vao}concat=n={len(giu)}:v={int(co_hinh)}:a={int(co_tieng)}{ra}")
+    return _chay_ra_file(
+        [
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", nguon,
+            "-filter_complex", ";".join(do_thi),
+            *(["-map", "[v]", *_MA_HOA] if co_hinh else []),
+            *(["-map", "[a]"] if co_tieng else []),
+            *_MA_HOA_TIENG,
+            dang,
+        ],
+        dang,
+        dich,
+        huy=huy,
+        khi_tien_do=khi_tien_do,
+    )
 
 
 def tai_doan(
@@ -140,17 +221,22 @@ def tai_doan(
     thu_muc: str,
     cau_hinh_mang: Optional[CauHinhMang] = None,
     *,
-    tu_s: float,
-    den_s: float,
+    tu_s: Optional[float] = None,
+    den_s: Optional[float] = None,
+    ds_bo: Optional[list] = None,
     chat_luong: str = tv.CHAT_LUONG_MAC_DINH,
     chuan_hoa_am: bool = False,
     progress: Optional[Callable[[float, str], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
     **kw,
 ) -> list:
-    """Tải từng link rồi cắt đoạn [``tu_s``, ``den_s``) vào ``thu_muc``. Trả list dict như ``tai_nhieu`` (một dòng mỗi
-    link; ``duong_dan`` = file đoạn cắt). ``kw`` chuyển cho ``tai_nhieu`` (player_clients, phien…)."""
-    if not 0 <= tu_s < den_s:
+    """Tải từng link rồi cắt đoạn [``tu_s``, ``den_s``) — hoặc bỏ các đoạn ``ds_bo`` rồi nối phần còn lại — vào
+    ``thu_muc``. Trả list dict như ``tai_nhieu`` (một dòng mỗi link; ``duong_dan`` = file kết quả). ``kw`` chuyển cho
+    ``tai_nhieu`` (player_clients, phien…)."""
+    if ds_bo:
+        if tu_s is not None:
+            raise ValueError("Chỉ chọn một việc: cắt lấy một đoạn («Từ»/«Đến») hoặc bỏ các đoạn.")
+    elif not (tu_s is not None and den_s is not None and 0 <= tu_s < den_s):
         raise ValueError("Mốc «Đến» phải sau mốc «Từ» (và «Từ» không âm).")
     bao = progress or (lambda _p, _m: None)
     huy = cancel_check or (lambda: False)
@@ -192,8 +278,8 @@ def tai_doan(
             )
             continue
         k.update(
-            cat_mot(
-                nguon, thu_muc, tu_s, den_s, chuan_hoa_am=chuan_hoa_am, huy=huy,
+            cat_hoac_bo(
+                nguon, thu_muc, tu_s, den_s, ds_bo, chuan_hoa_am=chuan_hoa_am, huy=huy,
                 bao=lambda f, m, i=i: bao(0.7 + 0.3 * (i + f) / len(ket_qua), m),
                 nhan=f"Video {i + 1}/{len(ket_qua)}",
                 giu=f"Video đã tải vẫn giữ ở «{tam}», sửa mốc rồi bấm lại thì không phải tải lại.",
@@ -226,7 +312,7 @@ def cat_mot(
     ``giu``: câu nói ``nguon`` còn ở đâu (gắn vào lỗi), ``bao(phần 0–1 của file này, câu)``."""
     doan = f"{moc_hien(tu_s)}–{moc_hien(den_s)}"
     try:
-        do_dai, co_hinh = _do(nguon)
+        do_dai, co_hinh = _do(nguon)[:2]
     except RuntimeError as e:
         return {"trang_thai": "loi", "duong_dan": "", "ghi_chu": str(e)}
     if den_s > do_dai + LECH_DO_DAI_TOI_DA_S:
@@ -245,6 +331,18 @@ def cat_mot(
 
     bao(0.0, nhan + "...")
     r = _cat(nguon, dich, tu_s, den_s, co_hinh, huy=huy, khi_tien_do=tien_do)
+    return _kiem_va_chinh_am(
+        r, dich, thu_muc, den_s - tu_s, LECH_DO_DAI_TOI_DA_S, chuan_hoa_am=chuan_hoa_am, huy=huy, bao=bao, nhan=nhan,
+        giu=giu, ghi_xong=f"Đoạn {doan} ({den_s - tu_s:.3f} s), cắt đúng từng khung hình (nén lại đoạn cắt).",
+    )
+
+
+def _kiem_va_chinh_am(
+    r, dich: str, thu_muc: str, dai_yeu_cau: float, lech_toi_da: float, *, chuan_hoa_am: bool, huy, bao, nhan: str,
+    giu: str, ghi_xong: str,
+) -> dict:
+    """Phần chung sau FFmpeg của cắt/bỏ đoạn: dừng/lỗi → dòng kết quả; độ dài ra lệch ``dai_yeu_cau`` quá ``lech_toi_da``
+    → đổi tên «.loi», không tin; đúng → tuỳ chọn chỉnh âm lượng."""
     if r.cancelled:
         return {"trang_thai": "bo_qua", "duong_dan": "", "ghi_chu": "Đã dừng theo yêu cầu trong lúc cắt; phần cắt dở đã xoá."}
     if r.returncode != 0 or not os.path.isfile(dich):
@@ -252,10 +350,10 @@ def cat_mot(
                 "ghi_chu": f"FFmpeg cắt lỗi: {(r.stderr or r.ly_do or '').strip()[-300:]}"}
     try:
         dai_ra = _do(dich)[0]
-        ly_do = (f"đoạn cắt dài {dai_ra:.3f} s, yêu cầu {den_s - tu_s:.3f} s"
-                 if abs(dai_ra - (den_s - tu_s)) > LECH_DO_DAI_TOI_DA_S else "")
+        ly_do = (f"file ra dài {dai_ra:.3f} s, yêu cầu {dai_yeu_cau:.3f} s"
+                 if abs(dai_ra - dai_yeu_cau) > lech_toi_da else "")
     except RuntimeError as e:
-        ly_do = f"không đo lại được đoạn cắt ({e})"
+        ly_do = f"không đo lại được file ra ({e})"
     if ly_do:
         # Đổi tên «.loi»: tên đẹp «… (00.01.23-00.02.45).mp4» dễ bị dùng nhầm như một đoạn cắt đúng.
         loi = tv._ten_trong(thu_muc, os.path.splitext(os.path.basename(dich))[0] + ".loi" + os.path.splitext(dich)[1])
@@ -271,5 +369,58 @@ def cat_mot(
             ghi_am = " Đã dừng lúc chỉnh âm lượng — đoạn cắt giữ âm lượng gốc."
         except RuntimeError as e:
             ghi_am = f" Chưa chỉnh được âm lượng ({e}) — đoạn cắt giữ âm lượng gốc."
-    return {"trang_thai": "xong", "duong_dan": dich,
-            "ghi_chu": f"Đoạn {doan} ({den_s - tu_s:.3f} s), cắt đúng từng khung hình (nén lại đoạn cắt)." + ghi_am}
+    return {"trang_thai": "xong", "duong_dan": dich, "ghi_chu": ghi_xong + ghi_am}
+
+
+def bo_doan(
+    nguon: str,
+    thu_muc: str,
+    ds_bo: list,
+    *,
+    chuan_hoa_am: bool = False,
+    huy: Callable[[], bool] = lambda: False,
+    bao: Callable[[float, str], None] = lambda _f, _m: None,
+    nhan: str = "",
+    giu: str = "",
+) -> dict:
+    """BỎ các đoạn ``ds_bo`` (từ :func:`doc_ds_doan`: đã xếp, đã gộp) của ``nguon`` rồi nối phần còn lại thành file MỚI
+    trong ``thu_muc`` — đúng từng khung hình, kiểm độ dài như :func:`cat_mot`. ``nguon`` KHÔNG bị sửa/xoá ở đây."""
+    try:
+        do_dai, co_hinh, co_tieng = _do(nguon)
+    except RuntimeError as e:
+        return {"trang_thai": "loi", "duong_dan": "", "ghi_chu": str(e)}
+    vuot = [(a, b) for a, b in ds_bo if b > do_dai + LECH_DO_DAI_TOI_DA_S]
+    if vuot:
+        return {"trang_thai": "loi", "duong_dan": "",
+                "ghi_chu": f"Video chỉ dài {hhmmss(do_dai)} — đoạn {moc_hien(vuot[0][0])}–{moc_hien(vuot[0][1])} vượt "
+                           f"quá. {giu}".strip()}
+    giu_lai = _phan_giu(ds_bo, do_dai)
+    if not giu_lai:
+        return {"trang_thai": "loi", "duong_dan": "",
+                "ghi_chu": f"Các đoạn bỏ phủ kín cả video — không còn gì để nối. {giu}".strip()}
+    if not (co_hinh or co_tieng):
+        return {"trang_thai": "loi", "duong_dan": "", "ghi_chu": "File không có hình lẫn tiếng."}
+    con_lai = sum((do_dai if b is None else b) - a for a, b in giu_lai)
+    goc = tv.ten_khong_dau(re.sub(r"\.audio$", "", os.path.splitext(os.path.basename(nguon))[0])) or "video"
+    os.makedirs(thu_muc, exist_ok=True)
+    dich = tv._ten_trong(thu_muc, f"{goc}_bo_{len(ds_bo)}_doan" + (".mp4" if co_hinh else ".m4a"))
+    nhan = f"{nhan}: đang bỏ {len(ds_bo)} đoạn" if nhan else f"Đang bỏ {len(ds_bo)} đoạn"
+
+    def tien_do(d: dict) -> None:
+        giay = int(d.get("out_time_us") or d.get("out_time_ms") or 0) / 1e6
+        bao(min(giay / con_lai, 1.0), f"{nhan} ({hhmmss(giay)}/{hhmmss(con_lai)})")
+
+    bao(0.0, nhan + "...")
+    r = _bo(nguon, dich, giu_lai, co_hinh, co_tieng, huy=huy, khi_tien_do=tien_do)
+    # Mỗi chỗ nối hình/tiếng có thể lệch tối đa ~1 khung hình (mốc rơi giữa hai khung) → nới theo số phần.
+    return _kiem_va_chinh_am(
+        r, dich, thu_muc, con_lai, LECH_DO_DAI_TOI_DA_S + 0.05 * len(giu_lai), chuan_hoa_am=chuan_hoa_am, huy=huy,
+        bao=bao, nhan=nhan, giu=giu,
+        ghi_xong=f"Đã bỏ {len(ds_bo)} đoạn ({hhmmss(do_dai - con_lai)}), nối {len(giu_lai)} phần còn lại thành video "
+                 f"dài {hhmmss(con_lai)}, đúng từng khung hình (nén lại).",
+    )
+
+
+def cat_hoac_bo(nguon: str, thu_muc: str, tu_s, den_s, ds_bo, **kw) -> dict:
+    """Có ``ds_bo`` → :func:`bo_doan`; không → :func:`cat_mot` (dùng chung cho tab tải theo link và tab video trong máy)."""
+    return bo_doan(nguon, thu_muc, ds_bo, **kw) if ds_bo else cat_mot(nguon, thu_muc, tu_s, den_s, **kw)
