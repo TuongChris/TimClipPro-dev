@@ -19,7 +19,7 @@
  *    thì đọc theo thứ tự cột gốc của công cụ + coi hàng 1 là dòng dữ liệu
  *    đầu tiên (bản cũ luôn bắt đầu từ hàng 2 nên còn bỏ sót mất dòng đầu).
  *
- * 2) BẢN MẪU XUẤT MỚI: mỗi tiêu đề mục có một dòng trống ngay sau nó, đoạn
+ * 2) BẢN MẪU XUẤT MỚI: tiêu đề mục đi liền dòng đầu của mục (18/11), đoạn
  *    vi phạm tách thành mục riêng "3.", danh sách video gốc thành mục "4.".
  *    Hai dòng "Thời gian quét" và "Tổng số đoạn video gốc phát hiện" mặc
  *    định KHÔNG in ra — bật lại bằng MAU_XUAT ở file 01 nếu cần.
@@ -161,18 +161,16 @@ function xuatHangDaChonSangKetQuaJson() {
 /**
  * Chuyển một hàng thành đoạn văn bản theo bản mẫu.
  *
- * BỐ CỤC (mỗi tiêu đề mục có một dòng trống ngay sau nó):
+ * BỐ CỤC (tiêu đề mục đi LIỀN dòng đầu của mục; một dòng trống giữa các mục):
  *
  *   [Thời gian quét : ...]            <- chỉ khi MAU_XUAT.HIEN_THOI_GIAN_QUET
  *
  *   1. Thông tin chi tiết chanel vi phạm :
- *
  *   Link kênh vi phạm : ...
  *   Tên kênh vi phạm : ...
  *   Id kênh vi phạm : ...
  *
  *   2. Thông tin chi tiết video vi phạm :
- *
  *   Link video vi phạm : ...
  *   Tên video vi phạm : ...
  *   Thời lượng video vi phạm : ...
@@ -182,7 +180,6 @@ function xuatHangDaChonSangKetQuaJson() {
  *   Đoạn vi phạm 2 trong video vi phạm : ...      <- nếu có nhiều đoạn
  *
  *   4. Danh sách các video gốc :
- *
  *   Link video gốc 1 : ...
  *   Tên video gốc 1 : ...
  *   Ngày đăng video gốc 1 : ...
@@ -207,7 +204,6 @@ function chuyenHangThanhVanBanTheoMau_(columnMap, rawRow, displayRow, timeZone) 
   function moMuc(tieuDe) {
     soMuc += 1;
     lines.push(soMuc + '. ' + tieuDe);
-    lines.push('');
   }
 
   if (MAU_XUAT.HIEN_THOI_GIAN_QUET) {

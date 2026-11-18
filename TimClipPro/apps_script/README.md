@@ -91,18 +91,16 @@ chèn hai hàng. **Cần dán lại `TOAN_BO_AppsScript.gs` vào Sheet** (Cách 
 
 ## Bản mẫu xuất
 
-Mỗi tiêu đề mục có một dòng trống ngay sau nó. Đoạn vi phạm tách thành mục
+Tiêu đề mục đi liền dòng đầu của mục (18/11), một dòng trống giữa các mục. Đoạn vi phạm tách thành mục
 riêng, danh sách video gốc lùi xuống mục kế tiếp:
 
 ```
 1. Thông tin chi tiết chanel vi phạm :
-
 Link kênh vi phạm : …,
 Tên kênh vi phạm : …,
 Id kênh vi phạm : …,
 
 2. Thông tin chi tiết video vi phạm :
-
 Link video vi phạm : …,
 Tên video vi phạm : …,
 Thời lượng video vi phạm : …,
@@ -111,7 +109,6 @@ Ngày đăng video vi phạm : …,
 3. Đoạn vi phạm 1 trong video vi phạm : …,
 
 4. Danh sách các video gốc :
-
 Link video gốc 1 : …,
 Tên video gốc 1 : …,
 Ngày đăng video gốc 1 : …,

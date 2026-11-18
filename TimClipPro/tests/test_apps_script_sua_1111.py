@@ -186,3 +186,61 @@ def test_toan_bo_sinh_dung_tu_bay_tep_goc():
         assert f.read().replace("\r\n", "\n") == gop.gop(), (
             "chạy apps_script/gop_toan_bo.py sau khi sửa tệp gốc"
         )
+
+
+@can_node
+def test_xuat_hang_khong_co_dong_trong_ngay_sau_tieu_de_muc(tmp_path):
+    """Bản mẫu người dùng chốt 18/11: tiêu đề mục («1. …», «2. …», «4. …») đi LIỀN dòng đầu tiên của mục; vẫn một dòng
+    trống giữa các mục và giữa các video gốc."""
+    kq = _chay(
+        tmp_path,
+        r"""
+const o = {
+  'Link kênh vi phạm': 'https://www.youtube.com/channel/UCkenh',
+  'Tên kênh vi phạm': 'Kênh Giả',
+  'Id kênh vi phạm': 'UCkenh',
+  'Link video vi phạm': 'https://www.youtube.com/watch?v=vidvipham01',
+  'Tên video vi phạm': 'Video vi phạm giả',
+  'Thời lượng video vi phạm': '4:48:27',
+  'Ngày đăng video vi phạm': 'November 11, 2026',
+  'Đoạn vi phạm 1 trong video vi phạm': '00:57:57 – 01:09:33 · https://www.youtube.com/watch?v=vidvipham01&t=3477',
+  'Đoạn vi phạm 2 trong video vi phạm': '04:26:06 – 04:37:26 · https://www.youtube.com/watch?v=vidvipham01&t=15966',
+  'Link video gốc 1': 'https://www.youtube.com/watch?v=goc00000001',
+  'Tên video gốc 1': 'Gốc 1',
+  'Ngày đăng video gốc 1': 'March 5, 2025',
+  'Thời lượng video gốc 1': '0:11:49',
+  'Link video gốc 2': 'https://www.youtube.com/watch?v=goc00000002',
+  'Tên video gốc 2': 'Gốc 2',
+  'Ngày đăng video gốc 2': 'June 15, 2024',
+  'Thời lượng video gốc 2': '0:12:32',
+};
+const dong = KETQUAQUET_COT_MAC_DINH.map((t) => o[t] || '');
+return chuyenHangThanhVanBanTheoMau_(taoBanDoCotTheoTieuDe_(KETQUAQUET_COT_MAC_DINH), dong, dong, 'Asia/Ho_Chi_Minh');
+""",
+    )
+    assert kq == (
+        "1. Thông tin chi tiết chanel vi phạm :\n"
+        "Link kênh vi phạm : https://www.youtube.com/channel/UCkenh,\n"
+        "Tên kênh vi phạm : Kênh Giả,\n"
+        "Id kênh vi phạm : UCkenh,\n"
+        "\n"
+        "2. Thông tin chi tiết video vi phạm :\n"
+        "Link video vi phạm : https://www.youtube.com/watch?v=vidvipham01,\n"
+        "Tên video vi phạm : Video vi phạm giả,\n"
+        "Thời lượng video vi phạm : 4:48:27,\n"
+        "Ngày đăng video vi phạm : November 11, 2026,\n"
+        "\n"
+        "3. Đoạn vi phạm 1 trong video vi phạm : 00:57:57 – 01:09:33 · https://www.youtube.com/watch?v=vidvipham01&t=3477,\n"
+        "Đoạn vi phạm 2 trong video vi phạm : 04:26:06 – 04:37:26 · https://www.youtube.com/watch?v=vidvipham01&t=15966,\n"
+        "\n"
+        "4. Danh sách các video gốc :\n"
+        "Link video gốc 1 : https://www.youtube.com/watch?v=goc00000001,\n"
+        "Tên video gốc 1 : Gốc 1,\n"
+        "Ngày đăng video gốc 1 : March 5, 2025,\n"
+        "Thời lượng video gốc 1 : 0:11:49,\n"
+        "\n"
+        "Link video gốc 2 : https://www.youtube.com/watch?v=goc00000002,\n"
+        "Tên video gốc 2 : Gốc 2,\n"
+        "Ngày đăng video gốc 2 : June 15, 2024,\n"
+        "Thời lượng video gốc 2 : 0:12:32,"
+    )
