@@ -23,7 +23,7 @@ YouTube: TẢI TRỌN phần HÌNH (không tiếng, ưu tiên bản SDR — HDR 
 KHÔNG cho FFmpeg đọc thẳng googlevideo (ngoài `PhienYouTube`/cookie/đường lui, chưa đo được độ chính xác khung khi
 chưa thử thật); video dài thì tải lâu hơn. Chọn MỘT trong cắt / bỏ đoạn / chụp ảnh; «Chỉ audio» không chụp được.
 Mã: `cat_video_goc.doc_ds_moc`/`chup_anh`. Bằng chứng: test video đánh dấu độ sáng từng khung (khung hình chính chỉ ở
-đầu) → ảnh đúng khung ở 4 mốc; nhanh 4295 = 4291/4/0. CHƯA thử YouTube thật.
+đầu) → ảnh đúng khung ở 4 mốc; nhanh 4295 = 4291/4/0. Người dùng thử trên DEV 19/11 cả file trong máy lẫn video YouTube: ĐẠT.
 
 ## D-59 Bỏ nhiều đoạn rồi nối phần còn lại thành video mới (người dùng, 2026-11-17)
 Ô «✂️ Bỏ các đoạn» ở tab «⬇️ Tải video gốc» (tải trọn rồi bỏ, như D-42) và «🛠️ Video trong máy» (D-46): dán
