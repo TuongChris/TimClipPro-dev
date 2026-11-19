@@ -25,7 +25,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   tạm; dữ liệu thật chỉ dùng trong app DEV vận hành.
 
 ## Tiếp theo
-0d. 19/11: «📸 Chụp ảnh ở các mốc» (D-60, nhánh `feature/pc2/chup-anh`) — chờ gộp + DEV; người dùng thử một file trong máy
+0d. 19/11: «📸 Chụp ảnh ở các mốc» (D-60) GỘP `99d29b8`, DEV 13:02 (sao lưu `data_20261119_130238`); người dùng thử một file trong máy
     và MỘT video YouTube (lượt YouTube thật đầu tiên của chức năng này).
 0c. 18/11: Apps Script «Xuất hàng» bỏ dòng trống sau tiêu đề mục (nhánh `fix/pc2/mau-xuat-sat-tieu-de`) — người dùng dán lại.
 0b. 17/11: giữ tab đang mở khi xong việc — GỘP `67531b8`, DEV 15:19 (sao lưu `data_20261117_151853`) — người dùng thử: ĐẠT.
