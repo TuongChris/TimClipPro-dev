@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Cắt đoạn / chỉnh âm lượng video ĐÃ CÓ trong máy (D-46, người dùng yêu cầu 11/11).
+"""Cắt đoạn / chỉnh âm lượng / chụp ảnh video ĐÃ CÓ trong máy (D-46, người dùng yêu cầu 11/11; chụp ảnh 18/11).
 
 Dùng lại đúng phần cắt (:func:`cat_video_goc.cat_mot`, cắt chính xác từng khung hình + kiểm độ dài) và phần chỉnh âm
 lượng (:func:`am_luong.chuan_hoa`, mức YouTube -14 LUFS) của luồng tải theo link. Bất biến: file GỐC không bao giờ bị sửa,
@@ -80,18 +80,22 @@ def xu_ly(
     tu_s: Optional[float] = None,
     den_s: Optional[float] = None,
     ds_bo: Optional[list] = None,
+    ds_moc: Optional[list] = None,
     chuan_hoa_am: bool = False,
     progress: Optional[Callable[[float, str], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
     **_kw,
 ) -> list:
     """Cắt đoạn [``tu_s``, ``den_s``) — hoặc bỏ các đoạn ``ds_bo`` rồi nối phần còn lại — và/hoặc chỉnh âm lượng từng file
-    vào ``thu_muc``. Trả list dict như :func:`tai_video_goc.tai_nhieu` (thêm ``la_file_may``). Tham số thứ ba + ``_kw``
-    (mạng, phiên…) bỏ qua: không dùng mạng."""
-    if tu_s is None and not ds_bo and not chuan_hoa_am:
+    vào ``thu_muc`` — hoặc chụp ảnh ở các mốc ``ds_moc`` (bỏ qua ``chuan_hoa_am``). Trả list dict như
+    :func:`tai_video_goc.tai_nhieu` (thêm ``la_file_may``). Tham số thứ ba + ``_kw`` (mạng, phiên…) bỏ qua: không dùng
+    mạng."""
+    if tu_s is None and not ds_bo and not ds_moc and not chuan_hoa_am:
         raise ValueError(
-            "Chọn ít nhất một việc: cắt đoạn («Từ»/«Đến»), bỏ các đoạn hoặc chỉnh âm lượng."
+            "Chọn ít nhất một việc: cắt đoạn («Từ»/«Đến»), bỏ các đoạn, chụp ảnh hoặc chỉnh âm lượng."
         )
+    if ds_moc and (tu_s is not None or ds_bo):
+        raise ValueError("Chỉ chọn một việc: cắt một đoạn, bỏ các đoạn hoặc chụp ảnh.")
     if ds_bo and tu_s is not None:
         raise ValueError("Chỉ chọn một việc: cắt lấy một đoạn («Từ»/«Đến») hoặc bỏ các đoạn.")
     if tu_s is not None and not (den_s is not None and 0 <= tu_s < den_s):
@@ -124,6 +128,9 @@ def xu_ly(
         def bao_i(phan: float, cau: str, i=i) -> None:
             bao(min((i + phan) / n, 1.0), cau)
 
+        if ds_moc:
+            k.update(cv.chup_anh(f, thu_muc, ds_moc, huy=huy, bao=bao_i, nhan=nhan, giu="File gốc giữ nguyên."))
+            continue
         if tu_s is not None or ds_bo:
             k.update(
                 cv.cat_hoac_bo(

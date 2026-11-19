@@ -8,6 +8,9 @@ cắt ``-c copy`` chỉ dừng được ở khung hình chính, lệch vài giâ
 
 «Bỏ các đoạn» (D-59, 17/11): ngược lại với cắt một đoạn — bỏ NHIỀU đoạn rồi nối phần còn lại thành video mới, MỘT lượt
 FFmpeg (``trim``/``atrim`` + ``concat``, nén lại một lần như cắt) → đúng từng khung hình, hình–tiếng khớp ở mọi chỗ nối.
+
+«Chụp ảnh» (18/11): ảnh PNG đúng khung hình ở từng mốc người dùng gõ (``-ss`` trước ``-i`` + giải mã = khung hình ĐẦU
+TIÊN từ mốc trở đi, không phải khung hình chính gần nhất), độ phân giải gốc. Video theo link chỉ tải phần HÌNH.
 """
 
 from __future__ import annotations
@@ -34,6 +37,8 @@ _MOC_TRONG_DS = re.compile(r"\d+(?::\d+){0,2}(?:[.,]\d+(?![\d:]))?")
 _PHAN_CACH_DS = re.compile(r"[\s,;\-–—]*")
 # Phần giữ lại ngắn hơn mức này (dưới ~1 khung hình) coi như bỏ luôn: không có khung hình nào để nối.
 DOAN_GIU_TOI_THIEU_S = 0.05
+# Mốc chụp ảnh cách nhau bằng phẩy, chấm phẩy, dấu cách hoặc xuống dòng — không có «-» («7:23 - 8:00» là một đoạn).
+_PHAN_CACH_MOC = re.compile(r"[\s,;]*")
 
 
 def doc_moc(van_ban: str) -> Optional[float]:
@@ -93,6 +98,20 @@ def mo_ta_ds_doan(ds_bo: list) -> str:
     tong = sum(b - a for a, b in ds_bo)
     return (f"Bỏ {len(ds_bo)} đoạn (tổng {moc_hien(tong)}): "
             + ", ".join(f"{moc_hien(a)}–{moc_hien(b)}" for a, b in ds_bo))
+
+
+def doc_ds_moc(van_ban: str) -> list:
+    """«7:23, 12:05» (phẩy, chấm phẩy, dấu cách hoặc mỗi dòng một mốc) → ``[443.0, 725.0]`` xếp theo thời gian, bỏ
+    trùng; rỗng → ``[]``; sai → ``ValueError`` (câu tiếng Việt)."""
+    s = str(van_ban or "")
+    thua = _MOC_TRONG_DS.sub(" ", s)
+    if not _PHAN_CACH_MOC.fullmatch(thua):
+        la = re.sub(r"[\s,;]+", " ", thua).strip()
+        raise ValueError(
+            f"Không đọc được «{la}» trong danh sách mốc — gõ phút:giây (vd. 7:23) hoặc giờ:phút:giây, các mốc cách "
+            "nhau bằng dấu phẩy."
+        )
+    return sorted({doc_moc(m.group()) for m in _MOC_TRONG_DS.finditer(s)})
 
 
 def moc_hien(giay: float, cach: str = ":") -> str:
@@ -224,6 +243,7 @@ def tai_doan(
     tu_s: Optional[float] = None,
     den_s: Optional[float] = None,
     ds_bo: Optional[list] = None,
+    ds_moc: Optional[list] = None,
     chat_luong: str = tv.CHAT_LUONG_MAC_DINH,
     chuan_hoa_am: bool = False,
     progress: Optional[Callable[[float, str], None]] = None,
@@ -231,9 +251,14 @@ def tai_doan(
     **kw,
 ) -> list:
     """Tải từng link rồi cắt đoạn [``tu_s``, ``den_s``) — hoặc bỏ các đoạn ``ds_bo`` rồi nối phần còn lại — vào
-    ``thu_muc``. Trả list dict như ``tai_nhieu`` (một dòng mỗi link; ``duong_dan`` = file kết quả). ``kw`` chuyển cho
-    ``tai_nhieu`` (player_clients, phien…)."""
-    if ds_bo:
+    ``thu_muc`` — hoặc chụp ảnh ở các mốc ``ds_moc`` (:func:`chup_anh`). Trả list dict như ``tai_nhieu`` (một dòng mỗi
+    link; ``duong_dan`` = file kết quả). ``kw`` chuyển cho ``tai_nhieu`` (player_clients, phien…)."""
+    if ds_moc:
+        if tu_s is not None or ds_bo:
+            raise ValueError("Chỉ chọn một việc: cắt một đoạn, bỏ các đoạn hoặc chụp ảnh.")
+        if tv.CHAT_LUONG.get(chat_luong) == 0:
+            raise ValueError("Chụp ảnh cần video có hình — chọn «Video», không chọn «Chỉ audio».")
+    elif ds_bo:
         if tu_s is not None:
             raise ValueError("Chỉ chọn một việc: cắt lấy một đoạn («Từ»/«Đến») hoặc bỏ các đoạn.")
     elif not (tu_s is not None and den_s is not None and 0 <= tu_s < den_s):
@@ -242,8 +267,9 @@ def tai_doan(
     huy = cancel_check or (lambda: False)
     thu_muc = os.path.abspath(str(thu_muc or "").strip().strip('"'))
     # Một thư mục tạm cho mỗi mức chất lượng: video trọn giữ lại từ lượt trước (nhận ra theo [mã video]) chỉ được dùng
-    # lại khi cùng mức — khác mức thì tải lại, không cắt từ bản 720p cũ khi người dùng chọn «Cao nhất».
-    tam = os.path.join(thu_muc, THU_MUC_TAM, f"cl_{tv.CHAT_LUONG.get(chat_luong)}")
+    # lại khi cùng mức — khác mức thì tải lại, không cắt từ bản 720p cũ khi người dùng chọn «Cao nhất». Chụp ảnh tải video
+    # KHÔNG tiếng → thư mục riêng, không bao giờ bị lấy để cắt.
+    tam = os.path.join(thu_muc, THU_MUC_TAM, f"{'anh' if ds_moc else 'cl'}_{tv.CHAT_LUONG.get(chat_luong)}")
     chi_tieng = tv.CHAT_LUONG.get(chat_luong) == 0
     ket_qua = tv.tai_nhieu(
         list(links),
@@ -253,6 +279,7 @@ def tai_doan(
         cancel_check=huy,
         bo_qua_da_co=True,
         chat_luong=chat_luong,
+        **({"dinh_dang": _dinh_dang_anh(chat_luong)} if ds_moc else {}),
         **kw,
     )
     # Video đã có trong thư mục tạm (lượt trước cắt hỏng/mốc sai): tai_nhieu báo «bỏ qua» không kèm đường dẫn.
@@ -277,13 +304,15 @@ def tai_doan(
                 ghi_chu="Đã dừng theo yêu cầu trước khi cắt.",
             )
             continue
+        chung = dict(
+            huy=huy,
+            bao=lambda f, m, i=i: bao(0.7 + 0.3 * (i + f) / len(ket_qua), m),
+            nhan=f"Video {i + 1}/{len(ket_qua)}",
+            giu=f"Video đã tải vẫn giữ ở «{tam}», sửa mốc rồi bấm lại thì không phải tải lại.",
+        )
         k.update(
-            cat_hoac_bo(
-                nguon, thu_muc, tu_s, den_s, ds_bo, chuan_hoa_am=chuan_hoa_am, huy=huy,
-                bao=lambda f, m, i=i: bao(0.7 + 0.3 * (i + f) / len(ket_qua), m),
-                nhan=f"Video {i + 1}/{len(ket_qua)}",
-                giu=f"Video đã tải vẫn giữ ở «{tam}», sửa mốc rồi bấm lại thì không phải tải lại.",
-            )
+            chup_anh(nguon, thu_muc, ds_moc, **chung) if ds_moc
+            else cat_hoac_bo(nguon, thu_muc, tu_s, den_s, ds_bo, chuan_hoa_am=chuan_hoa_am, **chung)
         )
         if k["trang_thai"] == "xong":
             with contextlib.suppress(OSError):
@@ -419,6 +448,81 @@ def bo_doan(
         ghi_xong=f"Đã bỏ {len(ds_bo)} đoạn ({hhmmss(do_dai - con_lai)}), nối {len(giu_lai)} phần còn lại thành video "
                  f"dài {hhmmss(con_lai)}, đúng từng khung hình (nén lại).",
     )
+
+
+def _dinh_dang_anh(chat_luong: str) -> dict:
+    """yt-dlp cho chụp ảnh: chỉ phần HÌNH (không tải/ghép tiếng), ưu tiên bản SDR — ảnh chụp từ bản HDR ra màu nhạt."""
+    cao = tv.CHAT_LUONG[chat_luong]
+    loc = f"[height<={cao}]" if cao else ""
+    return {"format": f"bv*{loc}[dynamic_range=SDR]/bv*{loc}/b{loc}"}
+
+
+def chup_anh(
+    nguon: str,
+    thu_muc: str,
+    ds_moc: list,
+    *,
+    huy: Callable[[], bool] = lambda: False,
+    bao: Callable[[float, str], None] = lambda _f, _m: None,
+    nhan: str = "",
+    giu: str = "",
+) -> dict:
+    """Chụp ảnh PNG ở từng mốc ``ds_moc`` (giây, từ :func:`doc_ds_moc`) của ``nguon`` vào ``thu_muc``: khung hình ĐẦU
+    TIÊN từ mốc trở đi, độ phân giải gốc, không bao giờ ghi đè. ``nguon`` KHÔNG bị sửa/xoá ở đây. Trả
+    ``{trang_thai, duong_dan, ghi_chu}`` — ``duong_dan`` = ảnh (một mốc) hoặc ``thu_muc`` (nhiều mốc)."""
+    try:
+        do_dai, co_hinh = _do(nguon)[:2]
+    except RuntimeError as e:
+        return {"trang_thai": "loi", "duong_dan": "", "ghi_chu": str(e)}
+    if not co_hinh:
+        return {"trang_thai": "loi", "duong_dan": "",
+                "ghi_chu": "File chỉ có tiếng, không có hình — không chụp ảnh được."}
+    vuot = [g for g in ds_moc if g >= do_dai]
+    if vuot:
+        return {"trang_thai": "loi", "duong_dan": "",
+                "ghi_chu": f"Video chỉ dài {hhmmss(do_dai)} — mốc {moc_hien(vuot[0])} vượt quá. {giu}".strip()}
+    goc = tv.ten_khong_dau(re.sub(r"\.audio$", "", os.path.splitext(os.path.basename(nguon))[0])) or "anh"
+    os.makedirs(thu_muc, exist_ok=True)
+    anh: list = []
+
+    def da_chup() -> str:
+        return f" Đã chụp {len(anh)} ảnh trước đó: {', '.join(os.path.basename(a) for a in anh)}." if anh else ""
+
+    for j, g in enumerate(ds_moc):
+        if huy():
+            return {"trang_thai": "bo_qua", "duong_dan": "", "ghi_chu": "Đã dừng theo yêu cầu." + da_chup()}
+        bao(j / len(ds_moc), f"{nhan + ': đ' if nhan else 'Đ'}ang chụp ảnh ở {moc_hien(g)}")
+        dich = tv._ten_trong(thu_muc, f"{goc}_{moc_hien(g, '-').replace(',', '-')}.png")
+        dang = dich + ".dang.png"
+        # «-update 1»: tên file là tên thật, không phải mẫu «%d» — thư mục có «%» vẫn đúng.
+        r = _chay_ra_file(
+            ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{g:.3f}", "-i", nguon,
+             "-map", "0:v:0", "-frames:v", "1", "-update", "1", dang],
+            dang,
+            dich,
+            huy=huy,
+            khi_tien_do=lambda _d: None,
+        )
+        if r.cancelled:
+            return {"trang_thai": "bo_qua", "duong_dan": "", "ghi_chu": "Đã dừng theo yêu cầu." + da_chup()}
+        if r.returncode != 0 or not os.path.isfile(dich):
+            # FFmpeg thoát 0 mà không ghi ảnh = mốc nằm sau khung hình cuối (giữa khung cuối và hết video).
+            ly_do = ((r.stderr or r.ly_do or "").strip()[-300:] if r.returncode else
+                     "không có khung hình nào từ mốc này tới hết video — chọn mốc sớm hơn một chút")
+            return {"trang_thai": "loi", "duong_dan": "",
+                    "ghi_chu": f"Không chụp được ảnh ở {moc_hien(g)}: {ly_do}.{da_chup()} {giu}".strip()}
+        anh.append(dich)
+    try:
+        s = am_luong.doc_ffprobe(anh[0])["streams"][0]
+        co = f" {s['width']}×{s['height']}"
+    except (RuntimeError, LookupError):
+        co = ""
+    return {
+        "trang_thai": "xong",
+        "duong_dan": anh[0] if len(anh) == 1 else thu_muc,
+        "ghi_chu": f"{len(anh)} ảnh PNG{co} (khung hình đúng mốc, độ phân giải gốc): "
+                   + ", ".join(os.path.basename(a) for a in anh),
+    }
 
 
 def cat_hoac_bo(nguon: str, thu_muc: str, tu_s, den_s, ds_bo, **kw) -> dict:

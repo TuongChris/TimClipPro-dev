@@ -15,6 +15,16 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-60 Chụp ảnh ở các mốc của video (người dùng, 2026-11-19)
+Ô «📸 Chụp ảnh ở các mốc» ở tab «⬇️ Tải video gốc» và «🛠️ Video trong máy»: «7:23, 12:05, 1:01:10» → mỗi mốc một ảnh PNG
+(người dùng không chọn → mặc định đề xuất: PNG, nhiều mốc) tên `<tên file>_00-07-23.png`, không ghi đè. FFmpeg `-ss` trước
+`-i` + giải mã = khung hình ĐẦU TIÊN từ mốc trở đi (lệch tối đa 1 khung so với khung đang hiện), độ phân giải gốc.
+YouTube: TẢI TRỌN phần HÌNH (không tiếng, ưu tiên bản SDR — HDR chụp ra màu nhạt) qua `tai_nhieu` rồi chụp, xong xoá —
+KHÔNG cho FFmpeg đọc thẳng googlevideo (ngoài `PhienYouTube`/cookie/đường lui, chưa đo được độ chính xác khung khi
+chưa thử thật); video dài thì tải lâu hơn. Chọn MỘT trong cắt / bỏ đoạn / chụp ảnh; «Chỉ audio» không chụp được.
+Mã: `cat_video_goc.doc_ds_moc`/`chup_anh`. Bằng chứng: test video đánh dấu độ sáng từng khung (khung hình chính chỉ ở
+đầu) → ảnh đúng khung ở 4 mốc; nhanh 4295 = 4291/4/0. CHƯA thử YouTube thật.
+
 ## D-59 Bỏ nhiều đoạn rồi nối phần còn lại thành video mới (người dùng, 2026-11-17)
 Ô «✂️ Bỏ các đoạn» ở tab «⬇️ Tải video gốc» (tải trọn rồi bỏ, như D-42) và «🛠️ Video trong máy» (D-46): dán
 «0:04:12 - 0:05:24, 0:07:11 - 0:09:01…» (phẩy/chấm phẩy/xuống dòng; chồng nhau thì gộp; chọn MỘT trong «Từ/Đến» và

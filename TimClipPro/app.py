@@ -1603,22 +1603,31 @@ with tab_tai:
     _bo_tai = st.text_area(
         "✂️ Bỏ các đoạn rồi nối phần còn lại (để trống = không bỏ)", key="bo_tai", height=80,
         placeholder="vd. 0:04:12 - 0:05:24, 0:07:11 - 0:09:01\n(mỗi đoạn «Từ - Đến», cách nhau dấu phẩy hoặc xuống dòng)")
+    _anh_tai = st.text_input("📸 Chụp ảnh ở các mốc (để trống = không chụp)", key="anh_tai", placeholder="vd. 7:23 hoặc 7:23, 12:05, 1:01:10 (mỗi mốc một ảnh PNG)")
     _tu_s = _den_s = None
     _ds_bo_tai: list = []
+    _ds_moc_tai: list = []
     _loi_doan = ""
     try:
         _tu_s, _den_s = cat_video_goc.doc_moc(_tu_tai), cat_video_goc.doc_moc(_den_tai)
         _ds_bo_tai = cat_video_goc.doc_ds_doan(_bo_tai)
+        _ds_moc_tai = cat_video_goc.doc_ds_moc(_anh_tai)
         if (_tu_s is None) != (_den_s is None):
             _loi_doan = "Điền cả «Từ» lẫn «Đến» — hoặc để trống cả hai để tải cả video."
         elif _tu_s is not None and _den_s <= _tu_s:
             _loi_doan = "Mốc «Đến» phải sau mốc «Từ»."
-        elif _tu_s is not None and _ds_bo_tai:
-            _loi_doan = "Chỉ chọn một việc: cắt lấy một đoạn («Từ»/«Đến») hoặc bỏ các đoạn — xoá một trong hai."
+        elif sum((_tu_s is not None, bool(_ds_bo_tai), bool(_ds_moc_tai))) > 1:
+            _loi_doan = "Chỉ chọn một việc: cắt một đoạn («Từ»/«Đến»), bỏ các đoạn hoặc chụp ảnh — xoá bớt ô."
+        elif _ds_moc_tai and _chi_audio:
+            _loi_doan = "Chụp ảnh cần video có hình — chọn «🎬 Video», không chọn «Chỉ audio»."
     except ValueError as e:
         _loi_doan = str(e)
     if _loi_doan:
         st.error(_loi_doan)
+    elif _ds_moc_tai:
+        st.caption(f"Chụp {len(_ds_moc_tai)} ảnh PNG ở {', '.join(map(cat_video_goc.moc_hien, _ds_moc_tai))} — khung hình "
+                   "đúng mốc, độ phân giải gốc của video (theo «Chất lượng tối đa»). Tải trọn từng video (chỉ phần hình, "
+                   "không tiếng) rồi chụp; xong thì xoá video. Ô âm lượng không áp dụng khi chụp ảnh.")
     elif _ds_bo_tai:
         st.caption(f"{cat_video_goc.mo_ta_ds_doan(_ds_bo_tai)}. Tải trọn từng video rồi bỏ các đoạn đó, nối phần còn lại "
                    f"thành video mới; xong thì xoá video trọn. {CAN_BO}")
@@ -1640,14 +1649,14 @@ with tab_tai:
             placeholder=r"vd. C:\...\secrets\twitch_cookies.txt")
         st.caption("Hai đường dẫn được nhớ khi bấm «💾 Lưu cấu hình» ở thanh bên. Nội dung file không được lưu vào cấu hình.")
     _mo_khoa_tw = ytdlp_chung.MoKhoaTwitch(st.session_state.twitch_proxy_file, st.session_state.twitch_cookie_file)
-    _co_doan = (_tu_s is not None or bool(_ds_bo_tai)) and not _loi_doan
-    _nhan_tai = "✂️ Tải và cắt" if _co_doan else "🎵 Tải audio" if _chi_audio else "⬇️ Tải"
+    _co_doan = (_tu_s is not None or bool(_ds_bo_tai) or bool(_ds_moc_tai)) and not _loi_doan
+    _nhan_tai = "📸 Tải và chụp" if _ds_moc_tai else "✂️ Tải và cắt" if _co_doan else "🎵 Tải audio" if _chi_audio else "⬇️ Tải"
     if st.button(f"{_nhan_tai} {len(_ds_link)} video" if _ds_link else f"{_nhan_tai} video", type="primary",
                  disabled=not (_ds_link and _thu_muc_tai) or bool(_loi_doan) or _chua_tai_duoc(),
                  key="bat_dau_tai_video"):
         if _co_doan:
             _bat_dau_tai(cat_video_goc.tai_doan, _ds_link, _thu_muc_tai, tu_s=_tu_s, den_s=_den_s,
-                         ds_bo=_ds_bo_tai or None, chat_luong=_cl_tai, chuan_hoa_am=_am_tai, mo_khoa_twitch=_mo_khoa_tw)
+                         ds_bo=_ds_bo_tai or None, ds_moc=_ds_moc_tai or None, chat_luong=_cl_tai, chuan_hoa_am=_am_tai, mo_khoa_twitch=_mo_khoa_tw)
         else:
             _bat_dau_tai(tai_video_goc.tai_nhieu, _ds_link, _thu_muc_tai, chat_luong=_cl_tai, chuan_hoa_am=_am_tai,
                          mo_khoa_twitch=_mo_khoa_tw)
@@ -1719,7 +1728,7 @@ with tab_ghep:
         _bat_dau_tai(ghep_video_goc.ghep, _ds_ghep, _thu_muc_ghep, ten_file=_ten_ghep, chuan_hoa_am=_am_ghep)
 
 with tab_may:
-    st.subheader("Cắt đoạn / bỏ đoạn / chỉnh âm lượng video có sẵn trong máy")
+    st.subheader("Cắt đoạn / bỏ đoạn / chụp ảnh / chỉnh âm lượng video có sẵn trong máy")
     st.caption("File gốc KHÔNG bị sửa, đổi tên hay xoá — kết quả ra file MỚI trong thư mục lưu (trùng tên thì thêm « (2)»). "
                "Muốn GHÉP các file trong máy: dán đường dẫn file vào tab «🎞️ Ghép video gốc» (trộn được với link YouTube).")
     may_vb = st.text_area("Đường dẫn video trong máy (mỗi dòng một file, hoặc một thư mục)", height=120, key="file_may",
@@ -1739,32 +1748,40 @@ with tab_may:
     _bo_may = st.text_area(
         "✂️ Bỏ các đoạn rồi nối phần còn lại (để trống = không bỏ)", key="bo_may", height=80,
         placeholder="vd. 0:04:12 - 0:05:24, 0:07:11 - 0:09:01\n(mỗi đoạn «Từ - Đến», cách nhau dấu phẩy hoặc xuống dòng)")
+    _anh_may = st.text_input("📸 Chụp ảnh ở các mốc (để trống = không chụp)", key="anh_may", placeholder="vd. 7:23 hoặc 7:23, 12:05, 1:01:10 (mỗi mốc một ảnh PNG)")
     _tu_m = _den_m = None
     _ds_bo_may: list = []
+    _ds_moc_may: list = []
     _loi_doan_m = ""
     try:
         _tu_m, _den_m = cat_video_goc.doc_moc(_tu_may), cat_video_goc.doc_moc(_den_may)
         _ds_bo_may = cat_video_goc.doc_ds_doan(_bo_may)
+        _ds_moc_may = cat_video_goc.doc_ds_moc(_anh_may)
         if (_tu_m is None) != (_den_m is None):
             _loi_doan_m = "Điền cả «Từ» lẫn «Đến» — hoặc để trống cả hai nếu chỉ chỉnh âm lượng."
         elif _tu_m is not None and _den_m <= _tu_m:
             _loi_doan_m = "Mốc «Đến» phải sau mốc «Từ»."
-        elif _tu_m is not None and _ds_bo_may:
-            _loi_doan_m = "Chỉ chọn một việc: cắt lấy một đoạn («Từ»/«Đến») hoặc bỏ các đoạn — xoá một trong hai."
+        elif sum((_tu_m is not None, bool(_ds_bo_may), bool(_ds_moc_may))) > 1:
+            _loi_doan_m = "Chỉ chọn một việc: cắt một đoạn («Từ»/«Đến»), bỏ các đoạn hoặc chụp ảnh — xoá bớt ô."
     except ValueError as e:
         _loi_doan_m = str(e)
     if _loi_doan_m:
         st.error(_loi_doan_m)
+    elif _ds_moc_may:
+        st.caption(f"Chụp {len(_ds_moc_may)} ảnh PNG ở {', '.join(map(cat_video_goc.moc_hien, _ds_moc_may))} mỗi file — "
+                   "khung hình đúng mốc, độ phân giải gốc; file gốc giữ nguyên. Ô âm lượng không áp dụng khi chụp ảnh.")
     elif _ds_bo_may:
         st.caption(f"{cat_video_goc.mo_ta_ds_doan(_ds_bo_may)}. Phần còn lại nối thành file MỚI. {CAN_BO}")
     _am_may = st.checkbox(O_AM_LUONG, value=True, key="am_may", help=GIAI_THICH_AM_LUONG)
-    _chua_chon_m = _tu_m is None and not _ds_bo_may and not _am_may
+    _chua_chon_m = _tu_m is None and not _ds_bo_may and not _ds_moc_may and not _am_may
     if _chua_chon_m:
-        st.caption("Chọn ít nhất một việc: điền «Từ»/«Đến» để cắt, điền các đoạn cần bỏ, hoặc tick chỉnh âm lượng.")
-    if st.button(f"🛠️ Xử lý {len(_ds_may)} file" if _ds_may else "🛠️ Xử lý", type="primary", key="bat_dau_xu_ly_may",
+        st.caption("Chọn ít nhất một việc: điền «Từ»/«Đến» để cắt, điền các đoạn cần bỏ, điền mốc chụp ảnh, hoặc tick "
+                   "chỉnh âm lượng.")
+    _nhan_may = "📸 Chụp ảnh" if _ds_moc_may and not _loi_doan_m else "🛠️ Xử lý"
+    if st.button(f"{_nhan_may} {len(_ds_may)} file" if _ds_may else _nhan_may, type="primary", key="bat_dau_xu_ly_may",
                  disabled=not (_ds_may and _thu_muc_may) or bool(_loi_doan_m) or _chua_chon_m or _chua_tai_duoc()):
         _bat_dau_tai(video_trong_may.xu_ly, _ds_may, _thu_muc_may, tu_s=_tu_m, den_s=_den_m, ds_bo=_ds_bo_may or None,
-                     chuan_hoa_am=_am_may)
+                     ds_moc=_ds_moc_may or None, chuan_hoa_am=_am_may)
 
 with tab_td:
     st.subheader("Tải danh sách tiêu đề của kênh")

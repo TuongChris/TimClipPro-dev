@@ -540,3 +540,127 @@ def test_tab_tai_video_bo_cac_doan_goi_tai_doan(tmp_path, monkeypatch):
     at.run()
     assert not at.exception
     assert goi == [(None, None, [(252.0, 324.0), (431.0, 541.0)])]
+
+
+# ---------------------------------------------------------------- chụp ảnh ở các mốc (18/11)
+def _sang_anh(path):
+    """Số khung (mod 32) của ảnh chụp từ video :func:`_tao_danh_dau` — đọc độ sáng trung bình của PNG."""
+    # Đổi PNG (RGB) về yuv420p — cùng thang độ sáng «TV» với video nguồn; «gray» là thang đầy đủ, lệch số.
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-f", "rawvideo", "-pix_fmt", "yuv420p", "-"],
+                         capture_output=True, check=True).stdout
+    return int(round(np.frombuffer(raw, np.uint8)[: 64 * 48].mean() / 8)) % 32
+
+
+def test_doc_ds_moc():
+    assert cv.doc_ds_moc("7:23, 12:05\n1:01:10") == [443.0, 725.0, 3670.0]
+    assert cv.doc_ds_moc("12:05; 7:23 7:23") == [443.0, 725.0]  # xếp theo thời gian, bỏ trùng
+    assert cv.doc_ds_moc("7:23.5") == [443.5]
+    assert cv.doc_ds_moc("  ") == []
+    with pytest.raises(ValueError, match="không hợp lệ"):
+        cv.doc_ds_moc("7:75")
+    with pytest.raises(ValueError, match="Không đọc được «abc»"):
+        cv.doc_ds_moc("7:23, abc")
+
+
+@can_ffmpeg
+def test_chup_anh_dung_khung_hinh_o_moc(tmp_path):
+    """Video 30 hình/giây, chỉ một khung hình chính ở đầu (phải giải mã từ đầu tới mốc): ảnh ở mốc t là ĐÚNG khung
+    t·30 — không phải khung hình chính gần nhất. File gốc không bị sửa."""
+    src = _tao_danh_dau(tmp_path / "Phim thu.mp4")
+    truoc = os.path.getsize(src), os.path.getmtime(src)
+    ra = tmp_path / "ra"
+    k = cv.chup_anh(src, str(ra), [0.1, 2.5, 7.1, 19.5])
+    assert k["trang_thai"] == "xong", k
+    anh = sorted(os.listdir(ra))
+    assert anh == ["Phim_thu_00-00-00-1.png", "Phim_thu_00-00-02-5.png", "Phim_thu_00-00-07-1.png",
+                   "Phim_thu_00-00-19-5.png"]
+    # Khung 0–1 và 30–31 (độ sáng < 16 hay > 235) nằm ngoài thang TV, đổi qua RGB bị cắt → mốc chọn tránh chúng.
+    assert [_sang_anh(str(ra / a)) for a in anh] == [3, 75 % 32, 213 % 32, 585 % 32]
+    p = _probe(str(ra / anh[0]))["streams"][0]
+    assert (p["codec_name"], p["width"], p["height"]) == ("png", 64, 48)
+    assert "4 ảnh PNG 64×48" in k["ghi_chu"]
+    assert (os.path.getsize(src), os.path.getmtime(src)) == truoc
+    # Bấm lại: không ghi đè ảnh cũ.
+    assert cv.chup_anh(src, str(ra), [2.5])["duong_dan"].endswith("Phim_thu_00-00-02-5_2.png")
+
+
+@can_ffmpeg
+def test_chup_anh_bao_loi_khi_khong_chup_duoc(tmp_path):
+    src = _tao_danh_dau(tmp_path / "v.mp4", giay=6)
+    k = cv.chup_anh(src, str(tmp_path / "ra"), [2.0, 7.0], giu="File gốc giữ nguyên.")
+    assert k["trang_thai"] == "loi" and "chỉ dài 00:00:06" in k["ghi_chu"] and "00:00:07" in k["ghi_chu"]
+    assert "File gốc giữ nguyên." in k["ghi_chu"]
+    assert not (tmp_path / "ra").exists()  # kiểm mốc TRƯỚC khi chụp ảnh nào
+    k = cv.chup_anh(src, str(tmp_path / "ra"), [5.99])  # sau khung cuối (5,967 s), trước hết video
+    assert k["trang_thai"] == "loi" and "không có khung hình" in k["ghi_chu"], k
+    k = cv.chup_anh(_tao(tmp_path / "t.m4a", chi_tieng=True), str(tmp_path / "ra"), [1.0])
+    assert k["trang_thai"] == "loi" and "chỉ có tiếng" in k["ghi_chu"]
+
+
+@can_ffmpeg
+def test_tai_doan_chup_anh_tai_chi_hinh_sdr_roi_xoa_video(tmp_path, monkeypatch):
+    goi = _gia_tai(monkeypatch, _tao_danh_dau(tmp_path / "nguon.mp4"))
+    ra = tmp_path / "ra"
+    k = cv.tai_doan([URL[0]], str(ra), ds_moc=[2.5, 7.1], chat_luong="1080p", chuan_hoa_am=True)[0]
+    assert k["trang_thai"] == "xong", k
+    ma = tv.ma_tu_url(URL[0])
+    assert sorted(os.listdir(ra)) == [f"Tieu_de_{ma}_{ma}_00-00-02-5.png", f"Tieu_de_{ma}_{ma}_00-00-07-1.png"]
+    assert k["duong_dan"] == str(ra) and "2 ảnh PNG" in k["ghi_chu"]
+    # Chỉ phần hình, ưu tiên bản SDR (bản HDR chụp ra màu nhạt), không ghép tiếng; thư mục tạm riêng với cắt đoạn.
+    assert goi["dinh_dang"] == {"format": "bv*[height<=1080][dynamic_range=SDR]/bv*[height<=1080]/b[height<=1080]"}
+    assert goi["thu_muc"] == [str(ra / cv.THU_MUC_TAM / "anh_1080")]
+    assert "chuan_hoa_am" not in goi
+
+
+def test_tai_doan_chup_anh_tu_choi_chi_audio_hoac_hai_viec(tmp_path, monkeypatch):
+    goi = _gia_tai(monkeypatch, "khong_dung")
+    with pytest.raises(ValueError, match="Chụp ảnh cần video có hình"):
+        cv.tai_doan([URL[0]], str(tmp_path), ds_moc=[1.0], chat_luong="Chỉ tiếng")
+    with pytest.raises(ValueError, match="Chỉ chọn một việc"):
+        cv.tai_doan([URL[0]], str(tmp_path), tu_s=1, den_s=5, ds_moc=[2.0])
+    with pytest.raises(ValueError, match="Chỉ chọn một việc"):
+        cv.tai_doan([URL[0]], str(tmp_path), ds_bo=[(2.0, 3.0)], ds_moc=[2.0])
+    assert goi == {}
+
+
+def test_tab_tai_video_chup_anh_goi_tai_doan(tmp_path, monkeypatch):
+    """AppTest: điền «📸 Chụp ảnh» → tai_doan nhận ds_moc đã đọc; chọn «Chỉ audio» hay điền thêm «Từ»/«Đến» → nút tắt."""
+    import time
+    from pathlib import Path
+
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    goi = []
+
+    def gia(links, thu_muc, cau_hinh_mang=None, *, progress=None, cancel_check=None, **kw):
+        goi.append({k: kw.get(k) for k in ("tu_s", "ds_bo", "ds_moc", "chat_luong")})
+        return [{"url": links[0], "trang_thai": "xong", "duong_dan": thu_muc, "tieu_de": "Video",
+                 "chat_luong": "", "ghi_chu": "2 ảnh PNG"}]
+
+    monkeypatch.setattr(cv, "tai_doan", gia)
+    at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=120).run()
+    next(t for t in at.text_area if t.label.startswith("Link video")).input(URL[0]).run()
+    next(t for t in at.text_input if t.label == "Thư mục lưu video").input(str(tmp_path / "v")).run()
+    at.text_input(key="anh_tai").input("12:05, 7:23").run()
+    assert any("Chụp 2 ảnh PNG ở 00:07:23, 00:12:05" in c.value for c in at.caption)
+    assert at.button(key="bat_dau_tai_video").label == "📸 Tải và chụp 1 video"
+    at.text_input(key="tu_tai").input("1:00").run()
+    at.text_input(key="den_tai").input("2:00").run()
+    assert at.button(key="bat_dau_tai_video").disabled
+    assert any("Chỉ chọn một việc" in e.value for e in at.error)
+    at.text_input(key="tu_tai").input("").run()
+    at.text_input(key="den_tai").input("").run()
+    at.radio(key="loai_tai").set_value(tv.LOAI_TAI[1]).run()
+    assert at.button(key="bat_dau_tai_video").disabled
+    assert any("Chụp ảnh cần video có hình" in e.value for e in at.error)
+    at.radio(key="loai_tai").set_value(tv.LOAI_TAI[0]).run()
+    at.button(key="bat_dau_tai_video").click().run()
+    for _ in range(50):
+        if goi and not at.session_state.job["running"]:
+            break
+        time.sleep(0.1)
+    at.run()
+    assert not at.exception
+    assert goi == [{"tu_s": None, "ds_bo": None, "ds_moc": [443.0, 725.0], "chat_luong": "Cao nhất"}]

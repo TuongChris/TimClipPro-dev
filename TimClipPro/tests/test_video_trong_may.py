@@ -302,3 +302,57 @@ def test_tab_video_trong_may_bo_cac_doan(tmp_path, monkeypatch):
     at.run()
     assert not at.exception
     assert goi == {"tu_s": None, "ds_bo": [(3662.0, 3671.0)], "chuan_hoa_am": False}
+
+
+@can_ffmpeg
+def test_xu_ly_chup_anh_khong_dung_file_goc(tmp_path):
+    """Chụp ảnh file trong máy (18/11): ra PNG, bỏ qua ô chỉnh âm lượng, file gốc giữ nguyên từng byte."""
+    goc = _tao(tmp_path / "a.mp4")
+    bam = _bam(goc)
+    k = vm.xu_ly([goc], str(tmp_path / "ra"), ds_moc=[1.0, 3.5], chuan_hoa_am=True)[0]
+    assert k["trang_thai"] == "xong", k
+    assert sorted(p.name for p in (tmp_path / "ra").iterdir()) == ["a_00-00-01.png", "a_00-00-03-5.png"]
+    assert _bam(goc) == bam
+    with pytest.raises(ValueError, match="Chỉ chọn một việc"):
+        vm.xu_ly([goc], str(tmp_path), tu_s=0, den_s=2, ds_moc=[1.0])
+
+
+def test_tab_video_trong_may_chup_anh_goi_xu_ly(tmp_path, monkeypatch):
+    """AppTest: điền mốc chụp ảnh → nút «📸 Chụp ảnh», xu_ly nhận ds_moc đã đọc; điền thêm «Từ»/«Đến» → nút tắt."""
+    import time
+    from pathlib import Path
+
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    f = tmp_path / "a.mp4"
+    f.write_bytes(b"x")
+    goi = []
+
+    def xu_ly_gia(files, thu_muc, cau_hinh_mang=None, *, progress=None, cancel_check=None, **kw):
+        goi.append({k: kw.get(k) for k in ("tu_s", "ds_bo", "ds_moc")})
+        return [{"url": files[0], "trang_thai": "xong", "duong_dan": thu_muc, "tieu_de": "a",
+                 "chat_luong": "file trong máy", "ghi_chu": "2 ảnh PNG", "la_file_may": True}]
+
+    monkeypatch.setattr(vm, "xu_ly", xu_ly_gia)
+    at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=120).run()
+    next(t for t in at.text_area if t.label.startswith("Đường dẫn video trong máy")).input(str(f)).run()
+    next(t for t in at.text_input if t.label == "Thư mục lưu kết quả").input(str(tmp_path / "ra")).run()
+    at.text_input(key="anh_may").input("0:03.5, 0:01").run()
+    assert any("Chụp 2 ảnh PNG ở 00:00:01, 00:00:03,5 mỗi file" in c.value for c in at.caption)
+    assert at.button(key="bat_dau_xu_ly_may").label == "📸 Chụp ảnh 1 file"
+    at.text_input(key="tu_may").input("0:01").run()
+    at.text_input(key="den_may").input("0:02").run()
+    assert at.button(key="bat_dau_xu_ly_may").disabled
+    assert any("Chỉ chọn một việc" in e.value for e in at.error)
+    at.text_input(key="tu_may").input("").run()
+    at.text_input(key="den_may").input("").run()
+    at.button(key="bat_dau_xu_ly_may").click().run()
+    for _ in range(50):
+        if goi and not at.session_state.job["running"]:
+            break
+        time.sleep(0.1)
+    at.run()
+    assert not at.exception
+    assert goi == [{"tu_s": None, "ds_bo": None, "ds_moc": [1.0, 3.5]}]
