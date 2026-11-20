@@ -391,8 +391,9 @@ def test_loi_khi_luu_phan_da_xong_giu_kho_cu_va_bao_ro(tmp_path, monkeypatch):
     assert "Đã dừng" in cau and "2 clip" in cau and "vẫn nguyên" in cau and "đĩa đầy" in cau, cau
 
 
-def test_clip_lam_moi_chay_truoc_va_chua_xong_luc_dung_thi_khong_luu_gi(tmp_path):
-    """Vân tay cũ của clip làm mới đã gỡ khỏi kho tạm: lưu khi nó chưa xong là mất clip đó."""
+def test_clip_lam_moi_chua_xong_luc_dung_thi_khong_luu_gi(tmp_path):
+    """Vân tay cũ của clip làm mới đã gỡ khỏi kho tạm: Dừng khi nó chưa xong thì không lưu gì, kho giữ nguyên. Clip làm mới
+    chạy một lượt RIÊNG trước (20/11), nên lúc đó chưa clip mới nào chạy."""
     e = _eng(tmp_path)
     nguon = _nguon(tmp_path, 3)
     e.add_kho("A", str(nguon))
@@ -400,17 +401,33 @@ def test_clip_lam_moi_chay_truoc_va_chua_xong_luc_dung_thi_khong_luu_gi(tmp_path
     sau = time.time() + 60
     os.utime(nguon / "clip_2.opus", (sau, sau))             # đồng bộ vừa thay file → làm mới vân tay
     truoc = Path(e.db_file).read_bytes()
-    chay = audfprint_gia(e, xong={1, 2})                     # clip mới xong, clip làm mới đang làm dở
+    chay = audfprint_gia(e, xong=set())                      # clip làm mới đang làm dở thì bấm Dừng
     e._run_stream = chay
 
-    with pytest.raises(RuntimeError) as loi:
-        e.build_database(str(nguon), mode="add")
+    r = e.build_database(str(nguon), mode="add")
 
-    assert [os.path.basename(p) for p in chay.da_chay[0]] == ["clip_2.opus", "clip_0.opus", "clip_1.opus"], (
-        "clip làm mới phải chạy trước: Dừng sau đó mới lưu được phần đã xong")
-    assert Path(e.db_file).read_bytes() == truoc
-    cau = str(loi.value)
-    assert "Đã dừng" in cau and "vẫn nguyên" in cau and "thiếu 1 clip" in cau, cau
+    assert [[os.path.basename(p) for p in ds] for ds in chay.da_chay] == [["clip_2.opus"]]
+    assert r["da_huy"] is True and Path(e.db_file).read_bytes() == truoc
+
+
+def test_dung_sau_luot_lam_moi_luu_clip_lam_moi_va_kho_dung_duoc(tmp_path):
+    """D-52 + review Codex 20/11: trước đây bộ lập lịch theo RAM có thể chạy clip MỚI trước clip làm mới; Dừng lúc đó bỏ cả
+    kho tạm (clip mới đã xong phải làm lại). Nay lượt làm mới chạy riêng trước: Dừng sau nó lưu được clip làm mới (vân tay
+    MỚI), các clip mới chưa chạy để «Bổ sung» sau."""
+    e = _eng(tmp_path)
+    nguon = _nguon(tmp_path, 3)
+    e.add_kho("A", str(nguon))
+    ghi_ht(e.db_file, [(str(nguon / "clip_2.opus"), 9)])
+    sau = time.time() + 60
+    os.utime(nguon / "clip_2.opus", (sau, sau))
+    chay = audfprint_gia(e, xong={0})                        # lượt 1 (làm mới) xong trọn rồi người dùng bấm Dừng
+    e._run_stream = chay
+
+    r = e.build_database(str(nguon), mode="add")
+
+    assert [[os.path.basename(p) for p in ds] for ds in chay.da_chay] == [["clip_2.opus"]]
+    assert r["da_huy"] is True and r["da_ghi_kho"] is True
+    assert doc_ht(e.db_file) == {"clip_2.opus": 7}           # vân tay mới của clip làm mới, không mất clip nào
 
 
 # ---------------------------------------------------------------------------

@@ -3667,7 +3667,15 @@ class Engine:
         con_lai: list = []      # Dừng giữa chừng: clip chưa xong (đang làm dở, chưa tới lượt, chờ thử lại)
         try:
             # Chỉ có clip cần GỠ (đã bị cách ly) mà không có gì để thêm: bỏ bước `add`.
-            if can_xu_ly:
+            # Clip LÀM MỚI (vân tay cũ đã gỡ khỏi kho tạm) chạy một lượt RIÊNG trước: bộ lập lịch theo RAM không chen
+            # clip mới lên trước được, nên bấm Dừng ở lượt sau thì mọi clip làm mới đã xong và phần đã xong được lưu
+            # (D-52). Dừng ngay trong lượt làm mới thì như cũ: không lưu gì, kho hiện tại giữ nguyên.
+            dot = [d for d in ([p for p in can_xu_ly if key(p) in lam_moi],
+                               [p for p in can_xu_ly if key(p) not in lam_moi]) if d] if can_xu_ly else []
+            for ds_dot in dot:
+                if len(dot) > 1:
+                    with open(listfile, "w", encoding="utf-8", newline="\n") as f:
+                        f.write("\n".join(ds_dot))
                 rc, duoi = self._run_stream(
                     self._audfprint_build_cmd(sub, *tham_so, db_file=db_tam),
                     on_line,
@@ -3679,6 +3687,9 @@ class Engine:
                     ),
                     khi_huy=xin_dung_luu,
                 )
+                if rc != 0 or os.path.exists(co_dung):
+                    break
+            if can_xu_ly:
                 if os.path.exists(co_dung):
                     con_lai = [p for p in can_xu_ly if key(p) not in da_xong]
                 if con_lai and not (luu_khi_dung and tracker.state.success_count):
