@@ -26,7 +26,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 
 ## Tiếp theo
 0f. 20/11: review Codex 20/11 (D-62) — 14 mục sửa GỘP `6770c40`, DEV 10:12 (sao lưu `data_20261120_101200`) — người
-    dùng thử. Hoãn (cần quyết): Dừng dựng kho khi clip làm mới dở, CLI in mốc V2, tra kênh gốc thiếu.
+    dùng thử trên DEV 20/11: ĐẠT. Hoãn (cần quyết): Dừng dựng kho khi clip làm mới dở, CLI in mốc V2, tra kênh gốc thiếu.
 0e. 20/11: «🎵 Chỉ audio» trong tab «🎞️ Ghép video gốc» (D-61) GỘP `ae6cac6`, DEV 08:43 (sao lưu `data_20261120_084308`)
     — người dùng thử trên DEV 20/11: ĐẠT.
 0d. 19/11: «📸 Chụp ảnh ở các mốc» (D-60) GỘP `99d29b8`, DEV 13:02 (sao lưu `data_20261119_130238`) — người dùng thử file trong máy + YouTube: ĐẠT.
