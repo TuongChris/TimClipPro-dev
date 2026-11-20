@@ -22,7 +22,7 @@ file trong máy nhận mọi file có tiếng (mp3, wav, flac, cả file video �
 MỘT luồng AAC-LC, tần số + số kênh của file 1 (`THONG_SO_AUDIO`; concat lấy luồng theo số thứ tự nên file video/ảnh bìa
 phải bỏ luồng thừa); phần lệch, KỂ CẢ file 1, chuyển riêng (đã là AAC đúng kiểu thì chỉ chép luồng tiếng), rồi nối
 `-c copy` ra `.m4a` + `.moc.csv` + mốc chương. Âm lượng -14 LUFS dùng chung. Mã: `ghep_video_goc.ghep(chi_audio=True)`.
-Bằng chứng: test M4A + MP3 48 kHz mono + file video, link lặp → tần số trội đúng từng đoạn; nhanh 4302 = 4298/4/0.
+Bằng chứng: test M4A + MP3 48 kHz mono + file video, link lặp → tần số trội đúng từng đoạn; nhanh 4302 = 4298/4/0. Người dùng thử trên DEV 20/11: ĐẠT.
 
 ## D-60 Chụp ảnh ở các mốc của video (người dùng, 2026-11-19)
 Ô «📸 Chụp ảnh ở các mốc» ở tab «⬇️ Tải video gốc» và «🛠️ Video trong máy»: «7:23, 12:05, 1:01:10» → mỗi mốc một ảnh PNG
