@@ -3,6 +3,11 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-11-17 — giữ tab đang mở khi xong việc (nhánh fix/pc2/giu-tab-dang-mo)
+- Nguyên nhân: khối trạng thái/kết quả vẽ TRÊN `st.tabs` đổi số phần tử → hàng tab đổi vị trí → trình duyệt dựng lại,
+  về tab đầu (tái hiện bằng app thử + playwright: Ba → Mot). Sửa: mọi thứ phía trên nằm trong khung `_khu_tren`
+  (diff -w = 6 dòng). Không dùng `st.tabs(key, on_change="rerun")`: đổi tab sẽ chạy lại cả trang, ngắt việc đang
+  chạy trong trang (vd đẩy Sheets). Test vị trí hàng tab (đỏ 0→3 trước khi sửa). Nhanh 4286 = 4282/4/0.
 ### 2026-11-17 — bỏ nhiều đoạn rồi nối phần còn lại (D-59, nhánh feature/pc2/bo-nhieu-doan)
 - `cat_video_goc.doc_ds_doan` (đọc danh sách đoạn kiểu người dùng gõ) + `bo_doan` (một lượt FFmpeg trim/atrim + concat,
   nén lại một lần, kiểm độ dài, «.loi» khi lệch); `cat_mot` và `bo_doan` dùng chung phần kiểm + chỉnh âm lượng.

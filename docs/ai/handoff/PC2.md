@@ -25,8 +25,11 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   tạm; dữ liệu thật chỉ dùng trong app DEV vận hành.
 
 ## Tiếp theo
+0g. 20/11: 3 việc hoãn của review Codex trên `fix/pc2/ba-viec-hoan` (clip làm mới chạy lượt riêng trước → Dừng lưu được;
+    CLI in mốc V2; tra kênh gốc thiếu thì báo) — nhanh 4327 = 4322/4/1 (1 test đo thời gian hỏng khi cả bộ chạy, chạy
+    riêng 3/3 đạt), chậm 25/25 — chờ người dùng duyệt gộp + DEV.
 0f. 20/11: review Codex 20/11 (D-62) — 14 mục sửa GỘP `6770c40`, DEV 10:12 (sao lưu `data_20261120_101200`) — người
-    dùng thử trên DEV 20/11: ĐẠT. Hoãn (cần quyết): Dừng dựng kho khi clip làm mới dở, CLI in mốc V2, tra kênh gốc thiếu.
+    dùng thử trên DEV 20/11: ĐẠT.
 0e. 20/11: «🎵 Chỉ audio» trong tab «🎞️ Ghép video gốc» (D-61) GỘP `ae6cac6`, DEV 08:43 (sao lưu `data_20261120_084308`)
     — người dùng thử trên DEV 20/11: ĐẠT.
 0d. 19/11: «📸 Chụp ảnh ở các mốc» (D-60) GỘP `99d29b8`, DEV 13:02 (sao lưu `data_20261119_130238`) — người dùng thử file trong máy + YouTube: ĐẠT.
@@ -61,6 +64,9 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 10. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-11-20 — 3 việc hoãn của review Codex (nhánh fix/pc2/ba-viec-hoan)
+- `engine` dựng kho: clip làm mới chạy lượt `add` riêng trước (D-52); `cli.dong_ket_qua` in mốc «Đoạn vi phạm» V2;
+  `tim_nghi_van.kenh_cua_kho` tra thiếu một phần → lý do «chưa tra được kênh của N/M clip», giao diện cảnh báo.
 ### 2026-11-20 — review Codex + 14 bản sửa (D-62, nhánh fix/pc2/codex-review-2011)
 - Codex không công cụ: 10 lượt review (127 phát hiện, ~1,4 triệu token) → 14 thật; 4 lượt viết sửa + test; 1 lượt soát sửa (5 thật).
 - Sửa: mốc giây trơn, bỏ đoạn, API thân lạ, bù tốc độ, mép tinh chỉnh, ghép audio… Nhanh 4324 = 4320/4/0, chậm 25/25. Phân loại `C:\Dev\codex_ketqua\tong_2011\PHAN_LOAI.md`.
@@ -72,9 +78,4 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 - `cat_video_goc.doc_ds_moc` + `chup_anh` (FFmpeg `-ss` trước `-i`, `-frames:v 1 -update 1`, PNG); `tai_doan(ds_moc=…)`
   tải trọn phần hình SDR vào `.timclip_cat/anh_<mức>`; `video_trong_may.xu_ly(ds_moc=…)`; ô ở hai tab.
 - Test: video đánh dấu từng khung → ảnh đúng khung; mốc sau khung cuối → lỗi rõ. Nhanh 4295 = 4291/4/0.
-### 2026-11-17 — giữ tab đang mở khi xong việc (nhánh fix/pc2/giu-tab-dang-mo)
-- Nguyên nhân: khối trạng thái/kết quả vẽ TRÊN `st.tabs` đổi số phần tử → hàng tab đổi vị trí → trình duyệt dựng lại,
-  về tab đầu (tái hiện bằng app thử + playwright: Ba → Mot). Sửa: mọi thứ phía trên nằm trong khung `_khu_tren`
-  (diff -w = 6 dòng). Không dùng `st.tabs(key, on_change="rerun")`: đổi tab sẽ chạy lại cả trang, ngắt việc đang
-  chạy trong trang (vd đẩy Sheets). Test vị trí hàng tab (đỏ 0→3 trước khi sửa). Nhanh 4286 = 4282/4/0.
-- Mục cũ hơn (2026-11-17 bỏ nhiều đoạn D-59; 2026-11-16 YouTube Data API + 7 tính năng D-51…D-58; 2026-11-16 audit toàn repo 20 mục; 2026-11-15 «Đoạn vi phạm» theo mốc tinh chỉnh D-50; 2026-11-14/15 tinh chỉnh mốc từng giây D-49; 2026-11-11 audit tổng Codex; 2026-11-12 thumbnail tên = mã D-47/D-48; 2026-11-11 video trong máy D-46; 2026-11-11 thumbnail cả kênh D-45; 2026-11-11 Twitch 1440p D-44; 2026-11-10 âm lượng D-43; 2026-11-10 audit phần video mới; 2026-11-09 cắt đoạn D-42; 2026-11-09 tải 4 kết nối D-40; 2026-11-09 ghép video gốc D-39/D-41 + chương QuickTime; 2026-11-09 tiêu đề kênh D-38 + audit 09/11; 2026-11-08 tải video gốc D-37 + review/audit 08/11; 2026-11-07 Codex bước 2 audit 14 + 18; 2026-11-07 Codex review PR #27–#29 D-36; 2026-11-07 đồng bộ nén song song D-35; 2026-11-07 audit số 15, 19, 20; 2026-11-07 kho video dài D-34; 2026-11-07 dựng kho nhường ổ cứng D-33; 2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
+- Mục cũ hơn (2026-11-17 giữ tab đang mở; 2026-11-17 bỏ nhiều đoạn D-59; 2026-11-16 YouTube Data API + 7 tính năng D-51…D-58; 2026-11-16 audit toàn repo 20 mục; 2026-11-15 «Đoạn vi phạm» theo mốc tinh chỉnh D-50; 2026-11-14/15 tinh chỉnh mốc từng giây D-49; 2026-11-11 audit tổng Codex; 2026-11-12 thumbnail tên = mã D-47/D-48; 2026-11-11 video trong máy D-46; 2026-11-11 thumbnail cả kênh D-45; 2026-11-11 Twitch 1440p D-44; 2026-11-10 âm lượng D-43; 2026-11-10 audit phần video mới; 2026-11-09 cắt đoạn D-42; 2026-11-09 tải 4 kết nối D-40; 2026-11-09 ghép video gốc D-39/D-41 + chương QuickTime; 2026-11-09 tiêu đề kênh D-38 + audit 09/11; 2026-11-08 tải video gốc D-37 + review/audit 08/11; 2026-11-07 Codex bước 2 audit 14 + 18; 2026-11-07 Codex review PR #27–#29 D-36; 2026-11-07 đồng bộ nén song song D-35; 2026-11-07 audit số 15, 19, 20; 2026-11-07 kho video dài D-34; 2026-11-07 dựng kho nhường ổ cứng D-33; 2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
