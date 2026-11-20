@@ -26,7 +26,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 
 ## Tiếp theo
 0g. 20/11: 3 việc hoãn review Codex (`fix/pc2/ba-viec-hoan`): nhanh 4327 = 4322/4/1 (test đo thời gian chỉ hỏng khi cả
-    bộ chạy, riêng 3/3 đạt), chậm 25/25 — GỘP `7a9561e`, DEV 10:49 (sao lưu `data_20261120_104911`) — người dùng thử.
+    bộ chạy, riêng 3/3 đạt), chậm 25/25 — GỘP `7a9561e`, DEV 10:49 (sao lưu `data_20261120_104911`) — người dùng thử: ĐẠT.
 0f. 20/11: review Codex 20/11 (D-62) — 14 mục sửa GỘP `6770c40`, DEV 10:12 (sao lưu `data_20261120_101200`) — người
     dùng thử trên DEV 20/11: ĐẠT.
 0e. 20/11: «🎵 Chỉ audio» trong tab «🎞️ Ghép video gốc» (D-61) GỘP `ae6cac6`, DEV 08:43 (sao lưu `data_20261120_084308`)
