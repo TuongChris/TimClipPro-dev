@@ -22,7 +22,7 @@ xảy ra — một tác vụ nền mỗi tiến trình; quyết định đã có
 lại chỗ sai (Data API gửi `fields=items(...)` → không có kết quả thì thân `{}`, là 0 kết quả chứ không phải lỗi), Codex soát
 lần hai. Danh sách đoạn / mốc: phẩy LUÔN ngăn cách khi mốc là giây trơn («0-10,100-200» = hai đoạn, «10,20,30» = ba mốc);
 phần lẻ của giây trơn dùng dấu CHẤM («0.5 - 2.5»); mốc có «:» vẫn nhận phẩy lẻ («1:23,5»). Từ chối file trong máy nằm
-trong thư mục tạm ghép (`.timclip_ghep*` bị xoá khi ghép xong). Phân loại đủ: `C:\Dev\codex_ketqua	ong_2011\PHAN_LOAI.md`.
+trong thư mục tạm ghép (`.timclip_ghep*` bị xoá khi ghép xong). Phân loại đủ: `C:\Dev\codex_ketqua\tong_2011\PHAN_LOAI.md`.
 
 ## D-61 Ghép chỉ audio trong tab «🎞️ Ghép video gốc» (người dùng, 2026-11-20)
 Lựa chọn «🎬 Video / 🎵 Chỉ audio» đầu tab (không thêm tab mới — đã 15 tab). Chỉ audio: link YouTube tải mức «Chỉ tiếng»
