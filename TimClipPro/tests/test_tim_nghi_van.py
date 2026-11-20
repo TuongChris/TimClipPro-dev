@@ -279,3 +279,11 @@ def test_clip_cua_kho_chi_doc_clips_meta_moi_nhat_truoc(tmp_path, monkeypatch):
 def test_khong_co_yt_dlp_trong_tinh_nang():
     nguon = inspect.getsource(tn)
     assert "yt_dlp" not in nguon and "ytdlp" not in nguon and ".chay(" not in nguon
+
+
+def test_kenh_goc_tra_duoc_mot_phan_van_loai_va_noi_ro_phan_thieu(api_youtube_gia, tmp_path):
+    """Review Codex 20/11: một clip gốc đã riêng tư → trước đây lặng lẽ coi như tra đủ."""
+    api_youtube_gia.video[_ma(1)] = gia.video_gia(_ma(1))          # _ma(2) vắng trong phản hồi
+    kenh, ly_do = tn.kenh_cua_kho(_phien(), str(tmp_path / "data"), [_ma(1), _ma(2)])
+    assert kenh == frozenset({gia.KENH_GIA}) and "1/2 clip" in ly_do and "lẫn trong kết quả" in ly_do
+    _khong_nhac_yt_dlp([ly_do])

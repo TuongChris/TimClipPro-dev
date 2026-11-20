@@ -2692,9 +2692,11 @@ with tab_tim:
                         st.session_state.tim_kenh_goc[ten_tim] = kenh_goc
                 kq_tim = tim_nghi_van.tim(phien_api, eng.data_dir, chay_tv, phien_tim=truy_cap_youtube.PhienYouTube(),
                                           kenh_goc=kenh_goc, thoi_luong=thoi_luong_tim, sau=sau_tim)
-                canh_bao_kenh = () if kenh_goc else (
-                    "Không loại được video của chính kênh gốc" + (f" — {ly_do_kenh}" if ly_do_kenh else "")
-                    + ". Kết quả có thể gồm video của bạn.",)
+                if kenh_goc:
+                    canh_bao_kenh = (f"Đã loại video của kênh gốc, nhưng {ly_do_kenh}.",) if ly_do_kenh else ()
+                else:
+                    canh_bao_kenh = ("Không loại được video của chính kênh gốc"
+                                     + (f" — {ly_do_kenh}" if ly_do_kenh else "") + ". Kết quả có thể gồm video của bạn.",)
                 luu_tim["lan"] = luu_tim.get("lan", 0) + 1
                 luu_tim["ket_qua"] = (ten_tim, kq_tim, canh_bao_kenh + kq_tim.ghi_chu)
         if luu_tim.get("ket_qua"):

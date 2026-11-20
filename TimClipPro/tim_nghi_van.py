@@ -114,10 +114,18 @@ def tao_truy_van(clips: Iterable[ClipKho], them: str = "") -> list:
 
 def kenh_cua_kho(phien: tc.PhienYouTube, data_dir: str, ma: Iterable[str]) -> tuple:
     """Mã kênh của chính kho: MỘT ``videos.list`` cho tối đa 50 mã clip đầu của ``ma`` (nơi gọi đưa clip đã chọn lên
-    trước). Trả ``(frozenset mã kênh, lý do)``; lý do rỗng khi lấy được — hoặc khi chưa có khoá (0 yêu cầu)."""
-    kq = youtube_api.lay_video(phien, data_dir, [m for m in dict.fromkeys(ma) if m][:youtube_api.LO_TOI_DA])
+    trước). Trả ``(frozenset mã kênh, lý do)``; lý do rỗng khi tra được MỌI clip — hoặc khi chưa có khoá (0 yêu cầu).
+    Tra được một phần (clip riêng tư / đã gỡ / lỗi): vẫn trả các kênh tra được, lý do nói rõ phần còn thiếu (review Codex
+    20/11: clip thiếu có thể thuộc kênh khác, video của kênh đó lẫn vào kết quả mà không ai biết)."""
+    ma = [m for m in dict.fromkeys(ma) if m][:youtube_api.LO_TOI_DA]
+    kq = youtube_api.lay_video(phien, data_dir, ma)
     kenh = frozenset(v["channel_id"] for v in kq.thong_tin.values() if v["channel_id"])
-    return kenh, "" if kenh else _ly_do(phien, kq.ly_do_lui)
+    if not kenh:
+        return kenh, _ly_do(phien, kq.ly_do_lui)
+    if kq.thieu:
+        return kenh, (f"chưa tra được kênh của {len(kq.thieu)}/{len(ma)} clip (video riêng tư, đã gỡ hoặc lỗi) — nếu "
+                      "clip đó thuộc kênh khác thì video của kênh đó có thể lẫn trong kết quả")
+    return kenh, ""
 
 
 # =====================================================================
