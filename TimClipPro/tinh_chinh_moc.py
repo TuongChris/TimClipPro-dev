@@ -894,7 +894,7 @@ def _mep(cl: _CuaSo, vi: _CuaSo, dau: float, k: float, c_tho: float, phia: str, 
         j = 0 if dau_ben else len(x)                                  # không có mép trong cửa sổ: đoạn phủ cả cửa sổ
     if 0 < j < len(x):
         mep = float((t[j - 1] + t[j]) / 2)
-    elif chan:
+    elif chan and j == (0 if dau_ben else len(x)):
         mep = bien
     else:
         return tho()                                                   # mép thô lệch quá nửa cửa sổ
@@ -1072,13 +1072,14 @@ def _tinh_chinh(clip_path, video_path, neo, vung, end, pham_vi_s, doc, moc, han_
     for d, lo, hi, mep_o_tu, ngoai in kiem:
         idx = _o_ngoai(u, max(lo, vi.t0), min(hi, vi.het_s))   # miếng vượt phần đã giải mã: chưa đo, không phải «vắng»
         idx = idx[:SAT_MEP_O] if mep_o_tu else idx[-SAT_MEP_O:]
-        if not len(idx):
+        moc()
+        s = _do_duong(cl, vi, d["dau"], d["k"], u[idx], moc=moc)[0]
+        if not np.isfinite(s).any():
             ngoai_khong_kiem |= ngoai
             if ngoai:
                 ngoai_ben.add(mep_o_tu)
             continue
-        moc()
-        if _co_mat(_do_duong(cl, vi, d["dau"], d["k"], u[idx], moc=moc)[0], muc_co_mat(d["neo"], idx, NEN_TAI_CHO_LE)):
+        if _co_mat(s, muc_co_mat(d["neo"], idx, NEN_TAI_CHO_LE)):
             return chua(LY_DO_CON_DUOI_DE)
     # khe giữa hai đoạn: ô có miếng nằm trọn trong khe, clip «có mặt» theo NEO NÀO trong hai neo ở ≥ 1/2 số ô → tiếng đè
     # đúng chỗ nối (tua lùi dưới tiếng đè: mỗi neo chỉ có mặt ở một phía của chỗ nối, ô sát mép không đủ thấy)

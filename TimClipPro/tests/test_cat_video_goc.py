@@ -664,3 +664,40 @@ def test_tab_tai_video_chup_anh_goi_tai_doan(tmp_path, monkeypatch):
     at.run()
     assert not at.exception
     assert goi == [{"tu_s": None, "ds_bo": None, "ds_moc": [443.0, 725.0], "chat_luong": "Cao nhất"}]
+
+
+def test_dau_phay_trong_danh_sach_giay():
+    assert cv.doc_ds_doan("0-10,100-200,1000-2000") == [(0, 10), (100, 200), (1000, 2000)]
+    assert cv.doc_ds_moc("10,20,30") == [10, 20, 30]
+    assert cv.doc_ds_moc("1:23,83.5;1:24,5") == [83, 83.5, 84.5]
+
+
+@can_ffmpeg
+def test_bo_doan_giu_tieng_bat_dau_muon(tmp_path):
+    nguon = str(tmp_path / "tieng_muon.mkv")
+    subprocess.run(
+        [
+            "ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=s=64x48:r=30:d=6",
+            "-itsoffset", "2", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=4",
+            "-c:v", "ffv1", "-c:a", "pcm_s16le", nguon,
+        ],
+        check=True,
+    )
+    k = cv.bo_doan(nguon, str(tmp_path / "ra"), [(4.0, 5.0)])
+    assert k["trang_thai"] == "xong", k
+    assert _tan_so(k["duong_dan"], 3.0) == pytest.approx(440, abs=8)
+
+
+def test_bo_doan_tua_dau_vao_va_dich_cac_moc(tmp_path, monkeypatch):
+    monkeypatch.setattr(cv, "_chay_ra_file", lambda lenh, *args, **kw: lenh)
+    giu = [(234000.25, 234002.75), (234005.0, None)]
+    lenh = cv._bo(
+        str(tmp_path / "nguon.mp4"), str(tmp_path / "ra.mp4"), giu, True, True, huy=None, khi_tien_do=None
+    )
+    truoc_vao = lenh[:lenh.index("-i")]
+    assert "-ss" in truoc_vao
+    assert float(truoc_vao[truoc_vao.index("-ss") + 1]) == giu[0][0]
+    do_thi = lenh[lenh.index("-filter_complex") + 1]
+    for loc in ("[0:v:0]trim", "[0:a:0]atrim"):
+        assert f"{loc}=start=0.000:end=2.500," in do_thi
+        assert f"{loc}=start=4.750," in do_thi

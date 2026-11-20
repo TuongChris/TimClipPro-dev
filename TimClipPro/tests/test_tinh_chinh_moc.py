@@ -1133,3 +1133,37 @@ def test_chuoi_lech_chi_tinh_o_ke_nhau():
     assert chuoi([250, 251, 258, 259]) == []
     assert chuoi([10, 11, 12, 13], [True, True, False, True]) == []
     assert chuoi([5, 6, 7, 8, 9]) == [5, 6, 7, 8, 9]
+
+
+@pytest.mark.parametrize("phia, c_tho", [("dau", 1.0), ("cuoi", 59.0)])
+def test_mep_khong_chot_ve_bien_khi_ca_cua_so_o_ngoai(monkeypatch, phia, c_tho):
+    def tuong_quan(cl, vi, dau, k, tu, den):
+        muc = 0.0 if tu <= c_tho <= den else 1.0
+        return np.linspace(tu, den, 64), np.full(64, muc)
+
+    monkeypatch.setattr(tcm, "_tuong_quan_khung", tuong_quan)
+    monkeypatch.setattr(tcm, "_clip_lang_ngoai", lambda *a: None)
+    kq = tcm._mep(None, None, 100.0, 1.0, c_tho, phia, (0.0, 60.0, True, True), (1.0, 59.0))
+    assert kq == (c_tho, "tho")
+
+
+def test_o_ngoai_mep_dau_toan_nan_chi_danh_dau_mep_dau(monkeypatch):
+    clip = _am(120, 7201)
+    bat_dau = 50.53
+    video = _chen(_am(160, 7202), _cat(clip, 30.37, 90.81), bat_dau)
+    do_goc = tcm._do_duong
+    o_ngoai = []
+
+    def do_duong(cl, vi, dau, k, u, **kw):
+        s, r, cc = do_goc(cl, vi, dau, k, u, **kw)
+        if 0 < len(u) <= tcm.SAT_MEP_O and u[-1] < bat_dau:
+            o_ngoai.extend(u)
+            s[:] = np.nan
+        return s, r, cc
+
+    monkeypatch.setattr(tcm, "_do_duong", do_duong)
+    kq = _chay(clip, video, [(bat_dau - 30.37, 1.0)], bat_dau + 3.0, bat_dau + 57.4)
+    assert kq["trang_thai"] == tcm.DA, kq["ly_do"]
+    assert o_ngoai
+    assert kq["cham_gioi_han"] is True
+    assert (kq["cham_dau"], kq["cham_cuoi"]) == (True, False)

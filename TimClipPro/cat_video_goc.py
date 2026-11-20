@@ -31,9 +31,8 @@ THU_MUC_TAM = ".timclip_cat"
 # Đoạn ra lệch độ dài yêu cầu quá mức này thì không tin (≈ 1 khung hình 30 fps + làm tròn khung tiếng).
 LECH_DO_DAI_TOI_DA_S = 0.06
 _SO = re.compile(r"\d+(\.\d+)?")
-# Một mốc trong danh sách đoạn. Phần lẻ «,5» chỉ khi KHÔNG có «:» theo sau: «0:05:24,0:07:11» là hai mốc, không phải
-# «0:05:24,0» + «:07:11».
-_MOC_TRONG_DS = re.compile(r"\d+(?::\d+){0,2}(?:[.,]\d+(?![\d:]))?")
+# Chỉ mốc có «:» mới dùng phẩy thập phân. Trong «0:05:24,0:07:11», dấu phẩy ngăn hai mốc.
+_MOC_TRONG_DS = re.compile(r"\d+(?::\d+){1,2}(?:[.,]\d+(?![\d:.]))?|\d+(?:\.\d+)?")
 _PHAN_CACH_DS = re.compile(r"[\s,;\-–—]*")
 # Phần giữ lại ngắn hơn mức này (dưới ~1 khung hình) coi như bỏ luôn: không có khung hình nào để nối.
 DOAN_GIU_TOI_THIEU_S = 0.05
@@ -204,24 +203,31 @@ def _phan_giu(ds_bo: list, do_dai: float) -> list:
 
 
 def _bo(nguon: str, dich: str, giu: list, co_hinh: bool, co_tieng: bool, *, huy, khi_tien_do):
-    """Nối các phần ``giu`` của ``nguon`` thành ``dich`` trong MỘT lượt FFmpeg (giải mã cả video, nén lại một lần)."""
+    """Nối các phần ``giu`` của ``nguon`` thành ``dich`` trong MỘT lượt FFmpeg (nén lại một lần). Tua đầu vào tới phần giữ
+    đầu tiên (không giải mã phần bỏ phía trước); hình và tiếng của mỗi phần cùng lấy mốc ``a`` làm 0 — tiếng bắt đầu
+    trễ hơn hình được đệm im lặng, không bị kéo sớm lên."""
     dang = dich + ".dang" + os.path.splitext(dich)[1]
-    # shortcut: đồ thị lọc nằm trên dòng lệnh (~120 ký tự/phần, Windows tối đa 32.767) → khoảng 250 đoạn; cần hơn thì
+    moc_dau = round(giu[0][0], 3)
+    tua = ["-ss", f"{moc_dau:.3f}"] if moc_dau > 0 else []
+    # shortcut: đồ thị lọc nằm trên dòng lệnh (~150 ký tự/phần, Windows tối đa 32.767) → khoảng 200 đoạn; cần hơn thì
     # chuyển sang file đồ thị lọc.
     do_thi, vao = [], ""
     for i, (a, b) in enumerate(giu):
-        het = f":end={b:.3f}" if b is not None else ""
+        a = round(a, 3) - moc_dau
+        het = f":end={round(b, 3) - moc_dau:.3f}" if b is not None else ""
         if co_hinh:
-            do_thi.append(f"[0:v:0]trim=start={a:.3f}{het},setpts=PTS-STARTPTS[v{i}]")
+            do_thi.append(f"[0:v:0]trim=start={a:.3f}{het},setpts=PTS-{a:.3f}/TB[v{i}]")
             vao += f"[v{i}]"
         if co_tieng:
-            do_thi.append(f"[0:a:0]atrim=start={a:.3f}{het},asetpts=PTS-STARTPTS[a{i}]")
+            do_thi.append(
+                f"[0:a:0]atrim=start={a:.3f}{het},asetpts=PTS-{a:.3f}/TB,aresample=async=1:first_pts=0[a{i}]"
+            )
             vao += f"[a{i}]"
     ra = ("[v]" if co_hinh else "") + ("[a]" if co_tieng else "")
     do_thi.append(f"{vao}concat=n={len(giu)}:v={int(co_hinh)}:a={int(co_tieng)}{ra}")
     return _chay_ra_file(
         [
-            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", nguon,
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *tua, "-i", nguon,
             "-filter_complex", ";".join(do_thi),
             *(["-map", "[v]", *_MA_HOA] if co_hinh else []),
             *(["-map", "[a]"] if co_tieng else []),

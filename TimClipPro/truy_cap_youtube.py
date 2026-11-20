@@ -884,8 +884,8 @@ def _ly_do_google(than: Any) -> set:
     ra: set = set()
     for ten in ("errors", "details"):
         if isinstance(loi.get(ten), list):
-            ra.update(x.get("reason") for x in loi[ten] if isinstance(x, dict))
-    return {x for x in ra if isinstance(x, str)}
+            ra.update(x["reason"] for x in loi[ten] if isinstance(x, dict) and isinstance(x.get("reason"), str))
+    return ra
 
 
 def phan_loai_loi_api(ma_http: Optional[int], than: Any = None) -> str:

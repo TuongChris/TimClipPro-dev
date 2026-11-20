@@ -112,7 +112,7 @@ def _binh_phuong_toi_thieu(diem: list) -> tuple | None:
 
 def _hoi_quy_ben(diem: list, dung_sai: float = 1.5,
                  toi_da_diem: int = 200) -> tuple | None:
-    """Hồi quy BỀN theo Theil–Sen; trả (độ dốc, tỉ lệ điểm hợp, số điểm hợp).
+    """Hồi quy BỀN theo Theil–Sen, trả độ dốc, tỉ lệ điểm hợp, số điểm hợp và độ trải dài của các điểm hợp.
 
     VÌ SAO KHÔNG DÙNG BÌNH PHƯƠNG TỐI THIỂU:
     trong cùng một clip gốc luôn lẫn hai loại mảnh — mảnh thật của bản reup (nằm
@@ -153,7 +153,7 @@ def _hoi_quy_ben(diem: list, dung_sai: float = 1.5,
     tinh = _binh_phuong_toi_thieu(hop)
     if tinh is not None:
         doc = tinh[0]
-    return doc, len(hop) / len(diem), len(hop)
+    return doc, len(hop) / len(diem), len(hop), hop[-1][0] - hop[0][0]
 
 
 def uoc_luong_toc_do(
@@ -195,13 +195,12 @@ def uoc_luong_toc_do(
             (float(x["bat_dau"]), float(x["bat_dau"]) - float(x["t_clip"]))
             for x in ds
         )
-        trai_dai = diem[-1][0] - diem[0][0]
-        if trai_dai < min_trai_dai_s:
-            continue
         kq = _hoi_quy_ben(diem)
         if kq is None:
             continue
-        doc, ty_le_hop, so_hop = kq
+        doc, ty_le_hop, so_hop, trai_dai = kq
+        if trai_dai < min_trai_dai_s:
+            continue
         r = 1.0 - doc
         if ty_le_hop < min_ty_le_hop or so_hop < min_manh:
             continue

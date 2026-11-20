@@ -79,7 +79,9 @@ def clip_cua_kho(thu_muc: str) -> tuple:
     if cu is None or cu[0] != dau:
         nguon = load_metadata_strict(path, kind="live", priority=10)
         moi = sorted((e for e in nguon.entries if e.title), key=lambda e: (e.upload_date, e.key), reverse=True)
-        cu = _BO_NHO_CLIP[path] = (dau, tuple(ClipKho(e.key, e.title, e.video_id) for e in moi))
+        cu = (dau, tuple(ClipKho(e.key, e.title, e.video_id) for e in moi))
+        if not nguon.warnings:
+            _BO_NHO_CLIP[path] = cu
     return cu[1]
 
 

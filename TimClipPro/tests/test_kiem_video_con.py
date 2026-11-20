@@ -262,3 +262,13 @@ def test_job_twitch_khong_vao_danh_sach_kiem(tmp_path):
                       " n_matches, note, source_id) VALUES('2026-11-16 10:00:00', 'youtube', 't', ?, 1, 'ok', 1, '', ?)",
                       (ref, ma))
     assert [v["ma"] for v in e.video_vi_pham()] == ["abcdefghijk"]
+
+
+@pytest.mark.parametrize("video", [[{"lan_dau_khong_con": "2026-11-10T08:00:00"}], None])
+def test_so_co_truong_video_sai_cau_truc_giu_nguyen_file(tmp_path, video):
+    so = tmp_path / kv.TEN_FILE
+    truoc = json.dumps({"phien_ban": 1, "video": video}).encode("utf-8")
+    so.write_bytes(truoc)
+    with pytest.raises(luu_tru.LoiDuLieu):
+        kv.kiem_tra(_phien(), str(tmp_path), [])
+    assert so.read_bytes() == truoc

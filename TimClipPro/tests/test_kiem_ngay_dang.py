@@ -220,3 +220,21 @@ def test_limit_gioi_han_so_clip_xu_ly(tmp_path):
     )
 
     assert len(da_goi) == 1
+
+
+@pytest.mark.parametrize("ngay", ["20261110", "20250620"])
+def test_repair_bo_qua_clip_da_doi_ma_trong_luc_lay_ngay(tmp_path, ngay):
+    kho = _lap_kho(tmp_path)
+    tep = tmp_path / "clips_meta.json"
+    muc_moi = {"id": "bbbbbbbbbbb", "upload_date_raw": "20261117"}
+
+    def lay_ngay(ma):
+        meta = json.loads(tep.read_text(encoding="utf-8"))
+        assert ma == meta[TEN_CU]["id"]
+        meta[TEN_CU] = muc_moi
+        tep.write_text(json.dumps(meta), encoding="utf-8")
+        return {"id": ma, "upload_date": ngay}
+
+    ket = kiem_ngay_dang.repair(kho, VN, dung_mang=True, apply=True, gioi_han=1, fetcher=lay_ngay)
+    assert json.loads(tep.read_text(encoding="utf-8"))[TEN_CU] == muc_moi
+    assert (ket["bo_qua"], ket["da_doi"], ket["khong_doi"], ket["thay_doi"]) == (1, 0, 0, [])

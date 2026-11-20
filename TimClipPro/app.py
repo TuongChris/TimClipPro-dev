@@ -1866,7 +1866,7 @@ with tab0:
                               disabled=not kenh_url or dang_dong_bo())
 
     lay_ngay = st.checkbox(
-        "Lấy cả ngày đăng chính xác (chậm: thêm 1 lượt hỏi mỗi video)",
+        "Lấy cả ngày đăng chính xác (có khoá YouTube Data API: 1 lượt hỏi mỗi 50 video; không có: chậm, 1 lượt mỗi video)",
         value=False,
         help="YouTube không trả ngày đăng ở chế độ liệt kê nhanh. Bật khi bạn cần "
              "xem ngày đăng ngay tại đây. Việc đồng bộ kho KHÔNG cần bật: ngày đăng "
@@ -2582,8 +2582,8 @@ with tab5:
             st.dataframe(df, width="stretch", hide_index=True)
             if bc_chon is not None and not loi_bc_chon:
                 st.caption("Bảng trên là số đo vân tay của lượt quét (chẩn đoán). «Đoạn vi phạm» để khiếu nại nằm "
-                           "trong 2 báo cáo tải ở trên — đã tinh chỉnh từng giây nếu lượt quét bật ô «🎯 Tinh chỉnh "
-                           "mốc từng giây».")
+                           "trong 2 báo cáo tải ở trên — lượt quét bật ô «🎯 Tinh chỉnh mốc từng giây» thì dòng nào "
+                           "tinh chỉnh được dùng mốc từng giây, dòng không tinh chỉnh được giữ mốc của lượt quét.")
             if not loi_bc_chon:
                 # Bảng hiển thị giữ nguyên; chỉ bản CSV tải về chặn công thức ở tầng ghi như
                 # mọi đường xuất CSV khác (tên clip kho máy có thể bắt đầu bằng = + - @).

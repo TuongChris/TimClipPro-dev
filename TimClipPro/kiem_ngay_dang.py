@@ -302,11 +302,11 @@ def repair(
         # Ngày NGUYÊN BẢN của yt-dlp (cột ngày báo cáo V2): chỉ khi vừa hỏi YouTube — ``upload_date`` đã lưu là ngày đã quy đổi.
         if tu_youtube and valid_upload_date(str(nguon_du_lieu.get("upload_date") or "")):
             truong["upload_date_raw"] = valid_upload_date(str(nguon_du_lieu["upload_date"]))
-        entry.update(truong)
         cap_nhat[ten] = truong
 
     if apply and cap_nhat:
         goc = os.path.join(kho, "clips_meta.json")
+        doi_ma: set[str] = set()
 
         def gop(du_lieu: dict) -> None:
             # Sao lưu ĐÚNG bản sắp bị sửa, trong lúc đang giữ khoá.
@@ -316,10 +316,21 @@ def repair(
                 print(f"Đã sao lưu -> {bk}")
             for ten_entry, cac_truong in cap_nhat.items():
                 # Entry bị writer khác xoá giữa chừng thì không hồi sinh nó.
-                if isinstance(du_lieu.get(ten_entry), dict):
-                    du_lieu[ten_entry].update(cac_truong)
+                hien_tai = du_lieu.get(ten_entry)
+                if not isinstance(hien_tai, dict):
+                    continue
+                if _ma_video(ten_entry, hien_tai) != _ma_video(ten_entry, meta[ten_entry]):
+                    doi_ma.add(ten_entry)
+                    continue
+                hien_tai.update(cac_truong)
 
         cap_nhat_json(goc, gop, mac_dinh={})
+        if doi_ma:
+            ten_doi_ngay = {muc[0] for muc in thay_doi}
+            da_doi -= len(doi_ma & ten_doi_ngay)
+            khong_doi -= len(doi_ma - ten_doi_ngay)
+            bo_qua += len(doi_ma)
+            thay_doi = [muc for muc in thay_doi if muc[0] not in doi_ma]
 
     return {
         "khong_doi": khong_doi,

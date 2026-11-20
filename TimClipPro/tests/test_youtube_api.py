@@ -211,7 +211,7 @@ def test_doc_khoa_nho_theo_duong_dan_gio_sua_va_co(tmp_path, monkeypatch):
     _ghi_khoa(tmp_path, "sai\n")
     _loi_khoa(path)
     _loi_khoa(path)
-    assert len(so_lan) == 3, "lỗi cũng được nhớ theo (đường dẫn, giờ sửa, cỡ)"
+    assert len(so_lan) == 4
 
 
 def test_trang_thai_khoa_cho_giao_dien_khong_mang_khoa(tmp_path, khoa_api_that):
@@ -583,3 +583,40 @@ def test_assertion_cua_fixture_chan_mang_noi_len(api_youtube_gia, tmp_path, monk
     monkeypatch.setattr(urllib.request, "urlopen", cam)
     with pytest.raises(AssertionError):
         ya.lay_video(_phien()[0], str(tmp_path / "data"), [_ma(1)])
+
+
+@pytest.mark.parametrize("doc, tham_so", [
+    (ya.lay_video, [_ma(1)]),
+    (ya.tim_video, "clip"),
+    (ya.lay_ngay_luot_xem, [_ma(1)]),
+])
+def test_phan_hoi_200_thieu_items_la_loi(api_youtube_gia, tmp_path, doc, tham_so):
+    api_youtube_gia.kich_ban = [{"error": {"message": "Đang bảo trì"}}]
+    phien, _ = _phien()
+    ket = doc(phien, str(tmp_path), tham_so)
+    assert phien.api.loai_tat == t.API_PHAN_HOI_LA
+    ly_do = t.THONG_BAO_API[t.API_PHAN_HOI_LA]
+    if isinstance(ket, ya.KetQuaApi):
+        assert ket.ly_do_tung_ma == {_ma(1): ly_do}
+    else:
+        assert ket[1] == ly_do
+
+
+def test_doc_khoa_thu_lai_sau_loi_mo_file(tmp_path, monkeypatch):
+    duong_dan = _ghi_khoa(tmp_path, gia.KHOA_GIA)
+
+    def tu_choi(*args, **kwargs):
+        raise PermissionError
+
+    with monkeypatch.context() as tam:
+        tam.setattr(ya, "open", tu_choi, raising=False)
+        assert "Không đọc được" in _loi_khoa(duong_dan)
+    assert ya.doc_khoa_api(duong_dan) == gia.KHOA_GIA
+
+
+def test_than_rong_khong_items_van_la_0_ket_qua(api_youtube_gia, tmp_path):
+    """Có ``fields=items(...)`` mà không mã nào còn, Google trả ``{}``: mọi mã vắng (đúng là đã gỡ), API không tắt."""
+    api_youtube_gia.kich_ban = [{}]
+    phien, _ = _phien()
+    ket = ya.lay_video(phien, str(tmp_path), [_ma(1)])
+    assert not phien.api.tat and ket.ly_do_tung_ma == {_ma(1): ya.LY_DO_VANG}

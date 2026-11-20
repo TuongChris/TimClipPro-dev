@@ -76,10 +76,8 @@ def kiem_tra(phien: truy_cap_youtube.PhienYouTube, data_dir: str, ids: Iterable[
     luc = _bay_gio()
 
     def sua(so: dict) -> None:
-        if not isinstance(so, dict):
+        if not isinstance(so, dict) or not isinstance(so.setdefault("video", {}), dict):
             raise luu_tru.LoiDuLieu(f"Sổ {TEN_FILE} sai cấu trúc — không ghi đè; sửa hoặc xoá file đó rồi kiểm lại.")
-        if not isinstance(so.get("video"), dict):
-            so["video"] = {}
         so["phien_ban"] = 1
         for m, moi in ket.items():
             cu = so["video"].get(m)

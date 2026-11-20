@@ -564,3 +564,9 @@ def test_che_bi_mat_an_ten_mat_khau_trong_url_proxy():
     assert nhay == "http://[đã ẩn]@proxy.example:8080" and t.che_bi_mat(nhay) == nhay
     giu = "https://www.youtube.com/@kenh_cua_toi http://127.0.0.1:8502/x?v=abcdefghijk"
     assert t.che_bi_mat(giu) == giu
+
+
+@pytest.mark.parametrize("truong, ly_do", [("errors", []), ("details", {})])
+def test_ly_do_google_khong_phai_chuoi_van_phan_loai_duoc_503(truong, ly_do):
+    than = {"error": {truong: [{"reason": ly_do}]}}
+    assert t.phan_loai_loi_api(503, than) == t.API_TAM_THOI

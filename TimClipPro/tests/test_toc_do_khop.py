@@ -260,3 +260,19 @@ def test_co_phuong_an_thi_KHONG_ghi_ly_do_choi_bo(tmp_path):
 
     assert e.chan_doan_quet.da_thu_toc_do, "phải ghi nhận là ĐÃ thử"
     assert e.chan_doan_quet.ly_do_khong_bu_toc_do == ""
+
+
+def test_manh_ngoai_lai_khong_keo_dai_khoang_troi():
+    from toc_do_khop import he_so_moc_theo_troi
+
+    manh = []
+    for i in range(6):
+        t = 30000 + 10 * i
+        manh.append(_manh(t, t - (1000.0 + 0.1 * i)))
+    manh.append(_manh(30400, 30400 - 1000.2))
+
+    assert uoc_luong_toc_do(manh) == []
+    assert he_so_moc_theo_troi(manh) == 1.0
+    (uoc,) = uoc_luong_toc_do(manh, min_trai_dai_s=50.0)
+    assert uoc.trai_dai_s == 50.0
+    assert he_so_moc_theo_troi(manh, min_trai_dai_s=50.0) == 1.0

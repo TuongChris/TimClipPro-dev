@@ -73,7 +73,7 @@ class LoiKhoaApi(ValueError):
     """File khoá sai dạng. Thông điệp chỉ nêu TÊN file — không thư mục, không gì của khoá."""
 
 
-_BO_NHO_KHOA: dict = {}  # đường dẫn -> ((mtime_ns, cỡ), khoá, lỗi)
+_BO_NHO_KHOA: dict = {}  # đường dẫn -> ((mtime_ns, cỡ), khoá)
 
 
 def doc_khoa_api(path: str) -> str:
@@ -89,11 +89,13 @@ def doc_khoa_api(path: str) -> str:
         raise LoiKhoaApi(f"Không đọc được file {ten}.")
     dau = (st.st_mtime_ns, st.st_size)
     cu = _BO_NHO_KHOA.get(path)
-    if cu is None or cu[0] != dau:
-        cu = _BO_NHO_KHOA[path] = (dau, *_doc_file_khoa(path, ten))
-    if cu[2]:
-        raise LoiKhoaApi(cu[2])
-    return cu[1]
+    if cu is not None and cu[0] == dau:
+        return cu[1]
+    khoa, loi = _doc_file_khoa(path, ten)
+    if loi:
+        raise LoiKhoaApi(loi)
+    _BO_NHO_KHOA[path] = (dau, khoa)
+    return khoa
 
 
 def _doc_file_khoa(path: str, ten: str) -> tuple:
@@ -327,9 +329,16 @@ def _video_chuan(muc: dict, can_trang_thai: bool) -> dict:
     return video
 
 
+def _items(du_lieu: dict):
+    """``items`` của phản hồi 200. Có ``fields=items(...)`` mà không khớp gì, Google bỏ hẳn khoá ``items`` (thân
+    ``{}``): 0 kết quả. Thân có khoá khác mà thiếu ``items`` (vd. tài liệu lỗi qua proxy) → ``None`` = sai dạng, để
+    lượt kiểm còn/gỡ không ghi cả lô là «không còn»."""
+    return du_lieu.get("items", None if du_lieu else [])
+
+
 def _doc_lo(du_lieu: dict, lo: list, can_trang_thai: bool) -> dict:
     """Phản hồi ``videos.list`` -> {mã: dict chuẩn} cho đúng các mã đã hỏi (mã lạ bị bỏ qua); sai dạng → ``_LoiApi``."""
-    items = du_lieu.get("items", [])
+    items = _items(du_lieu)
     if not isinstance(items, list):
         raise _LoiApi(tc.API_PHAN_HOI_LA)
     can = set(lo)
@@ -396,7 +405,7 @@ _TRUONG_TIM = ("title", "channelId", "channelTitle", "publishedAt")
 def _doc_tim(du_lieu: dict) -> list:
     """Phản hồi ``search.list`` -> [dict] theo thứ tự liên quan; sai dạng → ``_LoiApi``. Tiêu đề / tên kênh của
     ``search.list`` đã mã hoá HTML (``&amp;``, ``&#39;``), khác ``videos.list`` — giải mã ở đây."""
-    items = du_lieu.get("items", [])
+    items = _items(du_lieu)
     if not isinstance(items, list):
         raise _LoiApi(tc.API_PHAN_HOI_LA)
     ra = []
@@ -435,7 +444,7 @@ def lay_ngay_luot_xem(phien: tc.PhienYouTube, data_dir: str, ids: Iterable[str],
     ``LY_DO_CHUA_CO_KHOA`` (0 yêu cầu); lô hỏng → lý do tiếng Việt của lõi, các lô khác vẫn chạy. Không lùi về yt-dlp."""
 
     def doc(du_lieu: dict, lo: list) -> dict:
-        items = du_lieu.get("items", [])
+        items = _items(du_lieu)
         if not (isinstance(items, list) and all(isinstance(x, dict) and isinstance(x.get("id"), str) for x in items)):
             raise _LoiApi(tc.API_PHAN_HOI_LA)
         ra = {}

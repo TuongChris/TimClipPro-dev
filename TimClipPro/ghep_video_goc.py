@@ -28,7 +28,9 @@ import json
 import os
 import re
 import shutil
+import tempfile
 from datetime import datetime
+from pathlib import Path
 from typing import Callable, Optional
 
 import tai_video_goc as tv
@@ -399,17 +401,21 @@ def ghep(
         phan.append((ten, k["url"], duong))
     if huy():
         return that_bai("Đã dừng theo yêu cầu trước khi ghép.")
+    file_may = [Path(k["duong_dan"]) for k in ket_qua[:-1] if k.get("la_file_may")]
+    file_may_thuc = {d.resolve() for d in file_may}
+    tam_thuc = Path(tam).resolve()
+    giu_tam = any(Path(tam) in d.parents for d in file_may) or any(tam_thuc in d.parents for d in file_may_thuc)
+    # File người dùng chọn có thể mang chính tên file trung gian, ví dụ dang_ghep.m4a.
+    tam_ghep = tempfile.mkdtemp(dir=tam) if giu_tam else tam
     ghi_am = []
     if chuan_hoa_am:
         # Từng video riêng (như YouTube), TRƯỚC khi kiểm thông số/nối; video đã ở mức thì giữ nguyên — bấm lại với file lẻ
         # còn giữ từ lượt trước không nén lại lần nữa.
         thay: dict = {}
-        tam_tuyet_doi = os.path.abspath(tam) + os.sep
         for so, duong in enumerate(dict.fromkeys(d for *_x, d in phan), start=1):
             bao(0.70, f"Đang chỉnh âm lượng {vat} {so} về mức YouTube...")
-            # File trong máy (ngoài thư mục tạm): chỉnh ra BẢN trong thư mục tạm, file gốc của người dùng không đổi.
-            ban = (None if os.path.abspath(duong).startswith(tam_tuyet_doi)
-                   else os.path.join(tam, THU_MUC_AM, f"{so}_{os.path.basename(duong)}"))
+            ban = (os.path.join(tam_ghep, THU_MUC_AM, f"{so}_{os.path.basename(duong)}")
+                   if Path(duong).resolve() in file_may_thuc else None)
             if ban:
                 os.makedirs(os.path.dirname(ban), exist_ok=True)
                 # Bản cũ của lượt hỏng trước (có thể của file KHÁC): file đã đủ to thì chuan_hoa không ghi đè nó.
@@ -440,16 +446,26 @@ def ghep(
             "Chưa ghép: các video khác thông số và video 1 không phải H.264 + AAC nên tool không tự chuyển được. "
             "Bỏ các video lệch khỏi danh sách rồi ghép lại. " + " | ".join(cac_cho_lech(ts)) + "."
         )
+
+    def dung_luong_can(cac_vi_tri):
+        if not chi_audio:
+            return _DU_PHONG_O_DIA + sum(os.path.getsize(phan[i][2]) for i in cac_vi_tri)
+        thoi_luong = {Path(phan[i][2]): ts[i][1]["do_dai"] for i in cac_vi_tri}
+        return _DU_PHONG_O_DIA + sum(min(os.path.getsize(d), giay * 192_000 / 8) for d, giay in thoi_luong.items())
+
     if can_chuyen:
-        can = sum(os.path.getsize(phan[i][2]) for i in can_chuyen) + _DU_PHONG_O_DIA
+        thu_muc_khop = os.path.join(tam_ghep, THU_MUC_KHOP)
+        ban_khop = {d: os.path.join(thu_muc_khop, _ten_khop(d, chuan, khoa, duoi))
+                    for d in {phan[i][2] for i in can_chuyen}}
+        can = dung_luong_can(i for i in can_chuyen if not chi_audio or not os.path.isfile(ban_khop[phan[i][2]]))
         if shutil.disk_usage(thu_muc).free < can:
             return that_bai(f"Chưa ghép: cần chuyển {vat} lệch, ổ đĩa cần còn trống khoảng {can / 1e9:,.1f} GB.")
-        os.makedirs(os.path.join(tam, THU_MUC_KHOP), exist_ok=True)
+        os.makedirs(thu_muc_khop, exist_ok=True)
     da_chuyen: dict = {}
     for so, i in enumerate(can_chuyen, start=1):
         ten, link, duong = phan[i]
         if duong not in da_chuyen:
-            dich_khop = os.path.join(tam, THU_MUC_KHOP, _ten_khop(duong, chuan, khoa, duoi))
+            dich_khop = ban_khop[duong]
             if not os.path.isfile(dich_khop):
                 do_dai_i = ts[i][1]["do_dai"]
                 nhan = (f"Đang chuyển {vat} {i + 1} «{ten}» cho khớp "
@@ -484,7 +500,7 @@ def ghep(
             + "."
         )
     tong = sum(t["do_dai"] for _, t in ts)
-    can = sum(os.path.getsize(d) for *_x, d in phan) + _DU_PHONG_O_DIA
+    can = dung_luong_can(range(len(phan)))
     if shutil.disk_usage(thu_muc).free < can:
         return that_bai(f"Chưa ghép: ổ đĩa cần còn trống khoảng {can / 1e9:,.1f} GB.")
 
@@ -493,10 +509,10 @@ def ghep(
     )
     ten = ten_file_ra(ten_file, "Audio_ghep" if chi_audio else "Video_ghep")
     dich = _ten_ra(thu_muc, ten, duoi)
-    dang_ghi = os.path.join(tam, "dang_ghep" + duoi)
+    dang_ghi = os.path.join(tam_ghep, "dang_ghep" + duoi)
     ds_noi, meta = (
-        os.path.join(tam, "danh_sach_noi.txt"),
-        os.path.join(tam, "chuong.txt"),
+        os.path.join(tam_ghep, "danh_sach_noi.txt"),
+        os.path.join(tam_ghep, "chuong.txt"),
     )
     with open(ds_noi, "w", encoding="utf-8", newline="\n") as f:
         f.write(
@@ -598,11 +614,13 @@ def ghep(
             f"lệch. Giữ các {vat} đã tải ở «{tam}»."
         )
     else:
-        shutil.rmtree(tam, ignore_errors=True)
-        for k in ket_qua[:-1]:  # file lẻ vừa xoá: đừng để dòng từng link trỏ vào đó
+        shutil.rmtree(tam_ghep, ignore_errors=True)
+        if giu_tam:
+            dong_ghep["ghi_chu"] += f" — Giữ thư mục tạm «{tam}» vì có file trong máy được chọn."
+        for k in ket_qua[:-1]:
             if k.get("la_file_may"):
                 k["ghi_chu"] = f"Đã nối vào {vat} ghép bên dưới; file trong máy giữ nguyên."
-            elif k["trang_thai"] in ("xong", "bo_qua"):
+            elif not giu_tam and k["trang_thai"] in ("xong", "bo_qua"):
                 k.update(trang_thai="xong", duong_dan="", ghi_chu=f"Đã nối vào {vat} ghép bên dưới; file lẻ đã xoá.")
     bao(1.0, "Xong.")
     return ket_qua
