@@ -15,6 +15,15 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-62 Review độc lập bằng Codex 20/11 + quy tắc dấu phẩy trong danh sách mốc (người dùng, 2026-11-20)
+Người dùng cho dùng phần hạn mức ChatGPT dư: Codex (gpt-6.2-astra) KHÔNG công cụ (chỉ nhận mã công khai dạng chữ) review
+mã 2450682..8e0f45b (10 lượt, 127 phát hiện) → Claude kiểm từng mục: 14 sửa, phần lớn bác (hai việc nền chạy cùng lúc không
+xảy ra — một tác vụ nền mỗi tiến trình; quyết định đã có; quá hiếm). Codex viết bản sửa + test, Claude áp, kiểm đỏ→xanh, sửa
+lại chỗ sai (Data API gửi `fields=items(...)` → không có kết quả thì thân `{}`, là 0 kết quả chứ không phải lỗi), Codex soát
+lần hai. Danh sách đoạn / mốc: phẩy LUÔN ngăn cách khi mốc là giây trơn («0-10,100-200» = hai đoạn, «10,20,30» = ba mốc);
+phần lẻ của giây trơn dùng dấu CHẤM («0.5 - 2.5»); mốc có «:» vẫn nhận phẩy lẻ («1:23,5»). Từ chối file trong máy nằm
+trong thư mục tạm ghép (`.timclip_ghep*` bị xoá khi ghép xong). Phân loại đủ: `C:\Dev\codex_ketqua	ong_2011\PHAN_LOAI.md`.
+
 ## D-61 Ghép chỉ audio trong tab «🎞️ Ghép video gốc» (người dùng, 2026-11-20)
 Lựa chọn «🎬 Video / 🎵 Chỉ audio» đầu tab (không thêm tab mới — đã 15 tab). Chỉ audio: link YouTube tải mức «Chỉ tiếng»
 (M4A/AAC) vào `.timclip_ghep_audio` (thư mục tạm RIÊNG — ghép audio xong không xoá file lẻ của lượt ghép video còn dở);

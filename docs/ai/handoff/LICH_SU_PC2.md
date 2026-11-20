@@ -3,6 +3,10 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-11-17 — bỏ nhiều đoạn rồi nối phần còn lại (D-59, nhánh feature/pc2/bo-nhieu-doan)
+- `cat_video_goc.doc_ds_doan` (đọc danh sách đoạn kiểu người dùng gõ) + `bo_doan` (một lượt FFmpeg trim/atrim + concat,
+  nén lại một lần, kiểm độ dài, «.loi» khi lệch); `cat_mot` và `bo_doan` dùng chung phần kiểm + chỉnh âm lượng.
+- Thử khả thi + test: video đánh dấu độ sáng từng khung + tần số từng giây → 0 khung, 0 khúc tiếng sai nguồn. Nhanh 4285 = 4281/4/0.
 ### 2026-11-16 — YouTube Data API + 7 tính năng (nhánh feature/pc2/tong-hop-1611, 11 nhánh việc)
 - D-51 Data API lấy thông tin video (yt-dlp chỉ còn tải), khoá `DevState\secrets\youtube_api_key.txt` (kiểm 200), thăm dò thật
   20/20 ngày UTC trùng; D-52 Dừng dựng kho giữ phần xong; D-53 Thống kê; D-54 biết tiến trình khác đồng bộ; D-55 kiểm còn/gỡ;
