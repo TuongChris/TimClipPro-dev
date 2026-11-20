@@ -276,3 +276,10 @@ def test_manh_ngoai_lai_khong_keo_dai_khoang_troi():
     (uoc,) = uoc_luong_toc_do(manh, min_trai_dai_s=50.0)
     assert uoc.trai_dai_s == 50.0
     assert he_so_moc_theo_troi(manh, min_trai_dai_s=50.0) == 1.0
+
+
+def test_do_trai_tinh_tren_moi_diem_hop_ke_ca_khi_lay_mau():
+    """201 mảnh hợp trải đúng 60 s (lấy mẫu còn 200 điểm bỏ điểm cuối): độ trải vẫn 60 s, ước lượng không bị loại."""
+    manh = [_manh(0.3 * i, 0.3 * i * 0.98) for i in range(201)]
+    uoc = uoc_luong_toc_do(manh)
+    assert uoc and uoc[0].trai_dai_s == pytest.approx(60.0, abs=1e-6)

@@ -701,3 +701,9 @@ def test_bo_doan_tua_dau_vao_va_dich_cac_moc(tmp_path, monkeypatch):
     for loc in ("[0:v:0]trim", "[0:a:0]atrim"):
         assert f"{loc}=start=0.000:end=2.500," in do_thi
         assert f"{loc}=start=4.750," in do_thi
+
+
+def test_doc_ds_doan_giay_le_dung_dau_cham():
+    # Quyết định 20/11: giây trơn có phần lẻ dùng dấu CHẤM; phẩy luôn ngăn cách («0-10,100-200» là hai đoạn).
+    assert cv.doc_ds_doan("0.5 - 2.5") == [(0.5, 2.5)]
+    assert cv.doc_ds_doan("1:00,5 - 1:02,5") == [(60.5, 62.5)]

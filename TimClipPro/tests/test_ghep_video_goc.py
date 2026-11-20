@@ -768,10 +768,10 @@ def test_ghep_audio_uoc_luong_dung_luong_theo_tieng(nguon_tieng, tmp_path, monke
     co_that = os.path.getsize
 
     def kich_thuoc(duong):
-        return 40 * 10**9 if os.fspath(duong) in (video, tieng) else co_that(duong)
+        return 40 * 10**9 if os.fspath(duong) == video else co_that(duong)
 
     monkeypatch.setattr(gv.os.path, "getsize", kich_thuoc)
-    monkeypatch.setattr(gv.shutil, "disk_usage", lambda _: SimpleNamespace(free=gv._DU_PHONG_O_DIA + 100_000))
+    monkeypatch.setattr(gv.shutil, "disk_usage", lambda _: SimpleNamespace(free=gv._DU_PHONG_O_DIA + 10**6))
     cuoi = gv.ghep([video, video, video, tieng], str(tmp_path), chi_audio=True)[-1]
     assert cuoi["trang_thai"] == "xong", cuoi
     assert gv.thong_so_audio(cuoi["duong_dan"])["do_dai"] == pytest.approx(8, abs=0.2)
@@ -785,13 +785,7 @@ def test_ghep_audio_giu_file_may_trong_thu_muc_tam(tmp_path, monkeypatch):
     _tao_tieng(goc, 1, 440)
     bam = _bam_file(goc)
 
-    def chinh_am(nguon, *, huy, dich):
-        assert dich is not None
-        shutil.copyfile(nguon, dich)
-
-    monkeypatch.setattr(gv, "chuan_hoa", chinh_am)
-    dong, cuoi = gv.ghep([str(goc)], str(tmp_path), chi_audio=True, chuan_hoa_am=True)
-    assert cuoi["trang_thai"] == "xong", cuoi
+    dong, cuoi = gv.ghep([str(goc), str(goc)], str(tmp_path), chi_audio=True, chuan_hoa_am=True)[1:]
+    assert cuoi["trang_thai"] == "loi" and "không dùng được" in cuoi["ghi_chu"], cuoi
+    assert dong["trang_thai"] == "loi" and "thư mục tạm của tool" in dong["ghi_chu"]
     assert _bam_file(goc) == bam
-    assert dong["duong_dan"] == str(goc) and "giữ nguyên" in dong["ghi_chu"]
-    assert f"Giữ thư mục tạm «{tam}»" in cuoi["ghi_chu"]

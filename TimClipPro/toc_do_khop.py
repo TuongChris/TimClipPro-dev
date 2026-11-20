@@ -130,6 +130,7 @@ def _hoi_quy_ben(diem: list, dung_sai: float = 1.5,
         return None
     # Nhiều điểm quá thì lấy mẫu đều để số cặp không bùng nổ; thứ tự theo thời gian
     # nên lấy mẫu đều vẫn phủ hết trục.
+    tat_ca = diem
     if len(diem) > toi_da_diem:
         buoc = len(diem) / toi_da_diem
         diem = [diem[int(i * buoc)] for i in range(toi_da_diem)]
@@ -153,7 +154,8 @@ def _hoi_quy_ben(diem: list, dung_sai: float = 1.5,
     tinh = _binh_phuong_toi_thieu(hop)
     if tinh is not None:
         doc = tinh[0]
-    return doc, len(hop) / len(diem), len(hop), hop[-1][0] - hop[0][0]
+    hop_het = [p for p in tat_ca if abs(p[1] - (doc * p[0] + chan)) <= dung_sai] or hop
+    return doc, len(hop) / len(diem), len(hop), hop_het[-1][0] - hop_het[0][0]
 
 
 def uoc_luong_toc_do(
