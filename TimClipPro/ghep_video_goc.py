@@ -12,6 +12,10 @@ Dùng để có video dài mà ĐÁP ÁN đã biết: video gốc nào bắt đ�
   Chuyển xong vẫn lệch thì DỪNG, báo rõ, giữ các file đã tải — không ghép ra file hỏng ở chỗ nối.
 * Độ dài từng phần ghi thẳng vào danh sách nối (``duration``) nên mốc trong file CSV và mốc chương trong video khớp
   đúng chỗ FFmpeg đặt từng phần. Ghép xong và độ dài file ra khớp tổng thì mới xoá thư mục tạm.
+* Ghép CHỈ AUDIO (20/11, ``chi_audio``): tải phần tiếng (M4A/AAC) vào :data:`THU_MUC_PHAN_AUDIO`; file trong máy nhận
+  mọi file có tiếng (mp3, wav, flac, cả file video — chỉ lấy tiếng). Mọi phần phải là MỘT luồng AAC-LC cùng tần số/số
+  kênh với file 1 (:data:`THONG_SO_AUDIO`) — phần lệch, KỂ CẢ file 1 (vd. MP3), được chuyển riêng rồi nối ``-c copy``
+  ra một file ``.m4a`` + ``.moc.csv``.
 """
 
 from __future__ import annotations
@@ -35,6 +39,8 @@ from process_runner import IM_LANG_FFMPEG_S, chay_lenh_media
 from ytdlp_chung import CauHinhMang
 
 THU_MUC_PHAN = ".timclip_ghep"
+# Ghép chỉ audio: thư mục tạm RIÊNG — ghép audio xong (xoá thư mục tạm) không xoá file lẻ của lượt ghép video còn dở.
+THU_MUC_PHAN_AUDIO = ".timclip_ghep_audio"
 THU_MUC_KHOP = "khop"  # trong THU_MUC_PHAN: bản đã chuyển cho khớp video 1 (dùng lại khi bấm ghép lại)
 THU_MUC_AM = "am"  # trong THU_MUC_PHAN: bản đã chỉnh âm lượng của FILE TRONG MÁY (file gốc không bị sửa — D-46)
 # Dòng trông như đường dẫn file Windows («D:\…», «\\máy\…»): không có file thì báo «không tìm thấy», không đem đi tải.
@@ -63,6 +69,16 @@ THONG_SO = {
     "nhip_hinh": "nhịp thời gian hình",
 }
 _THONG_SO_TIENG = ("ma_tieng", "tan_so_tieng", "kenh_tieng")
+# Ghép chỉ audio: concat lấy luồng theo SỐ THỨ TỰ — file video hay MP3 có ảnh bìa đặt tiếng ở luồng 1, nên mỗi phần
+# phải chỉ có MỘT luồng tiếng; nhịp thời gian khác nhau nối -c copy cũng lệch mốc như nhịp hình.
+THONG_SO_AUDIO = {
+    "ma_tieng": "mã hoá tiếng",
+    "profile_tieng": "kiểu AAC",
+    "tan_so_tieng": "tần số tiếng",
+    "kenh_tieng": "số kênh tiếng",
+    "nhip_tieng": "nhịp thời gian tiếng",
+    "chi_tieng": "chỉ có một luồng tiếng",
+}
 # File ra lệch tổng độ dài các phần quá mức này thì không tin mốc — giữ file tạm, báo.
 LECH_DO_DAI_TOI_DA_S = 1.0
 _DU_PHONG_O_DIA = 10**9
@@ -100,34 +116,60 @@ def thong_so(path: str) -> dict:
     }
 
 
-def cac_cho_lech(ts: list) -> list:
-    """Câu báo cho từng phần lệch phần đầu tiên (rỗng = nối thẳng được). ``ts``: list (tiêu đề, thông số)."""
+def thong_so_audio(path: str) -> dict:
+    """Như :func:`thong_so` cho ghép chỉ audio: thông số luồng tiếng ĐẦU TIÊN (:data:`THONG_SO_AUDIO`) + ``do_dai``."""
+    d = doc_ffprobe(path)
+    luong = d.get("streams", [])
+    tieng = next((s for s in luong if s.get("codec_type") == "audio"), {})
+    do_dai = float((d.get("format") or {}).get("duration") or 0)
+    if not tieng or do_dai <= 0:
+        raise RuntimeError(f"File «{os.path.basename(path)}» không có tiếng hoặc không đo được độ dài.")
+    return {
+        "ma_tieng": tieng.get("codec_name"),
+        "profile_tieng": tieng.get("profile"),
+        "tan_so_tieng": tieng.get("sample_rate"),
+        "kenh_tieng": tieng.get("channels"),
+        "nhip_tieng": tieng.get("time_base"),
+        "chi_tieng": len(luong) == 1,
+        "do_dai": do_dai,
+    }
+
+
+def chuan_audio(t1: dict) -> dict:
+    """Đích chung khi ghép chỉ audio: AAC-LC, tần số + số kênh của file 1, một luồng, nhịp = tần số (muxer MP4 tự đặt
+    như vậy) — file 1 không phải AAC (MP3, WAV…) cũng được chuyển."""
+    return {"ma_tieng": "aac", "profile_tieng": "LC", "tan_so_tieng": t1["tan_so_tieng"],
+            "kenh_tieng": t1["kenh_tieng"], "nhip_tieng": f"1/{t1['tan_so_tieng']}", "chi_tieng": True}
+
+
+def cac_cho_lech(ts: list, chuan: Optional[dict] = None, khoa: dict = THONG_SO, ten_phan: str = "Video") -> list:
+    """Câu báo cho từng phần lệch phần đầu tiên (rỗng = nối thẳng được). ``ts``: list (tiêu đề, thông số).
+    Có ``chuan`` (ghép chỉ audio): so MỌI phần, kể cả phần 1, với đích đó."""
     if not ts:
         return []
-    _, chuan = ts[0]
+    nhan_chuan = "cần" if chuan is not None else "video 1"
+    chuan = chuan if chuan is not None else ts[0][1]
     bao = []
-    for i, (ten, t) in enumerate(ts[1:], start=2):
-        khac = [
-            f"{nhan} {t[k]} (video 1: {chuan[k]})"
-            for k, nhan in THONG_SO.items()
-            if t[k] != chuan[k]
-        ]
+    for i, (ten, t) in enumerate(ts, start=1):
+        if i == 1 and nhan_chuan == "video 1":
+            continue
+        khac = [f"{nhan} {t[k]} ({nhan_chuan}: {chuan[k]})" for k, nhan in khoa.items() if t[k] != chuan[k]]
         if khac:
-            bao.append(f"Video {i} «{ten}»: " + "; ".join(khac))
+            bao.append(f"{ten_phan} {i} «{ten}»: " + "; ".join(khac))
     return bao
 
 
 _PROFILE_X264 = {"High": "high", "Main": "main", "Constrained Baseline": "baseline"}
 
 
-def _ten_khop(nguon: str, chuan: dict) -> str:
+def _ten_khop(nguon: str, chuan: dict, khoa: dict = THONG_SO, duoi: str = ".mp4") -> str:
     """Tên bản chuyển: theo file nguồn + thông số đích — ghép lại cùng danh sách thì dùng lại, không nén lại lần nữa.
     Đường dẫn ĐẦY ĐỦ + cỡ + giờ sửa (audit 11/11): file trong máy cùng tên khác thư mục, hay sửa file rồi ghép lại, không
     được dùng chung bản chuyển."""
     st = os.stat(nguon)
-    khoa = (os.path.normcase(os.path.abspath(nguon)) + f"|{st.st_size}|{st.st_mtime_ns}"
-            + json.dumps({k: chuan[k] for k in THONG_SO}, sort_keys=True))
-    return hashlib.sha1(khoa.encode("utf-8")).hexdigest()[:16] + ".mp4"
+    khoa_bam = (os.path.normcase(os.path.abspath(nguon)) + f"|{st.st_size}|{st.st_mtime_ns}"
+                + json.dumps({k: chuan[k] for k in khoa}, sort_keys=True))
+    return hashlib.sha1(khoa_bam.encode("utf-8")).hexdigest()[:16] + duoi
 
 
 def _chuyen_khop(nguon: str, dich: str, chuan: dict, ts_nguon: dict, *, huy, khi_tien_do):
@@ -154,7 +196,24 @@ def _chuyen_khop(nguon: str, dich: str, chuan: dict, ts_nguon: dict, *, huy, khi
         lenh += ["-video_track_timescale", str(chuan["nhip_hinh"])]
     lenh += (["-c:a", "copy"] if tieng_khop else
              ["-c:a", "aac", "-b:a", "192k", "-ar", str(chuan["tan_so_tieng"]), "-ac", str(chuan["kenh_tieng"])])
-    lenh += ["-movflags", "+faststart", "-f", "mp4", dang]
+    return _chay_chuyen(lenh, dang, dich, huy=huy, khi_tien_do=khi_tien_do)
+
+
+def _chuyen_audio(nguon: str, dich: str, chuan: dict, ts_nguon: dict, *, huy, khi_tien_do):
+    """Ghép chỉ audio: lấy luồng tiếng đầu của ``nguon`` ra M4A đúng ``chuan`` — đã là AAC-LC đúng tần số/số kênh thì
+    chép nguyên (chỉ bỏ hình/ảnh bìa, đổi nhịp), không thì đổi sang AAC 192 kbps."""
+    giu_ma = all(ts_nguon[k] == chuan[k] for k in ("ma_tieng", "profile_tieng", "tan_so_tieng", "kenh_tieng"))
+    dang = dich + ".dang.m4a"
+    lenh = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", nguon, "-map", "0:a:0",
+            "-map_metadata", "-1", "-map_chapters", "-1"]
+    lenh += (["-c:a", "copy"] if giu_ma else
+             ["-c:a", "aac", "-b:a", "192k", "-ar", str(chuan["tan_so_tieng"]), "-ac", str(chuan["kenh_tieng"])])
+    return _chay_chuyen(lenh, dang, dich, huy=huy, khi_tien_do=khi_tien_do)
+
+
+def _chay_chuyen(lenh: list, dang: str, dich: str, *, huy, khi_tien_do):
+    """Chạy lệnh chuyển ghi ra ``dang`` (MP4) rồi mới đổi tên thành ``dich`` — Dừng/lỗi thì xoá bản dở."""
+    lenh = [*lenh, "-movflags", "+faststart", "-f", "mp4", dang]
     r = chay_lenh_media(lenh, cancel_event=_CoHuyTuHam(huy), im_lang_toi_da_s=IM_LANG_FFMPEG_S,
                         theo_doi_tien_do=True, khi_tien_do=khi_tien_do)
     if not r.cancelled and r.returncode == 0 and os.path.isfile(dang):
@@ -174,13 +233,13 @@ def _nhip_file(ts: list) -> list:
     return ["-movie_timescale", tan_so if dai_nhat * int(tan_so) < 2**31 else "1000"]
 
 
-def _ten_ra(thu_muc: str, ten: str) -> str:
+def _ten_ra(thu_muc: str, ten: str, duoi: str = ".mp4") -> str:
     """Đường dẫn ``<tên>.mp4`` mà CẢ ``.mp4`` lẫn ``.moc.csv`` cùng tên đều chưa có — không ghi đè file đáp án cũ của một
     video đã chuyển đi chỗ khác."""
     goc, i = ten, 2
-    while any(os.path.exists(os.path.join(thu_muc, goc + duoi)) for duoi in (".mp4", ".moc.csv")):
+    while any(os.path.exists(os.path.join(thu_muc, goc + d)) for d in (duoi, ".moc.csv")):
         goc, i = f"{ten}_{i}", i + 1
-    return os.path.join(thu_muc, goc + ".mp4")
+    return os.path.join(thu_muc, goc + duoi)
 
 
 def _nhay_concat(path: str) -> str:
@@ -242,10 +301,10 @@ def csv_moc(dong: list) -> bytes:
     return buf.getvalue().encode("utf-8-sig")
 
 
-def ten_file_ra(ten: str) -> str:
+def ten_file_ra(ten: str, goc: str = "Video_ghep") -> str:
     """Tên file video ghép (không đuôi): không dấu cách/ký tự đặc biệt/dấu tiếng Việt (12/11); rỗng →
-    «Video_ghep_<ngày giờ>»."""
-    return tv.ten_khong_dau(ten, 150) or datetime.now().strftime("Video_ghep_%Y-%m-%d_%H%M%S")
+    «<goc>_<ngày giờ>» (``goc`` = «Video_ghep» hoặc «Audio_ghep»)."""
+    return tv.ten_khong_dau(ten, 150) or datetime.now().strftime(goc + "_%Y-%m-%d_%H%M%S")
 
 
 def _ten_tu_file(path: str) -> str:
@@ -259,17 +318,21 @@ def ghep(
     *,
     ten_file: str = "",
     chuan_hoa_am: bool = False,
+    chi_audio: bool = False,
     progress: Optional[Callable[[float, str], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
     **kw,
 ) -> list:
     """Tải ``links`` (theo đúng thứ tự, link lặp lại thì video xuất hiện lặp lại) rồi ghép thành MỘT video MP4 trong
     ``thu_muc`` + file mốc ``<tên>.moc.csv``. Trả list dict như :func:`tai_video_goc.tai_nhieu` (một dòng mỗi link) và
-    một dòng cuối cho video ghép. ``kw`` chuyển cho ``tai_nhieu`` (player_clients, phien…)."""
+    một dòng cuối cho video ghép. ``kw`` chuyển cho ``tai_nhieu`` (player_clients, phien…). ``chi_audio``: chỉ tải/lấy
+    phần tiếng, ghép ra một file ``.m4a`` (AAC)."""
     bao = progress or (lambda _p, _m: None)
     huy = cancel_check or (lambda: False)
     thu_muc = os.path.abspath(str(thu_muc or "").strip().strip('"'))
-    tam = os.path.join(thu_muc, THU_MUC_PHAN)
+    tam = os.path.join(thu_muc, THU_MUC_PHAN_AUDIO if chi_audio else THU_MUC_PHAN)
+    vat = "audio" if chi_audio else "video"
+    nhan_ghep = "🎵 Audio ghép" if chi_audio else "🎞️ Video ghép"
     # Dòng là FILE trong máy (D-46) thì dùng thẳng; còn lại mới tải. File không có → dừng TRƯỚC khi tải gì.
     sach = [str(x).strip().strip('"').strip() for x in links]
     la_may = [os.path.isfile(x) or bool(_RE_DUONG_DAN.match(x)) for x in sach]
@@ -279,7 +342,7 @@ def ghep(
         ket_qua = [dong_may.get(i) or {"url": x, "trang_thai": "bo_qua", "duong_dan": "", "tieu_de": "", "chat_luong": "",
                                        "ghi_chu": "Chưa tải: có file trong máy không tìm thấy."}
                    for i, x in enumerate(sach)]
-        ket_qua.append({"url": "🎞️ Video ghép", "trang_thai": "loi", "duong_dan": "", "tieu_de": "", "chat_luong": "",
+        ket_qua.append({"url": nhan_ghep, "trang_thai": "loi", "duong_dan": "", "tieu_de": "", "chat_luong": "",
                         "ghi_chu": "Chưa ghép: có file trong máy không tìm thấy (xem các dòng ở trên).",
                         "la_dong_ghep": True})
         return ket_qua
@@ -293,7 +356,7 @@ def ghep(
             progress=lambda p, m: bao(0.7 * p, m),
             cancel_check=huy,
             bo_qua_da_co=True,
-            dinh_dang=tv.DINH_DANG_GHEP,
+            **({"chat_luong": "Chỉ tiếng"} if chi_audio else {"dinh_dang": tv.DINH_DANG_GHEP}),
             **kw,
         )
         if can_tai
@@ -301,7 +364,7 @@ def ghep(
     )
     ket_qua = [dong_may[i] if i in dong_may else next(da_tai) for i in range(len(sach))]
     dong_ghep = {
-        "url": "🎞️ Video ghép",
+        "url": nhan_ghep,
         "trang_thai": "loi",
         "duong_dan": "",
         "tieu_de": "",
@@ -314,14 +377,15 @@ def ghep(
     def that_bai(ly_do: str) -> list:
         dong_ghep["ghi_chu"] = (
             ly_do
-            + f" Các video đã tải vẫn giữ ở «{tam}» — bấm lại thì không phải tải lại."
+            + f" Các {vat} đã tải vẫn giữ ở «{tam}» — bấm lại thì không phải tải lại."
         )
         return ket_qua
 
     # Đường dẫn từng link theo đúng thứ tự: tải mới → đường dẫn tải; «đã có»/«trùng» → file «[mã].mp4» trong thư mục tạm.
     co_san = {}
+    re_ma = tv._RE_MA_CUOI_TEN_TIENG if chi_audio else tv._RE_MA_CUOI_TEN
     for f in os.listdir(tam) if os.path.isdir(tam) else []:
-        m = tv._RE_MA_CUOI_TEN.search(f)
+        m = re_ma.search(f)
         if m:
             co_san.setdefault(m.group(1), os.path.join(tam, f))
     phan, ten_theo_ma = [], {}
@@ -329,7 +393,7 @@ def ghep(
         ma = tv.ma_link(k["url"])
         duong = k["duong_dan"] if k["trang_thai"] == "xong" else co_san.get(ma)
         if k["trang_thai"] == "loi" or not duong or not os.path.isfile(duong):
-            return that_bai("Chưa ghép: có video chưa tải được (xem các dòng ở trên).")
+            return that_bai(f"Chưa ghép: có {vat} chưa tải được (xem các dòng ở trên).")
         # Link lặp lại: lượt tải báo «trùng», không trả tiêu đề — dùng tiêu đề của lần đầu.
         ten = ten_theo_ma.setdefault(ma or k["url"], k["tieu_de"] or _ten_tu_file(duong))
         phan.append((ten, k["url"], duong))
@@ -342,7 +406,7 @@ def ghep(
         thay: dict = {}
         tam_tuyet_doi = os.path.abspath(tam) + os.sep
         for so, duong in enumerate(dict.fromkeys(d for *_x, d in phan), start=1):
-            bao(0.70, f"Đang chỉnh âm lượng video {so} về mức YouTube...")
+            bao(0.70, f"Đang chỉnh âm lượng {vat} {so} về mức YouTube...")
             # File trong máy (ngoài thư mục tạm): chỉnh ra BẢN trong thư mục tạm, file gốc của người dùng không đổi.
             ban = (None if os.path.abspath(duong).startswith(tam_tuyet_doi)
                    else os.path.join(tam, THU_MUC_AM, f"{so}_{os.path.basename(duong)}"))
@@ -356,19 +420,21 @@ def ghep(
             except DaHuyChinhAmLuong:
                 return that_bai("Đã dừng theo yêu cầu trong lúc chỉnh âm lượng.")
             except RuntimeError as e:
-                ghi_am.append(f"Video {so}: chưa chỉnh được âm lượng ({e}).")
+                ghi_am.append(f"{vat.capitalize()} {so}: chưa chỉnh được âm lượng ({e}).")
             if ban and os.path.isfile(ban):
                 thay[duong] = ban
         phan = [(ten, link, thay.get(d, d)) for ten, link, d in phan]
 
-    bao(0.71, "Đang kiểm thông số các video...")
+    bao(0.71, f"Đang kiểm thông số các {vat}...")
+    do_ts, khoa, duoi = (thong_so_audio, THONG_SO_AUDIO, ".m4a") if chi_audio else (thong_so, THONG_SO, ".mp4")
     try:
-        ts = [(ten, thong_so(duong)) for ten, _l, duong in phan]
+        ts = [(ten, do_ts(duong)) for ten, _l, duong in phan]
     except RuntimeError as e:
         return that_bai(f"Chưa ghép: {e}")
-    chuan = ts[0][1]
-    can_chuyen = [i for i, (_t, t) in enumerate(ts) if i and any(t[k] != chuan[k] for k in THONG_SO)]
-    if can_chuyen and (chuan["ma_hinh"] != "h264" or chuan["ma_tieng"] != "aac"):
+    chuan = chuan_audio(ts[0][1]) if chi_audio else ts[0][1]
+    # Ghép video: video 1 là chuẩn, không chuyển; ghép audio: so cả file 1 với đích AAC chung.
+    can_chuyen = [i for i, (_t, t) in enumerate(ts) if (i or chi_audio) and any(t[k] != chuan[k] for k in khoa)]
+    if can_chuyen and not chi_audio and (chuan["ma_hinh"] != "h264" or chuan["ma_tieng"] != "aac"):
         # shortcut: chỉ chuyển về H.264 + AAC (định dạng tải chung); video 1 khác kiểu đó thì dừng như trước.
         return that_bai(
             "Chưa ghép: các video khác thông số và video 1 không phải H.264 + AAC nên tool không tự chuyển được. "
@@ -377,16 +443,17 @@ def ghep(
     if can_chuyen:
         can = sum(os.path.getsize(phan[i][2]) for i in can_chuyen) + _DU_PHONG_O_DIA
         if shutil.disk_usage(thu_muc).free < can:
-            return that_bai(f"Chưa ghép: cần chuyển video lệch, ổ đĩa cần còn trống khoảng {can / 1e9:,.1f} GB.")
+            return that_bai(f"Chưa ghép: cần chuyển {vat} lệch, ổ đĩa cần còn trống khoảng {can / 1e9:,.1f} GB.")
         os.makedirs(os.path.join(tam, THU_MUC_KHOP), exist_ok=True)
     da_chuyen: dict = {}
     for so, i in enumerate(can_chuyen, start=1):
         ten, link, duong = phan[i]
         if duong not in da_chuyen:
-            dich_khop = os.path.join(tam, THU_MUC_KHOP, _ten_khop(duong, chuan))
+            dich_khop = os.path.join(tam, THU_MUC_KHOP, _ten_khop(duong, chuan, khoa, duoi))
             if not os.path.isfile(dich_khop):
                 do_dai_i = ts[i][1]["do_dai"]
-                nhan = f"Đang chuyển video {i + 1} «{ten}» cho khớp video 1 ({so}/{len(can_chuyen)})"
+                nhan = (f"Đang chuyển {vat} {i + 1} «{ten}» cho khớp "
+                        f"{'kiểu AAC chung' if chi_audio else 'video 1'} ({so}/{len(can_chuyen)})")
                 bao(0.71 + 0.14 * (so - 1) / len(can_chuyen), nhan + "...")
 
                 def tien_do_chuyen(d: dict, so=so, nhan=nhan, do_dai_i=do_dai_i) -> None:
@@ -394,24 +461,25 @@ def ghep(
                     bao(0.71 + 0.14 * (so - 1 + min(giay / do_dai_i, 1.0)) / len(can_chuyen),
                         f"{nhan}: {hhmmss(giay)} / {hhmmss(do_dai_i)}")
 
-                r = _chuyen_khop(duong, dich_khop, chuan, ts[i][1], huy=huy, khi_tien_do=tien_do_chuyen)
+                chuyen = _chuyen_audio if chi_audio else _chuyen_khop
+                r = chuyen(duong, dich_khop, chuan, ts[i][1], huy=huy, khi_tien_do=tien_do_chuyen)
                 if r.cancelled:
-                    return that_bai("Đã dừng theo yêu cầu trong lúc chuyển video lệch; phần chuyển dở đã xoá.")
+                    return that_bai(f"Đã dừng theo yêu cầu trong lúc chuyển {vat} lệch; phần chuyển dở đã xoá.")
                 if r.returncode != 0 or not os.path.isfile(dich_khop):
-                    return that_bai(f"Chưa ghép: chuyển video {i + 1} «{ten}» cho khớp video 1 bị lỗi: "
+                    return that_bai(f"Chưa ghép: chuyển {vat} {i + 1} «{ten}» cho khớp bị lỗi: "
                                     f"{(r.stderr or r.ly_do or '').strip()[-300:]}")
             da_chuyen[duong] = dich_khop
         phan[i] = (ten, link, da_chuyen[duong])
     if can_chuyen:
         try:
-            ts = [(ten, thong_so(duong)) for ten, _l, duong in phan]
+            ts = [(ten, do_ts(duong)) for ten, _l, duong in phan]
         except RuntimeError as e:
             return that_bai(f"Chưa ghép: {e}")
-    lech = cac_cho_lech(ts)
+    lech = (cac_cho_lech(ts, chuan, THONG_SO_AUDIO, "Audio") if chi_audio else cac_cho_lech(ts))
     if lech:
         return that_bai(
-            "Chưa ghép: đã chuyển các video lệch nhưng vẫn khác thông số video 1 nên không nối thẳng được (nối vẫn "
-            "ra file nhưng hỏng ở chỗ nối). Bỏ các video lệch khỏi danh sách rồi ghép lại. "
+            f"Chưa ghép: đã chuyển các {vat} lệch nhưng vẫn khác thông số chung nên không nối thẳng được (nối vẫn "
+            f"ra file nhưng hỏng ở chỗ nối). Bỏ các {vat} lệch khỏi danh sách rồi ghép lại. "
             + " | ".join(lech)
             + "."
         )
@@ -423,9 +491,9 @@ def ghep(
     dong = moc_thoi_gian(
         [(ten, link, t["do_dai"]) for (ten, link, _d), (_t, t) in zip(phan, ts)]
     )
-    ten = ten_file_ra(ten_file)
-    dich = _ten_ra(thu_muc, ten)
-    dang_ghi = os.path.join(tam, "dang_ghep.mp4")
+    ten = ten_file_ra(ten_file, "Audio_ghep" if chi_audio else "Video_ghep")
+    dich = _ten_ra(thu_muc, ten, duoi)
+    dang_ghi = os.path.join(tam, "dang_ghep" + duoi)
     ds_noi, meta = (
         os.path.join(tam, "danh_sach_noi.txt"),
         os.path.join(tam, "chuong.txt"),
@@ -465,7 +533,7 @@ def ghep(
             "-i",
             meta,
             "-map",
-            "0",
+            "0:a:0" if chi_audio else "0",
             "-map_metadata",
             "1",
             "-map_chapters",
@@ -498,40 +566,43 @@ def ghep(
         f.write(csv_moc(dong))
 
     try:
-        do_dai_ra = thong_so(dich)["do_dai"]
+        do_dai_ra = do_ts(dich)["do_dai"]
     except RuntimeError as e:
         do_dai_ra, loi_do = None, str(e)
     t0 = ts[0][1]
+    kieu = (f"AAC {t0['tan_so_tieng']} Hz {t0['kenh_tieng']} kênh" if chi_audio
+            else f"{t0['do_phan_giai']} {t0['ma_hinh']} {t0['hinh_giay']} hình/giây")
     dong_ghep.update(
         trang_thai="xong",
         duong_dan=dich,
-        tieu_de=f"Video ghép {len(phan)} video — {hhmmss(do_dai_ra if do_dai_ra is not None else tong)}",
-        chat_luong=f"{t0['do_phan_giai']} {t0['ma_hinh']} {t0['hinh_giay']} hình/giây, "
-        + (f"{len(can_chuyen)} video nén lại cho khớp" if can_chuyen else "không nén lại"),
-        ghi_chu=f"Mốc thời gian từng video gốc: {duong_moc}"
-        + (" — Âm lượng từng video đã đưa về mức YouTube (-14 LUFS)." if chuan_hoa_am and not ghi_am else "")
+        tieu_de=f"{vat.capitalize()} ghép {len(phan)} {vat} — {hhmmss(do_dai_ra if do_dai_ra is not None else tong)}",
+        chat_luong=f"{kieu}, "
+        + (f"{len(can_chuyen)} {vat} chuyển cho khớp" if can_chuyen else "không nén lại"),
+        ghi_chu=f"Mốc thời gian từng {vat} gốc: {duong_moc}"
+        + (f" — Âm lượng từng {vat} đã đưa về mức YouTube (-14 LUFS)." if chuan_hoa_am and not ghi_am else "")
         + "".join(f" — {x}" for x in ghi_am),
     )
     if can_chuyen:
-        dong_ghep["ghi_chu"] += " — Đã chuyển cho khớp video 1 (tiếng giữ nguyên): " + ", ".join(
-            f"Video {i + 1} «{phan[i][0]}»" for i in can_chuyen
+        dong_ghep["ghi_chu"] += (" — Đã chuyển sang AAC cho khớp: " if chi_audio
+                                 else " — Đã chuyển cho khớp video 1 (tiếng giữ nguyên): ") + ", ".join(
+            f"{vat.capitalize()} {i + 1} «{phan[i][0]}»" for i in can_chuyen
         )
     if do_dai_ra is None:
         dong_ghep["ghi_chu"] += (
-            f" — CẢNH BÁO: không đo lại được độ dài video ghép ({loi_do}); chưa chắc mốc đúng. Giữ các video đã tải ở "
+            f" — CẢNH BÁO: không đo lại được độ dài {vat} ghép ({loi_do}); chưa chắc mốc đúng. Giữ các {vat} đã tải ở "
             f"«{tam}»."
         )
     elif abs(do_dai_ra - tong) > LECH_DO_DAI_TOI_DA_S:
         dong_ghep["ghi_chu"] += (
-            f" — CẢNH BÁO: video ghép dài {do_dai_ra:.2f} s, tổng các phần {tong:.2f} s; mốc có thể "
-            f"lệch. Giữ các video đã tải ở «{tam}»."
+            f" — CẢNH BÁO: {vat} ghép dài {do_dai_ra:.2f} s, tổng các phần {tong:.2f} s; mốc có thể "
+            f"lệch. Giữ các {vat} đã tải ở «{tam}»."
         )
     else:
         shutil.rmtree(tam, ignore_errors=True)
         for k in ket_qua[:-1]:  # file lẻ vừa xoá: đừng để dòng từng link trỏ vào đó
             if k.get("la_file_may"):
-                k["ghi_chu"] = "Đã nối vào video ghép bên dưới; file trong máy giữ nguyên."
+                k["ghi_chu"] = f"Đã nối vào {vat} ghép bên dưới; file trong máy giữ nguyên."
             elif k["trang_thai"] in ("xong", "bo_qua"):
-                k.update(trang_thai="xong", duong_dan="", ghi_chu="Đã nối vào video ghép bên dưới; file lẻ đã xoá.")
+                k.update(trang_thai="xong", duong_dan="", ghi_chu=f"Đã nối vào {vat} ghép bên dưới; file lẻ đã xoá.")
     bao(1.0, "Xong.")
     return ket_qua

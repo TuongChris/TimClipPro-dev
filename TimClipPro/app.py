@@ -1705,27 +1705,39 @@ with tab_kenh:
                      chat_luong=_cl_kenh)
 
 with tab_ghep:
-    st.subheader("Ghép nhiều video gốc thành một video dài")
-    st.caption("Tải từng video (H.264 tối đa 1080p + tiếng AAC, file MP4 — cùng một kiểu để nối mà KHÔNG nén lại) rồi ghép "
-               "theo đúng thứ tự link; link lặp lại thì video lặp lại. Kèm file «.moc.csv» ghi video gốc nào bắt đầu ở "
-               "giây nào (và mốc chương ngay trong video) — đem video dài đi quét rồi so với file mốc để đo độ chính xác. "
-               "Ghép xong thì xoá các file lẻ.")
+    st.subheader("Ghép nhiều video / audio gốc thành một file dài")
+    _loai_ghep = st.radio("Ghép", tai_video_goc.LOAI_TAI, horizontal=True, key="loai_ghep")
+    _audio_ghep = _loai_ghep == tai_video_goc.LOAI_TAI[1]
+    if _audio_ghep:
+        st.caption("Chỉ tải phần tiếng của từng video (AAC, file M4A) rồi ghép theo đúng thứ tự link; link lặp lại thì "
+                   "đoạn đó lặp lại. File trong máy: .m4a, .mp3, .wav, .flac… hoặc cả file video (chỉ lấy tiếng). File "
+                   "khác kiểu file 1 được chuyển sang AAC cho khớp trước khi nối. Ra một file .m4a + file «.moc.csv» ghi "
+                   "mỗi đoạn bắt đầu ở giây nào (và mốc chương ngay trong file). Ghép xong thì xoá các file lẻ.")
+    else:
+        st.caption("Tải từng video (H.264 tối đa 1080p + tiếng AAC, file MP4 — cùng một kiểu để nối mà KHÔNG nén lại) rồi "
+                   "ghép theo đúng thứ tự link; link lặp lại thì video lặp lại. Kèm file «.moc.csv» ghi video gốc nào bắt "
+                   "đầu ở giây nào (và mốc chương ngay trong video) — đem video dài đi quét rồi so với file mốc để đo độ "
+                   "chính xác. Ghép xong thì xoá các file lẻ.")
     links_ghep = st.text_area("Link video hoặc đường dẫn file trong máy cần ghép (mỗi dòng một, theo thứ tự ghép)",
                               height=140,
                               placeholder="https://www.youtube.com/watch?v=...\nD:\\Video\\intro.mp4\nhttps://youtu.be/...")
     st.caption("Trộn được link YouTube với file có sẵn trong máy. File trong máy không bị sửa hay xoá (chỉnh âm lượng làm "
                "trên bản sao tạm).")
     _thu_muc_ghep = _o_thu_muc_tai("Thư mục lưu video ghép", "ghep")
-    _ten_ghep = st.text_input("Tên file video ghép (để trống = «Video_ghep_<ngày giờ>»; dấu cách, dấu tiếng Việt, ký tự "
-                              "đặc biệt được đổi thành chữ không dấu và «_»)")
+    _ten_ghep = st.text_input("Tên file video ghép (để trống = «Video_ghep_<ngày giờ>», chỉ audio = «Audio_ghep_<ngày "
+                              "giờ>»; dấu cách, dấu tiếng Việt, ký tự đặc biệt được đổi thành chữ không dấu và «_»)")
     _ds_ghep = ghep_video_goc.tach_link(links_ghep)
     _am_ghep = st.checkbox(O_AM_LUONG, value=True, key="am_ghep", help=GIAI_THICH_AM_LUONG)
-    st.caption("Video khác độ phân giải hay số hình/giây video 1 (vd. một video 60 hình/giây giữa các video 30) thì "
-               "tool tự nén lại RIÊNG video đó cho khớp — lâu hơn vài phút cho mỗi video lệch; tiếng giữ nguyên nên mốc "
-               "vẫn đúng. Video đã tải được giữ lại tới khi ghép xong, bấm lại thì không phải tải lại.")
-    if st.button(f"🎞️ Tải và ghép {len(_ds_ghep)} video" if _ds_ghep else "🎞️ Tải và ghép", type="primary",
-                 key="bat_dau_ghep_video", disabled=len(_ds_ghep) < 2 or not _thu_muc_ghep or _chua_tai_duoc()):
-        _bat_dau_tai(ghep_video_goc.ghep, _ds_ghep, _thu_muc_ghep, ten_file=_ten_ghep, chuan_hoa_am=_am_ghep)
+    if not _audio_ghep:
+        st.caption("Video khác độ phân giải hay số hình/giây video 1 (vd. một video 60 hình/giây giữa các video 30) thì "
+                   "tool tự nén lại RIÊNG video đó cho khớp — lâu hơn vài phút cho mỗi video lệch; tiếng giữ nguyên nên "
+                   "mốc vẫn đúng. Video đã tải được giữ lại tới khi ghép xong, bấm lại thì không phải tải lại.")
+    _bieu_ghep, _vat_ghep = ("🎵", "audio") if _audio_ghep else ("🎞️", "video")
+    if st.button(f"{_bieu_ghep} Tải và ghép {len(_ds_ghep)} {_vat_ghep}" if _ds_ghep else f"{_bieu_ghep} Tải và ghép",
+                 type="primary", key="bat_dau_ghep_video",
+                 disabled=len(_ds_ghep) < 2 or not _thu_muc_ghep or _chua_tai_duoc()):
+        _bat_dau_tai(ghep_video_goc.ghep, _ds_ghep, _thu_muc_ghep, ten_file=_ten_ghep, chuan_hoa_am=_am_ghep,
+                     chi_audio=_audio_ghep)
 
 with tab_may:
     st.subheader("Cắt đoạn / bỏ đoạn / chụp ảnh / chỉnh âm lượng video có sẵn trong máy")

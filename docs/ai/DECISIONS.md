@@ -15,6 +15,15 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-61 Ghép chỉ audio trong tab «🎞️ Ghép video gốc» (người dùng, 2026-11-20)
+Lựa chọn «🎬 Video / 🎵 Chỉ audio» đầu tab (không thêm tab mới — đã 15 tab). Chỉ audio: link YouTube tải mức «Chỉ tiếng»
+(M4A/AAC) vào `.timclip_ghep_audio` (thư mục tạm RIÊNG — ghép audio xong không xoá file lẻ của lượt ghép video còn dở);
+file trong máy nhận mọi file có tiếng (mp3, wav, flac, cả file video — chỉ lấy tiếng), file gốc không đổi. Đích chung =
+MỘT luồng AAC-LC, tần số + số kênh của file 1 (`THONG_SO_AUDIO`; concat lấy luồng theo số thứ tự nên file video/ảnh bìa
+phải bỏ luồng thừa); phần lệch, KỂ CẢ file 1, chuyển riêng (đã là AAC đúng kiểu thì chỉ chép luồng tiếng), rồi nối
+`-c copy` ra `.m4a` + `.moc.csv` + mốc chương. Âm lượng -14 LUFS dùng chung. Mã: `ghep_video_goc.ghep(chi_audio=True)`.
+Bằng chứng: test M4A + MP3 48 kHz mono + file video, link lặp → tần số trội đúng từng đoạn; nhanh 4302 = 4298/4/0.
+
 ## D-60 Chụp ảnh ở các mốc của video (người dùng, 2026-11-19)
 Ô «📸 Chụp ảnh ở các mốc» ở tab «⬇️ Tải video gốc» và «🛠️ Video trong máy»: «7:23, 12:05, 1:01:10» → mỗi mốc một ảnh PNG
 (người dùng không chọn → mặc định đề xuất: PNG, nhiều mốc) tên `<tên file>_00-07-23.png`, không ghi đè. FFmpeg `-ss` trước

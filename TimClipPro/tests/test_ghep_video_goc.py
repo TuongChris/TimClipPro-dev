@@ -590,3 +590,170 @@ def test_hai_file_lech_nhip_thoi_gian_van_ghep_dung(tmp_path, nhip_1, nhip_2):
     assert float(d["format"]["duration"]) == pytest.approx(4.0, abs=0.2)
     assert float(hinh["duration"]) == pytest.approx(4.0, abs=0.2)
     assert _tan_so_tai(ra, 3.0) == pytest.approx(1320, abs=25)
+
+
+# ---------------------------------------------------------------- ghép chỉ audio (20/11)
+def _tao_tieng(path, giay, tan_so, ma="aac", ar=44100, ac=2):
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i",
+                    f"sine=frequency={tan_so}:sample_rate={ar}:duration={giay}", "-c:a", ma, "-ac", str(ac), str(path)],
+                   check=True)
+    return str(path)
+
+
+@pytest.fixture(scope="module")
+def nguon_tieng(tmp_path_factory):
+    if not (shutil.which("ffmpeg") and shutil.which("ffprobe")):
+        pytest.skip("cần FFmpeg")
+    d = tmp_path_factory.mktemp("nguon_tieng")
+    return {
+        URL[0]: ("Bài 1", _tao_tieng(d / "a.m4a", 2, 440)),  # như yt-dlp «Chỉ tiếng»: AAC-LC 44,1 kHz stereo
+        URL[1]: ("Bài 2", _tao_tieng(d / "b.m4a", 3, 880)),
+        "mp3": _tao_tieng(d / "Nhạc nền.mp3", 2.5, 1320, ma="libmp3lame", ar=48000, ac=1),
+        "video": _tao(d / "Clip có hình.mp4", 2, 660),
+    }
+
+
+def _gia_tai_tieng(monkeypatch, nguon_tieng):
+    """Như :func:`_gia_tai` nhưng ra file «x_<mã>.m4a» như lượt tải «Chỉ tiếng» thật."""
+    goi = {}
+
+    def tai_nhieu(links, thu_muc, cau_hinh_mang=None, *, progress=None, cancel_check=None, **kw):
+        goi.update(kw)
+        os.makedirs(thu_muc, exist_ok=True)
+        ra = []
+        for url in links:
+            dich = os.path.join(thu_muc, f"x_{tv.ma_link(url)}.m4a")
+            if os.path.exists(dich):
+                ra.append({"url": url, "trang_thai": "bo_qua", "duong_dan": "", "tieu_de": "", "chat_luong": "",
+                           "ghi_chu": "Trùng video đã tải ở trên trong lượt này."})
+            else:
+                ten, src = nguon_tieng[url]
+                shutil.copy(src, dich)
+                ra.append({"url": url, "trang_thai": "xong", "duong_dan": dich, "tieu_de": ten, "chat_luong": "x",
+                           "ghi_chu": ""})
+        return ra
+
+    monkeypatch.setattr(tv, "tai_nhieu", tai_nhieu)
+    return goi
+
+
+def _bam_file(path):
+    import hashlib
+
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
+@can_ffmpeg
+@pytest.mark.parametrize("chuan_hoa_am", [False, True])
+def test_ghep_chi_audio_tron_m4a_mp3_va_file_video(nguon_tieng, tmp_path, monkeypatch, chuan_hoa_am):
+    """M4A tải về + MP3 48 kHz mono + file video trong máy, link lặp → MỘT file .m4a AAC 44,1 kHz stereo đúng thứ tự,
+    mốc đúng tiếng thật; MP3 và file video được chuyển, M4A tải về không; file trong máy giữ nguyên từng byte; thư mục
+    tạm của ghép video không bị đụng."""
+    goi = _gia_tai_tieng(monkeypatch, nguon_tieng)
+    mp3, video = nguon_tieng["mp3"], nguon_tieng["video"]
+    bam = {f: _bam_file(f) for f in (mp3, video)}
+    giu = tmp_path / gv.THU_MUC_PHAN / "x [abcdefghij9].mp4"  # file lẻ của một lượt ghép VIDEO còn dở
+    giu.parent.mkdir()
+    giu.write_bytes(b"x")
+    links = [URL[0], mp3, URL[1], video, URL[0]]
+    kq = gv.ghep(links, str(tmp_path), ten_file="Thử audio", chi_audio=True, chuan_hoa_am=chuan_hoa_am)
+    cuoi = kq[-1]
+    assert cuoi["trang_thai"] == "xong", cuoi
+    assert goi["chat_luong"] == "Chỉ tiếng" and "dinh_dang" not in goi and goi["bo_qua_da_co"] is True
+    assert cuoi["url"] == "🎵 Audio ghép" and os.path.basename(cuoi["duong_dan"]) == "Thu_audio.m4a"
+    assert "Audio ghép 5 audio" in cuoi["tieu_de"] and cuoi["chat_luong"].startswith("AAC 44100 Hz 2 kênh, 2 audio")
+    assert "Đã chuyển sang AAC cho khớp: Audio 2 «Nhạc nền», Audio 4 «Clip có hình»" in cuoi["ghi_chu"]
+    assert not (tmp_path / gv.THU_MUC_PHAN_AUDIO).exists() and giu.exists()
+    assert {f: _bam_file(f) for f in (mp3, video)} == bam
+
+    luong = _probe(cuoi["duong_dan"])["streams"]
+    tieng = [s for s in luong if s["codec_type"] == "audio"]
+    assert not [s for s in luong if s["codec_type"] == "video"]
+    assert [(s["codec_name"], s["sample_rate"], s["channels"]) for s in tieng] == [("aac", "44100", 2)]
+    with open(tmp_path / "Thu_audio.moc.csv", encoding="utf-8-sig") as f:
+        moc = list(csv.DictReader(f))
+    assert [d["Tiêu đề"] for d in moc] == ["Bài 1", "Nhạc nền", "Bài 2", "Clip có hình", "Bài 1"]
+    bat_dau = [float(d["Bắt đầu (giây)"]) for d in moc]
+    assert bat_dau == pytest.approx([0, 2, 4.5, 7.5, 9.5], abs=0.1)
+    for giay, hz, dai in zip(bat_dau, (440, 1320, 880, 660, 440), (2, 2.5, 3, 2, 2)):
+        for t in (giay + 0.1, giay + dai - 0.5):
+            assert _tan_so_tai(cuoi["duong_dan"], t) == pytest.approx(hz, abs=25), t
+    ra = json.loads(subprocess.run(["ffprobe", "-v", "error", "-show_chapters", "-show_format", "-of", "json",
+                                    cuoi["duong_dan"]], capture_output=True, check=True).stdout)
+    assert float(ra["format"]["duration"]) == pytest.approx(11.5, abs=0.2)
+    assert [c["tags"]["title"] for c in ra["chapters"]] == [d["Tiêu đề"] for d in moc]
+
+
+@can_ffmpeg
+def test_ghep_chi_audio_file_1_mp3_thi_chuyen_ca_file_1(nguon_tieng, tmp_path, monkeypatch):
+    """File 1 không phải AAC: đích = AAC theo tần số/số kênh của file 1 (48 kHz mono), mọi phần đều được chuyển."""
+    _gia_tai_tieng(monkeypatch, nguon_tieng)
+    kq = gv.ghep([nguon_tieng["mp3"], URL[0]], str(tmp_path), chi_audio=True)
+    cuoi = kq[-1]
+    assert cuoi["trang_thai"] == "xong", cuoi
+    assert os.path.basename(cuoi["duong_dan"]).startswith("Audio_ghep_")
+    assert "Audio 1 «Nhạc nền», Audio 2 «Bài 1»" in cuoi["ghi_chu"]
+    tieng = [s for s in _probe(cuoi["duong_dan"])["streams"] if s["codec_type"] == "audio"]
+    assert [(s["codec_name"], s["sample_rate"], s["channels"]) for s in tieng] == [("aac", "48000", 1)]
+    assert _tan_so_tai(cuoi["duong_dan"], 2.6) == pytest.approx(440, abs=25)
+
+
+@can_ffmpeg
+def test_ghep_chi_audio_file_khong_co_tieng_thi_dung(nguon_tieng, tmp_path, monkeypatch):
+    _gia_tai_tieng(monkeypatch, nguon_tieng)
+    cam = str(tmp_path / "cam.mp4")
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i",
+                    "testsrc=size=64x48:rate=10:duration=1", "-c:v", "libx264", "-pix_fmt", "yuv420p", cam], check=True)
+    cuoi = gv.ghep([URL[0], cam], str(tmp_path / "ra"), chi_audio=True)[-1]
+    assert cuoi["trang_thai"] == "loi" and "«cam.mp4» không có tiếng" in cuoi["ghi_chu"], cuoi
+    assert "Các audio đã tải vẫn giữ" in cuoi["ghi_chu"]
+
+
+def test_cac_cho_lech_chi_audio_so_ca_file_1_voi_dich():
+    a = {"ma_tieng": "mp3", "profile_tieng": None, "tan_so_tieng": "48000", "kenh_tieng": 1, "nhip_tieng": "1/14112000",
+         "chi_tieng": True, "do_dai": 2.5}
+    chuan = gv.chuan_audio(a)
+    b = {**chuan, "do_dai": 3.0}
+    assert gv.cac_cho_lech([("A", a), ("B", b)], chuan, gv.THONG_SO_AUDIO, "Audio") == [
+        "Audio 1 «A»: mã hoá tiếng mp3 (cần: aac); kiểu AAC None (cần: LC); nhịp thời gian tiếng 1/14112000 "
+        "(cần: 1/48000)"
+    ]
+
+
+def test_ten_file_ra_chi_audio():
+    assert gv.ten_file_ra("", "Audio_ghep").startswith("Audio_ghep_")
+
+
+def test_tab_ghep_chi_audio_goi_ghep_voi_chi_audio(tmp_path, monkeypatch):
+    import time
+    from pathlib import Path
+
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    goi = []
+
+    def gia(links, thu_muc, cau_hinh_mang=None, *, progress=None, cancel_check=None, **kw):
+        goi.append((links, kw.get("chi_audio"), kw.get("chuan_hoa_am")))
+        return [{"url": "🎵 Audio ghép", "trang_thai": "xong", "duong_dan": "x.m4a", "tieu_de": "Audio ghép 2 audio",
+                 "chat_luong": "", "ghi_chu": "", "la_dong_ghep": True}]
+
+    monkeypatch.setattr(gv, "ghep", gia)
+    at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=120).run()
+    next(t for t in at.text_area if t.label.startswith("Link video hoặc đường dẫn file trong máy cần ghép")).input(
+        f"{URL[0]}\n{URL[1]}").run()
+    next(t for t in at.text_input if t.label == "Thư mục lưu video ghép").input(str(tmp_path / "ra")).run()
+    assert at.button(key="bat_dau_ghep_video").label == "🎞️ Tải và ghép 2 video"
+    at.radio(key="loai_ghep").set_value(tv.LOAI_TAI[1]).run()
+    assert at.button(key="bat_dau_ghep_video").label == "🎵 Tải và ghép 2 audio"
+    assert any("file video (chỉ lấy tiếng)" in c.value for c in at.caption)
+    at.button(key="bat_dau_ghep_video").click().run()
+    for _ in range(50):
+        if goi and not at.session_state.job["running"]:
+            break
+        time.sleep(0.1)
+    at.run()
+    assert not at.exception
+    assert goi == [([URL[0], URL[1]], True, True)]

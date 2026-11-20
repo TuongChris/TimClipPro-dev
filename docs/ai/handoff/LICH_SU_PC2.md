@@ -3,6 +3,11 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-11-16 — YouTube Data API + 7 tính năng (nhánh feature/pc2/tong-hop-1611, 11 nhánh việc)
+- D-51 Data API lấy thông tin video (yt-dlp chỉ còn tải), khoá `DevState\secrets\youtube_api_key.txt` (kiểm 200), thăm dò thật
+  20/20 ngày UTC trùng; D-52 Dừng dựng kho giữ phần xong; D-53 Thống kê; D-54 biết tiến trình khác đồng bộ; D-55 kiểm còn/gỡ;
+  D-56 tìm nghi vấn (search.list); D-57 Tiêu đề kênh + ngày/lượt xem; D-58 bổ sung ngày gốc tự bật khi có khoá; 2 mục audit 06/11.
+- Mỗi nhánh review độc lập (P1/P2 đã sửa kèm test). Bằng chứng `C:\Dev\pc2_test_runs\2026-11-16_dot2`, `…_tham_do_ngay`.
 ### 2026-11-16 — audit toàn repo, sửa đủ 20 mục + 6 mã thừa (nhánh fix/pc2/audit-1611)
 - Lớn: `cli kenh` KeyError «gio» + mã thoát; kho lỗi lúc `_merge` → «error» (không thành âm tính); hồ sơ dòng tinh
   chỉnh «Độ dài đoạn» = cuối − đầu; lưu kho thử lại ~11 s + nhớ mọi file cũ (`db_cu_khac`); hook installation_id 32 hex
