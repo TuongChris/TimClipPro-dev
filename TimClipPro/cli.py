@@ -601,9 +601,8 @@ def _main():
             # Dừng sớm / chỉ tải phần đầu / vùng lỗi: không để người đọc tưởng đã quét
             # trọn video (audit TCP-04/TCP-06).
             print(f"   ℹ️ Chưa quét trọn — {mo_ta_pham_vi(kq)}")
-        for m in kq.matches:
-            print(f"   • {m.clip} | {m.start_hhmmss} → {m.end_hhmmss} "
-                  f"| {m.hashes} hash ({m.confidence})")
+        for dong in dong_ket_qua(kq):
+            print(dong)
         if bao_cao_v2.la_loi_bao_cao(getattr(kq, "bao_cao", None)):
             # Báo cáo V2 lỗi: bằng chứng khớp ở trên đã lưu lịch sử, nhưng KHÔNG vào CSV theo
             # bất kỳ luật nào (audit P1-02).
@@ -634,6 +633,22 @@ def _main():
     # Như Watch (audit B-11): quét lỗi hay báo cáo V2 lỗi là lỗi — mã 0 thì script/lịch tưởng đã xong (audit 09/11).
     if ma_gui or loi_bao_cao or any(kq.status != "ok" for kq in ket):
         raise SystemExit(ma_gui or 1)
+
+
+def dong_ket_qua(kq) -> list:
+    """Các dòng «• clip | mốc» của một kết quả quét. Báo cáo V2 hợp lệ: mốc «Đoạn vi phạm» — đúng mốc trong CSV, dòng
+    tinh chỉnh từng giây dùng mốc đo từng giây (D-50); số đo vân tay chỉ in thêm, ghi rõ là chẩn đoán, khi có dòng đã
+    tinh chỉnh. Luật cũ (``bao_cao`` None) hay V2 lỗi: số đo vân tay như trước."""
+    van_tay = [f"   • {m.clip} | {m.start_hhmmss} → {m.end_hhmmss} | {m.hashes} hash ({m.confidence})"
+               for m in kq.matches]
+    bc = getattr(kq, "bao_cao", None)
+    if bc is None or bao_cao_v2.la_loi_bao_cao(bc) or not bc.doan:
+        return van_tay
+    ra = [f"   • {d.goc.clip} | {bao_cao_v2.hien_thi_moc(d.giay_bat_dau)} → {bao_cao_v2.hien_thi_moc(d.giay_ket_thuc)}"
+          f"{' (tinh chỉnh từng giây)' if d.da_tinh_chinh else ''} | {d.hashes} hash ({d.confidence})" for d in bc.doan]
+    if any(d.da_tinh_chinh for d in bc.doan):
+        ra += ["   Số đo vân tay của lượt quét (chẩn đoán — khiếu nại dùng mốc ở trên):"] + ["  " + x for x in van_tay]
+    return ra
 
 
 if __name__ == "__main__":

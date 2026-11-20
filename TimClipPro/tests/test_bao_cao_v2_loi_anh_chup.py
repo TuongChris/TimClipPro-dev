@@ -381,3 +381,21 @@ def test_lich_su_bao_ro_v2_loi_khong_cho_tai_khong_noi_la_ban_cu(tmp_path, monke
     assert [el.proto.label for el in at.get("download_button")] == []
     tab_ls = next(t for t in at.tabs if t.label == "📜 Lịch sử")   # tab «📊 Thống kê» cũng có bảng «Clip gốc»
     assert any("Clip gốc" in d.value.columns for d in tab_ls.dataframe)   # dữ liệu khớp vẫn xem được
+
+
+def test_cli_in_moc_doan_vi_pham_v2_khong_phai_so_do_van_tay():
+    """Review Codex 20/11: dòng lệnh in mốc «Đoạn vi phạm» của báo cáo V2 (dòng tinh chỉnh từng giây kết thúc 00:10:59) —
+    trước đây in số đo vân tay (00:10:23), người chép mốc từ màn hình khiếu nại thiếu 36 giây."""
+    kq = _kq_ca_that()
+    bc = _bc(kq)
+    d = dataclasses.replace(bc.doan[0], giay_bat_dau=0, giay_ket_thuc=659, da_tinh_chinh=True)
+    kq.bao_cao = dataclasses.replace(bc, doan=(d,) + tuple(bc.doan[1:]))
+    dong = cli.dong_ket_qua(kq)
+    assert f"• {d.goc.clip} | 00:00:00 → 00:10:59 (tinh chỉnh từng giây)" in dong[0]
+    assert any("chẩn đoán" in x for x in dong)
+    kq.bao_cao = None                                        # luật cũ: y như trước
+    assert dong_cu(kq) == cli.dong_ket_qua(kq)
+
+
+def dong_cu(kq):
+    return [f"   • {m.clip} | {m.start_hhmmss} → {m.end_hhmmss} | {m.hashes} hash ({m.confidence})" for m in kq.matches]
