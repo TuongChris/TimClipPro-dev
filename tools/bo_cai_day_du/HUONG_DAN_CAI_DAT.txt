@@ -1,0 +1,60 @@
+﻿TIMCLIPPRO {PHIEN_BAN} — BỘ CÀI ĐẦY ĐỦ CHO MÁY MỚI
+==================================================
+
+Bộ cài mang sẵn mọi thứ cần thiết, máy mới KHÔNG phải cài trước Python, FFmpeg hay Node.js, và lúc cài KHÔNG cần mạng:
+  - TimClipPro {PHIEN_BAN} (bản Stable đã ký, commit {COMMIT12})
+  - Python 3.12.10 (bản chính thức của python.org, dạng xách tay — không đăng ký vào Windows)
+  - FFmpeg {FFMPEG} và Node.js {NODE}
+  - các thư viện Python đã ghim mã băm (wheelhouse)
+
+CẦN: Windows 10/11 64-bit, ổ C: còn ít nhất 3 GB. Không cần quyền quản trị (admin).
+
+
+CÀI (khoảng 3–5 phút)
+---------------------
+1. Chép file ZIP sang máy mới (USB, Google Drive…), chuột phải → «Extract All…» (Giải nén tất cả) ra một thư mục TRỐNG,
+   ví dụ Downloads\TimClipPro_CaiDat. Đừng chạy thẳng trong cửa sổ xem ZIP.
+2. Mở thư mục vừa giải nén, nhấp đúp CAI_DAT_TimClipPro.bat.
+   Windows có thể hỏi «Windows protected your PC» / «Do you want to run this file?» → «More info» → «Run anyway» / «Run».
+3. Bộ cài kiểm từng file, hiện chỗ sẽ cài rồi hỏi: gõ C rồi Enter.
+4. Chờ tới dòng «ĐÃ CÀI XONG». Nếu có dòng [DỪNG]: làm theo câu hướng dẫn ngay trên nó, rồi chạy lại file .bat
+   (chạy lại an toàn: phần đã xong được giữ, làm tiếp phần còn dở).
+
+Bộ cài tạo:
+  C:\TimClipPro           ứng dụng (bộ cập nhật có chữ ký)      C:\TimClipPro_State   dữ liệu của máy này
+  C:\TimClipPro_Feed      bản phát hành để cập nhật              C:\TimClipPro_Python  Python 3.12 xách tay
+  icon «TimClipPro» trên Desktop
+
+
+DÙNG
+----
+- Nhấp đúp icon «TimClipPro» trên Desktop → trình duyệt mở http://localhost:8501. Đóng cửa sổ đen = tắt ứng dụng.
+- Máy mới bắt đầu TRỐNG, tự làm một lần:
+  1. Kho vân tay: tab «📥 Đồng bộ kênh gốc» (tải clip của kênh) rồi tab «🎬 Kho clip gốc» (dựng vân tay).
+     (Muốn mang kho đã dựng từ máy cũ sang: làm riêng, có hướng dẫn — đừng tự chép thư mục data.)
+  2. Cookie YouTube (nếu cần đăng nhập): thanh bên «🔐 Kết nối YouTube» → «Cookie và nhịp tải» — chọn trình duyệt
+     hoặc đường dẫn file cookies.txt.
+  3. Khoá YouTube Data API (tuỳ chọn): file văn bản một dòng khoá đặt ĐÚNG
+     C:\TimClipPro_State\secrets\youtube_api_key.txt
+  4. Google Sheets (tuỳ chọn): chép file khoá JSON vào C:\TimClipPro_State\secrets\ → tab «📤 Gửi Google Sheets»
+     → «Đăng ký khoá Google» → «Thêm hồ sơ đích».
+  Chép khoá / cookie bằng USB hoặc kênh riêng — không gửi qua chat, email.
+
+
+CẬP NHẬT BẢN SAU
+---------------
+Mỗi bản mới trên GitHub (TuongChris/TimClipPro-dev, mục Releases) có file TimClipPro_Feed_stable-X.Y.Z.zip và một khối
+PowerShell trong ghi chú phát hành: tải ZIP vào Downloads → đóng ứng dụng → dán khối PowerShell (phải ra «SAN SANG»)
+→ chạy C:\TimClipPro\CapNhat.bat → phải thấy «[ACTIVE] Đã chuyển sang bản X.Y.Z». Bản mới hỏng thì bộ cập nhật tự quay
+về bản cũ.
+
+
+KIỂM / SỰ CỐ
+------------
+- Kiểm nhanh (không đổi gì):  C:\TimClipPro\launcher\env\Scripts\python.exe C:\TimClipPro\launcher\launcher.py doctor
+  Dòng ✅ là ổn, ⚠️ cần xem, ❌ phải xử lý.
+- «Máy này ĐÃ cài TimClipPro»: bộ cài không ghi đè bản đã cài — dùng CapNhat.bat như trên.
+- Gỡ: đóng ứng dụng, sao lưu C:\TimClipPro_State nếu cần giữ dữ liệu, rồi xoá bốn thư mục C:\TimClipPro* và icon Desktop.
+
+Giấy phép phần mềm kèm theo: cai_dat\python\LICENSE.txt (Python), cai_dat\ffmpeg\LICENSE (FFmpeg, GPLv3 — mã nguồn tại
+https://ffmpeg.org và https://www.gyan.dev/ffmpeg/builds/), cai_dat\node\LICENSE.txt (Node.js).

@@ -1,3 +1,7 @@
 # Dữ liệu phát hành: byte phải GIỐNG HỆT bản đã ký/đã băm (lock có băm, khoá công khai, wheel, yêu cầu/uỷ quyền có
 # chữ ký) — KHÔNG đổi xuống dòng khi checkout (máy đặt core.autocrlf=true sẽ biến LF thành CRLF → sai băm).
 release/** -text
+# Bo cai day du: CaiDat.ps1 / huong dan can BOM + CRLF (PowerShell 5.1, Notepad); .bat CRLF ASCII - giu nguyen byte.
+tools/bo_cai_day_du/*.ps1 -text
+tools/bo_cai_day_du/*.bat -text
+tools/bo_cai_day_du/*.txt -text
