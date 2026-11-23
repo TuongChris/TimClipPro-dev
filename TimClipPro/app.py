@@ -75,6 +75,7 @@ import cat_video_goc
 import ghep_video_goc
 import tai_video_goc
 import video_trong_may
+import ui_thao_tac
 from channel import ChannelSync
 from tien_do_dong_bo import SoDongBo
 from ui_tien_do_dong_bo import dong_ho, dong_hieu_suat, ve_tien_do_dong_bo
@@ -1483,6 +1484,8 @@ with _khu_tren:
             if len(r) > 20:
                 with st.expander(f"Xem {_dem['xong'] + _dem['bo_qua']} video đã tải / bỏ qua"):
                     st.markdown("\n\n".join(_dong_tai(k) for k in r if k["trang_thai"] != "loi"))
+            for _i, _tm in enumerate(ui_thao_tac.thu_muc_ket_qua(r)[:3]):
+                ui_thao_tac.nut_mo_thu_muc(_tm, f"mo_tm_tai_{_i}", f"📂 Mở thư mục «{os.path.basename(_tm) or _tm}»")
         elif job["kind"] == "sua":
             r = job["results"]
             st.success(f"✅ Đã dựng lại danh sách: {r['tren_dia']} video thực có trên đĩa "
@@ -1554,6 +1557,12 @@ with _khu_tren:
 # =====================================================================
 #  Các trang chức năng (st.navigation) — mỗi lần vẽ lại chỉ chạy TRANG ĐANG MỞ
 # =====================================================================
+
+
+def _link_trang(ten: str, nhan: str) -> None:
+    """Lối tắt sang trang ``ten`` của menu (``_TRANG``). Bộ test vẽ mọi trang trong tab (không có menu) → không vẽ."""
+    if os.environ.get("TIMCLIP_UI_VE_MOI_TRANG") != "1":
+        st.page_link(next(p for ds in _TRANG.values() for p in ds if p.title == ten), label=nhan)
 
 
 # ---------------------------------------------------------------- TẢI VIDEO GỐC / THUMBNAIL / CẢ KÊNH
@@ -1656,10 +1665,22 @@ def _trang_tai_video() -> None:
                    "Twitch, tool xin danh sách chất lượng qua proxy (Windscribe, nút nguồn ON + Proxy Gateway bật) kèm cookie "
                    "twitch.tv; video vẫn tải thẳng bằng mạng thường. Để trống = bản Twitch cho Việt Nam (thường tối đa 720p). "
                    "Link YouTube không bị ảnh hưởng.")
-        st.session_state.twitch_proxy_file = st.text_input(
+        c_px, c_chon_px = st.columns([5, 1], vertical_alignment="bottom")
+        with c_chon_px:
+            _chon_px = ui_thao_tac.nut_chon("chon_twitch_proxy", st.session_state.twitch_proxy_file, "file",
+                                            tieu_de="Chọn file proxy Twitch")
+        if _chon_px:
+            st.session_state.twitch_proxy_file = _chon_px[0]
+        st.session_state.twitch_proxy_file = c_px.text_input(
             "File proxy (một dòng http://tên:mật_khẩu@máy:cổng)", st.session_state.twitch_proxy_file,
             placeholder=r"vd. C:\...\secrets\proxy_twitch.txt")
-        st.session_state.twitch_cookie_file = st.text_input(
+        c_ck, c_chon_ck = st.columns([5, 1], vertical_alignment="bottom")
+        with c_chon_ck:
+            _chon_ck = ui_thao_tac.nut_chon("chon_twitch_cookie", st.session_state.twitch_cookie_file, "file",
+                                            tieu_de="Chọn file cookie Twitch")
+        if _chon_ck:
+            st.session_state.twitch_cookie_file = _chon_ck[0]
+        st.session_state.twitch_cookie_file = c_ck.text_input(
             "File cookie Twitch (cookies.txt có đăng nhập twitch.tv)", st.session_state.twitch_cookie_file,
             placeholder=r"vd. C:\...\secrets\twitch_cookies.txt")
         st.caption("Hai đường dẫn được nhớ khi bấm «💾 Lưu cấu hình» ở thanh bên. Nội dung file không được lưu vào cấu hình.")
@@ -1733,7 +1754,13 @@ def _trang_ghep() -> None:
                    "ghép theo đúng thứ tự link; link lặp lại thì video lặp lại. Kèm file «.moc.csv» ghi video gốc nào bắt "
                    "đầu ở giây nào (và mốc chương ngay trong video) — đem video dài đi quét rồi so với file mốc để đo độ "
                    "chính xác. Ghép xong thì xoá các file lẻ.")
-    links_ghep = st.text_area("Link video hoặc đường dẫn file trong máy cần ghép (mỗi dòng một, theo thứ tự ghép)",
+    c_vb_ghep, c_chon_ghep = st.columns([5, 1], vertical_alignment="bottom")
+    with c_chon_ghep:
+        _chon_ghep = ui_thao_tac.nut_chon("chon_file_ghep", st.session_state.get("o_links_ghep", ""), "nhieu_file",
+                                          "📄 Chọn file…", tieu_de="Chọn file trong máy để ghép")
+    if _chon_ghep:
+        st.session_state["o_links_ghep"] = ui_thao_tac.noi_dong(st.session_state.get("o_links_ghep", ""), _chon_ghep)
+    links_ghep = c_vb_ghep.text_area("Link video hoặc đường dẫn file trong máy cần ghép (mỗi dòng một, theo thứ tự ghép)",
                               height=140,
                               placeholder="https://www.youtube.com/watch?v=...\nD:\\Video\\intro.mp4\nhttps://youtu.be/...", key="o_links_ghep", persist_state="session")
     st.caption("Trộn được link YouTube với file có sẵn trong máy. File trong máy không bị sửa hay xoá (chỉnh âm lượng làm "
@@ -1758,7 +1785,13 @@ def _trang_video_trong_may() -> None:
     st.subheader("Cắt đoạn / bỏ đoạn / chụp ảnh / chỉnh âm lượng video có sẵn trong máy")
     st.caption("File gốc KHÔNG bị sửa, đổi tên hay xoá — kết quả ra file MỚI trong thư mục lưu (trùng tên thì thêm « (2)»). "
                "Muốn GHÉP các file trong máy: dán đường dẫn file vào tab «🎞️ Ghép video gốc» (trộn được với link YouTube).")
-    may_vb = st.text_area("Đường dẫn video trong máy (mỗi dòng một file, hoặc một thư mục)", height=120, key="file_may",
+    c_vb_may, c_chon_may = st.columns([5, 1], vertical_alignment="bottom")
+    with c_chon_may:
+        _chon_may = ui_thao_tac.nut_chon("chon_file_may", st.session_state.get("file_may", ""), "nhieu_file",
+                                         "📄 Chọn file…", tieu_de="Chọn video trong máy")
+    if _chon_may:
+        st.session_state["file_may"] = ui_thao_tac.noi_dong(st.session_state.get("file_may", ""), _chon_may)
+    may_vb = c_vb_may.text_area("Đường dẫn video trong máy (mỗi dòng một file, hoặc một thư mục)", height=120, key="file_may",
                           placeholder="D:\\Video\\phim.mp4\nD:\\Video\\ThuMuc", persist_state="session")
     _ds_may, _loi_may = video_trong_may.tach_file(may_vb)
     for _l in _loi_may:
@@ -1850,7 +1883,14 @@ def _trang_dong_bo() -> None:
 
     kenh_url = st.text_input("Link kênh YouTube của bạn",
                              placeholder="https://www.youtube.com/@TenKenh", key="o_url_dong_bo", persist_state="session")
-    st.session_state.kho_dir = st.text_input(
+    if not st.session_state.kho_dir and eng.kho_thu_muc:   # ô trống → thư mục của kho đang dùng; gõ/chọn khác vẫn giữ
+        st.session_state.kho_dir = eng.kho_thu_muc
+    c_kho_dir, c_chon_kho_dir = st.columns([5, 1], vertical_alignment="bottom")
+    with c_chon_kho_dir:
+        _chon_kd = ui_thao_tac.nut_chon("chon_kho_dir", st.session_state.kho_dir, tieu_de="Chọn thư mục kho clip gốc")
+    if _chon_kd:
+        st.session_state.kho_dir = _chon_kd[0]
+    st.session_state.kho_dir = c_kho_dir.text_input(
         "Thư mục kho clip gốc (ổ D, E... tùy bạn)", st.session_state.kho_dir,
         placeholder=r"D:\KhoClipGoc")
     _thu_muc_dong_bo = st.session_state.kho_dir.strip('" ')
@@ -1931,6 +1971,11 @@ def _trang_dong_bo() -> None:
         tk = ChannelSync(st.session_state.kho_dir.strip('" ')).thong_ke()
         st.info(f"Kho hiện có **{tk['so_file']}** file audio gốc "
                 f"({tk['dung_luong_mb']:,.0f} MB).")
+        c_mo_kho, c_nap_kho = st.columns(2)
+        with c_mo_kho:
+            ui_thao_tac.nut_mo_thu_muc(st.session_state.kho_dir.strip('" '), "mo_tm_kho_dong_bo", "📂 Mở thư mục kho")
+        with c_nap_kho:
+            _link_trang("Kho clip gốc", "🎬 Sang trang Kho clip gốc để nạp clip mới vào vân tay")
 
     st.caption("Chạy lại bất cứ lúc nào — hệ thống ghi nhớ trong `downloaded.txt` "
                "nên chỉ tải video MỚI, không tải trùng.")
@@ -2074,8 +2119,16 @@ def _trang_kho() -> None:
     st.divider()
     st.markdown(f"#### Nạp clip vào kho đang dùng: **{eng.kho_dang_dung or '(chưa có kho)'}**")
 
-    thumuc = st.text_input("Đường dẫn thư mục chứa video gốc của kho này",
-                           value=eng.kho_thu_muc, key=f"o_thu_muc_kho_{eng.kho_dang_dung}", persist_state="session",
+    _khoa_o_kho = f"o_thu_muc_kho_{eng.kho_dang_dung}"
+    st.session_state.setdefault(_khoa_o_kho, eng.kho_thu_muc or "")
+    c_tm_kho, c_chon_kho = st.columns([5, 1], vertical_alignment="bottom")
+    with c_chon_kho:
+        _chon_tm = ui_thao_tac.nut_chon("chon_thu_muc_kho", st.session_state.get(_khoa_o_kho) or eng.kho_thu_muc,
+                                        tieu_de="Chọn thư mục chứa video gốc của kho")
+    if _chon_tm:
+        st.session_state[_khoa_o_kho] = _chon_tm[0]
+    thumuc = c_tm_kho.text_input("Đường dẫn thư mục chứa video gốc của kho này",
+                           key=_khoa_o_kho, persist_state="session",
                            placeholder=r"D:\ClipGocSML",
                            help="Copy đường dẫn từ thanh địa chỉ của File Explorer.")
     _kho_dong_bo_khac = _canh_bao_dong_bo_khac(thumuc.strip('" '), "tạo lại / bổ sung vân tay cho thư mục này, để "
@@ -2266,7 +2319,13 @@ def _trang_ds_kho() -> None:
                     f"Kho «{ten_chon}» đang trỏ tới `{thu_muc_dsv}` nhưng máy này "
                     "không có thư mục đó. Thường gặp khi chép kho sang máy khác "
                     "hoặc đổi ổ đĩa. Nhập đường dẫn đúng bên dưới rồi bấm lưu.")
-            duong_moi = st.text_input(
+            c_dm, c_chon_dm = st.columns([5, 1], vertical_alignment="bottom")
+            with c_chon_dm:
+                _chon_dm = ui_thao_tac.nut_chon("chon_dsv_thu_muc", st.session_state.get("dsv_thu_muc_moi", ""),
+                                                tieu_de=f"Chọn thư mục audio của kho «{ten_chon}»")
+            if _chon_dm:
+                st.session_state["dsv_thu_muc_moi"] = _chon_dm[0]
+            duong_moi = c_dm.text_input(
                 f"Đường dẫn thư mục audio của kho «{ten_chon}» trên máy này",
                 key="dsv_thu_muc_moi", placeholder=r"D:\ClipGocDanny", persist_state="session")
             if st.button("💾 Lưu thư mục cho kho này", key="dsv_luu_thu_muc",
@@ -2450,6 +2509,7 @@ def _trang_quet_youtube() -> None:
                       gioi_han_video_dai=ghvd)
     if not env["database"]:
         st.warning("Chưa có kho vân tay — hãy làm tab «Kho clip gốc» trước.")
+        _link_trang("Kho clip gốc", "🎬 Sang trang Kho clip gốc")
 
 # ---------------------------------------------------------------- TAB 4
 def _trang_quet_file() -> None:
@@ -2457,7 +2517,16 @@ def _trang_quet_file() -> None:
     st.caption("Nhập đường dẫn FILE hoặc THƯ MỤC. Không dùng nút upload để tránh "
                "phải copy file hàng chục GB.")
 
-    st.session_state.thu_muc_quet_gan_nhat = st.text_input(
+    c_dd, c_chon_tm_q, c_chon_f_q = st.columns([4, 1, 1], vertical_alignment="bottom")
+    with c_chon_tm_q:
+        _chon_q = ui_thao_tac.nut_chon("chon_thu_muc_quet", st.session_state.thu_muc_quet_gan_nhat,
+                                       nhan="📂 Thư mục…", tieu_de="Chọn thư mục video cần quét")
+    with c_chon_f_q:
+        _chon_q += ui_thao_tac.nut_chon("chon_file_quet", st.session_state.thu_muc_quet_gan_nhat, "file",
+                                        "📄 File…", tieu_de="Chọn file video/audio cần quét")
+    if _chon_q:
+        st.session_state.thu_muc_quet_gan_nhat = _chon_q[0]
+    st.session_state.thu_muc_quet_gan_nhat = c_dd.text_input(
         "Đường dẫn file hoặc thư mục",
         st.session_state.thu_muc_quet_gan_nhat,
         placeholder=r"D:\VideoDai  hoặc  D:\VideoDai\video30h.mp4",
@@ -2732,6 +2801,8 @@ def _trang_tim_nghi_van() -> None:
                 links_tim = [dong_tim[i]["Link"] for i in su_kien.selection.rows]
                 st.button(f"➡️ Đưa {len(links_tim)} video đã chọn vào ô quét YouTube", key="tim_dua",
                           on_click=_dua_vao_o_quet, args=(links_tim,), disabled=not links_tim)
+                if st.session_state.get(O_LINK_QUET_YT, "").strip():
+                    _link_trang("Quét YouTube", "▶️ Sang trang Quét YouTube để quét các link trong ô")
                 if st.session_state.pop("tim_da_dua", 0):
                     st.success("Đã đưa link vào ô «Dán link YouTube» — mở tab «▶️ Quét YouTube» để quét (tool không tự "
                                "quét). Link đã có sẵn trong ô thì không thêm lại.")

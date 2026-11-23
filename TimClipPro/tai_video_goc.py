@@ -729,28 +729,47 @@ def ten_file_kenh(url_kenh: str) -> str:
 _HOP_THOAI = """
 import sys, tkinter
 from tkinter import filedialog
+loai, tieu_de, ban_dau = sys.argv[1:4]
 r = tkinter.Tk(); r.withdraw(); r.attributes('-topmost', True)
-p = filedialog.askdirectory(initialdir=sys.argv[1] or None, title='Chọn thư mục lưu video', mustexist=False)
+if loai == 'thu_muc':
+    p = filedialog.askdirectory(initialdir=ban_dau or None, title=tieu_de, mustexist=False)
+elif loai == 'nhieu_file':
+    p = '\\n'.join(filedialog.askopenfilenames(initialdir=ban_dau or None, title=tieu_de))
+else:
+    p = filedialog.askopenfilename(initialdir=ban_dau or None, title=tieu_de)
 sys.stdout.buffer.write((p or '').encode('utf-8'))
 """
 
 
-def chon_thu_muc(ban_dau: str = "") -> str:
-    """Mở hộp thoại chọn thư mục của Windows trên máy đang chạy Tool; rỗng = người dùng bấm Huỷ.
-    Không mở được (máy thiếu tkinter, quá 10 phút không chọn) → ``RuntimeError`` kèm cách làm tay."""
+def _hop_thoai(loai: str, tieu_de: str, ban_dau: str) -> str:
+    vat = "thư mục" if loai == "thu_muc" else "file"
     try:
         r = subprocess.run(
-            [sys.executable, "-I", "-c", _HOP_THOAI, ban_dau or ""],
+            [sys.executable, "-I", "-c", _HOP_THOAI, loai, tieu_de, ban_dau or ""],
             capture_output=True,
             timeout=600,
         )
     except (OSError, subprocess.TimeoutExpired) as e:
         raise RuntimeError(
-            f"Không mở được hộp thoại chọn thư mục ({e}) — hãy dán đường dẫn vào ô."
+            f"Không mở được hộp thoại chọn {vat} ({e}) — hãy dán đường dẫn vào ô."
         ) from e
     if r.returncode != 0:
         raise RuntimeError(
-            "Không mở được hộp thoại chọn thư mục — hãy dán đường dẫn vào ô."
+            f"Không mở được hộp thoại chọn {vat} — hãy dán đường dẫn vào ô."
         )
-    p = r.stdout.decode("utf-8", "replace").strip()
+    return r.stdout.decode("utf-8", "replace").strip()
+
+
+def chon_thu_muc(ban_dau: str = "", tieu_de: str = "Chọn thư mục lưu video") -> str:
+    """Mở hộp thoại chọn thư mục của Windows trên máy đang chạy Tool; rỗng = người dùng bấm Huỷ.
+    Không mở được (máy thiếu tkinter, quá 10 phút không chọn) → ``RuntimeError`` kèm cách làm tay."""
+    p = _hop_thoai("thu_muc", tieu_de, ban_dau)
     return os.path.normpath(p) if p else ""
+
+
+def chon_file(ban_dau: str = "", nhieu: bool = False, tieu_de: str = "Chọn file") -> list:
+    """Như :func:`chon_thu_muc` nhưng chọn FILE (``nhieu`` = được chọn nhiều file); rỗng = bấm Huỷ."""
+    if ban_dau and not os.path.isdir(ban_dau):
+        ban_dau = os.path.dirname(ban_dau)
+    p = _hop_thoai("nhieu_file" if nhieu else "file", tieu_de, ban_dau)
+    return [os.path.normpath(x) for x in p.splitlines() if x.strip()]
