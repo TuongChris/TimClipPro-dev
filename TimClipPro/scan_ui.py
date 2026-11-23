@@ -310,11 +310,11 @@ def huong_dan_kho_sau_dong_bo(thu_muc_dong_bo: str, kho_dang_dung: str, thu_muc_
     """``(mức, câu)`` — bước tiếp theo sau đồng bộ: KHÔNG xui nạp audio của nguồn này vào kho vân tay của nguồn khác
     (sự cố 15/10/2026: thư mục audio của kênh vừa đồng bộ ≠ kho «SML» đang chọn)."""
     if kho_dang_dung and _cung_thu_muc(thu_muc_dong_bo, thu_muc_kho):
-        return ("info", f"Bước tiếp theo: tab «Kho clip gốc» → «Bổ sung clip mới vào kho» cho kho «{kho_dang_dung}» "
+        return ("info", f"Bước tiếp theo: trang «🎬 Kho clip gốc» → «Bổ sung clip mới vào kho» cho kho «{kho_dang_dung}» "
                         "(đúng kho của thư mục vừa đồng bộ) để tạo vân tay các video vừa tải.")
     hien = (f"Kho vân tay đang chọn là «{kho_dang_dung}» (thư mục `{thu_muc_kho or '(chưa đặt)'}`) — KHÁC thư mục vừa "
             "đồng bộ. Đừng nạp audio này vào kho đó." if kho_dang_dung else "Chưa chọn kho vân tay nào.")
-    return ("warning", f"{hien} Tạo kho riêng cho nguồn này: tab «Kho clip gốc» → «Tạo kho mới» (ví dụ theo tên kênh), "
+    return ("warning", f"{hien} Tạo kho riêng cho nguồn này: trang «🎬 Kho clip gốc» → «Tạo kho mới» (ví dụ theo tên kênh), "
                        f"chọn kho đó ở thanh bên, đặt thư mục `{thu_muc_dong_bo}`, rồi «Bổ sung clip mới vào kho».")
 
 

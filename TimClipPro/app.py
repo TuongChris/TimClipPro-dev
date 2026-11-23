@@ -603,11 +603,9 @@ def hien_tinh_chinh(results: list) -> None:
     if not co:
         return
     with st.expander("🎯 Mốc tinh chỉnh từng giây (thử nghiệm)", expanded=False):
-        st.caption("Đo độ giống âm thanh từng giây giữa clip gốc và video quanh mỗi kết quả. Mốc là ƯỚC LƯỢNG PHÍA "
-                   "TRONG, tới khoảng 0,1 giây trên dữ liệu thử. «% giống» chỉ có nghĩa khi so với nền của chính kết "
-                   "quả đó: nhạc đè to có thể chỉ khoảng 50 % dù khớp chắc. «Đoạn vi phạm» trong bảng kết quả, báo cáo, "
-                   "Google Sheets và lịch sử dùng mốc đã tinh chỉnh; dòng «chưa tinh chỉnh» giữ mốc của lượt quét. "
-                   "Khớp vân tay không phải xác nhận quyền sở hữu.")
+        st.caption("Mốc đo từng giây (sai lệch khoảng 0,1 giây). «Đoạn vi phạm» trong báo cáo, Google Sheets và lịch sử "
+                   "dùng mốc này; dòng «chưa tinh chỉnh» giữ mốc của lượt quét. «% giống» chỉ so được trong cùng một "
+                   "kết quả: nhạc đè to có thể chỉ khoảng 50 % dù khớp chắc.")
         for r, tc in co:
             ten = (f"**{thoat_markdown(tc.get('clip', ''))}** — {thoat_markdown(r.source_name[:60])} "
                    f"(mốc lượt quét {hhmmss(tc.get('start_s') or 0.0)})")
@@ -623,8 +621,8 @@ def hien_tinh_chinh(results: list) -> None:
                      for c in tc.get("cho_cat") or ()]
             st.markdown(ten + "\n" + "\n".join(f"- {x}" for x in dong))
             if tc.get("cham_gioi_han"):
-                st.caption("⚠️ Một mép chạm giới hạn đo được (cuối phần đã quét, rìa khung phân tích quanh kết quả, "
-                           "hoặc đoạn im lặng của chính clip) — mép thật có thể nằm ngoài.")
+                st.caption("⚠️ Một mép chạm giới hạn đo (cuối phần đã quét, rìa vùng đo, hoặc đoạn im lặng của clip) — "
+                           "mép thật có thể nằm ngoài.")
             ho_so = tc.get("ho_so") or []
             if ho_so:
                 st.line_chart(pd.DataFrame({"% giống": [p for _, p in ho_so]},
@@ -661,17 +659,14 @@ def bang_ket_qua(results: list[ScanResult]) -> None:
         coverage = eng.metadata_coverage(matches)
         if coverage.resolved_complete == 0:
             st.warning(
-                "⚠️ Đã phát hiện đoạn vi phạm nhưng không clip gốc nào có đủ "
-                "metadata chính thức (ID, tên, link, ngày đăng và thời lượng). "
-                "Báo cáo vẫn hiển thị dữ liệu phục hồi an toàn và đánh dấu phần thiếu."
+                "⚠️ Có đoạn vi phạm nhưng chưa clip gốc nào đủ thông tin (mã, tên, link, "
+                "ngày đăng, thời lượng). Báo cáo vẫn hiện, phần thiếu được đánh dấu."
             )
         if coverage.filename_fallbacks:
             st.warning(
                 f"⚠️ {coverage.filename_fallbacks}/{coverage.selected_matches} video gốc "
-                "được phục hồi từ filename. Tiêu đề có thể đã được rút gọn; "
-                "ngày đăng/thời lượng chỉ hiện khi có bằng chứng. Link video gốc của các "
-                "clip này lấy từ mã trong tên file, chưa đối chiếu YouTube: với file bạn tự "
-                "đặt tên hoặc tự chép vào kho, hãy mở link kiểm tra trước khi dùng hồ sơ."
+                "lấy tên và link từ tên file (tên có thể bị rút gọn, link chưa đối chiếu YouTube). "
+                "Mở link kiểm tra trước khi dùng hồ sơ — nhất là file bạn tự đặt tên hoặc tự chép vào kho."
             )
         if coverage.unresolved or coverage.ambiguous:
             st.error(
@@ -683,8 +678,8 @@ def bang_ket_qua(results: list[ScanResult]) -> None:
         )
         if tong_dat_nguong != len(matches):
             st.caption(
-                f"Có {tong_dat_nguong} đoạn đạt ngưỡng trước bước chọn lọc; "
-                f"{len(matches)} đoạn được chọn để xuất. Hai số này có chủ đích khác nhau."
+                f"Có {tong_dat_nguong} đoạn đạt ngưỡng; "
+                f"chọn {len(matches)} đoạn tốt nhất để xuất."
             )
     # Quét tăng dần dừng sớm khi đã đủ bằng chứng. PHẢI nói ra: `note` chỉ được hiển
     # thị khi nguồn bị LỖI, nên nếu không báo ở đây thì người dùng tưởng đã quét trọn
@@ -709,11 +704,13 @@ def bang_ket_qua(results: list[ScanResult]) -> None:
                   for x in bao_cao_v2.ngay_goc_thieu(r.bao_cao)]
     if thieu_ngay:
         st.caption(
-            f"📅 {len(thieu_ngay)} video gốc chưa có ngày đăng nguyên bản (ô ngày để trống) — "
+            f"📅 {len(thieu_ngay)} video gốc chưa có ngày đăng — "
             f"{thieu_ngay[0][1]}. Bật «Bổ sung ngày đăng gốc từ YouTube» ở thanh bên "
-            "(mục 🔐 Kết nối YouTube) để lượt quét sau tự lấy.")
+            "(🔐 Kết nối YouTube) để lượt quét sau tự lấy.")
     rows = eng.to_rows(results)
-    st.dataframe(df_ket_qua(rows), width="stretch", hide_index=True)
+    st.dataframe(df_ket_qua(rows), width="stretch", hide_index=True,
+                 column_config={"Link video gốc": st.column_config.LinkColumn(),
+                                "🔗 Nhảy tới đúng mốc vi phạm": st.column_config.LinkColumn()})
     df_csv = pd.DataFrame(
         [[o_bang_tinh_an_toan(o) for o in dong] for dong in rows],
         columns=eng.HEADER,
@@ -730,8 +727,8 @@ def bang_ket_qua(results: list[ScanResult]) -> None:
 
     c1, c2, c3, c4 = st.columns(4)
     with c3:
-        st.caption("📤 Gửi Google Sheets: chọn «Đích gửi» trước khi bấm Bắt đầu (tự động, lưu bền), "
-                   "hoặc gửi thêm thủ công ở mục bên dưới.")
+        st.caption("📤 Gửi Google Sheets: chọn «Đích gửi» trước khi bấm Bắt đầu, "
+                   "hoặc gửi thủ công ở mục bên dưới.")
     with c1:
         st.download_button("⬇️ Tải báo cáo CSV", csv_bytes,
                            file_name=f"ketqua_{time.strftime('%Y%m%d_%H%M%S')}.csv",
@@ -818,9 +815,9 @@ def hien_ket_qua_nguon_chung(kql: nguon_chung.KetQuaLo) -> None:
             f"{so_lieu.get('luot_mot_phan', 0)} dừng sớm vì đã thấy video gốc cần xác minh)"
             f" trong {_thoi_luong(so_lieu.get('thoi_gian_s'))}.")
     st.caption(
-        "Khớp vân tay âm thanh là bằng chứng kỹ thuật, không phải xác nhận quyền sở hữu — "
-        "hãy xem lại từng mốc trước khi gửi khiếu nại. Chế độ này không ghi vào «Lịch sử "
-        "quét» và chưa đẩy Google Sheets. "
+        "Khớp vân tay là bằng chứng kỹ thuật, không phải xác nhận quyền sở hữu — "
+        "xem lại từng mốc trước khi khiếu nại. Chế độ này không ghi vào «📜 Lịch sử» "
+        "và không gửi Google Sheets. "
         + (f"Kết quả đã tự lưu: {thoat_markdown(kql.csv_tu_luu)}" if kql.csv_tu_luu
            else "Chưa tự lưu được, hãy tải CSV để lưu."))
     c1, c2 = st.columns(2)
@@ -880,7 +877,8 @@ with st.sidebar:
         c.overlap_s = st.number_input("Khúc gối nhau (giây)", *_khung(60, 3600, c.overlap_s), c.overlap_s, 60,
                                       help="Giá trị đề xuất khi thiếu metadata. Giá trị hiệu lực "
                                            "luôn bị giới hạn bởi trần khúc gối "
-                                           f"({c.overlap_max_s} giây).")
+                                           f"({c.overlap_max_s} giây); clip dài hơn có thể được ghép lại "
+                                           "từ nhiều mảnh ở ranh giới khúc.")
         c.min_hash = st.slider("Số hash tối thiểu", *_khung(5, 100, c.min_hash), c.min_hash,
                                help="Bị báo nhầm → tăng lên. Bỏ sót → giảm xuống.")
         c.min_match_s = st.slider("Đoạn khớp tối thiểu (giây)", *_khung(1.0, 60.0, float(c.min_match_s)),
@@ -890,12 +888,10 @@ with st.sidebar:
             help="Đặt 0 để tự dò, chừa một nhân cho hệ thống và dùng tối đa 8 nhân.")
         c.shifts_kho = st.number_input(
             "Subframe shifts khi tạo kho", 0, 8, max(0, c.shifts_kho), 1,
-            help="Cao hơn giúp bắt vân tay chính xác hơn nhưng tạo kho chậm và tốn "
-                 "dung lượng hơn. Đặt 0 để dùng hành vi cũ.")
+            help="Cao hơn: vân tay chính xác hơn nhưng tạo kho chậm và nặng hơn. 0 = như cũ.")
         c.shifts_quet = st.number_input(
             "Subframe shifts khi quét", 0, 8, max(0, c.shifts_quet), 1,
-            help="Cao hơn giúp chịu nén và lệch pha tốt hơn nhưng quét chậm hơn. "
-                 "Đặt 0 để dùng hành vi cũ.")
+            help="Cao hơn: chịu video bị nén lại tốt hơn nhưng quét chậm hơn. 0 = như cũ.")
 
         st.markdown("**Chọn lọc kết quả**")
         c.top_n = st.number_input("Chỉ lấy bao nhiêu kết quả tốt nhất", *_khung(1, 50, c.top_n), c.top_n)
@@ -913,18 +909,16 @@ with st.sidebar:
             "Ưu tiên các clip gốc khác nhau", c.uu_tien_clip_khac_nhau)
         c.tinh_chinh_moc = st.checkbox(
             "🎯 Tinh chỉnh mốc từng giây (thử nghiệm)", c.tinh_chinh_moc,
-            help="Sau khi tìm thấy, đo độ giống âm thanh TỪNG GIÂY quanh mỗi kết quả đã chọn: ra đoạn dùng thật tới "
-                 "khoảng 0,1 giây, chỗ bị cắt ghép, và biểu đồ % giống. «Đoạn vi phạm» trong báo cáo, Google Sheets "
-                 "và lịch sử dùng mốc đã tinh chỉnh (không tinh chỉnh được thì giữ mốc của lượt quét); kết quả tìm "
-                 "thấy không đổi; mỗi kết quả tốn thêm vài giây. Chi tiết ở mục «🎯 Mốc tinh chỉnh từng giây» dưới "
-                 "bảng kết quả và 2 file CSV phụ.")
+            help="Đo độ giống âm thanh từng giây quanh mỗi kết quả: mốc chính xác tới khoảng 0,1 giây, chỗ bị cắt "
+                 "ghép, biểu đồ % giống. «Đoạn vi phạm» trong báo cáo, Google Sheets và lịch sử dùng mốc này (không đo "
+                 "được thì giữ mốc của lượt quét). Mỗi kết quả tốn thêm vài giây. Xem mục «🎯 Mốc tinh chỉnh từng "
+                 "giây» dưới bảng kết quả.")
         c.keep_downloads = st.checkbox("Giữ lại audio đã tải", c.keep_downloads,
                                        help="Bỏ tick để tiết kiệm ổ cứng (lần sau phải tải lại).")
         c.quet_tang_dan = st.checkbox(
             "Quét tăng dần cho video rất dài", c.quet_tang_dan,
-            help="Quét từng đoạn từ đầu; thấy đủ bằng chứng thì dừng, không thấy thì "
-                 "quét tiếp cho hết. KHÔNG bỏ sót video nào — chỉ đổi thứ tự làm việc. "
-                 "Đo trên video 35 tiếng: 40 phút xuống 5,5 phút, bằng chứng tương đương.")
+            help="Quét từng đoạn từ đầu; thấy đủ bằng chứng thì dừng, không thấy thì quét tiếp "
+                 "cho hết — không bỏ sót. Video 35 tiếng: 40 phút còn 5,5 phút.")
         if c.quet_tang_dan:
             ct1, ct2 = st.columns(2)
             with ct1:
@@ -943,28 +937,24 @@ with st.sidebar:
             # ô cha vẫn không tắt được nó — xem Engine._gioi_han_tai.
             c.tai_mot_phan = st.checkbox(
                 "Chỉ TẢI phần cần quét trước", c.tai_mot_phan,
-                help="Tiết kiệm băng thông: tải đúng đoạn đầu cần quét, không thấy gì "
-                     "mới tải nốt phần còn lại. Đo trên video 66 tiếng: 18,4 GB xuống "
-                     "841 MB. Bỏ tick để tải trọn ngay từ đầu.")
+                help="Tải đoạn đầu cần quét trước, không thấy gì mới tải nốt phần còn lại "
+                     "(video 66 tiếng: 18,4 GB còn 841 MB). Bỏ tick để tải trọn ngay từ đầu.")
         st.caption(
-            f"Khúc gối hiệu lực tối đa hiện tại: {c.overlap_max_s} giây; "
-            "clip dài có thể được ghép lại từ nhiều mảnh ở ranh giới."
+            f"Khúc gối tối đa: {c.overlap_max_s} giây."
         )
 
     st.divider()
     st.subheader("🔐 Kết nối YouTube")
     with st.expander("Cookie và nhịp tải (mở khi bị báo «nghi là bot»)", expanded=False):
         st.caption(
-            "YouTube chặn theo ĐỊA CHỈ MẠNG khi thấy tải quá nhanh hoặc quá nhiều. "
-            "Lúc đó mọi cách tải đều hỏng, kể cả video hôm qua vừa tải được. "
-            "Hai cách xử lý: giãn nhịp cho đỡ bị để ý, và nạp cookie để YouTube "
-            "coi bạn là người dùng đã đăng nhập."
+            "Bị YouTube chặn thì giãn nhịp tải và nạp cookie đăng nhập."
         )
         c.ytdlp_sleep_requests_s = st.number_input(
             "Nghỉ giữa các lượt hỏi YouTube (giây)", 0.0, 60.0,
             float(c.ytdlp_sleep_requests_s), 0.5,
-            help="Áp cho khâu LẤY THÔNG TIN video — đúng chỗ YouTube chặn bot. "
-                 "0 = tắt (dễ bị chặn). 1 giây là mức an toàn mà gần như không chậm thêm.")
+            help="YouTube chặn theo địa chỉ mạng khi thấy hỏi/tải quá nhanh — lúc đó mọi cách tải đều hỏng, kể cả "
+                 "video hôm qua vừa tải được. Áp cho khâu lấy thông tin video. 0 = tắt (dễ bị chặn); 1 giây là mức "
+                 "an toàn mà gần như không chậm thêm.")
         c1_ns, c2_ns = st.columns(2)
         with c1_ns:
             c.ytdlp_sleep_min_s = st.number_input(
@@ -976,14 +966,10 @@ with st.sidebar:
                 help="Nghỉ ngẫu nhiên trong khoảng này. Để 0 cả hai là tắt.")
         c.bo_sung_ngay_goc = st.checkbox(
             "Bổ sung ngày đăng gốc từ YouTube", c.bo_sung_ngay_goc,
-            help="Báo cáo ghi ngày đăng NGUYÊN BẢN (upload_date của YouTube, không đổi múi "
-                 "giờ). Kho tạo trước bản này chỉ lưu ngày đã quy đổi nên ô ngày video gốc "
-                 "để trống. Đã có khoá YouTube Data API thì lượt QUÉT YOUTUBE TỰ bổ sung qua "
-                 "API cho các video gốc được chọn còn thiếu ngày (một yêu cầu cho tới 50 video, "
-                 "không dùng yt-dlp) — không cần bật ô này. Ô này = hỏi thêm bằng yt-dlp khi "
-                 "chưa có khoá, hoặc khi API không trả được: mỗi video gốc tối đa một lần mỗi "
-                 "lượt, dừng ngay khi YouTube chặn. Thêm request yt-dlp là thêm nguy cơ bị coi "
-                 "là bot, nên mặc định tắt.")
+            help="Hỏi YouTube ngày đăng gốc cho video gốc còn thiếu ngày (kho cũ chỉ lưu ngày đã đổi múi giờ). "
+                 "Có khoá YouTube Data API thì lượt quét TỰ lấy qua API — không cần bật ô này. Ô này hỏi bằng "
+                 "yt-dlp: mỗi video gốc tối đa một lần mỗi lượt, dừng ngay khi YouTube chặn. Mặc định tắt vì hỏi "
+                 "thêm dễ bị coi là bot.")
         st.markdown("**Cookie** — chỉ cần một trong hai cách:")
         c.ytdlp_cookies_browser = st.text_input(
             "Lấy thẳng từ trình duyệt", c.ytdlp_cookies_browser,
@@ -996,15 +982,14 @@ with st.sidebar:
             "Hoặc đường dẫn file cookies.txt", c.ytdlp_cookiefile,
             placeholder=r"D:\cookies.txt",
             help="File xuất từ tiện ích «Get cookies.txt». Tool chỉ lưu ĐƯỜNG DẪN, "
-                 "không bao giờ đọc hay lưu lại nội dung cookie vào cấu hình.")
+                 "không bao giờ đọc hay lưu lại nội dung cookie vào cấu hình. Có cookie thì các cách tải không "
+                 "dùng được cookie (android, ios) tự lùi xuống cuối danh sách.")
         duong_dan = (c.ytdlp_cookiefile or "").strip()
         if duong_dan and not os.path.isfile(duong_dan):
             st.warning("Chưa thấy file cookie ở đường dẫn này — kiểm tra lại.")
         elif duong_dan or (c.ytdlp_cookies_browser or "").strip():
             st.success(
-                "Đã cấu hình cookie (dùng được trên máy này hay không: xem «Trạng thái YouTube» "
-                "bên dưới). Các cách tải không dùng được cookie (android, ios) sẽ tự động lùi "
-                "xuống cuối danh sách."
+                "Đã cấu hình cookie — dùng được hay không: xem «Trạng thái YouTube» bên dưới."
             )
         st.caption(
             "⚠️ Cookie là chìa khoá vào tài khoản của bạn — đừng chia sẻ file đó, "
@@ -1023,14 +1008,14 @@ with st.sidebar:
         for muc_tt, cau_tt in dong_trang_thai_api_youtube(
                 youtube_api.trang_thai_khoa(eng.data_dir), getattr(eng, "phien_youtube_cuoi", None)):
             getattr(st, muc_tt)(cau_tt)
-        st.caption("Kiểm sâu hơn (một request tới YouTube): `python cli.py youtube-doctor "
+        st.caption("Kiểm sâu (cho người hỗ trợ kỹ thuật): `python cli.py youtube-doctor "
                    "--network <link video công khai>`.")
 
     st.divider()
     st.subheader("📊 Google Sheets")
     with st.expander("Cấu hình", expanded=False):
-        st.caption("Đích gửi kết quả quét chọn theo từng lượt (hồ sơ đích) ở tab «📤 Gửi Google "
-                   "Sheets». Link dưới đây chỉ dùng cho «Danh sách video» và để nhập hồ sơ từ link cũ.")
+        st.caption("Nơi gửi kết quả quét chọn ở trang «📤 Gửi Google Sheets». Link dưới đây chỉ dùng cho trang "
+                   "«📋 Danh sách video trong kho» và để nhập hồ sơ từ link cũ.")
         st.session_state.sheet_link = st.text_input(
             "Link Google Sheet", st.session_state.sheet_link,
             placeholder="https://docs.google.com/spreadsheets/d/...")
@@ -1043,7 +1028,7 @@ with st.sidebar:
             ok, tb = sx_tmp.kiem_tra()
             (st.success if ok else st.error)(tb)
         if not sx_tmp.co_key():
-            st.caption("Chưa có `google_key.json` — xem hướng dẫn ở đầu file `sheets.py`.")
+            st.caption("Chưa có khoá Google (`google_key.json`) — cách tạo: đầu file `sheets.py`.")
 
     st.divider()
     c_luu, c_mac_dinh = st.columns(2)
@@ -1108,13 +1093,12 @@ def _ve_ket_qua_dong_bo(r: dict) -> None:
                    + "\n- ".join(thoat_markdown(d) for d in r["loi"][:10]))
     if r.get("nghi_hong"):
         st.warning(
-            f"Phát hiện {len(r['nghi_hong'])} file audio nghi hỏng/nén dở trong kho "
-            "— đã đưa vào danh sách tải lại. Bản cũ chỉ được chuyển vào thư mục "
-            "`_hong` sau khi tải lại thành công, không bị xoá:\n\n- "
+            f"Phát hiện {len(r['nghi_hong'])} file audio nghi hỏng/nén dở — sẽ tải lại. "
+            "Bản cũ chỉ chuyển vào thư mục `_hong` sau khi tải lại xong, không bị xoá:\n\n- "
             + "\n- ".join(thoat_markdown(d) for d in r["nghi_hong"][:10]))
     if r.get("da_doi_soat"):
-        st.info(f"Đã bổ sung metadata tại chỗ cho {r['da_doi_soat']} file có sẵn "
-                "trên đĩa (không gọi lại YouTube).")
+        st.info(f"Đã bổ sung thông tin cho {r['da_doi_soat']} file có sẵn "
+                "trên đĩa (không hỏi lại YouTube).")
     # Thư mục audio vừa đồng bộ có thể KHÁC kho vân tay đang chọn (vd. audio kênh mới, kho đang chọn là kho «SML»):
     # không xui người dùng nạp nhầm kho.
     muc_kho, cau_kho = huong_dan_kho_sau_dong_bo(r.get("thu_muc", ""), eng.kho_dang_dung or "",
@@ -1142,9 +1126,8 @@ def _khung_dong_bo_dang_chay() -> None:
         if st.button("⏹️ Dừng đồng bộ", type="secondary", key="dung_dong_bo"):
             _huy_dong_bo()
             st.warning("Đã gửi yêu cầu dừng đồng bộ, chờ một chút... Việc quét (nếu có) vẫn chạy tiếp.")
-        st.caption("Lượt đồng bộ chạy riêng: các tab bên dưới vẫn dùng bình thường. Quét file trong máy chạy song song "
-                   "thoải mái; quét link YouTube cùng lúc thì dùng chung cookie và mạng với lượt đồng bộ — nếu YouTube "
-                   "báo chặn, hãy dừng bớt một việc. Đừng đóng cửa sổ đen phía sau.")
+        st.caption("Đồng bộ chạy riêng — các trang khác vẫn dùng được. Quét YouTube cùng lúc thì dễ bị chặn hơn: "
+                   "bị chặn thì dừng bớt một việc. Đừng đóng cửa sổ đen phía sau.")
 
 
 def _ve_lan_dong_bo() -> None:
@@ -1178,7 +1161,7 @@ def _form_dong_bo_song_song() -> None:
             thu_lai = st.checkbox("Thử lại cả video bị hạn chế (giới hạn tuổi / chỉ hội viên) đã gặp ở lượt trước",
                                   value=False, key="ss_thu_lai_han_che", persist_state="session")
             bam = st.form_submit_button("⬇️ Bắt đầu đồng bộ kênh", type="primary")
-        st.caption("Xem trước danh sách video, kiểm tra còn thiếu: tab «📥 Đồng bộ kênh gốc» (khi việc này xong).")
+        st.caption("Xem trước danh sách video, kiểm tra còn thiếu: trang «📥 Đồng bộ kênh gốc» (khi việc này xong).")
     if bam:
         st.session_state.pop("thong_bao_dong_bo", None)
         if not (kenh.strip() and kho.strip('" ')):
@@ -1243,7 +1226,7 @@ with _khu_tren:
                     if fp.rate_per_minute is not None
                     else "Đang tính...",
                 )
-                t3.metric("ETA", _thoi_luong(fp.eta_seconds))
+                t3.metric("Còn lại (ước tính)", _thoi_luong(fp.eta_seconds))
                 t4.metric(
                     "Worker",
                     "Đang hoạt động" if fp.worker_alive else "Đã dừng",
@@ -1257,18 +1240,16 @@ with _khu_tren:
             )
             pid = fp.active_subprocess_pid or "—"
             heartbeat_slot.caption(
-                f"Cập nhật gần nhất: {cap_nhat} · PID audfprint: {pid} · "
-                f"Clip hiện tại đã chạy: {_thoi_luong(clip_elapsed)}"
+                f"Cập nhật gần nhất: {cap_nhat} · clip này đã chạy {_thoi_luong(clip_elapsed)} · "
+                f"mã tiến trình: {pid}"
             )
             if clip_elapsed is not None and clip_elapsed >= 120:
                 st.warning(
-                    "Clip hiện tại đang xử lý lâu hơn bình thường. "
-                    "Worker/subprocess vẫn hoạt động; phần trăm không được tăng giả."
+                    "Clip này lâu hơn bình thường nhưng máy vẫn đang xử lý — cứ chờ."
                 )
             elif now - fp.last_progress_at >= 15 and fp.worker_alive:
                 st.warning(
-                    "Chưa có event mới trong 15 giây, nhưng worker vẫn sống. "
-                    "Đang chờ subprocess hoặc thao tác ghi file."
+                    "15 giây chưa có tiến triển mới nhưng máy vẫn đang chạy (xử lý hoặc ghi file) — cứ chờ."
                 )
 
             recent = fingerprint_controller.recent()[-20:]
@@ -1285,10 +1266,9 @@ with _khu_tren:
                 disabled=fp.status == "cancel_requested",
             ):
                 fingerprint_controller.cancel()
-                st.warning("Đang yêu cầu dừng; chưa đánh dấu đã dừng cho tới khi worker xác nhận.")
+                st.warning("Đang dừng — chờ việc đang chạy xác nhận đã dừng.")
             st.caption(
-                "Trang tự làm mới từ ảnh chụp tiến độ; worker không gọi Streamlit trực tiếp. "
-                "Log kỹ thuật: `ketqua/fingerprint.log`."
+                "Trang tự cập nhật. Nhật ký chi tiết: `ketqua/fingerprint.log`."
             )
         elif job.get("kind") == "scan":
             anh = scan_controller.snapshot()
@@ -1343,8 +1323,8 @@ with _khu_tren:
                 st.caption(thoat_markdown(anh.message))   # có tiêu đề YouTube (audit 09/11)
             st.dataframe(build_nguon_chung_status_dataframe(anh.videos), width="stretch",
                          hide_index=True, height=260)
-            st.caption("Trong lúc lô chạy, Giám sát tự động và tạo kho phải chờ — kho vân tay "
-                       "phải giữ nguyên suốt lô thì kết luận «không có» mới có nghĩa.")
+            st.caption("Trong lúc lô chạy, Giám sát tự động và tạo kho phải chờ (kho giữ nguyên thì "
+                       "kết luận mới đúng).")
             if st.button("⏹️ Dừng lại", type="secondary", disabled=anh.cancelled,
                          key="dung_nguon_chung"):
                 common_controller.cancel()
@@ -1392,13 +1372,13 @@ with _khu_tren:
             if r.get("chan_youtube"):
                 st.error(f"🚫 YouTube chặn giữa chừng nên đã dừng: {r['chan_youtube']}")
             (st.warning if r["loi"] or r.get("chan_youtube") else st.success)(
-                f"Đã vá metadata snapshot cho {r['da_va']}/{r['tong']} clip; "
+                f"Đã bổ sung thông tin (ngày đăng, thời lượng) cho {r['da_va']}/{r['tong']} clip; "
                 f"không đổi {r['bo_qua']}, lỗi {len(r['loi'])}."
             )
             if r["loi"]:
                 with st.expander(f"⚠️ {len(r['loi'])} clip chưa vá được"):
                     st.code("\n".join(r["loi"][:50]))
-            st.caption(f"Snapshot: `{r['snapshot_path']}`")
+            st.caption(f"File thông tin: `{r['snapshot_path']}`")
         elif job["kind"] == "va_title":
             r = job["results"]
             if r.get("da_huy"):
@@ -1419,8 +1399,8 @@ with _khu_tren:
                 with st.expander(f"⚠️ {len(r['loi'])} video chưa lấy được tên"):
                     st.code("\n".join(r["loi"][:50]))
                 st.caption("Những video này giữ tên suy từ tên file và vẫn bị đánh dấu "
-                           "«cần kiểm tra» ở tab «Danh sách video trong kho».")
-            st.info("Mở tab «📋 Danh sách video trong kho» và bấm xem lại để thấy tên mới.")
+                           "«cần kiểm tra» ở trang «📋 Danh sách video trong kho».")
+            st.info("Mở trang «📋 Danh sách video trong kho» và bấm xem lại để thấy tên mới.")
         elif job["kind"] == "nguon_chung":
             hien_ket_qua_nguon_chung(job["results"][0])
         elif job["kind"] == "tai_video":
@@ -1449,18 +1429,18 @@ with _khu_tren:
         elif job["kind"] == "sua":
             r = job["results"]
             st.success(f"✅ Đã dựng lại danh sách: {r['tren_dia']} video thực có trên đĩa "
-                       f"(trước đó archive ghi {r['archive_cu']}).")
+                       f"(sổ cũ ghi {r['archive_cu']}).")
             if r["ma_bi_thieu"]:
-                st.info(f"Bổ sung {len(r['ma_bi_thieu'])} video có file nhưng archive quên ghi.")
+                st.info(f"Bổ sung {len(r['ma_bi_thieu'])} video có file nhưng sổ quên ghi.")
             if r["ma_bi_ghi_thua"]:
-                st.warning(f"Có {len(r['ma_bi_ghi_thua'])} mã trong archive nhưng KHÔNG thấy file "
-                           "— chúng sẽ được tải lại ở lần đồng bộ tới.")
+                st.warning(f"Có {len(r['ma_bi_ghi_thua'])} mã trong sổ nhưng KHÔNG thấy file "
+                           "— sẽ tải lại ở lần đồng bộ tới.")
         else:
             res = job["results"]
             if loi_lo_quet_co_ket_qua:
                 st.error(f"Lỗi: {job['error']}")
                 st.info(f"Lô dừng giữa chừng vì lỗi trên. Kết quả của {len(res)} video đã quét xong TRƯỚC lỗi vẫn ở "
-                        "bên dưới; các video còn lại chưa có kết quả — quét lại chúng sau khi xử lý lỗi.")
+                        "bên dưới; các video còn lại chưa quét — xử lý lỗi rồi quét lại chúng.")
             tong_match = sum(len(x.matches) for x in res)
             tong_loai = sum(len(getattr(x, "matches_loai", [])) for x in res)
             loi = [x for x in res if x.status != "ok"]
@@ -1536,12 +1516,12 @@ def _o_thu_muc_tai(nhan: str, khoa: str) -> str:
                 if _chon:
                     st.session_state.thu_muc_tai_video = _chon
                     st.rerun()
-    st.caption("Thư mục được nhớ khi bấm «💾 Lưu cấu hình» ở thanh bên (dùng chung cho các tab tải).")
+    st.caption("Thư mục được nhớ khi bấm «💾 Lưu cấu hình» ở thanh bên (dùng chung cho các trang tải).")
     return st.session_state.thu_muc_tai_video.strip('" ')
 
 
 O_AM_LUONG = "🔊 Đưa âm lượng về mức YouTube (-14 LUFS)"
-CAN_BO = ("Nối lại bằng cách nén lại cả phần còn lại một lần (đúng từng khung hình, hình–tiếng khớp ở chỗ nối): video 1080p dài 1 giờ mất khoảng 8–12 phút. File chỉ có tiếng thì nhanh hơn nhiều.")
+CAN_BO = ("Phần còn lại được nén lại một lần để nối khớp: video 1080p dài 1 giờ mất khoảng 8–12 phút (file chỉ có tiếng nhanh hơn nhiều).")
 GIAI_THICH_AM_LUONG = ("Nhiều video gốc được thu rất nhỏ; xem trên YouTube nghe to là nhờ «Âm lượng ổn định». Tick ô này thì "
                        "tải xong tool đo độ to và chỉnh về mức YouTube (có giới hạn đỉnh, không rè); hình giữ nguyên. "
                        "Video vốn đã đủ to thì giữ nguyên. Bỏ tick = giữ đúng âm lượng gốc.")
@@ -1561,9 +1541,8 @@ def _chua_tai_duoc() -> bool:
 
 def _trang_tai_video() -> None:
     st.subheader("Tải video / audio gốc theo link")
-    st.caption("Tải file video (hình + tiếng) hoặc chỉ audio — không đưa vào kho vân tay. Bản 4K thường ra file .mkv (mở "
-               "bằng VLC hoặc ứng dụng Phim & TV của Windows); bản thấp hơn ra .mp4; chỉ audio ra .m4a. Tên file = tiêu đề "
-               "không dấu + mã video, không dấu cách (vd. Ten_video_RMpCKfipD-Y.mp4).")
+    st.caption("Tải video hoặc chỉ audio (.m4a) về máy — không đưa vào kho vân tay. Tên file = tiêu đề không dấu + mã "
+               "video (vd. Ten_video_RMpCKfipD-Y.mp4).")
     _loai_tai = st.radio("Tải về", tai_video_goc.LOAI_TAI, horizontal=True, key="loai_tai", persist_state="session")
     _chi_audio = _loai_tai == tai_video_goc.LOAI_TAI[1]
     links_tai = st.text_area("Link video (mỗi dòng một link)", height=120,
@@ -1571,7 +1550,8 @@ def _trang_tai_video() -> None:
     _thu_muc_tai = _o_thu_muc_tai("Thư mục lưu video", "tai")
     _cl_tai = "Chỉ tiếng" if _chi_audio else st.selectbox(
         "Chất lượng tối đa", [m for m in tai_video_goc.CHAT_LUONG if tai_video_goc.CHAT_LUONG[m] != 0], key="cl_tai",
-        help="Video gốc thấp hơn mức chọn thì lấy bản cao nhất có.", persist_state="session")
+        help="Video gốc thấp hơn mức chọn thì lấy bản cao nhất có. Bản 4K thường ra file .mkv (mở bằng VLC hoặc ứng "
+             "dụng Phim & TV của Windows); bản thấp hơn ra .mp4.", persist_state="session")
     _ds_link = tai_video_goc.tach_link(links_tai)
     c_tu, c_den = st.columns(2)
     with c_tu:
@@ -1603,25 +1583,25 @@ def _trang_tai_video() -> None:
     if _loi_doan:
         st.error(_loi_doan)
     elif _ds_moc_tai:
-        st.caption(f"Chụp {len(_ds_moc_tai)} ảnh PNG ở {', '.join(map(cat_video_goc.moc_hien, _ds_moc_tai))} — khung hình "
-                   "đúng mốc, độ phân giải gốc của video (theo «Chất lượng tối đa»). Tải trọn từng video (chỉ phần hình, "
-                   "không tiếng) rồi chụp; xong thì xoá video. Ô âm lượng không áp dụng khi chụp ảnh.")
+        st.caption(f"Chụp {len(_ds_moc_tai)} ảnh PNG ở {', '.join(map(cat_video_goc.moc_hien, _ds_moc_tai))} (đúng khung "
+                   "hình, độ phân giải theo «Chất lượng tối đa»). Tải trọn video (chỉ hình) rồi chụp, xong thì xoá video. "
+                   "Không chỉnh âm lượng khi chụp.")
     elif _ds_bo_tai:
-        st.caption(f"{cat_video_goc.mo_ta_ds_doan(_ds_bo_tai)}. Tải trọn từng video rồi bỏ các đoạn đó, nối phần còn lại "
-                   f"thành video mới; xong thì xoá video trọn. {CAN_BO}")
+        st.caption(f"{cat_video_goc.mo_ta_ds_doan(_ds_bo_tai)}. Tải trọn video, bỏ các đoạn đó rồi nối phần còn lại "
+                   f"thành video mới; xong thì xoá bản trọn. {CAN_BO}")
     elif _tu_s is not None:
-        st.caption(f"Tải trọn từng video rồi cắt CHÍNH XÁC đoạn {cat_video_goc.moc_hien(_tu_s)}–{cat_video_goc.moc_hien(_den_s)} "
-                   f"({_den_s - _tu_s:g} giây; đúng từng khung hình vì nén lại đoạn cắt). Cắt xong thì xoá video trọn.")
-    st.caption("Link kênh/danh sách phát bị bỏ qua — tải cả kênh dùng tab «📺 Tải cả kênh».")
+        st.caption(f"Cắt đúng đoạn {cat_video_goc.moc_hien(_tu_s)}–{cat_video_goc.moc_hien(_den_s)} "
+                   f"({_den_s - _tu_s:g} giây, chính xác từng khung hình). Tải trọn video rồi cắt, xong thì xoá bản trọn.")
+    st.caption("Link kênh/danh sách phát bị bỏ qua — tải cả kênh dùng trang «📺 Tải cả kênh».")
     _am_tai = st.checkbox(O_AM_LUONG, value=True, key="am_tai", help=GIAI_THICH_AM_LUONG, persist_state="session")
     with st.expander("🟣 Twitch: mở khoá bản 1440p (tuỳ chọn)"):
-        st.caption("Twitch chỉ cho bản 1440p khi xem từ nước được mở VÀ có đăng nhập. Điền hai file dưới đây thì với link "
-                   "Twitch, tool xin danh sách chất lượng qua proxy (Windscribe, nút nguồn ON + Proxy Gateway bật) kèm cookie "
-                   "twitch.tv; video vẫn tải thẳng bằng mạng thường. Để trống = bản Twitch cho Việt Nam (thường tối đa 720p). "
-                   "Link YouTube không bị ảnh hưởng.")
+        st.caption("Twitch chỉ cho bản 1440p khi xem từ nước được mở VÀ có đăng nhập. Để trống = bản cho Việt Nam "
+                   "(thường tối đa 720p). Link YouTube không bị ảnh hưởng.")
         st.session_state.twitch_proxy_file = st.text_input(
             "File proxy (một dòng http://tên:mật_khẩu@máy:cổng)", st.session_state.twitch_proxy_file,
-            placeholder=r"vd. C:\...\secrets\proxy_twitch.txt")
+            placeholder=r"vd. C:\...\secrets\proxy_twitch.txt",
+            help="Với link Twitch, tool xin danh sách chất lượng qua proxy này (Windscribe: nút nguồn ON + Proxy Gateway "
+                 "bật) kèm cookie twitch.tv; video vẫn tải thẳng bằng mạng thường.")
         st.session_state.twitch_cookie_file = st.text_input(
             "File cookie Twitch (cookies.txt có đăng nhập twitch.tv)", st.session_state.twitch_cookie_file,
             placeholder=r"vd. C:\...\secrets\twitch_cookies.txt")
@@ -1641,8 +1621,7 @@ def _trang_tai_video() -> None:
 
 def _trang_thumbnail() -> None:
     st.subheader("Tải thumbnail của video YouTube")
-    st.caption("Lấy ảnh thumbnail lớn nhất YouTube có (thường 1280×720), lưu dạng .jpg, tên file = mã video "
-               "(vd. RMpCKfipD-Y.jpg).")
+    st.caption("Lấy ảnh thumbnail lớn nhất (thường 1280×720), lưu .jpg, tên file = mã video (vd. RMpCKfipD-Y.jpg).")
     links_anh = st.text_area("Link video cần lấy thumbnail (mỗi dòng một link)", height=120,
                              placeholder="https://www.youtube.com/watch?v=...\nhttps://youtu.be/...", key="o_links_anh", persist_state="session")
     _thu_muc_anh = _o_thu_muc_tai("Thư mục lưu thumbnail", "anh")
@@ -1655,10 +1634,11 @@ def _trang_thumbnail() -> None:
     url_kenh_anh = st.text_input("Link kênh YouTube cần lấy thumbnail", key="kenh_anh",
                                  placeholder="https://www.youtube.com/@TenKenh", persist_state="session")
     _so_kenh_anh = st.number_input("Số thumbnail mới nhất (0 = cả kênh)", min_value=0, value=0, step=10,
-                                   key="so_kenh_anh", persist_state="session")
-    st.caption("Lấy thumbnail các video ở tab Videos của kênh (không lấy Shorts/Live), lưu vào thư mục ở trên — tải thẳng "
-               "ảnh lớn nhất YouTube có (1280×720; video cũ 640×480), không phải hỏi từng video nên nhanh. Ảnh đã có trong "
-               "thư mục (theo [mã video]) được bỏ qua: YouTube chặn giữa chừng thì bấm lại sau là lấy tiếp phần còn thiếu.")
+                                   key="so_kenh_anh", persist_state="session",
+                                   help="Tải thẳng ảnh lớn nhất YouTube có (1280×720; video cũ 640×480), không phải hỏi "
+                                        "từng video nên nhanh.")
+    st.caption("Lấy thumbnail các video ở tab Videos của kênh (không lấy Shorts/Live) vào thư mục ở trên. Ảnh đã có "
+               "được bỏ qua — bị chặn giữa chừng thì bấm lại sau để lấy tiếp.")
     if st.button("🖼️ Tải thumbnail của kênh", type="primary", key="bat_dau_tai_anh_kenh",
                  disabled=not (url_kenh_anh.strip() and _thu_muc_anh) or _chua_tai_duoc()):
         _bat_dau_tai(tai_video_goc.tai_kenh, url_kenh_anh.strip(), _thu_muc_anh, gioi_han=int(_so_kenh_anh) or None,
@@ -1666,8 +1646,8 @@ def _trang_thumbnail() -> None:
 
 def _trang_tai_ca_kenh() -> None:
     st.subheader("Tải video gốc của cả kênh")
-    st.caption("Tải file video ở tab Videos của kênh (không lấy Shorts/Live) — không nén, không đưa vào kho vân tay. "
-               "Video đã có trong thư mục (theo mã video ở cuối tên file) được bỏ qua: bấm lại là tải tiếp phần còn thiếu.")
+    st.caption("Tải video ở tab Videos của kênh (không lấy Shorts/Live), không đưa vào kho vân tay. Video đã có được "
+               "bỏ qua — bấm lại là tải tiếp phần còn thiếu.")
     url_kenh_tai = st.text_input("Link kênh YouTube cần tải", placeholder="https://www.youtube.com/@TenKenh", key="o_url_kenh_tai", persist_state="session")
     _thu_muc_kenh = _o_thu_muc_tai("Thư mục lưu video của kênh", "kenh")
     c_so, c_cl = st.columns(2)
@@ -1687,29 +1667,29 @@ def _trang_ghep() -> None:
     _loai_ghep = st.radio("Ghép", tai_video_goc.LOAI_TAI, horizontal=True, key="loai_ghep", persist_state="session")
     _audio_ghep = _loai_ghep == tai_video_goc.LOAI_TAI[1]
     if _audio_ghep:
-        st.caption("Chỉ tải phần tiếng của từng video (AAC, file M4A) rồi ghép theo đúng thứ tự link; link lặp lại thì "
-                   "đoạn đó lặp lại. File trong máy: .m4a, .mp3, .wav, .flac… hoặc cả file video (chỉ lấy tiếng). File "
-                   "khác kiểu file 1 được chuyển sang AAC cho khớp trước khi nối. Ra một file .m4a + file «.moc.csv» ghi "
-                   "mỗi đoạn bắt đầu ở giây nào (và mốc chương ngay trong file). Ghép xong thì xoá các file lẻ.")
+        st.caption("Lấy phần tiếng của từng link hoặc file trong máy — audio, hoặc file video (chỉ lấy tiếng) — rồi ghép theo đúng "
+                   "thứ tự (link lặp thì đoạn lặp). Ra một file .m4a "
+                   "+ file «.moc.csv» ghi mỗi đoạn bắt đầu ở giây nào.")
     else:
-        st.caption("Tải từng video (H.264 tối đa 1080p + tiếng AAC, file MP4 — cùng một kiểu để nối mà KHÔNG nén lại) rồi "
-                   "ghép theo đúng thứ tự link; link lặp lại thì video lặp lại. Kèm file «.moc.csv» ghi video gốc nào bắt "
-                   "đầu ở giây nào (và mốc chương ngay trong video) — đem video dài đi quét rồi so với file mốc để đo độ "
-                   "chính xác. Ghép xong thì xoá các file lẻ.")
+        st.caption("Tải từng link rồi ghép theo đúng thứ tự (link lặp thì video lặp). Kèm file «.moc.csv» ghi video "
+                   "gốc nào bắt đầu ở giây nào — dùng để kiểm độ chính xác khi quét.")
     links_ghep = st.text_area("Link video hoặc đường dẫn file trong máy cần ghép (mỗi dòng một, theo thứ tự ghép)",
                               height=140,
-                              placeholder="https://www.youtube.com/watch?v=...\nD:\\Video\\intro.mp4\nhttps://youtu.be/...", key="o_links_ghep", persist_state="session")
-    st.caption("Trộn được link YouTube với file có sẵn trong máy. File trong máy không bị sửa hay xoá (chỉnh âm lượng làm "
-               "trên bản sao tạm).")
+                              placeholder="https://www.youtube.com/watch?v=...\nD:\\Video\\intro.mp4\nhttps://youtu.be/...", key="o_links_ghep", persist_state="session",
+                              help="File trong máy: video (.mp4, .mkv…) hoặc audio (.m4a, .mp3, .wav, .flac…). Ghép video: "
+                                   "tải H.264 tối đa 1080p + tiếng AAC (MP4) để nối mà không nén lại. Ghép chỉ audio: lấy "
+                                   "tiếng AAC (M4A); file khác kiểu file 1 được chuyển sang AAC cho khớp. Mốc chương nằm "
+                                   "ngay trong file ghép. Ghép xong thì xoá các file lẻ đã tải.")
+    st.caption("Trộn được link YouTube với file trong máy — file trong máy không bị sửa hay xoá.")
     _thu_muc_ghep = _o_thu_muc_tai("Thư mục lưu video ghép", "ghep")
-    _ten_ghep = st.text_input("Tên file video ghép (để trống = «Video_ghep_<ngày giờ>», chỉ audio = «Audio_ghep_<ngày "
-                              "giờ>»; dấu cách, dấu tiếng Việt, ký tự đặc biệt được đổi thành chữ không dấu và «_»)", key="o_ten_ghep", persist_state="session")
+    _ten_ghep = st.text_input("Tên file ghép (để trống = tự đặt theo ngày giờ)", key="o_ten_ghep", persist_state="session",
+                              help="Để trống = «Video_ghep_<ngày giờ>» (chỉ audio: «Audio_ghep_<ngày giờ>»). Dấu cách, dấu "
+                                   "tiếng Việt, ký tự đặc biệt được đổi thành chữ không dấu và «_».")
     _ds_ghep = ghep_video_goc.tach_link(links_ghep)
     _am_ghep = st.checkbox(O_AM_LUONG, value=True, key="am_ghep", help=GIAI_THICH_AM_LUONG, persist_state="session")
     if not _audio_ghep:
-        st.caption("Video khác độ phân giải hay số hình/giây video 1 (vd. một video 60 hình/giây giữa các video 30) thì "
-                   "tool tự nén lại RIÊNG video đó cho khớp — lâu hơn vài phút cho mỗi video lệch; tiếng giữ nguyên nên "
-                   "mốc vẫn đúng. Video đã tải được giữ lại tới khi ghép xong, bấm lại thì không phải tải lại.")
+        st.caption("Video khác độ phân giải hay số hình/giây so với video 1 được nén lại riêng cho khớp (thêm vài phút "
+                   "mỗi video, mốc vẫn đúng). Video đã tải được giữ tới khi ghép xong — bấm lại không phải tải lại.")
     _bieu_ghep, _vat_ghep = ("🎵", "audio") if _audio_ghep else ("🎞️", "video")
     if st.button(f"{_bieu_ghep} Tải và ghép {len(_ds_ghep)} {_vat_ghep}" if _ds_ghep else f"{_bieu_ghep} Tải và ghép",
                  type="primary", key="bat_dau_ghep_video",
@@ -1718,9 +1698,9 @@ def _trang_ghep() -> None:
                      chi_audio=_audio_ghep)
 
 def _trang_video_trong_may() -> None:
-    st.subheader("Cắt đoạn / bỏ đoạn / chụp ảnh / chỉnh âm lượng video có sẵn trong máy")
-    st.caption("File gốc KHÔNG bị sửa, đổi tên hay xoá — kết quả ra file MỚI trong thư mục lưu (trùng tên thì thêm « (2)»). "
-               "Muốn GHÉP các file trong máy: dán đường dẫn file vào tab «🎞️ Ghép video gốc» (trộn được với link YouTube).")
+    st.subheader("Cắt đoạn, bỏ đoạn, chụp ảnh, chỉnh âm lượng video trong máy")
+    st.caption("File gốc KHÔNG bị sửa, đổi tên hay xoá — kết quả ra file MỚI (trùng tên thì thêm « (2)»). "
+               "Muốn ghép các file trong máy: dùng trang «🎞️ Ghép video gốc».")
     may_vb = st.text_area("Đường dẫn video trong máy (mỗi dòng một file, hoặc một thư mục)", height=120, key="file_may",
                           placeholder="D:\\Video\\phim.mp4\nD:\\Video\\ThuMuc", persist_state="session")
     _ds_may, _loi_may = video_trong_may.tach_file(may_vb)
@@ -1758,8 +1738,8 @@ def _trang_video_trong_may() -> None:
     if _loi_doan_m:
         st.error(_loi_doan_m)
     elif _ds_moc_may:
-        st.caption(f"Chụp {len(_ds_moc_may)} ảnh PNG ở {', '.join(map(cat_video_goc.moc_hien, _ds_moc_may))} mỗi file — "
-                   "khung hình đúng mốc, độ phân giải gốc; file gốc giữ nguyên. Ô âm lượng không áp dụng khi chụp ảnh.")
+        st.caption(f"Chụp {len(_ds_moc_may)} ảnh PNG ở {', '.join(map(cat_video_goc.moc_hien, _ds_moc_may))} mỗi file "
+                   "(đúng khung hình, độ phân giải gốc); file gốc giữ nguyên. Không chỉnh âm lượng khi chụp.")
     elif _ds_bo_may:
         st.caption(f"{cat_video_goc.mo_ta_ds_doan(_ds_bo_may)}. Phần còn lại nối thành file MỚI. {CAN_BO}")
     _am_may = st.checkbox(O_AM_LUONG, value=True, key="am_may", help=GIAI_THICH_AM_LUONG, persist_state="session")
@@ -1775,8 +1755,8 @@ def _trang_video_trong_may() -> None:
 
 def _trang_tieu_de_kenh() -> None:
     st.subheader("Tải danh sách tiêu đề của kênh")
-    st.caption("Lấy tiêu đề, link và thời lượng mọi video ở tab Videos của kênh (không lấy Shorts/Live) — không tải video "
-               "nào; kênh vài nghìn video thường xong trong khoảng một phút.")
+    st.caption("Lấy tiêu đề, link và thời lượng mọi video ở tab Videos của kênh (không lấy Shorts/Live) — không tải "
+               "video nào, thường xong trong khoảng một phút.")
     url_td = st.text_input("Link kênh YouTube cần lấy tiêu đề", placeholder="https://www.youtube.com/@TenKenh", key="o_url_tieu_de", persist_state="session")
     if st.button("📝 Lấy danh sách tiêu đề", type="primary", key="lay_tieu_de",
                  disabled=not url_td.strip() or _chua_tai_duoc()):
@@ -1808,11 +1788,12 @@ def _trang_tieu_de_kenh() -> None:
 # ---------------------------------------------------------------- TAB 0
 def _trang_dong_bo() -> None:
     st.subheader("Tự động tải toàn bộ video từ kênh YouTube gốc của bạn")
-    st.caption("Chỉ tải phần tiếng, nén còn opus mono 64 kbps — đã đo thực nghiệm là "
-               "cho độ chính xác đối chiếu NGANG BẰNG video gốc, nhưng nhẹ hơn ~100 lần.")
+    st.caption("Chỉ tải phần tiếng: nhẹ hơn ~100 lần mà vẫn đối chiếu chính xác.")
 
     kenh_url = st.text_input("Link kênh YouTube của bạn",
-                             placeholder="https://www.youtube.com/@TenKenh", key="o_url_dong_bo", persist_state="session")
+                             placeholder="https://www.youtube.com/@TenKenh", key="o_url_dong_bo", persist_state="session",
+                             help="Tool chỉ tải phần tiếng, nén còn opus mono 64 kbps — đã đo thực nghiệm: độ chính xác "
+                                  "đối chiếu NGANG BẰNG video gốc mà nhẹ hơn ~100 lần.")
     st.session_state.kho_dir = st.text_input(
         "Thư mục kho clip gốc (ổ D, E... tùy bạn)", st.session_state.kho_dir,
         placeholder=r"D:\KhoClipGoc")
@@ -1844,18 +1825,18 @@ def _trang_dong_bo() -> None:
                               disabled=not kenh_url or dang_dong_bo())
 
     lay_ngay = st.checkbox(
-        "Lấy cả ngày đăng chính xác (có khoá YouTube Data API: 1 lượt hỏi mỗi 50 video; không có: chậm, 1 lượt mỗi video)",
+        "Lấy cả ngày đăng chính xác (chậm hơn)",
         value=False,
         help="YouTube không trả ngày đăng ở chế độ liệt kê nhanh. Bật khi bạn cần "
-             "xem ngày đăng ngay tại đây. Việc đồng bộ kho KHÔNG cần bật: ngày đăng "
-             "thật được lấy sẵn trong lượt tải của từng video.",
+             "xem ngày đăng ngay tại đây. Có khoá YouTube Data API: 1 lượt hỏi mỗi 50 video; không có: chậm, 1 lượt "
+             "mỗi video. Việc đồng bộ kho KHÔNG cần bật: ngày đăng thật được lấy sẵn trong lượt tải của từng video.",
      key="o_lay_ngay_dong_bo", persist_state="session")
     thu_lai_han_che = st.checkbox(
         "Thử lại cả video bị hạn chế (giới hạn tuổi / chỉ hội viên) đã gặp ở lượt trước",
         value=False,
-        help="Mặc định tool KHÔNG gửi lại request cho video đã biết bị hạn chế khi cách đăng nhập không đổi, để lượt "
-             "sau tiến tới các video còn lại. Tool tự thử lại khi bạn thêm/đổi nguồn cookie. Bật khi vừa xuất lại "
-             "cookie tài khoản đã xác minh tuổi (cùng file). Vẫn dừng nếu YouTube từ chối hàng loạt.",
+        help="Mặc định tool bỏ qua video đã biết bị hạn chế (khi cách đăng nhập không đổi) để đi tiếp các video "
+             "khác; thêm/đổi cookie thì tool tự thử lại. Bật khi vừa xuất lại cookie của tài khoản đã xác minh tuổi "
+             "(cùng file). Vẫn dừng nếu YouTube từ chối hàng loạt.",
      key="o_thu_lai_han_che", persist_state="session")
 
     if xem_truoc:
@@ -1888,25 +1869,24 @@ def _trang_dong_bo() -> None:
         chay_dong_bo(kenh_url, st.session_state.kho_dir, gioi_han or None, thu_lai_han_che)
     if dang_dong_bo():
         st.caption("Đang có một lượt đồng bộ chạy (khung ở đầu trang) — chờ lượt đó xong rồi đồng bộ kênh khác. "
-                   "Trong lúc chờ vẫn quét được ở tab «▶️ Quét YouTube» / «📁 Quét file trong máy».")
+                   "Trong lúc chờ vẫn quét được ở trang «▶️ Quét YouTube» / «📁 Quét file trong máy».")
 
     if st.session_state.kho_dir and os.path.isdir(st.session_state.kho_dir.strip('" ')):
         tk = ChannelSync(st.session_state.kho_dir.strip('" ')).thong_ke()
         st.info(f"Kho hiện có **{tk['so_file']}** file audio gốc "
                 f"({tk['dung_luong_mb']:,.0f} MB).")
 
-    st.caption("Chạy lại bất cứ lúc nào — hệ thống ghi nhớ trong `downloaded.txt` "
-               "nên chỉ tải video MỚI, không tải trùng.")
+    st.caption("Chạy lại bất cứ lúc nào — chỉ tải video MỚI, không tải trùng (ghi nhớ trong `downloaded.txt`).")
 
     st.divider()
     st.markdown("#### 🔧 Bị mất mạng giữa chừng? Xử lý ở đây")
-    st.caption("Không cần tải lại từ đầu. Hệ thống đối chiếu file THỰC TẾ trên đĩa "
-               "(đọc mã ID trong tên file; file chưa xác nhận được kiểm bằng ffprobe) "
-               "nên không tải trùng, và file nén dở sẽ được tải lại.")
+    st.caption("Không cần tải lại từ đầu: tool đối chiếu file thật trên đĩa nên không tải trùng, file nén dở được "
+               "tải lại.")
     cc1, cc2 = st.columns(2)
     with cc1:
         if st.button("🔍 Kiểm tra còn thiếu video nào", width="stretch",
-                     disabled=not (kenh_url and st.session_state.kho_dir) or dang_dong_bo()):
+                     disabled=not (kenh_url and st.session_state.kho_dir) or dang_dong_bo(),
+                     help="Đọc mã video trong tên file; file chưa xác nhận được thì kiểm bằng ffprobe."):
             with st.spinner("Đang đối chiếu kênh với thư mục kho..."):
                 try:
                     cs = ChannelSync(st.session_state.kho_dir.strip('" '),
@@ -1964,15 +1944,14 @@ def _trang_dong_bo() -> None:
     st.divider()
     st.markdown("#### 🏷️ Tên video hiển thị sai? Lấy lại tên thật ở đây")
     st.caption(
-        "Tên file trên đĩa bị Windows bắt thay các ký tự `: / \\ | ? * \" < >` bằng "
-        "`_` và cắt còn 80 ký tự. Nút này hỏi YouTube tiêu đề ĐÚNG cho từng video "
-        "rồi ghi vào `clips_meta.json` — sau đó tab «Danh sách video trong kho» và "
-        "báo cáo sẽ hiện tên thật. Đây là tác vụ MẠNG: một lượt hỏi mỗi video."
+        "Tên file trên đĩa thiếu ký tự đặc biệt (Windows không cho phép) và bị cắt còn 80 ký tự. Nút này hỏi YouTube "
+        "tên ĐÚNG của từng video (một lượt hỏi mỗi video)."
     )
     if st.button("🌐 Lấy lại tên video thật cho kho này", width="stretch",
                  disabled=not st.session_state.kho_dir or job["running"] or dang_dong_bo() or _dong_bo_khac,
-                 help="Chỉ lấy thông tin, KHÔNG tải lại video. Chạy lại được bất cứ "
-                      "lúc nào; video nào đã có tên thật thì bỏ qua."):
+                 help="Chỉ lấy thông tin, KHÔNG tải lại video. Tên đúng ghi vào `clips_meta.json` — trang «📋 Danh "
+                      "sách video trong kho» và báo cáo sẽ hiện tên thật. Chạy lại được bất cứ lúc nào; video nào đã "
+                      "có tên thật thì bỏ qua. Ký tự Windows bắt thay bằng `_`: `: / \\ | ? * \" < >`."):
         cs_title = ChannelSync(st.session_state.kho_dir.strip('" '),
                                player_clients=list(eng.config.ytdlp_player_clients),
                                cau_hinh_mang=eng.cau_hinh_mang(), data_dir=eng.data_dir)
@@ -1984,8 +1963,8 @@ def _trang_dong_bo() -> None:
 # ---------------------------------------------------------------- TAB 1
 def _trang_kho() -> None:
     st.subheader("Quản lý các kho clip gốc")
-    st.caption("Mỗi kho là một bộ vân tay RIÊNG (ví dụ: Ẩm thực, Du lịch, Review). "
-               "Khi quét video vi phạm, chọn đúng kho tương ứng — vừa nhanh vừa ít báo nhầm.")
+    st.caption("Mỗi kho là một bộ vân tay riêng (ví dụ: Ẩm thực, Du lịch, Review). "
+               "Quét đúng kho thì vừa nhanh vừa ít báo nhầm.")
 
     with st.expander("➕ Tạo kho mới", expanded=not khos):
         n1, n2 = st.columns([2, 1])
@@ -2067,11 +2046,11 @@ def _trang_kho() -> None:
             chay_van_tay(thumuc.strip('" '), "add")
 
     st.divider()
-    st.markdown("#### Tình trạng metadata báo cáo")
+    st.markdown("#### Thông tin (metadata) video gốc cho báo cáo")
     st.caption(
-        "Kiểm tra chỉ đọc mối liên hệ giữa clip trong fingerprint DB và metadata. "
-        "Khôi phục offline chỉ tạo/cập nhật snapshot riêng của kho; không sửa "
-        "`clips_meta.json`, không gọi mạng và không tạo lại fingerprint."
+        "Kiểm tra (chỉ đọc) clip trong kho đã đủ tên, link, ngày đăng, thời lượng để lập báo cáo chưa. "
+        "«Khôi phục offline» chỉ ghi file thông tin riêng của kho — không sửa "
+        "`clips_meta.json`, không gọi mạng, không tạo lại vân tay."
     )
     mc1, mc2 = st.columns(2)
     with mc1:
@@ -2099,7 +2078,7 @@ def _trang_kho() -> None:
                 st.session_state.metadata_audit = preview.audit.to_dict()
                 st.session_state.metadata_audit_kho = eng.kho_dang_dung
             except Exception as e:  # noqa: BLE001
-                st.error(f"Không lập được dry-run: {e}")
+                st.error(f"Không lập được bản xem trước: {e}")
 
     audit_data = st.session_state.get("metadata_audit")
     if (
@@ -2107,25 +2086,25 @@ def _trang_kho() -> None:
         and st.session_state.get("metadata_audit_kho") == eng.kho_dang_dung
     ):
         a1, a2, a3 = st.columns(3)
-        a1.metric("Clip trong fingerprint DB", audit_data["total_db_clips"])
-        a2.metric("Metadata đầy đủ", audit_data["complete"])
-        a3.metric("Metadata một phần", audit_data["partial"])
+        a1.metric("Clip trong kho vân tay", audit_data["total_db_clips"])
+        a2.metric("Đủ thông tin", audit_data["complete"])
+        a3.metric("Thiếu một phần", audit_data["partial"])
         a4, a5, a6 = st.columns(3)
-        a4.metric("Phục hồi từ filename", audit_data["filename_fallbacks"])
+        a4.metric("Lấy từ tên file", audit_data["filename_fallbacks"])
         a5.metric("Chưa ánh xạ", audit_data["missing"])
         a6.metric("Mơ hồ / xung đột", audit_data["ambiguous"])
         st.caption(
             "Nguồn đang dùng: "
             + (", ".join(audit_data.get("source_files") or []) or "chưa có")
-            + f" · Snapshot cập nhật: {audit_data.get('updated_at') or 'chưa có'}"
+            + f" · Cập nhật lần cuối: {audit_data.get('updated_at') or 'chưa có'}"
         )
         if audit_data.get("complete", 0) == 0 and audit_data.get("total_db_clips", 0):
             st.warning(
-                "Kho có fingerprint nhưng chưa clip nào có đủ toàn bộ metadata báo cáo. "
-                "Có thể xuất dữ liệu fallback, nhưng báo cáo chưa được xem là đầy đủ."
+                "Kho có vân tay nhưng chưa clip nào đủ thông tin cho báo cáo. "
+                "Vẫn xuất được (phần thiếu được đánh dấu) nhưng báo cáo chưa đầy đủ."
             )
         if audit_data.get("samples"):
-            with st.expander("Mẫu metadata thiếu/mơ hồ (tối đa 20)"):
+            with st.expander("Ví dụ clip thiếu / mơ hồ (tối đa 20)"):
                 st.dataframe(
                     pd.DataFrame(audit_data["samples"]),
                     width="stretch",
@@ -2138,12 +2117,12 @@ def _trang_kho() -> None:
         and st.session_state.get("metadata_repair_preview_kho") == eng.kho_dang_dung
     ):
         st.info(
-            f"Dry-run: {preview_data['updated']} entry sẽ được cập nhật, "
+            f"Xem trước: {preview_data['updated']} mục sẽ được cập nhật, "
             f"{preview_data['unchanged']} không đổi, "
             f"{preview_data['skipped_ambiguous']} mơ hồ bị bỏ qua."
         )
     confirm_offline = st.checkbox(
-        "Tôi xác nhận chỉ tạo/cập nhật snapshot metadata offline của kho đang dùng",
+        "Tôi xác nhận cập nhật file thông tin (offline) của kho đang dùng",
         key=f"confirm_metadata_offline_{eng.kho_dang_dung}",   # đổi kho → hỏi lại
         persist_state="session",
     )
@@ -2157,23 +2136,22 @@ def _trang_kho() -> None:
                 st.error("; ".join(repaired.errors))
             else:
                 st.success(
-                    f"Đã cập nhật snapshot: {repaired.updated} entry; "
+                    f"Đã cập nhật file thông tin: {repaired.updated} mục; "
                     f"không đổi {repaired.unchanged}."
                 )
-                st.caption(f"Snapshot: `{repaired.snapshot_path}`")
+                st.caption(f"File thông tin: `{repaired.snapshot_path}`")
                 st.session_state.metadata_audit = eng.kiem_tra_metadata_kho().to_dict()
                 st.session_state.metadata_audit_kho = eng.kho_dang_dung
         except Exception as e:  # noqa: BLE001
             st.error(f"Không khôi phục được metadata: {e}")
 
-    with st.expander("🌐 Vá metadata thiếu từ YouTube (tác vụ mạng riêng)"):
+    with st.expander("🌐 Vá metadata thiếu từ YouTube (cần mạng)"):
         st.warning(
-            "Chỉ dùng khi bạn chủ động cần ngày đăng/thời lượng chính thức. "
-            "Tác vụ không tải audio/video, có timeout và retry hữu hạn, nhưng có thể "
-            "mất nhiều thời gian với kho lớn."
+            "Chỉ dùng khi bạn cần ngày đăng/thời lượng chính thức. "
+            "Không tải audio/video, nhưng kho lớn có thể mất nhiều thời gian."
         )
         confirm_network = st.checkbox(
-            "Tôi xác nhận cho phép gọi YouTube để vá các entry còn thiếu",
+            "Tôi xác nhận cho phép hỏi YouTube để bổ sung các mục còn thiếu",
             key=f"confirm_metadata_network_{eng.kho_dang_dung}",
          persist_state="session")
         if st.button(
@@ -2200,12 +2178,11 @@ def _trang_kho() -> None:
 # ---------------------------------------------------------------- TAB 2
 def _trang_ds_kho() -> None:
     st.subheader("Danh sách tên video đã tải về trong kho")
-    st.caption("Đọc thẳng file trên đĩa và `clips_meta.json` của kho — không tải gì "
-               "từ mạng, không sửa file nào. Tên video lấy từ metadata nên là tên "
-               "THẬT trên YouTube, không phải tên file đã bị làm sạch ký tự.")
+    st.caption("Chỉ đọc file trên đĩa — không tải, không sửa gì. Tên video là tên THẬT "
+               "trên YouTube (lấy từ `clips_meta.json`), không phải tên file.")
 
     if not khos:
-        st.warning("Chưa có kho nào — tạo ở tab «Kho clip gốc».")
+        st.warning("Chưa có kho nào — tạo ở trang «🎬 Kho clip gốc».")
     else:
         # Mở sẵn ĐÚNG kho đang dùng ở thanh bên. Không có `index`, Streamlit lấy
         # phần tử số 0 — người dùng dễ quét kho này rồi đẩy đè lên trang tính kho kia.
@@ -2230,8 +2207,8 @@ def _trang_ds_kho() -> None:
             if thu_muc_dsv:
                 st.warning(
                     f"Kho «{ten_chon}» đang trỏ tới `{thu_muc_dsv}` nhưng máy này "
-                    "không có thư mục đó. Thường gặp khi chép kho sang máy khác "
-                    "hoặc đổi ổ đĩa. Nhập đường dẫn đúng bên dưới rồi bấm lưu.")
+                    "không có thư mục đó (hay gặp khi chép kho sang máy khác hoặc đổi ổ đĩa). "
+                    "Nhập đường dẫn đúng bên dưới rồi bấm lưu.")
             duong_moi = st.text_input(
                 f"Đường dẫn thư mục audio của kho «{ten_chon}» trên máy này",
                 key="dsv_thu_muc_moi", placeholder=r"D:\ClipGocDanny", persist_state="session")
@@ -2283,15 +2260,14 @@ def _trang_ds_kho() -> None:
                 if kq.so_media_khac:
                     st.info("Kho này chứa video gốc (.mp4, .mkv…) chứ không phải "
                             "audio đã tải bằng «Đồng bộ kênh gốc». Vân tay của kho "
-                            "vẫn dùng quét bình thường — chỉ tab này chưa liệt kê "
+                            "vẫn dùng quét bình thường — chỉ trang này chưa liệt kê "
                             "được tên video cho loại kho đó.")
                 else:
                     st.info("Kho này chưa có file audio nào (.opus). Hãy đồng bộ kênh "
-                            "ở tab «Đồng bộ kênh gốc» trước.")
+                            "ở trang «📥 Đồng bộ kênh gốc» trước.")
             else:
-                st.caption(f"Danh sách chụp lúc {kq.thoi_diem}. "
-                           "Kho vừa đổi thì bấm quét lại. Di chuột lên bảng để hiện "
-                           "nút 🔍 tìm kiếm, ⬇️ tải CSV và ⛶ phóng to.")
+                st.caption(f"Danh sách chụp lúc {kq.thoi_diem} — kho vừa đổi thì bấm xem lại. "
+                           "Di chuột lên bảng để tìm kiếm 🔍, tải CSV ⬇️, phóng to ⛶.")
                 # Chia lại bề ngang: STT chỉ cần vài ký tự, phần còn lại nhường hết
                 # cho tiêu đề — kho Cory có tiêu đề dài tới 95 ký tự.
                 st.dataframe(pd.DataFrame([{"STT": d.stt, "Tên video": d.ten_video}
@@ -2308,17 +2284,16 @@ def _trang_ds_kho() -> None:
                             f"⚠️ {len(can_kiem)} video chưa lấy được tên chính xác"):
                         st.caption(
                             f"{len(can_kiem)} dòng này VẪN được đẩy lên Google "
-                            "Sheets bình thường, chỉ là tên có thể thiếu dấu câu "
-                            "hoặc bị cắt ở 80 ký tự — không dòng nào bị bỏ ra. "
+                            "Sheets, chỉ là tên có thể thiếu dấu câu hoặc bị cắt ở 80 ký tự. "
                             "Muốn có tên đúng: bấm «🌐 Lấy lại tên video thật cho "
-                            "kho này» ở tab «Đồng bộ kênh gốc».")
+                            "kho này» ở trang «📥 Đồng bộ kênh gốc».")
                         st.dataframe(pd.DataFrame([{
                             "STT": d.stt, "Tên đang dùng": d.ten_video,
                             "Tên file": d.ten_file, "Lý do": d.ghi_chu}
                             for d in can_kiem]), width="stretch", hide_index=True)
 
                 if not sx_dsv.san_sang():
-                    st.caption("Chưa kết nối được Google Sheets — mở «📊 Google "
+                    st.warning("Chưa kết nối được Google Sheets — mở «📊 Google "
                                "Sheets» ở thanh bên: dán link bảng tính, bấm «🔌 "
                                "Kiểm tra kết nối», và chia sẻ quyền «Người chỉnh "
                                "sửa» cho địa chỉ email hiện ở đó.")
@@ -2363,8 +2338,7 @@ def _trang_ds_kho() -> None:
 O_LINK_QUET_YT = "quet_yt_links"  # tab «🔎 Tìm video nghi vấn» ghi link vào ô này
 def _trang_quet_youtube() -> None:
     st.subheader("Quét video YouTube dài")
-    st.caption("Hệ thống chỉ tải RIÊNG phần audio (video 30 tiếng ≈ 1–2 GB thay vì vài chục GB). "
-               "Đứt mạng cứ chạy lại — sẽ tải tiếp từ chỗ dừng.")
+    st.caption("Chỉ tải phần audio (video 30 tiếng ≈ 1–2 GB). Đứt mạng cứ chạy lại — tải tiếp từ chỗ dừng.")
 
     links_text = st.text_area("Dán link YouTube — mỗi dòng một link", height=160, key=O_LINK_QUET_YT,
                               placeholder="https://www.youtube.com/watch?v=xxxxxxxxxxx\n"
@@ -2378,16 +2352,16 @@ def _trang_quet_youtube() -> None:
         ["Mỗi video tự chọn kết quả", "Một video gốc chung cho cả lô"],
         index=0, horizontal=True, key="che_do_chon_ket_qua",
         help="«Một video gốc chung cho cả lô»: tìm MỘT clip gốc trong kho có mặt ở TẤT CẢ "
-             "các link (để gom một khiếu nại), kèm một đoạn bằng chứng cho từng video.",
+             "các link (để gom một khiếu nại), kèm một đoạn bằng chứng cho từng video. Tool quét TRỌN "
+             "video ngắn nhất làm mốc rồi xác minh ứng viên mạnh nhất trên các video còn lại (tối đa 2 lượt "
+             "bổ sung mỗi video).",
      persist_state="session")
     nguon_chung_bat = che_do == "Một video gốc chung cho cả lô"
     thieu_link = nguon_chung_bat and len(set(links)) < 2
     if nguon_chung_bat:
         st.caption(
-            "Tool lấy thông tin cả lô trước, quét TRỌN video ngắn nhất làm mốc, rồi xác minh "
-            "ứng viên mạnh nhất trên các video còn lại; cần thì quét bổ sung (tối đa 2 lượt "
-            "mỗi video). Trong lúc chạy, Giám sát tự động và tạo kho phải chờ. Không ghi "
-            "lịch sử, chưa có đích gửi Google Sheets — tải CSV ở cuối."
+            "Chế độ này không ghi lịch sử, không gửi Google Sheets — tải CSV ở cuối. "
+            "Trong lúc chạy, Giám sát tự động và tạo kho phải chờ."
             + ("" if eng.config.keep_downloads else
                " ⚠️ «Giữ lại audio đã tải» đang tắt nên lượt quét lại sẽ phải tải lại."))
         if links and thieu_link:
@@ -2397,9 +2371,8 @@ def _trang_quet_youtube() -> None:
         ghvd = st.radio(
             "Giới hạn quét video dài", list(NHAN_GHVD), format_func=NHAN_GHVD.get, index=0,
             horizontal=True, key="gioi_han_video_dai",
-            help="Video dài hơn 6 giờ chỉ được TẢI và quét phần đầu — giới hạn đặt ngay ở đường tải, "
-                 "không tải trọn rồi cắt; phần đầu không thấy gì cũng KHÔNG tự tải tiếp. Video không "
-                 "quá 6 giờ quét như bình thường. Kết quả ghi rõ phần đã quét và phần chưa quét.", persist_state="session")
+            help="Video dài hơn 6 giờ chỉ TẢI và quét phần đầu (không tải trọn rồi cắt); phần đầu không thấy gì "
+                 "cũng KHÔNG tự tải tiếp. Video không quá 6 giờ quét như bình thường. Kết quả ghi rõ phần đã quét.", persist_state="session")
         if ghvd == GHVD_TOAN_BO:
             st.warning("«Quét toàn bộ video» tải trọn rồi quét hết, không dừng sớm: video rất dài có thể "
                        "phải tải hàng chục GB (video 66 giờ ≈ 18 GB) và chạy nhiều giờ.")
@@ -2415,13 +2388,12 @@ def _trang_quet_youtube() -> None:
             chay_quet(links, "youtube", dich_id=dich_yt, tu_dong=tu_dong_yt, tab_key="quet_yt",
                       gioi_han_video_dai=ghvd)
     if not env["database"]:
-        st.warning("Chưa có kho vân tay — hãy làm tab «Kho clip gốc» trước.")
+        st.warning("Chưa có kho vân tay — hãy làm ở trang «🎬 Kho clip gốc» trước.")
 
 # ---------------------------------------------------------------- TAB 4
 def _trang_quet_file() -> None:
     st.subheader("Quét video/audio dài có sẵn trong máy")
-    st.caption("Nhập đường dẫn FILE hoặc THƯ MỤC. Không dùng nút upload để tránh "
-               "phải copy file hàng chục GB.")
+    st.caption("Nhập đường dẫn FILE hoặc THƯ MỤC (không cần tải file lên).")
 
     st.session_state.thu_muc_quet_gan_nhat = st.text_input(
         "Đường dẫn file hoặc thư mục",
@@ -2469,8 +2441,8 @@ def _trang_lich_su() -> None:
                     else:
                         st.success(f"Đã kiểm {len(_ket_kv)} video.")
         if _co_khoa_api:
-            st.caption(f"Mỗi lần kiểm {len(_vi_pham)} video tốn khoảng {kiem_video_con.so_don_vi(len(_vi_pham))} đơn "
-                       "vị hạn mức YouTube Data API (10.000 đơn vị mỗi ngày) — không dùng yt-dlp.")
+            st.caption(f"Mỗi lần kiểm {len(_vi_pham)} video tốn khoảng {kiem_video_con.so_don_vi(len(_vi_pham))} đơn vị "
+                       "(hạn mức YouTube Data API: 10.000 đơn vị mỗi ngày).")
         else:
             st.caption("Nút kiểm cần khoá YouTube Data API — không kiểm bằng yt-dlp. " + thoat_markdown(
                 _khoa_api.ly_do if _khoa_api.ma == youtube_api.SAI_DANG else f"Đặt file khoá ở {_khoa_api.duong_dan}."))
@@ -2491,7 +2463,7 @@ def _trang_lich_su() -> None:
         st.divider()
     jobs = eng.list_jobs(200)
     if len(jobs) >= 200:   # audit 09/11: trước đây lặng lẽ cắt
-        st.caption("Chỉ hiện 200 lần quét gần nhất. Các lần cũ hơn vẫn được lưu trong lịch sử, chỉ không hiện ở bảng này.")
+        st.caption("Chỉ hiện 200 lần quét gần nhất — các lần cũ hơn vẫn được lưu.")
     if not jobs:
         st.info("Chưa có lần quét nào.")
     else:
@@ -2524,8 +2496,7 @@ def _trang_lich_su() -> None:
             # (audit P1-02) — dữ liệu khớp bên dưới vẫn xem được.
             st.error("⛔ " + bc_chon.thong_bao())
         elif bc_chon is not None:
-            st.caption("📄 Báo cáo của lần quét này được chụp lúc quét (chính sách báo cáo "
-                       "V2) — tải lại luôn ra đúng tên, ngày, link như lúc quét.")
+            st.caption("📄 Báo cáo được lưu lúc quét — tải lại luôn ra đúng tên, ngày, link như lúc quét.")
             ngang_chon = eng.dong_bao_cao_job(chon, dang_ngang=True) or []
             doc_chon = eng.dong_bao_cao_job(chon, dang_ngang=False) or []
             ch1, ch2 = st.columns(2)
@@ -2546,9 +2517,8 @@ def _trang_lich_su() -> None:
                     file_name=f"baocao_doc_job{chon}.csv", mime="text/csv",
                     key=f"ls_doc_{chon}")
         else:
-            st.caption("Lần quét cũ (trước báo cáo V2): lịch sử không lưu tên, ngày đăng hay "
-                       "link video gốc nên không dựng lại được báo cáo đã xuất lúc đó — bên "
-                       "dưới chỉ là dữ liệu khớp.")
+            st.caption("Lần quét cũ: lịch sử không lưu tên, ngày đăng, link video gốc nên không dựng lại được "
+                       "báo cáo — bên dưới chỉ là dữ liệu khớp.")
         ms = eng.job_matches(chon)
         if ms:
             df = pd.DataFrame([{
@@ -2560,9 +2530,8 @@ def _trang_lich_su() -> None:
             } for m in ms])
             st.dataframe(df, width="stretch", hide_index=True)
             if bc_chon is not None and not loi_bc_chon:
-                st.caption("Bảng trên là số đo vân tay của lượt quét (chẩn đoán). «Đoạn vi phạm» để khiếu nại nằm "
-                           "trong 2 báo cáo tải ở trên — lượt quét bật ô «🎯 Tinh chỉnh mốc từng giây» thì dòng nào "
-                           "tinh chỉnh được dùng mốc từng giây, dòng không tinh chỉnh được giữ mốc của lượt quét.")
+                st.caption("Bảng trên là số đo kỹ thuật. «Đoạn vi phạm» để khiếu nại nằm trong 2 báo cáo tải ở "
+                           "trên (đã dùng mốc tinh chỉnh từng giây nếu lượt quét bật ô đó).")
             if not loi_bc_chon:
                 # Bảng hiển thị giữ nguyên; chỉ bản CSV tải về chặn công thức ở tầng ghi như
                 # mọi đường xuất CSV khác (tên clip kho máy có thể bắt đầu bằng = + - @).
@@ -2609,8 +2578,8 @@ def _dua_vao_o_quet(links: list) -> None:
 
 def _trang_tim_nghi_van() -> None:
     st.subheader("Tìm video nghi vấn theo tiêu đề clip gốc")
-    st.caption("Tìm trên YouTube (YouTube Data API) các video có tiêu đề giống tiêu đề clip gốc của kho — chỉ TÌM, không "
-               "tải, không quét. Chọn video muốn kiểm rồi đưa sang tab «▶️ Quét YouTube».")
+    st.caption("Tìm trên YouTube các video có tiêu đề giống clip gốc của kho — chỉ TÌM, không tải, không quét. "
+               "Chọn video rồi đưa sang trang «▶️ Quét YouTube».")
     tt_khoa = youtube_api.trang_thai_khoa(eng.data_dir)
     if tt_khoa.ma == youtube_api.SAI_DANG:
         st.error(f"Khoá YouTube Data API không dùng được: {tt_khoa.ly_do} (file ở `{tt_khoa.duong_dan}`)")
@@ -2618,13 +2587,13 @@ def _trang_tim_nghi_van() -> None:
         st.warning("Tìm video nghi vấn cần khoá YouTube Data API: đặt file khoá (một dòng, bắt đầu bằng «AIza») ở "
                    f"`{tt_khoa.duong_dan}` rồi tải lại trang (F5).")
     if not khos:
-        st.warning("Chưa có kho nào — tạo ở tab «Kho clip gốc».")
+        st.warning("Chưa có kho nào — tạo ở trang «🎬 Kho clip gốc».")
     else:
         tens_tim = [k["ten"] for k in khos]
         ten_tim = st.selectbox("Kho", tens_tim, key="tim_kho",
                                index=tens_tim.index(eng.kho_dang_dung) if eng.kho_dang_dung in tens_tim else 0, persist_state="session")
         if ten_tim != eng.kho_dang_dung:
-            st.info(f"Tab «▶️ Quét YouTube» quét bằng kho đang dùng ở thanh bên («{eng.kho_dang_dung}»), cột «Đã quét "
+            st.info(f"Trang «▶️ Quét YouTube» quét bằng kho đang dùng ở thanh bên («{eng.kho_dang_dung}»), cột «Đã quét "
                     f"chưa» cũng tính theo kho đó — muốn quét với kho «{ten_tim}», đổi kho ở thanh bên.")
         clips_tim = tim_nghi_van.clip_cua_kho(next(k.get("thu_muc") or "" for k in khos if k["ten"] == ten_tim))
         theo_khoa = {c.khoa: c for c in clips_tim}
@@ -2642,7 +2611,9 @@ def _trang_tim_nghi_van() -> None:
                                       format_func=tim_nghi_van.NHAN_THOI_LUONG.get, key="tim_thoi_luong", persist_state="session")
         with c_td:
             toi_da_tim = st.number_input("Tối đa số truy vấn mỗi lần bấm", 1, tim_nghi_van.TOI_DA,
-                                         tim_nghi_van.TOI_DA_MAC_DINH, key="tim_toi_da", persist_state="session")
+                                         tim_nghi_van.TOI_DA_MAC_DINH, key="tim_toi_da", persist_state="session",
+                                         help="Thời lượng và kênh của video tìm được lấy thêm bằng videos.list — hạn mức "
+                                              "riêng 10.000 đơn vị/ngày, khoảng 1 đơn vị cho 50 video.")
         with c_ng:
             sau_tim = st.date_input("Chỉ video đăng từ ngày (bỏ trống = mọi lúc)", value=None, format="DD/MM/YYYY",
                                     key="tim_sau", persist_state="session")
@@ -2652,9 +2623,7 @@ def _trang_tim_nghi_van() -> None:
         if len(ds_tv) > len(chay_tv):
             st.caption(f"Có {len(ds_tv)} truy vấn — chỉ chạy {len(chay_tv)} truy vấn đầu (tăng «Tối đa số truy vấn» hoặc "
                        "bỏ bớt clip).")
-        st.caption("Mỗi truy vấn = 1 lượt trong hạn mức tìm kiếm 100 lượt/ngày (đặt lại khoảng 14–15 giờ chiều giờ Việt "
-                   "Nam). Thời lượng và kênh gốc lấy thêm bằng videos.list — hạn mức riêng 10.000 đơn vị, khoảng 1 đơn vị "
-                   "cho 50 video.")
+        st.caption("Mỗi truy vấn tốn 1 trong 100 lượt tìm mỗi ngày (đặt lại khoảng 14–15 giờ chiều giờ Việt Nam).")
         # Đọc/ghi st.session_state cũng là điểm nhường: thao tác của người dùng lúc đang tìm chen lượt chạy lại ở điểm
         # nhường đầu tiên sau tim(). Lấy sẵn dict lưu kết quả ở đây, sau tim() chỉ ghi dict thường — không mất kết quả đã
         # tốn hạn mức.
@@ -2693,13 +2662,12 @@ def _trang_tim_nghi_van() -> None:
                     on_select="rerun", selection_mode="multi-row", hide_index=True,
                     column_config={"Tiêu đề": st.column_config.TextColumn(width="large"),
                                    "Link": st.column_config.LinkColumn()})
-                st.caption("Bấm ô đầu dòng để chọn video. «Đã quét chưa» = đã kiểm xong với kho đang dùng (có kết quả, "
-                           "hoặc đã quét trọn mà không thấy) — cùng cách tính với Giám sát.")
+                st.caption("Bấm ô đầu dòng để chọn video. «Đã quét chưa» = đã quét xong với kho đang dùng.")
                 links_tim = [dong_tim[i]["Link"] for i in su_kien.selection.rows]
                 st.button(f"➡️ Đưa {len(links_tim)} video đã chọn vào ô quét YouTube", key="tim_dua",
                           on_click=_dua_vao_o_quet, args=(links_tim,), disabled=not links_tim)
                 if st.session_state.pop("tim_da_dua", 0):
-                    st.success("Đã đưa link vào ô «Dán link YouTube» — mở tab «▶️ Quét YouTube» để quét (tool không tự "
+                    st.success("Đã đưa link vào ô «Dán link YouTube» — mở trang «▶️ Quét YouTube» để quét (tool không tự "
                                "quét). Link đã có sẵn trong ô thì không thêm lại.")
 
 # ---------------------------------------------------------------- THỐNG KÊ (chỉ đọc lịch sử)
@@ -2728,12 +2696,12 @@ def _trang_thong_ke() -> None:
         m1, m2, m3, m4, m5 = st.columns(5)
         m1.metric("Số lần quét", tke.so_lan_quet, help="Tính cả lần quét lỗi / đã huỷ.")
         m2.metric("Lỗi / đã huỷ", tke.so_lan_loi)
-        m3.metric("Video vi phạm", tke.so_video_vi_pham, help="Video có ít nhất một đoạn khớp clip gốc.")
+        m3.metric("Video vi phạm", tke.so_video_vi_pham, help="Video có ít nhất một đoạn khớp clip gốc. Mỗi cặp video "
+                  "vi phạm – clip gốc tính một lần (số đoạn và số giây lớn nhất trong các lần quét).")
         m4.metric("Đoạn khớp", tke.so_doan_khop)
         m5.metric("Tổng thời lượng khớp", hhmmss(tke.tong_giay_khop))
         st.caption(f"Lần quét đầu: {format_publication_date(tke.ngay_dau) or '—'} · gần nhất: "
-                   f"{format_publication_date(tke.ngay_cuoi) or '—'}. Quét lại một video không làm tăng số liệu: mỗi "
-                   "cặp video vi phạm – clip gốc tính một lần (số đoạn và số giây lớn nhất trong các lần quét). Lần "
+                   f"{format_publication_date(tke.ngay_cuoi) or '—'}. Quét lại một video không làm tăng số liệu; lần "
                    "quét lỗi / đã huỷ không tính vào vi phạm.")
         if tke.so_video_vi_pham:
             st.markdown("**📺 Kênh vi phạm nhiều nhất**")
@@ -2744,12 +2712,11 @@ def _trang_thong_ke() -> None:
                 } for k in tke.kenh]), width="stretch", hide_index=True,
                     column_config={"Link kênh": st.column_config.LinkColumn()})
             if tke.video_chua_ro_kenh:
-                st.caption(f"{tke.video_chua_ro_kenh} video vi phạm chưa rõ kênh: lần quét trước báo cáo V2 (lịch sử "
-                           "cũ không lưu kênh), quét file trong máy, YouTube không trả tên kênh, hoặc báo cáo V2 "
-                           "không đọc được.")
+                st.caption(f"{tke.video_chua_ro_kenh} video vi phạm chưa rõ kênh (lần quét cũ, quét file trong máy, "
+                           "hoặc YouTube không trả tên kênh).")
             if tke.anh_chup_khong_doc_duoc:
-                st.warning(f"⚠️ {tke.anh_chup_khong_doc_duoc} video vi phạm chỉ có báo cáo V2 không đọc được — chưa "
-                           "rõ kênh (đoạn khớp của chúng vẫn được tính). Quét lại các video đó để có báo cáo mới.")
+                st.warning(f"⚠️ {tke.anh_chup_khong_doc_duoc} video vi phạm có báo cáo không đọc được nên chưa "
+                           "rõ kênh (đoạn khớp vẫn được tính). Quét lại các video đó để có báo cáo mới.")
             st.markdown("**🎬 Clip gốc bị dùng nhiều nhất**")
             st.dataframe(pd.DataFrame([{
                 "Clip gốc": c["clip"], "Tên video gốc (lúc quét)": c["tieu_de"], "Video vi phạm": c["so_video"],
@@ -2784,7 +2751,7 @@ def _ve_o_kho() -> None:
                 eng.use_kho(chon)
                 st.rerun()
         else:
-            st.warning("Chưa có kho nào — tạo ở tab «Kho clip gốc».")
+            st.warning("Chưa có kho nào — tạo ở trang «🎬 Kho clip gốc».")
 
         if clips:
             st.info(f"Kho «{eng.kho_dang_dung}» có **{len(clips)}** clip gốc.")

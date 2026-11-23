@@ -365,7 +365,7 @@ def liet_ke_kho(
 
     if not thu_muc:
         raise LoiKho(
-            f"Kho «{ten_kho}» chưa gán thư mục. Vào tab «Kho clip gốc» để đặt "
+            f"Kho «{ten_kho}» chưa gán thư mục. Vào trang «🎬 Kho clip gốc» để đặt "
             f"đường dẫn thư mục chứa audio của kho này.")
     if not os.path.isdir(thu_muc):
         raise LoiKho(
@@ -389,7 +389,7 @@ def liet_ke_kho(
         canh_bao.append(
             f"Kho «{ten_kho}» chưa có file clips_meta.json — mọi tên video đang "
             f"phải suy từ tên file nên có thể mất dấu câu và bị cắt ở 80 ký tự. "
-            f"Bấm «🌐 Lấy lại tên video thật cho kho này» ở tab «Đồng bộ kênh gốc» "
+            f"Bấm «🌐 Lấy lại tên video thật cho kho này» ở trang «📥 Đồng bộ kênh gốc» "
             f"để hỏi YouTube tên đúng. (Lưu ý: chạy lại «Đồng bộ kênh gốc» KHÔNG "
             f"cứu được, vì nó chỉ ghi metadata cho video tải MỚI.)")
     muc_hong = frozenset(
@@ -508,7 +508,7 @@ def liet_ke_theo_ten_kho(
     """
     ten = (ten_kho or "").strip()
     if not khos:
-        raise LoiKho("Chưa có kho nào. Tạo kho ở tab «Kho clip gốc».")
+        raise LoiKho("Chưa có kho nào. Tạo kho ở trang «🎬 Kho clip gốc».")
     kho = next((k for k in khos if k.get("ten") == ten), None)
     if kho is None:
         co_gi = ", ".join(str(x.get("ten")) for x in khos)

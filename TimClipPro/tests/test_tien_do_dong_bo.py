@@ -438,7 +438,7 @@ def test_ui_hien_kpi_tien_do_tai_va_nen():
                  "eta": 4, "info_dict": {"format_id": "18", "ext": "mp4", "vcodec": "avc1", "acodec": "mp4a"}})
     a = so.anh()
     kpi = {n: (v, phu) for n, v, _, phu in ui.the_kpi(a)}
-    assert kpi["Đã có (giữ nguyên)"][0] == "74" and kpi["Còn lại (ETA)"] == ("—", "Đang ước tính")
+    assert kpi["Đã có (giữ nguyên)"][0] == "74" and kpi["Còn lại (ước tính)"] == ("—", "Đang ước tính")
     dong = ui.dong_video(a)
     tai = [x for x in dong if x[0] == "tai"][0]
     assert tai[2] == pytest.approx(0.4) and "10.5 MB/s" in tai[1] and "30.0 MB / 75.0 MB" in tai[1]
@@ -460,7 +460,7 @@ def test_ui_kpi_gia_tri_ngan_khong_bi_cat_va_dang_uoc_tinh_van_hien():
     so.liet_ke_xong(1263)
     so.ke_hoach(da_co=74, can_tai=1189, han_che_bo_qua=0, se_thu=1189)
     kpi = {n: (v, phu) for n, v, _, phu in ui.the_kpi(so.anh())}
-    assert kpi["Còn lại (ETA)"] == ("—", "Đang ước tính")
+    assert kpi["Còn lại (ước tính)"] == ("—", "Đang ước tính")
     for i in range(40):                                    # lượt dài: 40 video × 1000 s ≈ 11 giờ
         so.video_bat_dau(i + 1, 1189, _ma(i), f"Video {i}")
         dh.tien(1000)
@@ -470,7 +470,7 @@ def test_ui_kpi_gia_tri_ngan_khong_bi_cat_va_dang_uoc_tinh_van_hien():
     kpi = {n: (v, phu) for n, v, _, phu in the}
     assert kpi["Thời gian chạy"][0] == "11:06:40"
     assert kpi["Tốc độ (video/giờ)"] == ("3.6", "0.6 giờ audio/giờ")
-    eta, phu = kpi["Còn lại (ETA)"]
+    eta, phu = kpi["Còn lại (ước tính)"]
     assert eta.count(":") == 2 and "tin cậy" in phu
 
     class StGhi:
@@ -583,7 +583,7 @@ def _kiem_khung_dong_bo(at, khung_s, huy):
     assert "Đang đồng bộ kênh" in chu and "Video 7/1189: Video đang tải" in chu
     nhan = {m.label for m in at.metric}
     assert {"Đã có (giữ nguyên)", "Tải mới", "Lỗi", "Bị hạn chế", "Chưa thử", "Thời gian chạy", "Tốc độ (video/giờ)",
-            "Còn lại (ETA)"} <= nhan
+            "Còn lại (ước tính)"} <= nhan
     assert any(m.label == "Đã có (giữ nguyên)" and m.value == "74" for m in at.metric)
     assert len(at.dataframe) >= 1
     assert khung_s < 2.0, f"một khung hình tiến độ mất {khung_s:.2f} s"

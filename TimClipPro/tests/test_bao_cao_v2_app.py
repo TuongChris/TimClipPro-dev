@@ -32,7 +32,7 @@ def test_lich_su_v2_tai_lai_tu_anh_chup(tmp_path, monkeypatch):
     assert not at.exception
     chon = next(sb for sb in at.selectbox if sb.label == "Xem chi tiết lần quét số")
     assert chon.value == id_moi
-    assert any("chính sách báo cáo V2" in c.value for c in at.caption)
+    assert any("Báo cáo được lưu lúc quét" in c.value for c in at.caption)
     nut = [el.proto.label for el in at.get("download_button")]
     assert "⬇️ Tải báo cáo ngang (34 cột)" in nut and "⬇️ Tải báo cáo dọc (16 cột)" in nut
     eng = at.session_state.eng
@@ -42,7 +42,7 @@ def test_lich_su_v2_tai_lai_tu_anh_chup(tmp_path, monkeypatch):
 
     at = chon.set_value(id_cu).run()
     assert not at.exception
-    assert any("Lần quét cũ (trước báo cáo V2)" in c.value for c in at.caption)
+    assert any("Lần quét cũ:" in c.value for c in at.caption)
     nut = [el.proto.label for el in at.get("download_button")]
     assert "⬇️ Tải báo cáo ngang (34 cột)" not in nut
 

@@ -358,7 +358,7 @@ def test_tab_ghep_video_goi_dung_ham(tmp_path, monkeypatch):
     next(t for t in at.text_input if t.label == "Thư mục lưu video ghép").input(
         str(tmp_path / "ra")
     ).run()
-    next(t for t in at.text_input if t.label.startswith("Tên file video ghép")).input(
+    next(t for t in at.text_input if t.label.startswith("Tên file ghép")).input(
         "Joe dài"
     ).run()
     at.button(key="bat_dau_ghep_video").click().run()

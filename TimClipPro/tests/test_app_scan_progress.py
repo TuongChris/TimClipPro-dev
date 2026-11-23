@@ -85,7 +85,7 @@ def test_man_hinh_quet_hien_tien_do_va_bang_tung_video_khi_dang_chay(tmp_path, m
     assert len(khung) == 3
     ghep = "\n".join(khung)
     assert "Đang quét video" in ghep
-    assert "Hoàn tất" in ghep and "ETA" in ghep and "Đã chạy" in ghep
+    assert "Hoàn tất" in ghep and "Còn lại" in ghep and "Đã chạy" in ghep
     assert any(x in ghep for x in ("Đang lấy thông tin video", "Đang tải audio",
                                    "Đang so khớp vân tay"))
     # Bảng từng video được vẽ -> phải có dataframe trên trang.
