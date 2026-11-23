@@ -83,7 +83,7 @@ def the_kpi(anh: AnhDongBo) -> list:
         ("Thời gian chạy", dong_ho(anh.chay_s), "giờ:phút:giây", ""),
         ("Tốc độ (video/giờ)", "—" if vmg is None else f"{vmg:,.1f}", "Số video xử lý xong mỗi giờ, tính trên thời "
          "gian đã chạy.", "" if anh.media_gio_moi_gio is None else f"{anh.media_gio_moi_gio:,.1f} giờ audio/giờ"),
-        ("Còn lại (ETA)", "—" if anh.eta_s is None else dong_ho(anh.eta_s), anh.eta_ly_do, phu_eta(anh)),
+        ("Còn lại (ước tính)", "—" if anh.eta_s is None else dong_ho(anh.eta_s), anh.eta_ly_do, phu_eta(anh)),
     ]
 
 

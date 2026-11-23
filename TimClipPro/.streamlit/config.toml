@@ -1,0 +1,5 @@
+# Cấu hình Streamlit đi kèm bản phát hành. Streamlit 1.62 đọc .streamlit/config.toml cạnh app.py dù tiến trình
+# chạy ở thư mục nào (launcher managed chạy ở state root) — streamlit/config.py get_config_files.
+# "viewer": ẩn nút Deploy và menu dành cho lập trình viên (chạy lại, xoá cache) với người dùng cuối.
+[client]
+toolbarMode = "viewer"

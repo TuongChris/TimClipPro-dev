@@ -54,8 +54,7 @@ def _ban_dang_chay() -> str:
 def ve_phien_ban(eng) -> None:
     goc = os.environ.get("TIMCLIP_INSTALLATION_ROOT", "")
     if os.environ.get("TIMCLIP_RUNTIME_MODE") != "managed" or not goc:
-        st.caption("Bản phát triển (chế độ legacy) — không tự cập nhật; cập nhật mã do người phát triển "
-                   "quản lý.")
+        st.caption("Bản phát triển — không tự cập nhật (người phát triển cập nhật mã).")
         return
     try:
         cd = mu.CaiDat(goc=goc, state_root=os.path.dirname(eng.data_dir))

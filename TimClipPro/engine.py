@@ -1977,7 +1977,7 @@ class Engine:
         if can_ytdlp and not env["yt_dlp"]:
             thieu.append("thư viện yt-dlp (chạy: pip install -U yt-dlp)")
         if can_db and not env["database"]:
-            thieu.append("kho vân tay clip gốc (hãy tạo ở tab \"Kho clip gốc\")")
+            thieu.append("kho vân tay clip gốc (hãy tạo ở trang \"Kho clip gốc\")")
         if thieu:
             raise RuntimeError("Còn thiếu: " + "; ".join(thieu))
 
@@ -3006,7 +3006,7 @@ class Engine:
                 return
             raise RuntimeError(
                 f"Không bổ sung: kho «{ten_kho}» đang gắn với thư mục «{cu}», còn thư mục vừa chọn là «{thumuc}». "
-                f"Nạp vào sẽ TRỘN clip của nguồn khác vào kho «{ten_kho}». Tạo kho riêng cho thư mục này (tab «Kho "
+                f"Nạp vào sẽ TRỘN clip của nguồn khác vào kho «{ten_kho}». Tạo kho riêng cho thư mục này (trang «Kho "
                 "clip gốc» → «Tạo kho mới») rồi chọn kho đó; còn nếu chủ ý chuyển kho sang thư mục mới thì dùng «Tạo "
                 "lại kho từ đầu» (thay toàn bộ vân tay, phải xác nhận).")
         nguon = self.thu_muc_nguon_tu_van_tay(ds_cu)
@@ -6940,7 +6940,7 @@ class Engine:
         self._td(ghi=f"Đã lưu lịch sử (lần quét #{job_id})")
         if da_xep_hang:
             outbox.danh_thuc(self.sqlite_file)      # SAU commit: người gửi nền gửi ngay
-            self._td(ghi="Đã xếp hàng gửi Google Sheets (gửi nền, xem tab «📤 Gửi Google Sheets»)")
+            self._td(ghi="Đã xếp hàng gửi Google Sheets (gửi nền, xem trang «📤 Gửi Google Sheets»)")
         return job_id
 
     @property

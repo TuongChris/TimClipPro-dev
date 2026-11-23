@@ -60,8 +60,8 @@ def dam_bao_nguoi_gui(eng, *, bat_buoc: bool = False) -> None:
 def chon_dich(eng, *, key: str, nguon_chung: bool = False) -> tuple:
     """Hộp chọn «Đích gửi» + «Tự động gửi khi từng video hoàn tất». Trả ``(dich_id, tu_dong)``."""
     if nguon_chung:
-        st.caption("📤 Chế độ «Một video gốc chung cho cả lô» chưa có hợp đồng Google Sheets riêng — "
-                   "chưa hỗ trợ đích gửi; kết quả chỉ xuất CSV.")
+        st.caption("📤 Chế độ «Một video gốc chung cho cả lô» chưa hỗ trợ gửi Google Sheets — "
+                   "kết quả chỉ xuất CSV.")
         return CHI_LUU, False
     ds = sd.ds_dich(_db(eng), bo_luu_tru=True)
     lua_chon = [CHI_LUU] + [d.id for d in ds]
@@ -87,7 +87,7 @@ def chon_dich(eng, *, key: str, nguon_chung: bool = False) -> tuple:
         st.session_state[khoa_chon] = tu_dong
         st.caption("Đích được GHIM lúc bấm Bắt đầu: đổi lựa chọn giữa chừng chỉ áp dụng cho lượt sau.")
     elif not ds:
-        st.caption("Chưa có hồ sơ đích nào — tạo ở tab «📤 Gửi Google Sheets».")
+        st.caption("Chưa có hồ sơ đích nào — tạo ở trang «📤 Gửi Google Sheets».")
     return chon, tu_dong
 
 
@@ -202,8 +202,8 @@ def nut_gui_cho_job(eng, job_ids: list, *, key: str) -> None:
     if not job_ids or not ds:
         return
     with st.expander("📤 Gửi thêm (thủ công) tới Google Sheets", expanded=False):
-        st.caption("Dùng khi lượt quét chỉ lưu cục bộ, hoặc muốn gửi thêm một bản sang bảng khác. "
-                   "Dòng dựng lại từ ảnh chụp báo cáo đã lưu — không quét lại.")
+        st.caption("Dùng khi lượt quét chỉ lưu cục bộ, hoặc muốn gửi thêm sang bảng khác "
+                   "(dựng lại từ báo cáo đã lưu, không quét lại).")
         nhan = {d.id: d.nhan for d in ds}
         dich = st.selectbox("Gửi tới", list(nhan), format_func=nhan.get, key=f"{key}_dich", persist_state="session")
         trung = st.checkbox("Tôi hiểu có thể tạo dòng TRÙNG nếu đã gửi trước đó",
@@ -211,7 +211,7 @@ def nut_gui_cho_job(eng, job_ids: list, *, key: str) -> None:
         if st.button("📤 Tạo việc gửi", key=f"{key}_nut"):
             tao, bo_qua, can = gui_thu_cong(eng, job_ids, dich, cho_phep_trung=trung)
             if tao:
-                st.success(f"Đã xếp {tao} việc gửi (lưu bền) — xem tab «📤 Gửi Google Sheets».")
+                st.success(f"Đã xếp {tao} việc gửi — xem trang «📤 Gửi Google Sheets».")
             for x in bo_qua:
                 st.warning(x)
             if can and not trung:
@@ -281,7 +281,7 @@ def _ve_hang_doi(eng) -> None:
         # khác — nút khoá chung sẽ áp cú bấm lên việc đó (đánh dấu «đã có trên Sheet» một việc chưa gửi).
         st.caption(f"Mã việc {v.id} · lần quét #{v.job_id} · máy {v.dich.installation_id[:8] if _dich_doc_duoc(v) else '?'}")
         if v.trang_thai == outbox.UNKNOWN:
-            st.warning("Request có thể đã tới Google mà phản hồi bị mất — tool KHÔNG tự gửi lại. Mở "
+            st.warning("Không rõ đã gửi chưa (phản hồi từ Google bị mất) — tool KHÔNG tự gửi lại. Mở "
                        "Sheet, tìm dòng của lần quét này: có rồi thì bấm «Đã có trên Sheet»; chưa "
                        "có thì «Gửi lại» (chấp nhận khả năng trùng).")
             tab = outbox.tab_da_ghim(_db(eng), v)
@@ -366,7 +366,7 @@ def _ve_ho_so(eng) -> None:
     xt = sd.ds_xac_thuc(db)
     with st.expander("➕ Thêm hồ sơ đích", expanded=not ds):
         if not xt:
-            st.info("Cần đăng ký khoá Google (binding) trước — mục bên dưới.")
+            st.info("Cần đăng ký khoá Google trước — mục «Khoá Google trên máy này» bên dưới.")
         else:
             ten = st.text_input("Tên hồ sơ (để không gửi nhầm)", key="hs_ten", persist_state="session")
             link = st.text_input("Link Google Sheet (mở đúng TAB rồi chép link — có «#gid=…»)",
@@ -416,8 +416,8 @@ def _ve_ho_so(eng) -> None:
                 if st.button("🗑 Xoá (chỉ khi chưa có việc gửi)", key=f"hs_xoa_{d.id}"):
                     if _thu(sd.xoa_dich, db, d.id):
                         st.rerun()
-            st.caption("Sửa = revision MỚI: lượt quét đang chạy và việc đã xếp hàng vẫn gửi theo đích cũ đã "
-                       "ghim; chỉ lượt sau dùng revision mới.")
+            st.caption("Sửa chỉ áp dụng cho lượt sau (bản sửa = «revision» mới): lượt đang chạy và việc đã xếp "
+                       "hàng vẫn gửi theo đích cũ.")
             khoa_ds = [x.ref for x in sd.ds_xac_thuc(db) if x.trang_thai == sd.TT_HOAT_DONG]
             if khoa_ds:
                 k1, k2 = st.columns([3, 2])
@@ -481,10 +481,11 @@ def _ve_nhap_link_cu(eng) -> None:
         return
     if any(d.nguon == sd.NGUON_LINK_CU for d in sd.ds_dich(_db(eng))):
         return
-    st.info("Cấu hình cũ có link Google Sheet. Bấm để tạo hồ sơ đích từ link đó — giống bản cũ: luôn "
-            "tab tên «KetQuaQuet» (mã tab trong link được bỏ qua; mã thật chốt ở lần gửi đầu), khoá mặc "
-            "định — sau đó chọn hồ sơ này ở ô «Đích gửi» khi quét.")
-    if st.button("Tạo hồ sơ từ link cũ", key="nhap_link_cu"):
+    st.info("Cấu hình cũ có link Google Sheet. Bấm để tạo hồ sơ đích từ link đó (tab «KetQuaQuet», khoá mặc "
+            "định), rồi chọn hồ sơ này ở ô «Đích gửi» khi quét.")
+    if st.button("Tạo hồ sơ từ link cũ", key="nhap_link_cu",
+                 help="Giống bản cũ: luôn ghi vào tab tên «KetQuaQuet» — mã tab trong link được bỏ qua, mã thật "
+                      "chốt ở lần gửi đầu."):
         try:
             dang = (sd.SCHEMA_NGANG if st.session_state.get("sheet_dang_ngang", True)
                     else sd.SCHEMA_DOC)
@@ -498,9 +499,8 @@ def _ve_nhap_link_cu(eng) -> None:
 
 def ve_tab(eng) -> None:
     st.subheader("📤 Gửi Google Sheets")
-    st.caption("Mỗi lượt quét chọn một đích; kết quả từng video được XẾP HÀNG BỀN cùng lúc lưu lịch "
-               "sử rồi gửi ngay. Tắt app / mất điện không làm mất việc đã xếp. Việc không rõ đã gửi "
-               "chưa được giữ lại để bạn đối soát — tool không tự gửi lại mù.")
+    st.caption("Mỗi lượt quét chọn một đích. Kết quả từng video được xếp hàng rồi gửi ngay — tắt app hay "
+               "mất điện cũng không mất. Việc không rõ đã gửi chưa được giữ lại để bạn kiểm, tool không tự gửi lại.")
     _ve_nhap_link_cu(eng)
     st.markdown("**Hàng đợi gửi**")
     _ve_hang_doi(eng)

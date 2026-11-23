@@ -104,8 +104,8 @@ def dong_nhip(anh, bay_gio: Optional[float] = None) -> str:
 def dong_eta_buoc(anh) -> str:
     td = anh.tien_do
     if not cung_video(anh) or td.eta_buoc_s is None:
-        return f"ETA bước hiện tại: {CHUA_DU_ETA.lower()}"
-    return f"ETA bước hiện tại: ~{thoi_luong(td.eta_buoc_s)} (theo tốc độ đo được, có thể thay đổi)"
+        return f"Còn lại bước này: {CHUA_DU_ETA.lower()}"
+    return f"Còn lại bước này: ~{thoi_luong(td.eta_buoc_s)} (theo tốc độ đo được, có thể thay đổi)"
 
 
 def dong_nhat_ky(anh, gio: Callable[[float], str]) -> list:
@@ -124,7 +124,7 @@ def ve_tien_do_lo(st, anh, ten_phase: dict, gio: Callable[[float], str]) -> None
     b1.metric("Hoàn tất", anh.completed)
     b2.metric("Lỗi", anh.failed)
     b3.metric("Đã chạy", thoi_luong(anh.elapsed_seconds))
-    b4.metric("ETA cả lô", thoi_luong(anh.eta_seconds) if anh.eta_seconds is not None else CHUA_DU_ETA)
+    b4.metric("Còn lại cả lô", thoi_luong(anh.eta_seconds) if anh.eta_seconds is not None else CHUA_DU_ETA)
     if not (0 < anh.current_index <= len(anh.videos)):
         return
     v = anh.videos[anh.current_index - 1]

@@ -254,7 +254,7 @@ def test_app_man_hinh_quet_cap_nhat_so_do_that(tmp_path, monkeypatch):
     assert "**Phạm vi quét:** 00:00:00 → 03:00:00" in van_ban
     assert "00:03:00 / 03:00:00 âm thanh" in van_ban
     assert "Metadata OK — nguồn dài 65:01:54" in van_ban, "nhật ký trực tiếp phải hiện trên trang"
-    assert "ETA" in van_ban and "Chưa đủ dữ liệu để ước tính" in van_ban
+    assert "Còn lại" in van_ban and "Chưa đủ dữ liệu để ước tính" in van_ban
     _cho_xong(controller)
 
 
