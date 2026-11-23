@@ -10,6 +10,7 @@ lý do»; kết quả đã kiểm được trước đó giữ nguyên. Sổ ``<
 from __future__ import annotations
 
 import collections
+import copy
 import math
 import os
 from datetime import datetime
@@ -94,11 +95,27 @@ def kiem_tra(phien: truy_cap_youtube.PhienYouTube, data_dir: str, ids: Iterable[
     return ket
 
 
+_NHO_SO: dict = {}
+
+
 def doc_so(data_dir: str) -> dict:
-    """{mã: mục sổ}; chưa có sổ hay sổ sai cấu trúc → rỗng. Sổ hỏng cả bản sao → ``luu_tru.LoiDuLieu`` (bản hỏng giữ lại)."""
-    so = luu_tru.doc_json_an_toan(os.path.join(data_dir, TEN_FILE), {})
-    video = so.get("video") if isinstance(so, dict) else None
-    return {m: muc for m, muc in video.items() if isinstance(muc, dict)} if isinstance(video, dict) else {}
+    """{mã: mục sổ}; chưa có sổ hay sổ sai cấu trúc → rỗng. Sổ hỏng cả bản sao → ``luu_tru.LoiDuLieu`` (bản hỏng giữ lại).
+
+    Tab Lịch sử gọi ở MỖI lần vẽ lại, mà đọc thật giữ khoá liên tiến trình của thư mục data (có khi chờ hàng trăm ms):
+    nhớ theo (mtime, cỡ, inode) của sổ — sổ luôn ghi qua file tạm + thay thế nên lần kiểm mới đổi khoá, đọc lại."""
+    duong_dan = os.path.join(data_dir, TEN_FILE)
+    try:
+        s = os.stat(duong_dan)
+    except FileNotFoundError:
+        return {}                              # như doc_json_an_toan: chưa có sổ = rỗng, không cần khoá
+    khoa = (s.st_mtime_ns, s.st_size, s.st_ino)
+    nho = _NHO_SO.get(duong_dan)
+    if nho is None or nho[0] != khoa:
+        so = luu_tru.doc_json_an_toan(duong_dan, {})
+        video = so.get("video") if isinstance(so, dict) else None
+        nho = _NHO_SO[duong_dan] = (khoa, {m: muc for m, muc in video.items() if isinstance(muc, dict)}
+                                    if isinstance(video, dict) else {})
+    return copy.deepcopy(nho[1])
 
 
 def dong_bang(vi_pham: list, so: dict) -> list:

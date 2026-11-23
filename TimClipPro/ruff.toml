@@ -10,3 +10,7 @@ exclude = [
 [lint]
 # Tập trung vào lỗi cú pháp/import/tên chưa định nghĩa; tránh reformat hàng loạt source cũ.
 select = ["E4", "E7", "E9", "F"]
+
+[lint.per-file-ignores]
+# app.py vẽ chữ «Đang khởi động» TRƯỚC khi nạp các module nặng (lượt chạy đầu).
+"app.py" = ["E402"]

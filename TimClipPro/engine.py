@@ -1542,7 +1542,7 @@ class Engine:
         Sổ sai cấu trúc → danh sách rỗng: thanh bên gọi hàm này mỗi lần vẽ lại, lý do đã
         nằm trong cảnh báo khởi động (audit C-6)."""
         try:
-            d = self._doc_khos()
+            d = self._doc_khos_nho()
         except LoiDuLieu:
             return []
         self._theo_file_kho_moi(d)
@@ -1552,6 +1552,20 @@ class Engine:
             ds.append({**k, "duong_dan_db": db, "co_van_tay": os.path.exists(db),
                        "dang_dung": k["ten"] == self.kho_dang_dung})
         return ds
+
+    def _doc_khos_nho(self) -> dict:
+        """``_doc_khos`` cho thanh bên (mỗi lần vẽ lại): đọc thật giữ khoá liên tiến trình của thư mục data — có khi chờ
+        hàng trăm ms — nên chỉ đọc lại khi khos.json đổi (mtime, cỡ, inode: ghi luôn qua file tạm + thay thế). Lấy khoá
+        TRƯỚC khi đọc: file đổi giữa hai bước thì lượt sau thấy khoá khác và đọc lại. Bản sao sâu — người gọi sửa thoải mái."""
+        try:
+            s = os.stat(self.kho_file)
+            khoa = (s.st_mtime_ns, s.st_size, s.st_ino)
+        except OSError:
+            return self._doc_khos()
+        nho = getattr(self, "_nho_khos", None)
+        if nho is None or nho[0] != khoa:
+            nho = self._nho_khos = (khoa, self._doc_khos())
+        return copy.deepcopy(nho[1])
 
     def add_kho(self, ten: str, thu_muc: str = "") -> dict:
         ten = (ten or "").strip()

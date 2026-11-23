@@ -1,5 +1,11 @@
 # Cấu hình Streamlit đi kèm bản phát hành. Streamlit 1.62 đọc .streamlit/config.toml cạnh app.py dù tiến trình
 # chạy ở thư mục nào (launcher managed chạy ở state root) — streamlit/config.py get_config_files.
-# "viewer": ẩn nút Deploy và menu dành cho lập trình viên (chạy lại, xoá cache) với người dùng cuối.
+
 [client]
+# "viewer": ẩn nút Deploy và menu dành cho lập trình viên (chạy lại, xoá cache) với người dùng cuối.
 toolbarMode = "viewer"
+
+[runner]
+# «Magic» biến mỗi biểu thức trần thành st.write: Streamlit phải duyệt cây cú pháp của app.py (~2.800 dòng) ở lần
+# vẽ đầu sau khi mở app — đo được ~0,6 giây. app.py không dùng magic (chỉ có docstring), tắt cho mở app nhanh hơn.
+magicEnabled = false
