@@ -104,6 +104,7 @@ chạm file) — không phải audit lại mã. Thêm/xoá/đổi vai trò modul
 | `tinh_chinh_moc.py` | Tinh chỉnh mốc từng giây SAU khi đã chọn kết quả: độ tương đồng phổ từng giây, đoạn dùng thật, chỗ cắt (P-8/D-49; `docs/KHOP_TUNG_GIAY.md`). Không đổi kết quả tìm thấy; mốc đầu–cuối vào báo cáo V2 (D-50). | 1138 | nhánh `feature/pc2/khop-tung-giay` (PC2, 14/11) |
 | `toc_do_khop.py` | Phát hiện video vi phạm đã bị ĐỔI TỐC ĐỘ để né vân tay âm thanh; `he_so_moc_theo_troi` cho mốc nhóm lượt thường trôi (D-49). | 273 | `1d8b6d9 2026-11-14` |
 | `ui_tien_do_quet.py` | Màn hình tiến độ khi ĐANG quét (Streamlit) — chỉ ĐỌC ảnh chụp ``scan_jobs.BatchSnapshot``. | 146 | nhánh `fix/pc2/live-progress-smart-marathon` (PC2, 13/10) |
+| `ui_thao_tac.py` | Nút bớt thao tác tay dùng chung (Streamlit): «📂 Chọn…» thư mục/file bằng hộp thoại Windows (`tai_video_goc.chon_thu_muc` / `chon_file`), «📂 Mở thư mục» kết quả. | 54 | nhánh `feature/pc2/giao-dien-gd3` (PC2, 23/11) |
 | `watch.py` | Mô hình dữ liệu và lưu trữ danh sách nguồn YouTube cần theo dõi. | 729 | `ce5a64b 2026-10-07` |
 
 ## Bộ giả và dữ liệu test dùng chung (`TimClipPro/tests/`)
