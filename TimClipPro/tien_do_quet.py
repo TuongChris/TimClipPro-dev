@@ -72,7 +72,8 @@ NHIP_CON_SONG_S = 30.0
 # Cần ít nhất bấy nhiêu giây dữ liệu tốc độ mới tính ETA (tránh ETA nhảy loạn lúc mới bắt đầu).
 CUA_SO_TOC_DO_S = 10.0
 
-_SO_HOC = ("byte_da_nhan", "byte_dau_ra", "audio_da_nhan_s", "khuc_xong", "khop_xong")
+_SO_HOC = ("byte_da_nhan", "byte_dau_ra", "audio_da_nhan_s", "khuc_xong", "khop_phan_tich",
+           "khop_xong")
 _KHONG_PHAI_TIEN_TRIEN = frozenset({"toc_do_byte_s", "toc_do_x", "eta_buoc_s", "giai_doan",
                                     "giai_doan_luc"})
 
@@ -115,7 +116,10 @@ class AnhTienDo:
     khuc_xong: Optional[int] = None
     khuc_hien_tai: str = ""
     khop_tong: Optional[int] = None
+    # Khúc đã TÍNH HASH (dòng ``Analyzed`` của audfprint) — CHƯA tra kho; ``khop_xong`` mới là xong thật.
+    khop_phan_tich: Optional[int] = None
     khop_xong: Optional[int] = None
+    khop_luot: str = ""                       # «lượt bù tốc độ 1, tối đa 6»; rỗng = lượt thường
     so_dat_chuan: Optional[int] = None
     eta_buoc_s: Optional[float] = None
 

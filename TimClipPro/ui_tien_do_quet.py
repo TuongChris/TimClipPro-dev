@@ -81,7 +81,13 @@ def dong_chi_tiet(anh, v, ten_phase: dict, bay_gio: Optional[float] = None) -> l
         dong.append(f"**Cắt khúc:** {td.khuc_xong or 0}/{td.khuc_tong}"
                     + (f" — đang cắt {td.khuc_hien_tai}" if td.khuc_hien_tai else ""))
     elif td.giai_doan == tdq.GD_KHOP and td.khop_tong:
-        dong.append(f"**So khớp:** đã xong {td.khop_xong or 0}/{td.khop_tong} khúc")
+        xong, pt, tong = td.khop_xong or 0, td.khop_phan_tich or 0, td.khop_tong
+        cau = (f"**So khớp{f' ({td.khop_luot})' if td.khop_luot else ''}:** tra kho xong "
+               f"{xong}/{tong} khúc · đã phân tích {pt}/{tong}")
+        if pt > xong:
+            cau += (" — đang tra kho vân tay (bước lâu nhất: khúc dài, kho nhiều clip có thể mất "
+                    "hàng chục phút)")
+        dong.append(cau)
     if td.so_dat_chuan is not None:
         dong.append(f"**Ứng viên đạt chuẩn:** {td.so_dat_chuan}")
     return dong

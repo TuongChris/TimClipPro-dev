@@ -59,6 +59,7 @@ import outbox
 import runtime_paths
 import sheet_destinations
 import tien_do_quet as tdq
+from audfprint_match_runner import PREFIX as TIEN_TO_KHOP_XONG
 from audfprint_progress_runner import TEN_CO_DUNG
 from chan_doan_quet import (
     AUDFPRINT_KHONG_RA_MATCH,
@@ -1045,6 +1046,8 @@ RE_NOMATCH_SO_HASH = re.compile(r"\ssec\s+(\d+)\s+raw\s+hashes\s*$")
 # "wavfile2peaks: Error reading <đường dẫn>/chunk_<mốc>[_k<hệ số>].wav" — neo vào cụm
 # "Error reading" để mỗi lần xuất hiện cho đúng khúc của nó, kể cả khi dòng bị xen.
 RE_LOI_DOC_KHUC = re.compile(r"Error reading .*?(chunk_\d+(?:_k\d+)?\.wav)")
+# Dòng «khúc đã tra kho xong» của audfprint_match_runner (dòng của nhiều worker có thể xen nhau).
+RE_KHUC_KHOP_XONG = re.compile(re.escape(TIEN_TO_KHOP_XONG) + r".*?(chunk_\d+(?:_k\d+)?\.wav)")
 # Khúc 0 hash mà tiếng to hơn mức này thì KHÔNG thể đã được phân tích: audfprint chuẩn
 # hoá phổ theo đỉnh của chính khúc nên âm thanh thật luôn sinh hash. Đặt thấp hơn hẳn
 # tiếng thật nhưng cao hơn nhiễu nền của video bị tắt tiếng (phản biện vòng 3).
@@ -2876,6 +2879,12 @@ class Engine:
         return [sys.executable, "-u", self.audfprint, sub, "--dbase", db_file or self.db_file,
                 "--ncores", str(ncores), "--continue-on-error", *them]
 
+    def _audfprint_match_cmd(self, *them: str) -> list:
+        """``audfprint match`` qua bộ bọc báo «khúc đã tra kho xong» (không sửa code vendored)."""
+        lenh_goc = self._audfprint_cmd("match", *them)
+        wrapper = os.path.join(self.root, "audfprint_match_runner.py")
+        return [sys.executable, "-u", wrapper, self.audfprint, *lenh_goc[3:]]
+
     def _audfprint_build_cmd(
         self,
         sub: str,
@@ -4510,10 +4519,15 @@ class Engine:
     def _match_chunks(self, chunks: list, progress: Optional[Callable] = None,
                       pct0: float = 0.60, pct1: float = 0.95,
                       workspace: Optional[str] = None,
-                      hau_to: str = "", luot_bu: str = "") -> list:
+                      hau_to: str = "", luot_bu: str = "", nhan_luot: str = "") -> list:
         """So khớp một nhóm khúc với kho vân tay, trả về danh sách kết quả thô.
 
         ``luot_bu``: khoá lượt bù tốc độ (``_luot_bu``) khi các khúc là bản đã đổi tốc độ.
+        ``nhan_luot``: tên lượt cho màn hình tiến độ (vd. «lượt bù tốc độ 1, tối đa 6»).
+
+        Tiến độ: ``Analyzed <khúc>`` chỉ nghĩa là đã TÍNH HASH xong (``khop_phan_tich``); khúc chỉ
+        xong (``khop_xong``) khi ``audfprint_match_runner`` báo đã tra kho xong — bước tra kho mới
+        là bước lâu (khúc 57 phút, kho 612 clip: ~19 phút, 23/11/2026).
 
         VÌ SAO KHÔNG CÒN DÙNG ``--sortbytime``:
         audfprint cắt bớt kết quả THEO THỨ TỰ ĐANG CÓ, và nó cắt SAU khi đã sắp lại:
@@ -4541,6 +4555,7 @@ class Engine:
             os.remove(opfile)
 
         dem = {"n": 0}
+        xong: set = set()
         # Khúc audfprint KHÔNG đọc được: tín hiệu chính là dòng stdout
         # "wavfile2peaks: Error reading <khúc> skipping" (phản biện TCP-04). Dòng NOMATCH
         # "0.0 sec" thì KHÔNG đủ: khúc im lặng cũng ghi y hệt (phản biện vòng 2, N1).
@@ -4561,7 +4576,11 @@ class Engine:
                     1, len(chunks))),
                     f"Đang so khớp vân tay... khúc {min(dem['n'], len(chunks))}/"
                     f"{len(chunks)}")
-                self._td(khop_xong=min(dem["n"], len(chunks)))
+                self._td(khop_phan_tich=min(dem["n"], len(chunks)))
+            moi = {m.group(1) for m in RE_KHUC_KHOP_XONG.finditer(dong)} - xong
+            if moi:
+                xong.update(moi)
+                self._td(khop_xong=min(len(xong), len(chunks)))
 
         tham_so = [
             "--find-time-range", "--exact-count",
@@ -4576,11 +4595,12 @@ class Engine:
             pct0,
             "Đang nạp kho vân tay và bắt đầu so khớp...",
         )
-        self._td(tdq.GD_KHOP, khop_tong=len(chunks), khop_xong=0,
+        self._td(tdq.GD_KHOP, khop_tong=len(chunks), khop_xong=0, khop_phan_tich=0,
+                 khop_luot=nhan_luot,
                  ghi=f"Nạp kho vân tay và so khớp {len(chunks)} khúc"
                      + (f" (lượt bù tốc độ {luot_bu})" if luot_bu else ""))
         rc, duoi = self._run_stream(
-            self._audfprint_cmd("match", *tham_so),
+            self._audfprint_match_cmd(*tham_so),
             on_line,
             # Nhịp sống của audfprint (mỗi 10 giây khi im lặng): còn chạy ≠ có tiến triển.
             on_heartbeat=self._td_nhip,
@@ -5753,7 +5773,9 @@ class Engine:
             luot = self._luot_bu(he_so, ho)
             ket = self._match_chunks(khuc_moi, progress, p0, p1,
                                      workspace=workspace,
-                                     hau_to=f"_{luot}", luot_bu=luot)
+                                     hau_to=f"_{luot}", luot_bu=luot,
+                                     nhan_luot=f"lượt bù tốc độ {lan}, tối đa "
+                                               f"{cfg.toc_do_toi_da_thu}")
             for khuc in khuc_moi:
                 with contextlib.suppress(OSError):
                     os.remove(khuc)
