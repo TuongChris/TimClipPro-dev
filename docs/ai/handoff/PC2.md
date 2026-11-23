@@ -25,7 +25,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   tạm; dữ liệu thật chỉ dùng trong app DEV vận hành.
 
 ## Tiếp theo
-0i. 23/11: khoá JSON chậm 0,1–1,2 s mỗi lượt vẽ (nhánh `fix/pc2/khoa-lay-hut`) — ĐÃ ĐẨY, CHỜ duyệt gộp; gộp xong cập nhật DEV 8502 (mã chạy đổi: `khoa.py`).
+0i. 23/11: khoá JSON chậm 0,1–1,2 s mỗi lượt vẽ (nhánh `fix/pc2/khoa-lay-hut`) — GỘP `9203bfd` (người dùng duyệt 23/11), DEV 11:10 (sao lưu `data_20261123_111036`), health ok. Người dùng: thấy thanh bên/tab Lịch sử còn khựng khi máy bận thì báo.
 0h. 23/11: sửa test chập chờn `test_dung_giua_chung` (nhánh `fix/pc2/test-dung-giua-chung`, chỉ test) — GỘP vào integration/current 23/11 (người dùng duyệt); mã chạy không đổi → DEV không cần cập nhật.
 0g. 20/11: 3 việc hoãn review Codex (`fix/pc2/ba-viec-hoan`): nhanh 4327 = 4322/4/1 (test đo thời gian chỉ hỏng khi cả
     bộ chạy, riêng 3/3 đạt), chậm 25/25 — GỘP `7a9561e`, DEV 10:49 (sao lưu `data_20261120_104911`) — người dùng thử: ĐẠT.
