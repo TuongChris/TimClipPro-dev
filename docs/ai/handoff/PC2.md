@@ -25,8 +25,9 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   tạm; dữ liệu thật chỉ dùng trong app DEV vận hành.
 
 ## Tiếp theo
-0k. 23/11: tiến độ so khớp trung thực (`fix/pc2/tien-do-so-khop`, ĐÃ ĐẨY, CHƯA gộp/DEV) — chờ duyệt gộp + DEV.
-    Người dùng quyết: tăng tốc tra kho (bản «cắt lát» `_exact_match_counts`, trùng từng số, ~15× ở ca kho dày —
+0k. 23/11: tiến độ so khớp trung thực (`fix/pc2/tien-do-so-khop`) — GỘP `34c5403` (người dùng duyệt), DEV 19:23
+    (sao lưu `data_20261123_192339`), health ok, mở lại bằng icon. Người dùng: quét thử, xem dòng «tra kho xong».
+    Còn quyết: tăng tốc tra kho (bản «cắt lát» `_exact_match_counts`, trùng từng số, ~15× ở ca kho dày —
     đổi audfprint/bộ bọc, cần duyệt); đo trên khúc thật khi DEV rảnh: `C:\Dev\pc2_test_runs\2026-11-23_tien_do_khop`.
 0j. 23/11: giao diện D-63 (menu 5 nhóm + mở nhanh + bớt thao tác tay + gọn chữ, `feature/pc2/giao-dien-tong2`): nhanh 4356 = 4352/4/0 trên 8a9045d, chậm 25/25 trên bc16ef9 — GỘP integration, DEV cập nhật — người dùng thử.
 0i. 23/11: khoá JSON chậm 0,1–1,2 s mỗi lượt vẽ (nhánh `fix/pc2/khoa-lay-hut`) — GỘP `9203bfd` (người dùng duyệt 23/11), DEV 11:10 (sao lưu `data_20261123_111036`), health ok. Người dùng: thấy thanh bên/tab Lịch sử còn khựng khi máy bận thì báo.
