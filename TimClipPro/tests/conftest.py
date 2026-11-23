@@ -8,6 +8,9 @@ import numpy as np
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# app.py dùng st.navigation (chỉ chạy trang đang mở); AppTest chỉ chuyển được trang dạng FILE nên bộ test vẽ MỌI
+# trang trong 15 tab như trước 23/11 (nhánh TIMCLIP_UI_VE_MOI_TRANG ở cuối app.py). Test của chính menu tự bỏ biến này.
+os.environ.setdefault("TIMCLIP_UI_VE_MOI_TRANG", "1")
 
 
 def _ghi_wav(path, sig, sr=22050):

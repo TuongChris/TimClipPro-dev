@@ -15,6 +15,16 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-63 Menu 5 nhóm thay 15 tab; mỗi lần vẽ lại chỉ chạy trang đang mở (người dùng, 2026-11-23) — giai đoạn 1 kế hoạch giao diện
+`st.tabs` vẽ nội dung MỌI tab ở mỗi lần bấm/gõ (cả tab không mở: đếm file kho trên ổ E:, đọc lịch sử…). Nay `st.navigation`
+(menu trên cùng, 5 nhóm thả xuống: Quét vi phạm · Kết quả · Kho clip gốc · Tải về · Xử lý video), mỗi tab cũ thành một hàm
+`_trang_*` (thân giữ nguyên), trang mặc định «Quét YouTube», mỗi trang một địa chỉ (F5 giữ trang). Khung tiến độ việc nền
+vẫn ở trên mọi trang; ô «Kho đang dùng» chỉ hiện ở trang quét / kho / tìm nghi vấn. st.navigation xoá giá trị widget không
+được vẽ → mọi ô nhập có key mang `persist_state="session"` (test AST giữ quy tắc này), 12 ô hay gõ (link, tên file, số
+video…) thêm key. AppTest chỉ chuyển được trang dạng FILE → bộ test đặt `TIMCLIP_UI_VE_MOI_TRANG=1` (conftest) để vẽ mọi
+trang trong 15 tab như cũ; `tests/test_giao_dien_trang.py` kiểm chính menu. Còn: giai đoạn 2 (mở app nhanh), 3 (bớt thao
+tác tay), 4 (gọn chữ) — chờ người dùng thử giai đoạn 1.
+
 ## D-62 Review độc lập bằng Codex 20/11 + quy tắc dấu phẩy trong danh sách mốc (người dùng, 2026-11-20)
 Người dùng cho dùng phần hạn mức ChatGPT dư: Codex (gpt-6.2-astra) KHÔNG công cụ (chỉ nhận mã công khai dạng chữ) review
 mã 2450682..8e0f45b (10 lượt, 127 phát hiện) → Claude kiểm từng mục: 14 sửa, phần lớn bác (hai việc nền chạy cùng lúc không

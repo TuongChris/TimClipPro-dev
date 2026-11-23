@@ -75,7 +75,7 @@ def chon_dich(eng, *, key: str, nguon_chung: bool = False) -> tuple:
     if hien not in lua_chon:
         hien = CHI_LUU
     chon = st.selectbox("Đích gửi", lua_chon, index=lua_chon.index(hien),
-                        format_func=lambda x: nhan.get(x, x), key=f"{key}_dich_gui")
+                        format_func=lambda x: nhan.get(x, x), key=f"{key}_dich_gui", persist_state="session")
     st.session_state[f"{key}_dich_chon"] = chon
     tu_dong = False
     if chon:
@@ -83,7 +83,7 @@ def chon_dich(eng, *, key: str, nguon_chung: bool = False) -> tuple:
         # — người dùng đã bỏ tick không được tự bật lại sau lô.
         khoa_chon = f"{key}_tu_dong_chon"
         tu_dong = st.checkbox("Tự động gửi khi từng video hoàn tất",
-                              value=st.session_state.get(khoa_chon, True), key=f"{key}_tu_dong_gui")
+                              value=st.session_state.get(khoa_chon, True), key=f"{key}_tu_dong_gui", persist_state="session")
         st.session_state[khoa_chon] = tu_dong
         st.caption("Đích được GHIM lúc bấm Bắt đầu: đổi lựa chọn giữa chừng chỉ áp dụng cho lượt sau.")
     elif not ds:
@@ -205,9 +205,9 @@ def nut_gui_cho_job(eng, job_ids: list, *, key: str) -> None:
         st.caption("Dùng khi lượt quét chỉ lưu cục bộ, hoặc muốn gửi thêm một bản sang bảng khác. "
                    "Dòng dựng lại từ ảnh chụp báo cáo đã lưu — không quét lại.")
         nhan = {d.id: d.nhan for d in ds}
-        dich = st.selectbox("Gửi tới", list(nhan), format_func=nhan.get, key=f"{key}_dich")
+        dich = st.selectbox("Gửi tới", list(nhan), format_func=nhan.get, key=f"{key}_dich", persist_state="session")
         trung = st.checkbox("Tôi hiểu có thể tạo dòng TRÙNG nếu đã gửi trước đó",
-                            key=f"{key}_trung")
+                            key=f"{key}_trung", persist_state="session")
         if st.button("📤 Tạo việc gửi", key=f"{key}_nut"):
             tao, bo_qua, can = gui_thu_cong(eng, job_ids, dich, cho_phep_trung=trung)
             if tao:
@@ -233,12 +233,12 @@ def _ve_hang_doi(eng) -> None:
     # widget mới đúng trạng thái — không bao giờ ghi ngược giá trị cũ của riêng phiên này vào DB.
     khoa = f"gui_tam_dung_{int(tam_dung)}"
     st.toggle("⏸ Tạm dừng toàn bộ việc gửi (quét vẫn chạy, việc vẫn xếp hàng)", value=tam_dung,
-              key=khoa, on_change=_doi_tam_dung, args=(db, khoa))
+              key=khoa, on_change=_doi_tam_dung, args=(db, khoa), persist_state="session")
     tt = outbox.tom_tat(db)
     st.caption(" · ".join(f"{outbox.NHAN_TRANG_THAI[k]}: {v}" for k, v in tt.items() if v)
                or "Hàng đợi trống.")
     loc = st.radio("Hiện", ["Cần xử lý / đang chờ", "Đã xong (gần nhất)", "Tất cả (gần nhất)"],
-                   horizontal=True, key="gui_loc")
+                   horizontal=True, key="gui_loc", persist_state="session")
     if loc.startswith("Cần"):
         ds = outbox.ds_viec(db, trang_thai=_VIEC_CAN_XEM, gioi_han=100_000)
     elif loc.startswith("Đã xong"):
@@ -275,7 +275,7 @@ def _ve_hang_doi(eng) -> None:
         chon = st.selectbox("Việc", [v.id for v in ds],
                             format_func=lambda i: next(
                                 f"{v.id[:8]} — #{v.job_id} — {outbox.NHAN_TRANG_THAI[v.trang_thai]}"
-                                for v in ds if v.id == i), key="gui_chon_viec")
+                                for v in ds if v.id == i), key="gui_chon_viec", persist_state="session")
         v = next(x for x in ds if x.id == chon)
         # Nút khoá THEO mã việc (audit 09/11): việc đang chọn biến khỏi danh sách đúng lúc bấm thì ô chọn rơi về việc
         # khác — nút khoá chung sẽ áp cú bấm lên việc đó (đánh dấu «đã có trên Sheet» một việc chưa gửi).
@@ -298,7 +298,7 @@ def _ve_hang_doi(eng) -> None:
                         st.rerun()
             with c2:
                 # Ô đồng ý gắn ĐÚNG việc đang chọn: đổi sang việc khác thì phải đồng ý lại.
-                dong_y = st.checkbox("Tôi chấp nhận có thể trùng dòng", key=f"gui_dong_y_trung_{v.id}")
+                dong_y = st.checkbox("Tôi chấp nhận có thể trùng dòng", key=f"gui_dong_y_trung_{v.id}", persist_state="session")
                 if st.button("⚠️ Gửi lại", key=f"gui_lai_unknown_{v.id}", disabled=not dong_y or bool(khong_gui_lai)):
                     if _thu(outbox.gui_lai_co_the_trung, _db(eng), v.id):
                         dam_bao_nguoi_gui(eng, bat_buoc=True)
@@ -310,7 +310,7 @@ def _ve_hang_doi(eng) -> None:
                     st.rerun()
         if v.trang_thai in (outbox.PENDING, outbox.RETRY_WAIT, outbox.CLAIMED, outbox.BLOCKED_CONFIG,
                             outbox.BLOCKED_REPORT, outbox.UNKNOWN):
-            huy = st.checkbox("Tôi muốn huỷ việc gửi này", key=f"gui_huy_xn_{v.id}")
+            huy = st.checkbox("Tôi muốn huỷ việc gửi này", key=f"gui_huy_xn_{v.id}", persist_state="session")
             if st.button("✖ Huỷ việc gửi", key=f"gui_huy_{v.id}", disabled=not huy):
                 if _thu(outbox.huy, _db(eng), v.id):
                     st.rerun()
@@ -368,14 +368,14 @@ def _ve_ho_so(eng) -> None:
         if not xt:
             st.info("Cần đăng ký khoá Google (binding) trước — mục bên dưới.")
         else:
-            ten = st.text_input("Tên hồ sơ (để không gửi nhầm)", key="hs_ten")
+            ten = st.text_input("Tên hồ sơ (để không gửi nhầm)", key="hs_ten", persist_state="session")
             link = st.text_input("Link Google Sheet (mở đúng TAB rồi chép link — có «#gid=…»)",
-                                 key="hs_link")
+                                 key="hs_link", persist_state="session")
             tab = st.text_input("Tên tab (đối chiếu ở lần gửi đầu — tab mang tên khác thì chặn)",
-                                value=sd.TAB_MAC_DINH, key="hs_tab")
+                                value=sd.TAB_MAC_DINH, key="hs_tab", persist_state="session")
             dang = st.radio("Định dạng", list(sd.SCHEMA_NHAN), format_func=sd.SCHEMA_NHAN.get,
-                            horizontal=True, key="hs_dang")
-            ref = st.selectbox("Khoá Google", [x.ref for x in xt], key="hs_ref")
+                            horizontal=True, key="hs_dang", persist_state="session")
+            ref = st.selectbox("Khoá Google", [x.ref for x in xt], key="hs_ref", persist_state="session")
             if st.button("Lưu hồ sơ", key="hs_luu"):
                 try:
                     sid, gid = sd.phan_tich_link(link)
@@ -392,9 +392,9 @@ def _ve_ho_so(eng) -> None:
         with st.expander("✏️ Sửa / tạm dừng / lưu trữ một hồ sơ", expanded=False):
             chon = st.selectbox("Hồ sơ", [d.id for d in ds],
                                 format_func=lambda i: next(d.nhan for d in ds if d.id == i),
-                                key="hs_chon")
+                                key="hs_chon", persist_state="session")
             d = next(x for x in ds if x.id == chon)
-            ten_moi = st.text_input("Đổi tên", value=d.ten, key=f"hs_ten_moi_{d.id}")
+            ten_moi = st.text_input("Đổi tên", value=d.ten, key=f"hs_ten_moi_{d.id}", persist_state="session")
             c1, c2, c3, c4 = st.columns(4)
             with c1:
                 if st.button("Lưu tên (revision mới)", key=f"hs_doi_ten_{d.id}") and ten_moi != d.ten:
@@ -425,15 +425,15 @@ def _ve_ho_so(eng) -> None:
                     khoa_moi = st.selectbox(
                         "Khoá Google của hồ sơ", khoa_ds,
                         index=khoa_ds.index(d.xac_thuc_ref) if d.xac_thuc_ref in khoa_ds else 0,
-                        key=f"hs_khoa_moi_{d.id}")
+                        key=f"hs_khoa_moi_{d.id}", persist_state="session")
                 with k2:
                     if st.button("Lưu khoá (revision mới)", key=f"hs_luu_khoa_{d.id}") and khoa_moi != d.xac_thuc_ref:
                         if _thu(sd.sua_dich, db, d.id, xac_thuc_ref=khoa_moi):
                             st.rerun()
             link_moi = st.text_input("Link Google Sheet mới (để trống = giữ bảng/tab hiện tại)",
-                                     key=f"hs_link_moi_{d.id}")
+                                     key=f"hs_link_moi_{d.id}", persist_state="session")
             tab_moi = st.text_input("Tên tab (đối chiếu ở lần gửi đầu của revision mới)",
-                                    value=d.worksheet_ten, key=f"hs_tab_moi_{d.id}")
+                                    value=d.worksheet_ten, key=f"hs_tab_moi_{d.id}", persist_state="session")
             if st.button("Lưu link/tab (revision mới)", key=f"hs_luu_dich_{d.id}"):
                 try:
                     sid, gid = (sd.phan_tich_link(link_moi) if link_moi.strip()
@@ -463,9 +463,9 @@ def _ve_khoa(eng) -> None:
                    f"[{x.trang_thai}] — chia sẻ Sheet (Người chỉnh sửa) cho địa chỉ này.")
     with st.expander("➕ Đăng ký / cập nhật khoá Google (binding)", expanded=False):
         ref = st.text_input("Tên binding (chữ thường không dấu)", value=sd.REF_MAC_DINH,
-                            key="xt_ref")
+                            key="xt_ref", persist_state="session")
         duong = st.text_input("Đường dẫn file khoá JSON trên máy này",
-                              value=eng.runtime.khoa_google_mac_dinh, key="xt_duong")
+                              value=eng.runtime.khoa_google_mac_dinh, key="xt_duong", persist_state="session")
         if st.button("Đăng ký khoá", key="xt_luu"):
             try:
                 x = sd.dang_ky_xac_thuc(db, ref, duong)
