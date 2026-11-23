@@ -15,6 +15,17 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-64 File kiểm claim: màn đen 144p + tiếng của video, giữ nguyên tiếng gốc (người dùng, 2026-11-23)
+Ô «🎧 Tạo file kiểm claim» ở trang «🛠️ Video trong máy»: ghép tiếng của file vào khung đen 256×144, 1 hình/giây, ra
+`<tên>_kiem_claim.mp4` — file nhẹ để tải lên kênh phụ cho YouTube Checks quét claim về TIẾNG (Bước 1 của bản thiết kế
+YouTube-Claim-Workbench; người dùng tự tải lên). Người dùng chọn: mặc định GIỮ NGUYÊN tiếng gốc (`-c:a copy` khi là AAC,
+giống từng byte — bản thiết kế ghi rủi ro nén thấp làm Content ID bỏ sót claim; không có tài liệu chính thức nói ngược lại);
+tiếng không phải AAC thì nén AAC 320k; tuỳ chọn nhẹ 96k / 48k. Khung đen dài ĐÚNG bằng file gốc (`color=…:d=<độ dài>`;
+`-shortest` thừa 5–10 giây khi đo), chỉ luồng tiếng đầu (`1:a:0`), độ trễ của tiếng giữ nguyên. Không chỉnh âm lượng; chọn
+MỘT trong cắt / bỏ đoạn / chụp ảnh / kiểm claim. Mã: `video_trong_may.tao_file_kiem_claim`. Đo (3 giờ tổng hợp, PC2): giữ
+nguyên (AAC 256k) 350 MB trong 9 s; AAC 96k 132 MB trong 5 phút 12; AAC 48k 68 MB. Chưa kiểm phía YouTube (1 fps/144p có qua
+Checks bình thường không; rủi ro bị coi là spam; claim về hình không kiểm được) — người dùng thử tay.
+
 ## D-63 Menu 5 nhóm thay 15 tab; mỗi lần vẽ lại chỉ chạy trang đang mở (người dùng, 2026-11-23) — giai đoạn 1 kế hoạch giao diện
 `st.tabs` vẽ nội dung MỌI tab ở mỗi lần bấm/gõ (cả tab không mở: đếm file kho trên ổ E:, đọc lịch sử…). Nay `st.navigation`
 (menu trên cùng, 5 nhóm thả xuống: Quét vi phạm · Kết quả · Kho clip gốc · Tải về · Xử lý video), mỗi tab cũ thành một hàm

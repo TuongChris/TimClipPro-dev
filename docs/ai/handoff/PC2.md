@@ -25,6 +25,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   tạm; dữ liệu thật chỉ dùng trong app DEV vận hành.
 
 ## Tiếp theo
+0l. 23/11: «🎧 Tạo file kiểm claim» (D-64, `feature/pc2/file-kiem-claim`) — CHỜ duyệt gộp + DEV; người dùng thử tải 1 file lên kênh phụ.
 0j. 23/11: giao diện D-63 (menu 5 nhóm + mở nhanh + bớt thao tác tay + gọn chữ, `feature/pc2/giao-dien-tong2`): nhanh 4356 = 4352/4/0 trên 8a9045d, chậm 25/25 trên bc16ef9 — GỘP integration, DEV cập nhật — người dùng thử.
 0i. 23/11: khoá JSON chậm 0,1–1,2 s mỗi lượt vẽ (nhánh `fix/pc2/khoa-lay-hut`) — GỘP `9203bfd` (người dùng duyệt 23/11), DEV 11:10 (sao lưu `data_20261123_111036`), health ok. Người dùng: thấy thanh bên/tab Lịch sử còn khựng khi máy bận thì báo.
 0h. 23/11: sửa test chập chờn `test_dung_giua_chung` (nhánh `fix/pc2/test-dung-giua-chung`, chỉ test) — GỘP vào integration/current 23/11 (người dùng duyệt); mã chạy không đổi → DEV không cần cập nhật.
@@ -32,9 +33,6 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
     bộ chạy, riêng 3/3 đạt), chậm 25/25 — GỘP `7a9561e`, DEV 10:49 (sao lưu `data_20261120_104911`) — người dùng thử: ĐẠT.
 0f. 20/11: review Codex 20/11 (D-62) — 14 mục sửa GỘP `6770c40`, DEV 10:12 (sao lưu `data_20261120_101200`) — người
     dùng thử trên DEV 20/11: ĐẠT.
-0e. 20/11: «🎵 Chỉ audio» trong tab «🎞️ Ghép video gốc» (D-61) GỘP `ae6cac6`, DEV 08:43 (sao lưu `data_20261120_084308`)
-    — người dùng thử trên DEV 20/11: ĐẠT.
-0d. 19/11: «📸 Chụp ảnh ở các mốc» (D-60) GỘP `99d29b8`, DEV 13:02 (sao lưu `data_20261119_130238`) — người dùng thử file trong máy + YouTube: ĐẠT.
 0c. 18/11: Apps Script «Xuất hàng» bỏ dòng trống sau tiêu đề mục (nhánh `fix/pc2/mau-xuat-sat-tieu-de`) — người dùng dán lại.
 0b. 17/11: giữ tab đang mở khi xong việc — GỘP `67531b8`, DEV 15:19 (sao lưu `data_20261117_151853`) — người dùng thử: ĐẠT.
 0a. 17/11: «✂️ Bỏ các đoạn» (D-59) GỘP `7d7b528`, DEV 09:13 (sao lưu `data_20261117_091254`) — người dùng thử: ĐẠT.
@@ -66,6 +64,8 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 10. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-11-23 — file kiểm claim (D-64, nhánh feature/pc2/file-kiem-claim)
+- `video_trong_may.tao_file_kiem_claim`: khung đen 256×144 1 fps `d=<độ dài>` + `1:a:0` (copy khi AAC, không thì AAC 320k; tuỳ chọn 96k/48k); ô ở «Video trong máy». 7 test mới (MD5 tiếng, độ dài, độ trễ, MP3, không tiếng, UI).
 ### 2026-11-23 — giao diện D-63: menu 5 nhóm + mở nhanh + bớt thao tác tay + gọn chữ (feature/pc2/giao-dien-tong2)
 - `st.tabs` 15 tab → `st.navigation(position="top")` 5 nhóm; thân tab thành `_trang_*`; `persist_state="session"` cho
   ô có key (trừ ô xác nhận / ô đọc lại DB); bộ test vẽ mọi trang qua `TIMCLIP_UI_VE_MOI_TRANG=1`. Sub-agent (người dùng
