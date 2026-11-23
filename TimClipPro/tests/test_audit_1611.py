@@ -217,7 +217,7 @@ def _ket_qua_va_metadata(tmp_path, monkeypatch, r):
 def test_va_metadata_bi_chan_khong_bao_xanh(tmp_path, monkeypatch):
     at = _ket_qua_va_metadata(tmp_path, monkeypatch, {
         "da_va": 3, "tong": 500, "loi": [], "chan_youtube": "YouTube nghi là bot — dừng để tránh bị chặn nặng hơn."})
-    assert not any("Đã vá metadata" in (x.value or "") for x in at.success)
+    assert not any("Đã bổ sung thông tin" in (x.value or "") for x in at.success)
     assert any("Đã bổ sung thông tin (ngày đăng, thời lượng) cho 3/500" in (x.value or "") for x in at.warning)
     assert any("nghi là bot" in (x.value or "") for x in at.error)
 

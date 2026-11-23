@@ -130,6 +130,19 @@ def test_du_cong_cu_gon_mot_dong_va_do_mot_lan_moi_phien(tmp_path, monkeypatch):
     assert any("Thiếu công cụ" in x.value for x in at2.sidebar.error)
 
 
+def test_thieu_cong_cu_cai_xong_la_het_bao_thieu_khong_can_tai_lai_trang(tmp_path, monkeypatch):
+    """Review 23/11 số 10: thiếu FFmpeg thì dò lại mỗi lượt — cài xong, lượt vẽ kế tiếp hết «❌ Thiếu công cụ»."""
+    e = _moi_truong(tmp_path, monkeypatch)
+    Path(e.db_file).write_bytes(b"gia")
+    monkeypatch.setattr(Engine, "check_env", lambda self: _env(self, ffmpeg=False))
+    at = _mo()
+    assert any("Thiếu công cụ" in x.value for x in at.sidebar.error)
+    monkeypatch.setattr(Engine, "check_env", lambda self: _env(self))
+    at = _mo(at)
+    assert "✅ Đủ công cụ" in [x.label for x in at.sidebar.expander]
+    assert not at.sidebar.error
+
+
 def test_kho_van_tay_xoa_thi_hien_lai_danh_sach_du(tmp_path, monkeypatch):
     """File vân tay mất (đổi kho, xoá kho) → dò lại ngay, lượt sau hiện đủ danh sách có ❌."""
     e = _moi_truong(tmp_path, monkeypatch)
@@ -170,8 +183,10 @@ def test_magic_tat_trong_cau_hinh_script():
 
     goc = Path(APP_PY).parent
     assert tomllib.loads((goc / ".streamlit" / "config.toml").read_text(encoding="utf-8"))["runner"]["magicEnabled"] is False
-    cay = ast.parse((goc / "app.py").read_text(encoding="utf-8"))
-    tran = [n.lineno for n in ast.walk(cay) if isinstance(n, ast.Expr)
-            and not isinstance(n.value, (ast.Call, ast.Await, ast.Yield, ast.YieldFrom))
-            and not (isinstance(n.value, ast.Constant) and isinstance(n.value.value, str))]
+    from streamlit.runtime.scriptrunner.magic import MAGIC_MODULE_NAME, add_magic
+
+    # Chính hàm Streamlit dùng khi magic BẬT: mỗi lệnh nó chèn là một chỗ trước đây được st.write.
+    cay = add_magic((goc / "app.py").read_text(encoding="utf-8"), str(goc / "app.py"))
+    tran = [n.lineno for n in ast.walk(cay) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+            and isinstance(n.func.value, ast.Name) and n.func.value.id == MAGIC_MODULE_NAME]
     assert not tran, f"biểu thức trần (magic đã tắt nên KHÔNG hiện) ở dòng {tran}"

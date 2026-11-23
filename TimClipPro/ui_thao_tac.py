@@ -27,7 +27,9 @@ def nut_chon(khoa: str, ban_dau: str = "", loai: str = "thu_muc", nhan: str = "�
 def noi_dong(van_ban: str, moi: list) -> str:
     """Thêm vào ô «mỗi dòng một đường dẫn» các dòng CHƯA có, giữ nguyên các dòng đã gõ."""
     dong = [d for d in (van_ban or "").splitlines() if d.strip()]
-    return "\n".join(dong + [x for x in dict.fromkeys(moi) if x not in dong])
+    # So như Windows so đường dẫn: bỏ ngoặc kép của «Copy as path», không phân biệt chữ hoa/thường.
+    da_co = {os.path.normcase(d.strip().strip('"').strip()) for d in dong}
+    return "\n".join(dong + [x for x in dict.fromkeys(moi) if os.path.normcase(x) not in da_co])
 
 
 def thu_muc_ket_qua(ket_qua: list) -> list:

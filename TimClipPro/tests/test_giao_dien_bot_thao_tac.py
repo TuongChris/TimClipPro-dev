@@ -68,6 +68,41 @@ def test_dong_bo_o_kho_trong_tu_dien_thu_muc_kho_dang_dung_nhung_giu_gia_tri_go(
     assert at.session_state.kho_dir == str(tmp_path / "Khac")
 
 
+def test_dong_bo_doi_kho_thi_o_tu_dien_theo_kho_moi(tmp_path, monkeypatch):
+    """Review 23/11 số 2: ô đã tự điền thư mục kho A, đổi sang kho B → ô hiện thư mục kho B (trước đây giữ A và
+    «Bắt đầu đồng bộ» tải kênh B vào kho A). Kho chưa có thư mục thì ô trống."""
+    a, b = tmp_path / "A", tmp_path / "B"
+    a.mkdir()
+    b.mkdir()
+    at = _app(tmp_path, monkeypatch)
+    eng = at.session_state.eng
+    eng.add_kho("Kho A", str(a))
+    eng.use_kho("Kho A")
+    at.run()
+    assert _o(at, "Thư mục kho clip gốc").value == str(a)
+    eng.add_kho("Kho B", str(b))
+    eng.use_kho("Kho B")
+    at.run()
+    assert _o(at, "Thư mục kho clip gốc").value == str(b)
+    eng.add_kho("Kho C", "")
+    eng.use_kho("Kho C")
+    at.run()
+    assert _o(at, "Thư mục kho clip gốc").value == ""
+
+
+def test_dong_bo_chon_lai_dung_duong_dan_cu_van_an(tmp_path, monkeypatch):
+    """Review 23/11 số 5: chọn X, gõ đè, rồi chọn lại X → ô hiện X (ô không key bỏ qua lựa chọn trùng giá trị cũ)."""
+    chon = str(tmp_path / "Kho X")
+    _thay_chon(monkeypatch, thu_muc=chon)
+    at = _app(tmp_path, monkeypatch)
+    _bam(at, "chon_kho_dir")
+    _o(at, "Thư mục kho clip gốc").set_value("gõ dở").run()
+    assert at.session_state.kho_dir == "gõ dở"
+    _bam(at, "chon_kho_dir")
+    assert _o(at, "Thư mục kho clip gốc").value == chon
+    assert at.session_state.kho_dir == chon
+
+
 def test_dong_bo_co_nut_mo_thu_muc_kho(tmp_path, monkeypatch):
     goi = []
     monkeypatch.setattr(os, "startfile", goi.append, raising=False)
@@ -88,6 +123,22 @@ def test_kho_clip_goc_chon_thu_muc_nguon(tmp_path, monkeypatch):
     assert _o(at, "Đường dẫn thư mục chứa video gốc").value == chon
 
 
+def test_kho_clip_goc_o_thu_muc_theo_thu_muc_kho_vua_doi(tmp_path, monkeypatch):
+    """Review 23/11 số 1: thư mục kho đổi ở trang khác (hay kho xoá rồi tạo lại cùng tên) → ô hiện thư mục mới, không
+    giữ thư mục cũ cho «Tạo lại» / «Bổ sung»."""
+    a, b = tmp_path / "A", tmp_path / "B"
+    a.mkdir()
+    b.mkdir()
+    at = _app(tmp_path, monkeypatch)
+    at.session_state.eng.add_kho("Kho", str(a))
+    at.session_state.eng.use_kho("Kho")
+    at.run()
+    assert _o(at, "Đường dẫn thư mục chứa video gốc").value == str(a)
+    at.session_state.eng.update_kho("Kho", str(b))
+    at.run()
+    assert _o(at, "Đường dẫn thư mục chứa video gốc").value == str(b)
+
+
 def test_danh_sach_kho_chon_thu_muc_moi(tmp_path, monkeypatch):
     chon = str(tmp_path / "Audio")
     _thay_chon(monkeypatch, thu_muc=chon)
@@ -95,7 +146,20 @@ def test_danh_sach_kho_chon_thu_muc_moi(tmp_path, monkeypatch):
     at.session_state.eng.add_kho("Kho B", "")
     at.run()
     _bam(at, "chon_dsv_thu_muc")
-    assert at.text_input(key="dsv_thu_muc_moi").value == chon
+    assert at.text_input(key="dsv_thu_muc_moi::Kho B").value == chon
+
+
+def test_danh_sach_kho_o_sua_thu_muc_rieng_tung_kho(tmp_path, monkeypatch):
+    """Review 23/11 số 3: đường dẫn gõ cho kho A không sang ô của kho B (một cú «Lưu» là B trỏ vào audio của A)."""
+    at = _app(tmp_path, monkeypatch)
+    at.session_state.eng.add_kho("Kho A", "")
+    at.session_state.eng.add_kho("Kho B", "")
+    at.run()
+    at.selectbox(key="dsv_kho").set_value("Kho A").run()
+    at.text_input(key="dsv_thu_muc_moi::Kho A").set_value(str(tmp_path / "AudioA")).run()
+    at.selectbox(key="dsv_kho").set_value("Kho B").run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert at.text_input(key="dsv_thu_muc_moi::Kho B").value == ""
 
 
 def test_quet_file_chon_thu_muc_hoac_file(tmp_path, monkeypatch):
@@ -170,6 +234,9 @@ def test_thu_muc_ket_qua_ghep_chi_lay_file_ghep(tmp_path):
 def test_noi_dong_giu_dong_cu_bo_trung():
     assert ui_thao_tac.noi_dong("a\n\nb", ["b", "c", "c"]) == "a\nb\nc"
     assert ui_thao_tac.noi_dong("", ["x"]) == "x"
+    # Review 23/11 số 6: dòng có ngoặc kép («Copy as path») hoặc khác chữ hoa/thường vẫn là cùng một file.
+    assert ui_thao_tac.noi_dong('"C:\\Video\\Intro.mp4"', ["c:\\video\\INTRO.mp4", "C:\\b.mp4"]) == (
+        '"C:\\Video\\Intro.mp4"\nC:\\b.mp4')
 
 
 def test_chon_file_tach_nhieu_dong_va_mo_o_thu_muc_cua_file(tmp_path, monkeypatch):

@@ -108,7 +108,8 @@ if "eng" not in st.session_state:
         _dang_khoi_dong.empty()
         st.error(f"Không khởi động được TimClip Pro: {e}")
         st.stop()
-_dang_khoi_dong.empty()
+    finally:
+        _dang_khoi_dong.empty()   # cả khi Engine ném lỗi lạ: chữ chờ không nằm đè lên thông báo lỗi
 du_lieu_giao_dien = st.session_state.eng.cau_hinh_da_luu
 for khoa, mac_dinh in GIA_TRI_GIAO_DIEN_MAC_DINH.items():
     if khoa not in st.session_state:
@@ -613,9 +614,10 @@ def hien_tinh_chinh(results: list) -> None:
     if not co:
         return
     with st.expander("🎯 Mốc tinh chỉnh từng giây (thử nghiệm)", expanded=False):
-        st.caption("Mốc đo từng giây (sai lệch khoảng 0,1 giây). «Đoạn vi phạm» trong báo cáo, Google Sheets và lịch sử "
-                   "dùng mốc này; dòng «chưa tinh chỉnh» giữ mốc của lượt quét. «% giống» chỉ so được trong cùng một "
-                   "kết quả: nhạc đè to có thể chỉ khoảng 50 % dù khớp chắc.")
+        st.caption("Mốc là ƯỚC LƯỢNG PHÍA TRONG, sai lệch khoảng 0,1 giây đo trên dữ liệu thử. «Đoạn vi phạm» trong báo "
+                   "cáo, Google Sheets và lịch sử dùng mốc này; dòng «chưa tinh chỉnh» giữ mốc của lượt quét. «% giống» "
+                   "chỉ so được trong cùng một kết quả: nhạc đè to có thể chỉ khoảng 50 % dù khớp chắc. Khớp vân tay "
+                   "không phải xác nhận quyền sở hữu.")
         for r, tc in co:
             ten = (f"**{thoat_markdown(tc.get('clip', ''))}** — {thoat_markdown(r.source_name[:60])} "
                    f"(mốc lượt quét {hhmmss(tc.get('start_s') or 0.0)})")
@@ -858,10 +860,13 @@ with st.sidebar:
         ui_cap_nhat.ve_phien_ban(eng)
 
     st.subheader("Tình trạng hệ thống")
-    # Dò công cụ (shutil.which quét cả PATH, nạp yt_dlp) tốn vài chục ms: dò MỘT lần mỗi phiên — cài FFmpeg xong, tải
-    # lại trang (phiên mới) là thấy. Dò lại ngay khi file vân tay của kho đang chọn xuất hiện/mất (vừa dựng kho, đổi kho).
+    # Dò công cụ (shutil.which quét cả PATH, nạp yt_dlp) tốn vài chục ms: đủ công cụ thì dò MỘT lần mỗi phiên; còn thiếu
+    # FFmpeg/FFprobe/yt-dlp thì dò lại mỗi lượt (vừa cài xong là thấy). Dò lại ngay khi file vân tay của kho đang chọn
+    # xuất hiện/mất (vừa dựng kho, đổi kho).
     _co_van_tay = os.path.exists(eng.db_file)
-    if st.session_state.get("env_cong_cu", (None,))[0] != _co_van_tay:
+    _env_cu = st.session_state.get("env_cong_cu")
+    if (_env_cu is None or _env_cu[0] != _co_van_tay
+            or not all(_env_cu[1][k] for k in ("ffmpeg", "ffprobe", "yt_dlp"))):
         st.session_state.env_cong_cu = (_co_van_tay, eng.check_env())
     env = st.session_state.env_cong_cu[1]
     dong = {"ffmpeg": "FFmpeg", "ffprobe": "FFprobe", "yt_dlp": "yt-dlp",
@@ -1150,7 +1155,7 @@ def _ve_ket_qua_dong_bo(r: dict) -> None:
                    + "\n- ".join(thoat_markdown(d) for d in r["loi"][:10]))
     if r.get("nghi_hong"):
         st.warning(
-            f"Phát hiện {len(r['nghi_hong'])} file audio nghi hỏng/nén dở — sẽ tải lại. "
+            f"Phát hiện {len(r['nghi_hong'])} file audio nghi hỏng/nén dở — đã đưa vào danh sách tải lại. "
             "Bản cũ chỉ chuyển vào thư mục `_hong` sau khi tải lại xong, không bị xoá:\n\n- "
             + "\n- ".join(thoat_markdown(d) for d in r["nghi_hong"][:10]))
     if r.get("da_doi_soat"):
@@ -1229,7 +1234,9 @@ def _form_dong_bo_song_song() -> None:
         st.rerun()                             # vẽ lại ngay: lời từ chối hiện trong ô đồng bộ
 
 
-with _khu_tren:
+def _ve_khu_tren() -> None:
+    """Thân trang phía trên các trang: lượt đồng bộ, tiến độ việc đang chạy (vòng tự vẽ lại), kết quả việc vừa xong.
+    Gọi SAU ``st.navigation`` — vòng tự vẽ lại chạy trước menu thì F5 / tab mới lúc có việc mất trang đang mở."""
     _ve_lan_dong_bo()
 
 
@@ -1668,8 +1675,8 @@ def _trang_tai_video() -> None:
                                             tieu_de="Chọn file proxy Twitch")
         if _chon_px:
             st.session_state.twitch_proxy_file = _chon_px[0]
-        st.session_state.twitch_proxy_file = c_px.text_input(
-            "File proxy (một dòng http://tên:mật_khẩu@máy:cổng)", st.session_state.twitch_proxy_file,
+        c_px.text_input(
+            "File proxy (một dòng http://tên:mật_khẩu@máy:cổng)", key="twitch_proxy_file", persist_state="session",
             placeholder=r"vd. C:\...\secrets\proxy_twitch.txt",
             help="Với link Twitch, tool xin danh sách chất lượng qua proxy này (Windscribe: nút nguồn ON + Proxy Gateway "
                  "bật) kèm cookie twitch.tv; video vẫn tải thẳng bằng mạng thường.")
@@ -1679,8 +1686,8 @@ def _trang_tai_video() -> None:
                                             tieu_de="Chọn file cookie Twitch")
         if _chon_ck:
             st.session_state.twitch_cookie_file = _chon_ck[0]
-        st.session_state.twitch_cookie_file = c_ck.text_input(
-            "File cookie Twitch (cookies.txt có đăng nhập twitch.tv)", st.session_state.twitch_cookie_file,
+        c_ck.text_input(
+            "File cookie Twitch (cookies.txt có đăng nhập twitch.tv)", key="twitch_cookie_file", persist_state="session",
             placeholder=r"vd. C:\...\secrets\twitch_cookies.txt")
         st.caption("Hai đường dẫn được nhớ khi bấm «💾 Lưu cấu hình» ở thanh bên. Nội dung file không được lưu vào cấu hình.")
     _mo_khoa_tw = ytdlp_chung.MoKhoaTwitch(st.session_state.twitch_proxy_file, st.session_state.twitch_cookie_file)
@@ -1891,15 +1898,17 @@ def _trang_dong_bo() -> None:
                              placeholder="https://www.youtube.com/@TenKenh", key="o_url_dong_bo", persist_state="session",
                              help="Tool chỉ tải phần tiếng, nén còn opus mono 64 kbps — đã đo thực nghiệm: độ chính xác "
                                   "đối chiếu NGANG BẰNG video gốc mà nhẹ hơn ~100 lần.")
-    if not st.session_state.kho_dir and eng.kho_thu_muc:   # ô trống → thư mục của kho đang dùng; gõ/chọn khác vẫn giữ
-        st.session_state.kho_dir = eng.kho_thu_muc
+    # Ô trống hoặc còn đúng giá trị tự điền lần trước → điền thư mục của kho ĐANG dùng (đổi kho thì điền lại, kho chưa
+    # có thư mục thì để trống); bạn gõ/chọn khác thì giữ.
+    if st.session_state.kho_dir in ("", st.session_state.get("kho_dir_tu_dien")):
+        st.session_state.kho_dir = st.session_state.kho_dir_tu_dien = eng.kho_thu_muc or ""
     c_kho_dir, c_chon_kho_dir = st.columns([5, 1], vertical_alignment="bottom")
     with c_chon_kho_dir:
         _chon_kd = ui_thao_tac.nut_chon("chon_kho_dir", st.session_state.kho_dir, tieu_de="Chọn thư mục kho clip gốc")
     if _chon_kd:
         st.session_state.kho_dir = _chon_kd[0]
-    st.session_state.kho_dir = c_kho_dir.text_input(
-        "Thư mục kho clip gốc (ổ D, E... tùy bạn)", st.session_state.kho_dir,
+    c_kho_dir.text_input(
+        "Thư mục kho clip gốc (ổ D, E... tùy bạn)", key="kho_dir", persist_state="session",
         placeholder=r"D:\KhoClipGoc")
     _thu_muc_dong_bo = st.session_state.kho_dir.strip('" ')
     _dong_bo_khac = _canh_bao_dong_bo_khac(_thu_muc_dong_bo,
@@ -2126,7 +2135,7 @@ def _trang_kho() -> None:
     st.divider()
     st.markdown(f"#### Nạp clip vào kho đang dùng: **{eng.kho_dang_dung or '(chưa có kho)'}**")
 
-    _khoa_o_kho = f"o_thu_muc_kho_{eng.kho_dang_dung}"
+    _khoa_o_kho = f"o_thu_muc_kho_{eng.kho_dang_dung}::{eng.kho_thu_muc}"
     st.session_state.setdefault(_khoa_o_kho, eng.kho_thu_muc or "")
     c_tm_kho, c_chon_kho = st.columns([5, 1], vertical_alignment="bottom")
     with c_chon_kho:
@@ -2326,13 +2335,13 @@ def _trang_ds_kho() -> None:
                     "Nhập đường dẫn đúng bên dưới rồi bấm lưu.")
             c_dm, c_chon_dm = st.columns([5, 1], vertical_alignment="bottom")
             with c_chon_dm:
-                _chon_dm = ui_thao_tac.nut_chon("chon_dsv_thu_muc", st.session_state.get("dsv_thu_muc_moi", ""),
+                _chon_dm = ui_thao_tac.nut_chon("chon_dsv_thu_muc", st.session_state.get(f"dsv_thu_muc_moi::{ten_chon}", ""),
                                                 tieu_de=f"Chọn thư mục audio của kho «{ten_chon}»")
             if _chon_dm:
-                st.session_state["dsv_thu_muc_moi"] = _chon_dm[0]
+                st.session_state[f"dsv_thu_muc_moi::{ten_chon}"] = _chon_dm[0]
             duong_moi = c_dm.text_input(
                 f"Đường dẫn thư mục audio của kho «{ten_chon}» trên máy này",
-                key="dsv_thu_muc_moi", placeholder=r"D:\ClipGocDanny", persist_state="session")
+                key=f"dsv_thu_muc_moi::{ten_chon}", placeholder=r"D:\ClipGocDanny", persist_state="session")
             if st.button("💾 Lưu thư mục cho kho này", key="dsv_luu_thu_muc",
                          disabled=not duong_moi):
                 d_moi = (duong_moi or "").strip().strip('"')
@@ -2526,9 +2535,8 @@ def _trang_quet_file() -> None:
                                         "📄 File…", tieu_de="Chọn file video/audio cần quét")
     if _chon_q:
         st.session_state.thu_muc_quet_gan_nhat = _chon_q[0]
-    st.session_state.thu_muc_quet_gan_nhat = c_dd.text_input(
-        "Đường dẫn file hoặc thư mục",
-        st.session_state.thu_muc_quet_gan_nhat,
+    c_dd.text_input(
+        "Đường dẫn file hoặc thư mục", key="thu_muc_quet_gan_nhat", persist_state="session",
         placeholder=r"D:\VideoDai  hoặc  D:\VideoDai\video30h.mp4",
     )
     duong_dan = st.session_state.thu_muc_quet_gan_nhat
@@ -2902,6 +2910,8 @@ _TRANG_CAN_KHO = {"Quét YouTube", "Quét file trong máy", "Tìm video nghi v�
 if os.environ.get("TIMCLIP_UI_VE_MOI_TRANG") == "1":
     # shortcut: AppTest.switch_page chỉ nhận trang dạng FILE nên bộ test vẽ MỌI trang trong 15 tab như trước 23/11;
     # khi AppTest chuyển được trang dạng hàm thì bỏ nhánh này.
+    with _khu_tren:
+        _ve_khu_tren()
     _ve_o_kho()
     for _tab, _ham in zip(st.tabs(
         ["📥 Đồng bộ kênh gốc", "⬇️ Tải video gốc", "🖼️ Tải thumbnail", "📺 Tải cả kênh", "🎞️ Ghép video gốc",
@@ -2912,6 +2922,8 @@ if os.environ.get("TIMCLIP_UI_VE_MOI_TRANG") == "1":
             _ham()
 else:
     _trang = st.navigation(_TRANG, position="top")
+    with _khu_tren:
+        _ve_khu_tren()
     if _trang.title in _TRANG_CAN_KHO:
         _ve_o_kho()
     _trang.run()
