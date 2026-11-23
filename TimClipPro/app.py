@@ -16,8 +16,17 @@ import time
 import uuid
 from datetime import datetime
 
-import pandas as pd
 import streamlit as st
+
+st.set_page_config(page_title="TimClip Pro — Tìm video gốc trong video dài",
+                   page_icon="🔎", layout="wide")
+# Lượt chạy ĐẦU: nạp hàng chục module (pandas, engine…) rồi dựng Engine mất cỡ một giây — hiện chữ chờ thay cho trang
+# trắng. Chỗ giữ LUÔN được tạo (lượt sau để trống) để số phần tử phía trên menu không đổi giữa các lượt.
+_dang_khoi_dong = st.empty()
+if "eng" not in st.session_state:
+    _dang_khoi_dong.info("⏳ Đang khởi động TimClip Pro…")
+
+import pandas as pd
 
 import bang_ngang
 import bao_cao_v2
@@ -80,8 +89,6 @@ from tien_do_dong_bo import SoDongBo
 from ui_tien_do_dong_bo import dong_ho, dong_hieu_suat, ve_tien_do_dong_bo
 from sheets import SheetsExporter
 
-st.set_page_config(page_title="TimClip Pro — Tìm video gốc trong video dài",
-                   page_icon="🔎", layout="wide")
 configure_metadata_logging()
 
 # =====================================================================
@@ -97,8 +104,10 @@ if "eng" not in st.session_state:
     except (runtime_paths.LoiRuntime, sheet_destinations.LoiDichGui, lich_su.LoiLichSuHong) as e:
         # Cấu hình runtime sai (bản managed thiếu state root, lịch sử của máy khác…) hoặc lichsu.db
         # hỏng (audit B-8): dừng rõ ràng — không đoán thư mục dữ liệu, không tạo DB ở chỗ đoán.
+        _dang_khoi_dong.empty()
         st.error(f"Không khởi động được TimClip Pro: {e}")
         st.stop()
+_dang_khoi_dong.empty()
 du_lieu_giao_dien = st.session_state.eng.cau_hinh_da_luu
 for khoa, mac_dinh in GIA_TRI_GIAO_DIEN_MAC_DINH.items():
     if khoa not in st.session_state:
@@ -851,12 +860,22 @@ with st.sidebar:
         ui_cap_nhat.ve_phien_ban(eng)
 
     st.subheader("Tình trạng hệ thống")
-    env = eng.check_env()
+    # Dò công cụ (shutil.which quét cả PATH, nạp yt_dlp) tốn vài chục ms: dò MỘT lần mỗi phiên — cài FFmpeg xong, tải
+    # lại trang (phiên mới) là thấy. Dò lại ngay khi file vân tay của kho đang chọn xuất hiện/mất (vừa dựng kho, đổi kho).
+    _co_van_tay = os.path.exists(eng.db_file)
+    if st.session_state.get("env_cong_cu", (None,))[0] != _co_van_tay:
+        st.session_state.env_cong_cu = (_co_van_tay, eng.check_env())
+    env = st.session_state.env_cong_cu[1]
     dong = {"ffmpeg": "FFmpeg", "ffprobe": "FFprobe", "yt_dlp": "yt-dlp",
             "audfprint": "audfprint", "database": "Kho vân tay clip gốc"}
-    for k, ten in dong.items():
-        st.write(("✅ " if env[k] else "❌ ") + ten +
-                 (f" `{env['yt_dlp_version']}`" if k == "yt_dlp" and env[k] else ""))
+    dong_tt = [("✅ " if env[k] else "❌ ") + ten + (f" `{env['yt_dlp_version']}`" if k == "yt_dlp" and env[k] else "")
+               for k, ten in dong.items()]
+    if all(env[k] for k in dong):
+        with st.expander("✅ Đủ công cụ", expanded=False):
+            st.markdown("\n".join(f"- {d}" for d in dong_tt))
+    else:
+        for d in dong_tt:
+            st.write(d)
     if not all(env[k] for k in ("ffmpeg", "ffprobe", "audfprint")):
         st.error("Thiếu công cụ — hãy chạy lại `cai_dat.bat`.")
 
@@ -1805,6 +1824,14 @@ def _trang_tieu_de_kenh() -> None:
         c_txt.download_button("⬇️ Tải file TXT (chỉ tiêu đề)", tai_video_goc.txt_tieu_de(_dong_td),
                               file_name=f"{_ten_td}.txt", mime="text/plain", on_click="ignore", width="stretch")
 
+@st.cache_data(max_entries=8, ttl=60, show_spinner=False)
+def _thong_ke_kho(thu_muc: str, mtime_ns: int) -> dict:
+    """Số file + dung lượng kho cho trang «Đồng bộ kênh gốc»: liệt kê + đọc cỡ ~1300 file trên ổ HDD ở MỖI lần vẽ lại
+    thì chậm. Nhớ theo mtime của THƯ MỤC (``mtime_ns`` chỉ để làm khoá) — NTFS đổi nó khi thêm/xoá/đổi tên file bên
+    trong (file tải xong được chuyển vào kho); ``ttl`` chặn số cũ ở ổ không đổi mtime thư mục (FAT) hay file sửa tại chỗ."""
+    return ChannelSync(thu_muc).thong_ke()
+
+
 # ---------------------------------------------------------------- TAB 0
 def _trang_dong_bo() -> None:
     st.subheader("Tự động tải toàn bộ video từ kênh YouTube gốc của bạn")
@@ -1891,7 +1918,8 @@ def _trang_dong_bo() -> None:
                    "Trong lúc chờ vẫn quét được ở tab «▶️ Quét YouTube» / «📁 Quét file trong máy».")
 
     if st.session_state.kho_dir and os.path.isdir(st.session_state.kho_dir.strip('" ')):
-        tk = ChannelSync(st.session_state.kho_dir.strip('" ')).thong_ke()
+        _kho_tk = st.session_state.kho_dir.strip('" ')
+        tk = _thong_ke_kho(_kho_tk, os.stat(_kho_tk).st_mtime_ns)
         st.info(f"Kho hiện có **{tk['so_file']}** file audio gốc "
                 f"({tk['dung_luong_mb']:,.0f} MB).")
 

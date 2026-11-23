@@ -1,0 +1,5 @@
+# Cấu hình Streamlit cấp SCRIPT (đọc theo thư mục app.py, mọi launcher đều nhận).
+[runner]
+# «Magic» biến mỗi biểu thức trần thành st.write: Streamlit phải duyệt cây cú pháp của app.py (~2.800 dòng) ở lần
+# vẽ đầu sau khi mở app — đo được ~0,6 giây. app.py không dùng magic (chỉ có docstring), tắt cho mở app nhanh hơn.
+magicEnabled = false
