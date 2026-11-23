@@ -164,12 +164,23 @@ def test_doan_vuot_do_dai_bao_loi_file_goc_giu_nguyen(tmp_path):
 
 
 @can_ffmpeg
-def test_dung_giua_chung(tmp_path):
+def test_dung_giua_chung(tmp_path, monkeypatch):
     a, b = _tao(tmp_path / "a.mp4"), _tao(tmp_path / "b.mp4")
     ra = tmp_path / "ra"
+    da_xong = []
+    cat_that = vm.cv.cat_hoac_bo
 
-    def huy():  # bấm Dừng ngay khi file đầu cắt xong
-        return ra.is_dir() and any(f.suffix == ".mp4" for f in ra.iterdir())
+    def cat_dem(*args, **kw):
+        k = cat_that(*args, **kw)
+        da_xong.append(k)
+        return k
+
+    monkeypatch.setattr(vm.cv, "cat_hoac_bo", cat_dem)
+
+    # bấm Dừng ngay khi file đầu cắt xong — đợi hàm cắt TRẢ VỀ, không nhìn file .mp4 (FFmpeg ghi file
+    # khi còn đang chạy: máy bận thì file 1 bị huỷ giữa chừng, 23/11/2026)
+    def huy():
+        return bool(da_xong)
 
     kq = vm.xu_ly([a, b], str(ra), tu_s=0, den_s=2, cancel_check=huy)
     assert [k["trang_thai"] for k in kq] == ["xong", "bo_qua"]

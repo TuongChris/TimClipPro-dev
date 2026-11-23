@@ -3,6 +3,12 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-11-20 — 3 việc hoãn của review Codex (nhánh fix/pc2/ba-viec-hoan)
+- `engine` dựng kho: clip làm mới chạy lượt `add` riêng trước (D-52); `cli.dong_ket_qua` in mốc «Đoạn vi phạm» V2;
+  `tim_nghi_van.kenh_cua_kho` tra thiếu một phần → lý do «chưa tra được kênh của N/M clip», giao diện cảnh báo.
+### 2026-11-20 — review Codex + 14 bản sửa (D-62, nhánh fix/pc2/codex-review-2011)
+- Codex không công cụ: 10 lượt review (127 phát hiện, ~1,4 triệu token) → 14 thật; 4 lượt viết sửa + test; 1 lượt soát sửa (5 thật).
+- Sửa: mốc giây trơn, bỏ đoạn, API thân lạ, bù tốc độ, mép tinh chỉnh, ghép audio… Nhanh 4324 = 4320/4/0, chậm 25/25. Phân loại `C:\Dev\codex_ketqua\tong_2011\PHAN_LOAI.md`.
 ### 2026-11-20 — ghép chỉ audio (D-61, nhánh feature/pc2/ghep-audio)
 - `ghep_video_goc.ghep(chi_audio=True)`: tải «Chỉ tiếng», `thong_so_audio` + `chuan_audio` (AAC-LC theo file 1),
   `_chuyen_audio` (chép luồng tiếng hoặc đổi AAC), nối `-map 0:a:0` ra `.m4a`; lựa chọn đầu tab Ghép.

@@ -125,3 +125,23 @@ def test_mot_khoa_chan_ca_hai_thao_tac(engine):
 
     assert bao_cao.loi
     assert "tác vụ kiểm tra" in bao_cao.loi[0]
+
+
+def test_lay_khoa_khong_fsync_file_khoa(tmp_path, monkeypatch):
+    """23/11: mỗi lần lấy khoá từng ``fsync`` file khoá để ghi PID. Ổ bận ghi → một fsync 0,1-1,4 s (đo: 300 lượt
+    ``doc_json_an_toan`` tốn 17 s fsync, 0 lần hụt khoá) — thanh bên đọc ``khos.json`` mỗi lượt vẽ nên chờ theo. Nội
+    dung file khoá chỉ để báo «ai đang giữ»: tiến trình khác đọc qua cache của HĐH vẫn thấy; loại trừ là khoá vùng byte
+    của HĐH, không cần dữ liệu nằm trên đĩa."""
+    import luu_tru
+
+    goi = []
+    monkeypatch.setattr(os, "fsync", lambda fd: goi.append(fd))
+    path = str(tmp_path / "a.lock")
+    with KhoaTienTrinh(path, "tác vụ một"):
+        with pytest.raises(DangChayRoi, match="tác vụ một"):    # handle khác vẫn đọc được chủ khoá
+            with KhoaTienTrinh(path):
+                pass
+    so = tmp_path / "so.json"
+    so.write_text('{"a": 1}', encoding="utf-8")
+    assert luu_tru.doc_json_an_toan(str(so)) == {"a": 1}
+    assert goi == [], "lấy khoá / đọc JSON không được fsync — ổ bận là chờ cả giây mỗi lượt vẽ"
