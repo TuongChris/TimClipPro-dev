@@ -3,6 +3,9 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-11-23 — sửa 14 mục review D-63 (nhánh fix/pc2/review-d63)
+- Ô thư mục theo kho (khoá có thư mục kho; ô sửa thư mục từng kho; Đồng bộ tự điền lại khi đổi kho); ô đường dẫn có key = biến phiên (chọn lại giá trị cũ vẫn ăn); ô sửa hồ sơ Sheets không persist; khối tiến độ `_ve_khu_tren` gọi SAU
+  `st.navigation`; `noi_dong` so normcase + bỏ ngoặc; dò lại công cụ khi thiếu; chữ mốc tinh chỉnh; test magic `add_magic`.
 ### 2026-11-23 — so khớp «4/4 khúc, 99%» rồi đứng ~15 phút (nhánh fix/pc2/tien-do-so-khop)
 - Chờ lâu: lượt thường 4 khúc 57 phút × kho Mr Ballen 612 clip ~19,5 phút (`--exact-count` quét TOÀN BỘ hits mỗi
   mode; kho dày → RAM worker 1,1–1,4 GB), rồi lượt bù tốc độ 0,97082 ~10 phút — 2 kết quả chỉ ra ở lượt này.
