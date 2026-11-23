@@ -25,7 +25,8 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   tạm; dữ liệu thật chỉ dùng trong app DEV vận hành.
 
 ## Tiếp theo
-0n. 23/11: tra kho nhanh (`fix/pc2/tra-kho-nhanh`, ĐÃ ĐẨY, CHƯA gộp/DEV) — chờ duyệt gộp + DEV. Đo thật 4 khúc video 1
+0n. 23/11: tra kho nhanh (`fix/pc2/tra-kho-nhanh`) — GỘP `f4629fb` (người dùng duyệt), DEV 20:57 (sao lưu
+    `data_20261123_205731`), health ok, mở lại bằng icon. Người dùng: quét thử, bước so khớp phải nhanh hẳn. Đo thật 4 khúc video 1
     × kho Mr Ballen, 3 worker: 401 → 45 s, 800 dòng kết quả TRÙNG (`C:\Dev\pc2_test_runs\2026-11-23_tien_do_khop`).
 0m. 23/11: «🎧 Tạo file kiểm claim» (D-64, `feature/pc2/file-kiem-claim`) — GỘP 23/11 (người dùng duyệt); người dùng thử tải 1 file lên kênh phụ.
 0l. 23/11: sửa 14 mục `/ponytail-review` của D-63 (`fix/pc2/review-d63`): nhanh 4362 = 4358/4/0, 9 test mới đỏ→xanh — GỘP 23/11 (người dùng duyệt).
