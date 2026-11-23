@@ -207,7 +207,7 @@ def nut_gui_cho_job(eng, job_ids: list, *, key: str) -> None:
         nhan = {d.id: d.nhan for d in ds}
         dich = st.selectbox("Gửi tới", list(nhan), format_func=nhan.get, key=f"{key}_dich", persist_state="session")
         trung = st.checkbox("Tôi hiểu có thể tạo dòng TRÙNG nếu đã gửi trước đó",
-                            key=f"{key}_trung", persist_state="session")
+                            key=f"{key}_trung")
         if st.button("📤 Tạo việc gửi", key=f"{key}_nut"):
             tao, bo_qua, can = gui_thu_cong(eng, job_ids, dich, cho_phep_trung=trung)
             if tao:
@@ -231,9 +231,9 @@ def _ve_hang_doi(eng) -> None:
     tam_dung = outbox.dang_tam_dung(db)
     # Khoá widget mang TRẠNG THÁI TRONG DB: phiên trình duyệt khác đổi trạng thái thì phiên này vẽ một
     # widget mới đúng trạng thái — không bao giờ ghi ngược giá trị cũ của riêng phiên này vào DB.
-    khoa = f"gui_tam_dung_{int(tam_dung)}"
+    khoa_tam_dung = f"gui_tam_dung_{int(tam_dung)}"
     st.toggle("⏸ Tạm dừng toàn bộ việc gửi (quét vẫn chạy, việc vẫn xếp hàng)", value=tam_dung,
-              key=khoa, on_change=_doi_tam_dung, args=(db, khoa), persist_state="session")
+              key=khoa_tam_dung, on_change=_doi_tam_dung, args=(db, khoa_tam_dung))
     tt = outbox.tom_tat(db)
     st.caption(" · ".join(f"{outbox.NHAN_TRANG_THAI[k]}: {v}" for k, v in tt.items() if v)
                or "Hàng đợi trống.")
@@ -298,7 +298,7 @@ def _ve_hang_doi(eng) -> None:
                         st.rerun()
             with c2:
                 # Ô đồng ý gắn ĐÚNG việc đang chọn: đổi sang việc khác thì phải đồng ý lại.
-                dong_y = st.checkbox("Tôi chấp nhận có thể trùng dòng", key=f"gui_dong_y_trung_{v.id}", persist_state="session")
+                dong_y = st.checkbox("Tôi chấp nhận có thể trùng dòng", key=f"gui_dong_y_trung_{v.id}")
                 if st.button("⚠️ Gửi lại", key=f"gui_lai_unknown_{v.id}", disabled=not dong_y or bool(khong_gui_lai)):
                     if _thu(outbox.gui_lai_co_the_trung, _db(eng), v.id):
                         dam_bao_nguoi_gui(eng, bat_buoc=True)
@@ -310,7 +310,7 @@ def _ve_hang_doi(eng) -> None:
                     st.rerun()
         if v.trang_thai in (outbox.PENDING, outbox.RETRY_WAIT, outbox.CLAIMED, outbox.BLOCKED_CONFIG,
                             outbox.BLOCKED_REPORT, outbox.UNKNOWN):
-            huy = st.checkbox("Tôi muốn huỷ việc gửi này", key=f"gui_huy_xn_{v.id}", persist_state="session")
+            huy = st.checkbox("Tôi muốn huỷ việc gửi này", key=f"gui_huy_xn_{v.id}")
             if st.button("✖ Huỷ việc gửi", key=f"gui_huy_{v.id}", disabled=not huy):
                 if _thu(outbox.huy, _db(eng), v.id):
                     st.rerun()

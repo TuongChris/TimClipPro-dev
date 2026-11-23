@@ -1065,7 +1065,7 @@ with st.sidebar:
         xac_nhan_mac_dinh = st.checkbox(
             "Chắc chắn khôi phục", key="xac_nhan_khoi_phuc_mac_dinh",
             help="Bỏ toàn bộ cấu hình đã lưu (cookie, kho, link Sheet…). Bản cũ được giữ ở "
-                 "data\\cau_hinh.json.truoc_khoi_phuc.", persist_state="session")
+                 "data\\cau_hinh.json.truoc_khoi_phuc.")
         if st.button(
             "↩️ Khôi phục mặc định",
             width="stretch",
@@ -1089,6 +1089,43 @@ with st.sidebar:
 # =====================================================================
 #  Làn đồng bộ kênh: khung riêng ở đầu trang, chạy song song với việc khác
 # =====================================================================
+
+_kho_da_ve = False
+
+
+def _ve_o_kho() -> None:
+    """Ô «🗄️ Kho đang dùng» ở thanh bên — trang quét / kho / tìm nghi vấn (_TRANG_CAN_KHO), và lúc có việc đang chạy
+    (vòng tự vẽ lại của việc đó chạy TRƯỚC menu — trước đây thanh bên luôn cho thấy kho đang quét). Mỗi lượt vẽ một lần."""
+    global _kho_da_ve
+    if _kho_da_ve:
+        return
+    _kho_da_ve = True
+    with _cho_kho:
+        st.subheader("🗄️ Kho đang dùng")
+        if khos:
+            tens = [k["ten"] for k in khos]
+            hien_tai = eng.kho_dang_dung if eng.kho_dang_dung in tens else tens[0]
+            # Job đang chạy đã GHIM kho lúc bắt đầu nên đổi kho không làm hỏng job, nhưng
+            # vẫn khoá ô này cho khỏi hiểu nhầm là job đã chuyển sang kho mới (TCP-01).
+            chon = st.selectbox("Chọn kho để quét", tens, index=tens.index(hien_tai),
+                                label_visibility="collapsed", disabled=job["running"])
+            if job["running"]:
+                st.caption("Đang có tác vụ chạy — đổi kho được sau khi tác vụ xong.")
+            if chon != eng.kho_dang_dung and not job["running"]:
+                eng.use_kho(chon)
+                st.rerun()
+        else:
+            st.warning("Chưa có kho nào — tạo ở tab «Kho clip gốc».")
+
+        if clips:
+            st.info(f"Kho «{eng.kho_dang_dung}» có **{len(clips)}** clip gốc.")
+        elif khos:
+            st.warning(f"Kho «{eng.kho_dang_dung}» chưa có vân tay.")
+
+
+if job["running"]:
+    _ve_o_kho()
+
 
 def _huy_dong_bo() -> None:
     """Nút Dừng của khung đồng bộ: cờ huỷ RIÊNG của lượt đồng bộ (kể cả lượt nhận lại từ phiên khác)."""
@@ -1826,7 +1863,7 @@ def _trang_dong_bo() -> None:
             value=_kho_dai, key=f"kho_video_dai_{_thu_muc_dong_bo}", disabled=dang_dong_bo() or _dong_bo_khac,
             help=f"Áp dụng riêng cho thư mục này; thư mục khác vẫn giới hạn {channel.GIO_CLIP_TOI_DA} giờ. Kho video dài "
                  "báo đúng vị trí trong video gốc dài, tối đa 2.047 clip, RAM khoảng 1,5 GB mỗi giờ âm thanh. Kho đã có "
-                 "vân tay trước khi bật phải «Tạo lại từ đầu».", persist_state="session")
+                 "vân tay trước khi bật phải «Tạo lại từ đầu».")
         if _bat_dai != _kho_dai:
             try:
                 channel.dat_kho_video_dai(_thu_muc_dong_bo, _bat_dai)
@@ -2017,8 +2054,7 @@ def _trang_kho() -> None:
         khoa_xn_kho = f"xac_nhan_xoa_kho_{xoa}"
         xac_nhan_xoa_kho = st.checkbox(
             "Tôi xác nhận muốn xóa vân tay của kho đã chọn",
-            disabled=xoa == "— chọn —", key=khoa_xn_kho,
-         persist_state="session")
+            disabled=xoa == "— chọn —", key=khoa_xn_kho)
         if xoa != "— chọn —" and st.button(
             f"🗑️ Xoá kho «{xoa}»",
             disabled=not xac_nhan_xoa_kho or job["running"],
@@ -2039,7 +2075,7 @@ def _trang_kho() -> None:
     st.markdown(f"#### Nạp clip vào kho đang dùng: **{eng.kho_dang_dung or '(chưa có kho)'}**")
 
     thumuc = st.text_input("Đường dẫn thư mục chứa video gốc của kho này",
-                           value=eng.kho_thu_muc,
+                           value=eng.kho_thu_muc, key=f"o_thu_muc_kho_{eng.kho_dang_dung}", persist_state="session",
                            placeholder=r"D:\ClipGocSML",
                            help="Copy đường dẫn từ thanh địa chỉ của File Explorer.")
     _kho_dong_bo_khac = _canh_bao_dong_bo_khac(thumuc.strip('" '), "tạo lại / bổ sung vân tay cho thư mục này, để "
@@ -2055,7 +2091,7 @@ def _trang_kho() -> None:
         if nguon_kho[2]:
             da_xac_nhan_thay = st.checkbox(
                 f"Tôi hiểu: «Tạo lại kho từ đầu» sẽ THAY toàn bộ {len(clips)} clip của kho «{eng.kho_dang_dung}» bằng "
-                "thư mục này", value=False, key=f"xac_nhan_thay_kho::{eng.kho_dang_dung}::{thumuc}", persist_state="session")
+                "thư mục này", value=False, key=f"xac_nhan_thay_kho::{eng.kho_dang_dung}::{thumuc}")
     c1, c2 = st.columns(2)
     with c1:
         if st.button("🔄 Tạo lại kho từ đầu", type="primary", width="stretch",
@@ -2145,7 +2181,6 @@ def _trang_kho() -> None:
     confirm_offline = st.checkbox(
         "Tôi xác nhận chỉ tạo/cập nhật snapshot metadata offline của kho đang dùng",
         key=f"confirm_metadata_offline_{eng.kho_dang_dung}",   # đổi kho → hỏi lại
-        persist_state="session",
     )
     if st.button(
         "🛠️ Khôi phục metadata offline",
@@ -2174,8 +2209,7 @@ def _trang_kho() -> None:
         )
         confirm_network = st.checkbox(
             "Tôi xác nhận cho phép gọi YouTube để vá các entry còn thiếu",
-            key=f"confirm_metadata_network_{eng.kho_dang_dung}",
-         persist_state="session")
+            key=f"confirm_metadata_network_{eng.kho_dang_dung}")
         if st.button(
             "Bắt đầu vá metadata thiếu",
             disabled=not (
@@ -2404,7 +2438,7 @@ def _trang_quet_youtube() -> None:
             st.warning("«Quét toàn bộ video» tải trọn rồi quét hết, không dừng sớm: video rất dài có thể "
                        "phải tải hàng chục GB (video 66 giờ ≈ 18 GB) và chạy nhiều giờ.")
             chua_xac_nhan_toan_bo = not st.checkbox(
-                "Tôi chủ động chọn quét toàn bộ video dài", key="xac_nhan_quet_toan_bo", persist_state="session")
+                "Tôi chủ động chọn quét toàn bộ video dài", key="xac_nhan_quet_toan_bo")
     dich_yt, tu_dong_yt = ui_gui.chon_dich(eng, key="quet_yt", nguon_chung=nguon_chung_bat)
     if st.button("🚀 Bắt đầu quét", type="primary",
                  disabled=(not links or not env["database"] or thieu_link
@@ -2583,7 +2617,7 @@ def _trang_lich_su() -> None:
         khoa_xn = f"xac_nhan_xoa_ls_{chon}"
         xac_nhan_xoa_lich_su = st.checkbox(
             "Tôi xác nhận muốn xóa lần quét đã chọn khỏi lịch sử", key=khoa_xn
-        , persist_state="session")
+        )
         if st.button(
             "🗑️ Xóa lần quét này khỏi lịch sử",
             disabled=not xac_nhan_xoa_lich_su,
@@ -2765,32 +2799,6 @@ def _trang_thong_ke() -> None:
                            "từ trước «Từ ngày quét».")
         else:
             st.info("Chưa thấy video vi phạm nào" + (" trong khoảng ngày đã chọn." if tk_tu or tk_den else "."))
-
-
-def _ve_o_kho() -> None:
-    """Ô «🗄️ Kho đang dùng» ở thanh bên — chỉ các trang quét / kho / tìm nghi vấn (_TRANG_CAN_KHO)."""
-    with _cho_kho:
-        st.subheader("🗄️ Kho đang dùng")
-        if khos:
-            tens = [k["ten"] for k in khos]
-            hien_tai = eng.kho_dang_dung if eng.kho_dang_dung in tens else tens[0]
-            # Job đang chạy đã GHIM kho lúc bắt đầu nên đổi kho không làm hỏng job, nhưng
-            # vẫn khoá ô này cho khỏi hiểu nhầm là job đã chuyển sang kho mới (TCP-01).
-            chon = st.selectbox("Chọn kho để quét", tens, index=tens.index(hien_tai),
-                                label_visibility="collapsed", disabled=job["running"])
-            if job["running"]:
-                st.caption("Đang có tác vụ chạy — đổi kho được sau khi tác vụ xong.")
-            if chon != eng.kho_dang_dung and not job["running"]:
-                eng.use_kho(chon)
-                st.rerun()
-        else:
-            st.warning("Chưa có kho nào — tạo ở tab «Kho clip gốc».")
-
-        if clips:
-            st.info(f"Kho «{eng.kho_dang_dung}» có **{len(clips)}** clip gốc.")
-        elif khos:
-            st.warning(f"Kho «{eng.kho_dang_dung}» chưa có vân tay.")
-
 
 
 # ---------------------------------------------------------------- MENU: 5 NHÓM, 15 TRANG (người dùng duyệt 23/11)
