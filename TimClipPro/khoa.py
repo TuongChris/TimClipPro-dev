@@ -69,7 +69,6 @@ class KhoaTienTrinh:
             if f.tell() == 0:
                 f.write("\n")
                 f.flush()
-                os.fsync(f.fileno())
             f.seek(1)
             thong_tin_truoc_khi_khoa = f.read().strip()
         except BaseException:
@@ -96,8 +95,9 @@ class KhoaTienTrinh:
             f.seek(1)
             f.truncate(1)
             f.write(self._thong_tin + "\n")
+            # Không fsync (23/11): ổ bận ghi → 0,1-1,4 s MỖI lần lấy khoá. Nội dung chỉ để báo «ai đang giữ» — tiến
+            # trình khác đọc qua cache HĐH vẫn thấy; loại trừ là khoá vùng byte, mất điện thì khoá cũng đã nhả.
             f.flush()
-            os.fsync(f.fileno())
         except BaseException:
             self.__exit__()
             raise
