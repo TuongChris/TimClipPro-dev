@@ -1788,7 +1788,7 @@ def _trang_ghep() -> None:
                      chi_audio=_audio_ghep)
 
 def _trang_video_trong_may() -> None:
-    st.subheader("Cắt đoạn, bỏ đoạn, chụp ảnh, chỉnh âm lượng video trong máy")
+    st.subheader("Cắt đoạn, bỏ đoạn, chụp ảnh, chỉnh âm lượng, tạo file kiểm claim cho video trong máy")
     st.caption("File gốc KHÔNG bị sửa, đổi tên hay xoá — kết quả ra file MỚI (trùng tên thì thêm « (2)»). "
                "Muốn ghép các file trong máy: dùng trang «🎞️ Ghép video gốc».")
     c_vb_may, c_chon_may = st.columns([5, 1], vertical_alignment="bottom")
@@ -1838,16 +1838,35 @@ def _trang_video_trong_may() -> None:
                    "(đúng khung hình, độ phân giải gốc); file gốc giữ nguyên. Không chỉnh âm lượng khi chụp.")
     elif _ds_bo_may:
         st.caption(f"{cat_video_goc.mo_ta_ds_doan(_ds_bo_may)}. Phần còn lại nối thành file MỚI. {CAN_BO}")
-    _am_may = st.checkbox(O_AM_LUONG, value=True, key="am_may", help=GIAI_THICH_AM_LUONG, persist_state="session")
-    _chua_chon_m = _tu_m is None and not _ds_bo_may and not _ds_moc_may and not _am_may
+    _kc_may = st.checkbox(
+        "🎧 Tạo file kiểm claim (màn đen 144p + tiếng của video)", key="kiem_claim_may", persist_state="session",
+        help="File nhẹ (3 giờ khoảng 250–500 MB thay vì hàng chục GB) để tải lên kênh phụ cho YouTube Checks quét claim "
+             "về TIẾNG trước khi đăng kênh chính. Không kiểm được claim về hình. Kênh phụ cần xác minh số điện thoại "
+             "mới tải được video dài hơn 15 phút.")
+    _muc_kc_may = None
+    if _kc_may:
+        _muc_kc_may = st.radio("Tiếng trong file kiểm claim", list(video_trong_may.MUC_TIENG_KIEM_CLAIM),
+                               format_func=video_trong_may.MUC_TIENG_KIEM_CLAIM.get, key="muc_kiem_claim_may",
+                               horizontal=True, persist_state="session",
+                               help="Giữ nguyên: tiếng giống từng byte bản gốc (tiếng gốc không phải AAC thì nén AAC "
+                                    "320 kbps). Bản nén nhẹ có thể khiến Content ID bỏ sót claim — chỉ dùng khi đã thử "
+                                    "so với bản giữ nguyên.")
+        if not _loi_doan_m and (_tu_m is not None or _ds_bo_may or _ds_moc_may):
+            _loi_doan_m = "Chỉ chọn một việc: tạo file kiểm claim, hoặc cắt / bỏ đoạn / chụp ảnh — xoá bớt ô."
+            st.error(_loi_doan_m)
+        st.caption("Không chỉnh âm lượng khi tạo file kiểm claim: tiếng phải giống bản sẽ đăng thật.")
+    _am_may = not _kc_may and st.checkbox(O_AM_LUONG, value=True, key="am_may", help=GIAI_THICH_AM_LUONG,
+                                          persist_state="session")
+    _chua_chon_m = _tu_m is None and not _ds_bo_may and not _ds_moc_may and not _am_may and not _kc_may
     if _chua_chon_m:
-        st.caption("Chọn ít nhất một việc: điền «Từ»/«Đến» để cắt, điền các đoạn cần bỏ, điền mốc chụp ảnh, hoặc tick "
-                   "chỉnh âm lượng.")
-    _nhan_may = "📸 Chụp ảnh" if _ds_moc_may and not _loi_doan_m else "🛠️ Xử lý"
+        st.caption("Chọn ít nhất một việc: điền «Từ»/«Đến» để cắt, điền các đoạn cần bỏ, điền mốc chụp ảnh, tick "
+                   "chỉnh âm lượng, hoặc tick tạo file kiểm claim.")
+    _nhan_may = ("🎧 Tạo file kiểm claim" if _kc_may else "📸 Chụp ảnh" if _ds_moc_may else "🛠️ Xử lý") \
+        if not _loi_doan_m else "🛠️ Xử lý"
     if st.button(f"{_nhan_may} {len(_ds_may)} file" if _ds_may else _nhan_may, type="primary", key="bat_dau_xu_ly_may",
                  disabled=not (_ds_may and _thu_muc_may) or bool(_loi_doan_m) or _chua_chon_m or _chua_tai_duoc()):
         _bat_dau_tai(video_trong_may.xu_ly, _ds_may, _thu_muc_may, tu_s=_tu_m, den_s=_den_m, ds_bo=_ds_bo_may or None,
-                     ds_moc=_ds_moc_may or None, chuan_hoa_am=_am_may)
+                     ds_moc=_ds_moc_may or None, chuan_hoa_am=_am_may, kiem_claim=_muc_kc_may)
 
 def _trang_tieu_de_kenh() -> None:
     st.subheader("Tải danh sách tiêu đề của kênh")

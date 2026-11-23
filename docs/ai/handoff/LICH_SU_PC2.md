@@ -3,6 +3,13 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-11-23 — so khớp «4/4 khúc, 99%» rồi đứng ~15 phút (nhánh fix/pc2/tien-do-so-khop)
+- Chờ lâu: lượt thường 4 khúc 57 phút × kho Mr Ballen 612 clip ~19,5 phút (`--exact-count` quét TOÀN BỘ hits mỗi
+  mode; kho dày → RAM worker 1,1–1,4 GB), rồi lượt bù tốc độ 0,97082 ~10 phút — 2 kết quả chỉ ra ở lượt này.
+  «4/4 khúc» đếm dòng `Analyzed` = mới tính hash, CHƯA tra kho.
+- Sửa: `audfprint_match_runner.py` (bọc, không sửa vendored) báo «xong khúc» sau tra kho (1 nhân + joblib); sổ
+  `khop_phan_tich`/`khop_xong`/`khop_luot`; màn hình «tra kho xong K/M · đã phân tích N/M» + tên lượt bù tốc độ.
+  `progress()` cũ giữ nguyên (golden). `tests/test_tien_do_so_khop.py` 5/5 (2 chậm, audfprint thật).
 ### 2026-11-23 — giao diện D-63: menu 5 nhóm + mở nhanh + bớt thao tác tay + gọn chữ (feature/pc2/giao-dien-tong2)
 - `st.tabs` 15 tab → `st.navigation(position="top")` 5 nhóm; thân tab thành `_trang_*`; `persist_state="session"` cho
   ô có key (trừ ô xác nhận / ô đọc lại DB); bộ test vẽ mọi trang qua `TIMCLIP_UI_VE_MOI_TRANG=1`. Sub-agent (người dùng
