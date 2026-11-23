@@ -22,8 +22,16 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 vẫn ở trên mọi trang; ô «Kho đang dùng» chỉ hiện ở trang quét / kho / tìm nghi vấn. st.navigation xoá giá trị widget không
 được vẽ → mọi ô nhập có key mang `persist_state="session"` (test AST giữ quy tắc này), 12 ô hay gõ (link, tên file, số
 video…) thêm key. AppTest chỉ chuyển được trang dạng FILE → bộ test đặt `TIMCLIP_UI_VE_MOI_TRANG=1` (conftest) để vẽ mọi
-trang trong 15 tab như cũ; `tests/test_giao_dien_trang.py` kiểm chính menu. Còn: giai đoạn 2 (mở app nhanh), 3 (bớt thao
-tác tay), 4 (gọn chữ) — chờ người dùng thử giai đoạn 1.
+trang trong 15 tab như cũ; `tests/test_giao_dien_trang.py` kiểm chính menu. Review độc lập: KHÔNG giữ giá trị cho ô
+xác nhận thao tác nguy hiểm (key gắn lựa chọn) và ô vẽ lại từ trạng thái đĩa/DB (nút tạm dừng gửi Sheets từng hiện
+ngược) — test đòi đúng hai phía. Cùng lượt gộp: giai đoạn 3 (nút «📂 Chọn…» cho ô đường dẫn, «📂 Mở thư mục» sau khi
+xong việc, tự điền thư mục kho, link sang trang kế; `ui_thao_tac.py`) và giai đoạn 4 (chữ gọn, chi tiết vào ⓘ, «tab»
+→ «trang», link bấm được trong bảng kết quả, `TimClipPro/.streamlit/config.toml` `toolbarMode = "viewer"` ẩn Deploy —
+Streamlit đọc file cạnh app.py bất kể thư mục chạy) và giai đoạn 2 (chữ «Đang khởi động…» lúc mở; «✅ Đủ công cụ» một
+dòng, `check_env` một lần mỗi phiên; `list_khos` + sổ kiểm video còn/gỡ nhớ theo mtime/size/inode — khoá `.timclip.lock`
+từng bắt mỗi lần vẽ lại chờ 10–1176 ms; đếm file kho nhớ theo mtime thư mục; tắt «magic» — đo trên dữ liệu giả: mã
+app.py mỗi lần vẽ lại trang mặc định 295–1473 ms → ~76 ms, mở lạnh ~5,1 s → ~3,6 s). Khoá đôi khi lấy hụt dù một luồng:
+chưa sửa (việc riêng).
 
 ## D-62 Review độc lập bằng Codex 20/11 + quy tắc dấu phẩy trong danh sách mốc (người dùng, 2026-11-20)
 Người dùng cho dùng phần hạn mức ChatGPT dư: Codex (gpt-6.2-astra) KHÔNG công cụ (chỉ nhận mã công khai dạng chữ) review

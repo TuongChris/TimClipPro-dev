@@ -3,6 +3,14 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-11-20 — ghép chỉ audio (D-61, nhánh feature/pc2/ghep-audio)
+- `ghep_video_goc.ghep(chi_audio=True)`: tải «Chỉ tiếng», `thong_so_audio` + `chuan_audio` (AAC-LC theo file 1),
+  `_chuyen_audio` (chép luồng tiếng hoặc đổi AAC), nối `-map 0:a:0` ra `.m4a`; lựa chọn đầu tab Ghép.
+- Test: M4A + MP3 + file video + link lặp → đúng thứ tự/tần số, file gốc giữ nguyên. Nhanh 4302 = 4298/4/0.
+### 2026-11-19 — chụp ảnh ở các mốc (D-60, nhánh feature/pc2/chup-anh)
+- `cat_video_goc.doc_ds_moc` + `chup_anh` (FFmpeg `-ss` trước `-i`, `-frames:v 1 -update 1`, PNG); `tai_doan(ds_moc=…)`
+  tải trọn phần hình SDR vào `.timclip_cat/anh_<mức>`; `video_trong_may.xu_ly(ds_moc=…)`; ô ở hai tab.
+- Test: video đánh dấu từng khung → ảnh đúng khung; mốc sau khung cuối → lỗi rõ. Nhanh 4295 = 4291/4/0.
 ### 2026-11-17 — giữ tab đang mở khi xong việc (nhánh fix/pc2/giu-tab-dang-mo)
 - Nguyên nhân: khối trạng thái/kết quả vẽ TRÊN `st.tabs` đổi số phần tử → hàng tab đổi vị trí → trình duyệt dựng lại,
   về tab đầu (tái hiện bằng app thử + playwright: Ba → Mot). Sửa: mọi thứ phía trên nằm trong khung `_khu_tren`
