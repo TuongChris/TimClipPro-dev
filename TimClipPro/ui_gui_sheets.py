@@ -394,7 +394,7 @@ def _ve_ho_so(eng) -> None:
                                 format_func=lambda i: next(d.nhan for d in ds if d.id == i),
                                 key="hs_chon", persist_state="session")
             d = next(x for x in ds if x.id == chon)
-            ten_moi = st.text_input("Đổi tên", value=d.ten, key=f"hs_ten_moi_{d.id}", persist_state="session")
+            ten_moi = st.text_input("Đổi tên", value=d.ten, key=f"hs_ten_moi_{d.id}")
             c1, c2, c3, c4 = st.columns(4)
             with c1:
                 if st.button("Lưu tên (revision mới)", key=f"hs_doi_ten_{d.id}") and ten_moi != d.ten:
@@ -425,15 +425,15 @@ def _ve_ho_so(eng) -> None:
                     khoa_moi = st.selectbox(
                         "Khoá Google của hồ sơ", khoa_ds,
                         index=khoa_ds.index(d.xac_thuc_ref) if d.xac_thuc_ref in khoa_ds else 0,
-                        key=f"hs_khoa_moi_{d.id}", persist_state="session")
+                        key=f"hs_khoa_moi_{d.id}")
                 with k2:
                     if st.button("Lưu khoá (revision mới)", key=f"hs_luu_khoa_{d.id}") and khoa_moi != d.xac_thuc_ref:
                         if _thu(sd.sua_dich, db, d.id, xac_thuc_ref=khoa_moi):
                             st.rerun()
             link_moi = st.text_input("Link Google Sheet mới (để trống = giữ bảng/tab hiện tại)",
-                                     key=f"hs_link_moi_{d.id}", persist_state="session")
+                                     key=f"hs_link_moi_{d.id}")
             tab_moi = st.text_input("Tên tab (đối chiếu ở lần gửi đầu của revision mới)",
-                                    value=d.worksheet_ten, key=f"hs_tab_moi_{d.id}", persist_state="session")
+                                    value=d.worksheet_ten, key=f"hs_tab_moi_{d.id}")
             if st.button("Lưu link/tab (revision mới)", key=f"hs_luu_dich_{d.id}"):
                 try:
                     sid, gid = (sd.phan_tich_link(link_moi) if link_moi.strip()

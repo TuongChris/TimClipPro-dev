@@ -67,7 +67,7 @@ PID hoặc exit code; không có command đầy đủ hay raw fingerprint.
 
 Nếu UI không đổi:
 
-1. Kiểm `Worker`, `Cập nhật gần nhất`, PID và phase; một video dài không đồng nghĩa job treo.
+1. Kiểm `Worker`, `Cập nhật gần nhất`, `mã tiến trình` (PID) và phase; một video dài không đồng nghĩa job treo.
 2. Tìm heartbeat/process child/end cùng `job_id` trong log.
 3. Chỉ kiểm PID được UI/log nêu: `Get-Process -Id <PID>`. Không kill mọi `python.exe`/`ffmpeg.exe`.
 4. Phase saving lâu: kiểm dung lượng, quyền ghi, antivirus/file lock. Không xóa `.pklz` hay workspace
@@ -396,7 +396,7 @@ Source packager mặc định từ chối overwrite; chỉ dùng `--overwrite` k
    Đừng bao giờ `Stop-Process -Name python` — sẽ giết cả GUI. Dùng nút **⏹️ Dừng lại**;
    nó dọn đúng cây PID gốc và giữ nguyên kho vân tay trước job.
 
-3. Màn hình hiện "Clip hiện tại đang xử lý lâu hơn bình thường" là **bình thường** với
+3. Màn hình hiện "Clip này lâu hơn bình thường nhưng máy vẫn đang xử lý — cứ chờ" là **bình thường** với
    clip dài; phần trăm cố tình không tăng giả khi clip chưa xong.
 
 > Bối cảnh: bản cũ đếm tiến độ bằng cách bắt chuỗi `ingesting #` trên stdout audfprint.

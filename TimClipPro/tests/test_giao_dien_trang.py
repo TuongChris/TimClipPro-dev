@@ -104,9 +104,10 @@ def test_menu_du_15_trang_moi_trang_mot_lan_5_nhom():
 
 # Ô KHÔNG được giữ giá trị khi khuất: ô xác nhận thao tác nguy hiểm (key gắn lựa chọn — đổi lựa chọn / rời trang là
 # phải tick lại) và ô vẽ lại từ trạng thái trên đĩa / DB (giữ bản cũ của phiên sẽ hiện ngược trạng thái thật, rồi ghi
-# ngược vào đĩa). Review 23/11 tái hiện: nút tạm dừng gửi Sheets hiện ngược; ô xác nhận xoá kho đã tick sẵn.
+# ngược vào đĩa). Review 23/11 tái hiện: nút tạm dừng gửi Sheets hiện ngược; ô xác nhận xoá kho đã tick sẵn; ô sửa
+# hồ sơ đích (hs_*_moi_) giữ chữ bỏ dở rồi lần «Lưu» sau lưu luôn.
 KHONG_GIU = re.compile(
-    r"xac_nhan|confirm_|gui_dong_y_|gui_huy_xn_|khoa_tam_dung|kho_video_dai_|_trung'|khoa_xn"
+    r"xac_nhan|confirm_|gui_dong_y_|gui_huy_xn_|khoa_tam_dung|kho_video_dai_|_trung'|khoa_xn|hs_\w*_moi_"
 )
 
 
@@ -131,4 +132,13 @@ def test_o_nhap_co_key_giu_gia_tri_tru_o_xac_nhan_va_o_doc_lai_trang_thai():
                 if giu == khong_giu:
                     sai.append(f"{f.name}:{n.lineno} {ast.unparse(kw['key'])}")
     assert not sai
-    assert so_khong_giu >= 12  # 8 ở app.py + 4 ở ui_gui_sheets.py (23/11)
+    assert so_khong_giu >= 16  # 8 ở app.py + 8 ở ui_gui_sheets.py (23/11)
+
+
+def test_vong_tu_ve_lai_cua_viec_dang_chay_nam_sau_menu():
+    """Review 23/11 số 7: vòng tiến độ (sleep + st.rerun) chạy TRƯỚC st.navigation thì F5 / tab mới lúc có việc mất
+    trang đang mở. Vòng nằm trong _ve_khu_tren, gọi giữa st.navigation và trang."""
+    src = APP_PY.read_text(encoding="utf-8")
+    nav = src.index('_trang = st.navigation(_TRANG, position="top")')
+    assert "_ve_khu_tren()" in src[nav:src.index("_trang.run()")]
+    assert src.index("def _ve_khu_tren") < src.index("time.sleep(0.75)") < src.index("def _link_trang")

@@ -3,6 +3,11 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-11-23 — giao diện D-63: menu 5 nhóm + mở nhanh + bớt thao tác tay + gọn chữ (feature/pc2/giao-dien-tong2)
+- `st.tabs` 15 tab → `st.navigation(position="top")` 5 nhóm; thân tab thành `_trang_*`; `persist_state="session"` cho
+  ô có key (trừ ô xác nhận / ô đọc lại DB); bộ test vẽ mọi trang qua `TIMCLIP_UI_VE_MOI_TRANG=1`. Sub-agent (người dùng
+  cho dùng thoải mái 23/11): soát lỗi + GĐ2 (nhớ `list_khos`/sổ theo mtime) + GĐ3 (`ui_thao_tac.py`) + GĐ4 (chữ,
+  `.streamlit/config.toml`), gộp tay 10 xung đột.
 ### 2026-11-23 — khoá JSON chậm mỗi lượt vẽ (nhánh fix/pc2/khoa-lay-hut)
 - KHÔNG phải hụt khoá (0/800 lượt, cả AppTest): `KhoaTienTrinh.__enter__` fsync file khoá mỗi lần lấy; ổ bận ghi → fsync tới 1,35 s (300 lượt `doc_json_an_toan`: p99 1369 → 81 ms, max 4839 → 141 ms).
 - Bỏ 2 fsync (nội dung chỉ để báo chủ khoá; loại trừ = khoá vùng byte HĐH), test `test_lay_khoa_khong_fsync_file_khoa` đỏ→xanh. Script đo: scratchpad phiên (không giữ).
