@@ -66,6 +66,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 ## Nhật ký
 ### 2026-11-23 — test «Dừng giữa chừng» chập chờn (nhánh fix/pc2/test-dung-giua-chung)
 - `huy()` bật khi thấy `.mp4` nhưng FFmpeg ghi file lúc còn chạy → máy bận (CPU 100%) huỷ file 1 giữa chừng. Nay bọc `cat_hoac_bo`, Dừng chỉ sau khi file 1 TRẢ VỀ: 5/5 + cả file 13/13 (CPU ~50%).
+- `integration/current` = `8c7bbb3` (CPU ~67%): nhanh 4327 = 4323/4/0 (1370 s; bỏ qua = 4 ca cũ), chậm 25/25 (870 s). Junit: `C:\Dev\pc2_test_runs\2026-11-23_test_dung_giua_chung`.
 ### 2026-11-20 — 3 việc hoãn của review Codex (nhánh fix/pc2/ba-viec-hoan)
 - `engine` dựng kho: clip làm mới chạy lượt `add` riêng trước (D-52); `cli.dong_ket_qua` in mốc «Đoạn vi phạm» V2;
   `tim_nghi_van.kenh_cua_kho` tra thiếu một phần → lý do «chưa tra được kênh của N/M clip», giao diện cảnh báo.
