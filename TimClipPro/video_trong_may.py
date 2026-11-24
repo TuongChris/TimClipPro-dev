@@ -4,7 +4,7 @@ chụp ảnh 18/11; file kiểm claim D-64, 23/11).
 
 Dùng lại đúng phần cắt (:func:`cat_video_goc.cat_mot`, cắt chính xác từng khung hình + kiểm độ dài) và phần chỉnh âm
 lượng (:func:`am_luong.chuan_hoa`, mức YouTube -14 LUFS) của luồng tải theo link. Bất biến: file GỐC không bao giờ bị sửa,
-đổi tên hay xoá — mọi kết quả ra file MỚI trong thư mục lưu (trùng tên thì thêm « (2)»). Ghép file trong máy: tab
+đổi tên hay xoá — mọi kết quả ra file MỚI trong thư mục lưu (trùng tên thì thêm «_2»). Ghép file trong máy: tab
 «🎞️ Ghép video gốc» nhận cả đường dẫn file (:func:`ghep_video_goc.ghep`).
 """
 
@@ -138,7 +138,7 @@ def tao_file_kiem_claim(
         return {"trang_thai": "bo_qua", "duong_dan": "", "ghi_chu": "Đã dừng theo yêu cầu; file gốc giữ nguyên."}
     if r.returncode != 0 or not os.path.isfile(dich):
         return {"trang_thai": "loi", "duong_dan": "",
-                "ghi_chu": f"Không tạo được file kiểm claim: {(r.stderr or r.ly_do or '').strip()[-300:]}"}
+                "ghi_chu": f"Không tạo được file kiểm claim: {r.mo_ta_loi()}"}
     if giu_nguyen:
         cach = "tiếng giữ nguyên (không nén lại)"
     elif muc_tieng == "goc":

@@ -105,7 +105,7 @@ def chuan_hoa(
     m = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", r.stderr or "")
     if r.returncode != 0 or not m:
         raise RuntimeError(
-            f"Không đo được âm lượng «{os.path.basename(path)}»: {(r.stderr or r.ly_do or '').strip()[-200:]}"
+            f"Không đo được âm lượng «{os.path.basename(path)}»: {r.mo_ta_loi(200)}"
         )
     do = json.loads(m.group(0))
     try:
@@ -159,7 +159,7 @@ def chuan_hoa(
         )
         if r.returncode != 0 or not os.path.isfile(dang):
             raise RuntimeError(
-                f"FFmpeg chỉnh âm lượng lỗi: {(r.stderr or r.ly_do or '').strip()[-200:]}"
+                f"FFmpeg chỉnh âm lượng lỗi: {r.mo_ta_loi(200)}"
             )
         os.replace(dang, dich or path)
     finally:
