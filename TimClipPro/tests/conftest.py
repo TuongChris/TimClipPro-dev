@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Fixture dùng chung cho toàn bộ test. Sinh audio giả lập, không cần file thật."""
+import importlib.util
 import os
 import sys
 import wave
@@ -11,6 +12,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # app.py dùng st.navigation (chỉ chạy trang đang mở); AppTest chỉ chuyển được trang dạng FILE nên bộ test vẽ MỌI
 # trang trong 15 tab như trước 23/11 (nhánh TIMCLIP_UI_VE_MOI_TRANG ở cuối app.py). Test của chính menu tự bỏ biến này.
 os.environ.setdefault("TIMCLIP_UI_VE_MOI_TRANG", "1")
+
+# Chặn mạng cho cả bộ test, kể cả tiến trình con Python (việc nhỏ #60) — trước đây chỉ khi người chạy nhớ đặt
+# PYTHONPATH tới bộ chặn ngoài. Đã có bộ chặn ngoài thì không cài chồng; THẬT cần mạng: TIMCLIP_TEST_CHO_MANG=1.
+_CHAN_MANG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chan_mang")
+_spec = importlib.util.spec_from_file_location("timclip_chan_mang", os.path.join(_CHAN_MANG, "sitecustomize.py"))
+chan_mang = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(chan_mang)
+# Tiến trình con nạp nó như sitecustomize qua PYTHONPATH; đã có sitecustomize khác thì không che mất nó.
+CHAN_CA_TIEN_TRINH_CON = chan_mang.TRANG_THAI == "cai" and "sitecustomize" not in sys.modules
+if CHAN_CA_TIEN_TRINH_CON:
+    os.environ["PYTHONPATH"] = os.pathsep.join(p for p in (_CHAN_MANG, os.environ.get("PYTHONPATH")) if p)
 
 
 def _ghi_wav(path, sig, sr=22050):
