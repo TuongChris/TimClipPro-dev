@@ -1806,7 +1806,7 @@ def _trang_ghep() -> None:
 
 def _trang_video_trong_may() -> None:
     st.subheader("Cắt đoạn, bỏ đoạn, chụp ảnh, chỉnh âm lượng, tạo file kiểm claim cho video trong máy")
-    st.caption("File gốc KHÔNG bị sửa, đổi tên hay xoá — kết quả ra file MỚI (trùng tên thì thêm « (2)»). "
+    st.caption("File gốc KHÔNG bị sửa, đổi tên hay xoá — kết quả ra file MỚI (trùng tên thì thêm «_2»). "
                "Muốn ghép các file trong máy: dùng trang «🎞️ Ghép video gốc».")
     c_vb_may, c_chon_may = st.columns([5, 1], vertical_alignment="bottom")
     with c_chon_may:
@@ -2657,7 +2657,7 @@ def _trang_lich_su() -> None:
         st.dataframe(pd.DataFrame([{
             "ID": j["id"], "Thời điểm": j["created_at"], "Loại": j["source_type"],
             "Nguồn": j["source_name"], "Thời lượng": hhmmss(j["duration_s"] or 0),
-            "Kết quả": j["n_matches"], "Trạng thái": j["status"],
+            "Kết quả": j["n_matches"], "Trạng thái": {"ok": "Quét xong", "error": "Lỗi"}.get(j["status"], j["status"]),
             "Kho": lich_su.mo_ta_kho(j), "Phạm vi": lich_su.mo_ta_pham_vi(j),
         } for j in jobs]), width="stretch", hide_index=True)
 
@@ -2693,14 +2693,14 @@ def _trang_lich_su() -> None:
                                      columns=bang_ngang.HEADER_NGANG)
                         .to_csv(index=False).encode("utf-8-sig"),
                         file_name=f"baocao_ngang_job{chon}.csv", mime="text/csv",
-                        key=f"ls_ngang_{chon}")
+                        key=f"ls_ngang_{chon}", help="Mỗi video vi phạm MỘT dòng, đúng 34 cột như trang Google Sheets.")
             with ch2:
                 st.download_button(
                     "⬇️ Tải báo cáo dọc (16 cột)",
                     pd.DataFrame([[o_bang_tinh_an_toan(o) for o in d] for d in doc_chon],
                                  columns=eng.HEADER).to_csv(index=False).encode("utf-8-sig"),
                     file_name=f"baocao_doc_job{chon}.csv", mime="text/csv",
-                    key=f"ls_doc_{chon}")
+                    key=f"ls_doc_{chon}", help="Mỗi đoạn vi phạm một dòng (16 cột), như file «⬇️ Tải báo cáo CSV» lúc quét xong.")
         else:
             st.caption("Lần quét cũ: lịch sử không lưu tên, ngày đăng, link video gốc nên không dựng lại được "
                        "báo cáo — bên dưới chỉ là dữ liệu khớp.")
@@ -2723,7 +2723,8 @@ def _trang_lich_su() -> None:
                 st.download_button("⬇️ Tải CSV lần quét này",
                                    df.map(o_bang_tinh_an_toan).to_csv(index=False)
                                    .encode("utf-8-sig"),
-                                   file_name=f"ketqua_job{chon}.csv", mime="text/csv")
+                                   file_name=f"ketqua_job{chon}.csv", mime="text/csv",
+                                   help="Bảng số đo kỹ thuật ngay trên (số hash, giây khớp…) — không phải báo cáo để khiếu nại.")
         else:
             st.info("Lần quét này không có kết quả nào.")
         viec_job = outbox.ds_viec(eng.sqlite_file, job_id=chon)
@@ -2909,7 +2910,8 @@ def _trang_thong_ke() -> None:
                 "Clip gốc": c["clip"], "Tên video gốc (lúc quét)": c["tieu_de"], "Video vi phạm": c["so_video"],
                 "Đoạn khớp": c["so_doan"], "Thời lượng khớp": hhmmss(c["tong_giay"]),
             } for c in tke.clip]), width="stretch", hide_index=True)
-            st.markdown("**📈 Video vi phạm phát hiện lần đầu theo tháng**")
+            st.markdown("**📈 Video vi phạm phát hiện lần đầu theo tháng** — tính theo ngày quét đầu tiên thấy vi phạm, "
+                        "không phải ngày video được đăng")
             if tke.theo_thang:
                 st.bar_chart(pd.DataFrame({"Tháng": [thong_ke.nhan_thang(t) for t, _ in tke.theo_thang],
                                            "Video vi phạm mới": [n for _, n in tke.theo_thang]}),

@@ -128,3 +128,27 @@ def test_canh_bao_khi_tham_so_nhan_dien_khac_mac_dinh(tmp_path, monkeypatch):
 def test_tham_so_mac_dinh_thi_khong_canh_bao(tmp_path, monkeypatch):
     at = _app(tmp_path, monkeypatch)
     assert not [w for w in at.sidebar.warning if "khác mặc định" in w.value]
+
+
+# ---------------------------------------------------------------- #37, #41: chữ dễ hiểu ở Lịch sử / Thống kê
+def test_lich_su_chu_viet_ba_nut_tai_co_giai_thich_thong_ke_noi_ro_ngay(tmp_path, monkeypatch):
+    from engine import Engine, ScanResult
+    from test_bao_cao_v2 import _bc, _kq_ca_that
+
+    e = Engine(data_dir=str(tmp_path / "data"), out_dir=str(tmp_path / "ketqua"))
+    e.save_job(ScanResult(source_name="Lượt lỗi", source_ref="u1", status="error", note="mạng"), "youtube")
+    kq = _kq_ca_that()
+    kq.bao_cao = _bc(kq)
+    e.save_job(kq, "youtube")
+    at = _app(tmp_path, monkeypatch)
+    bang = next(d.value for d in at.dataframe if {"ID", "Trạng thái", "Kho", "Phạm vi"} <= set(d.value.columns))
+    assert sorted(bang["Trạng thái"]) == ["Lỗi", "Quét xong"]
+    giai_thich = {el.proto.label: el.proto.help for el in at.get("download_button")}
+    for nhan in ("⬇️ Tải báo cáo ngang (34 cột)", "⬇️ Tải báo cáo dọc (16 cột)", "⬇️ Tải CSV lần quét này"):
+        assert giai_thich.get(nhan), nhan
+    assert any("ngày quét đầu tiên" in m.value for m in at.markdown), "biểu đồ theo tháng nói rõ tính theo ngày nào"
+
+
+def test_chu_thich_trung_ten_dung_voi_ma():
+    nguon = APP_PY.read_text(encoding="utf-8")
+    assert "« (2)»" not in nguon and "«_2»" in nguon
