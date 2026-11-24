@@ -1086,6 +1086,11 @@ class PhienYouTube:
             return self._mo_boi is not None
 
     @property
+    def loi_ghi_may(self) -> Optional[YoutubeAccessFailure]:
+        """Lỗi GHI đầu tiên của máy trong lượt (ổ đầy / không ghi được — ``LOAI_MAY``), nếu có."""
+        return self._loi_may
+
+    @property
     def ly_do(self) -> Optional[YoutubeAccessFailure]:
         with self._lock:
             return self._mo_boi

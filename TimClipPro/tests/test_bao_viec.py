@@ -27,6 +27,7 @@ import bao_viec
 import common_original as co
 import common_original_jobs
 import tac_vu_nen
+import truy_cap_youtube
 from common_original_jobs import CommonOriginalJobController
 from fingerprint_progress import FingerprintJobController, progress_ban_dau
 from scan_jobs import ScanJobController
@@ -78,6 +79,14 @@ def test_bam_dung_hoac_tat_o_tieng_thi_khong_keu(ghi, monkeypatch, kieu, bat):
 ])
 def test_kieu_ket_thuc(loi, phien, ket_qua, kieu):
     assert bao_viec.kieu_ket_thuc(loi, phien, ket_qua) == kieu
+
+
+def test_phien_da_gap_o_day_thi_keu_kieu_loi_du_viec_chay_het():
+    """Tải video gốc: ổ đầy ở video 10 → 40 video sau hỏng nhanh (không request), việc vẫn trả danh sách bình thường."""
+    phien = truy_cap_youtube.PhienYouTube()
+    assert bao_viec.kieu_ket_thuc("", phien, [{"trang_thai": "xong"}]) == bao_viec.XONG
+    phien.ghi_loi(OSError(28, "No space left on device"), "download")
+    assert not phien.mo and bao_viec.kieu_ket_thuc("", phien, [{"trang_thai": "loi"}]) == bao_viec.LOI
 
 
 def test_xong_va_loi_la_hai_kieu_tieng_khac_nhau_may_khong_phat_duoc_thi_im(monkeypatch, bao_viec_that):

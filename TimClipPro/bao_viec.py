@@ -60,9 +60,11 @@ def phat_tieng(kieu: str) -> None:
 
 
 def kieu_ket_thuc(loi: str = "", phien=None, ket_qua=None) -> str:
-    """``LOI`` khi việc ném lỗi hoặc bị YouTube chặn (cầu dao của ``phien`` mở, hay kết quả mang ``chan_youtube``);
-    còn lại ``XONG`` — kể cả xong một phần: chi tiết ở màn kết quả."""
-    bi_chan = getattr(phien, "mo", False) is True or (isinstance(ket_qua, dict) and bool(ket_qua.get("chan_youtube")))
+    """``LOI`` khi việc ném lỗi, bị YouTube chặn (cầu dao của ``phien`` mở, hay kết quả mang ``chan_youtube``) hoặc
+    phiên đã gặp lỗi GHI của máy (ổ đầy: các mục sau hỏng nhanh mà việc vẫn «chạy hết»); còn lại ``XONG`` — kể cả xong
+    một phần: chi tiết ở màn kết quả."""
+    bi_chan = (getattr(phien, "mo", False) is True or getattr(phien, "loi_ghi_may", None) is not None
+               or (isinstance(ket_qua, dict) and bool(ket_qua.get("chan_youtube"))))
     return LOI if loi or bi_chan else XONG
 
 
