@@ -15,6 +15,22 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-65 Đêm 24→25/11: khảo sát toàn dự án + 5 nhánh sửa nhỏ (người dùng cấp toàn quyền qua đêm, 2026-11-24)
+Người dùng nhờ Fable 5.2 (rồi Opus 5.5 khi hết hạn mức) khảo sát CHỈ ĐỌC toàn dự án: 18 mảng, 201 đề xuất, mỗi đề xuất
+được một agent khác kiểm trên mã (giữ 190, loại 11) → 25 đề tài + 66 việc nhỏ, 3 giám khảo chấm ưu tiên. Kết quả ngoài Git:
+`C:\Dev\pc2_test_runs\2026-11-24_khao_sat_nang_cap\DE_TAI_CHI_TIET.md`. Rồi người dùng đi ngủ, cấp toàn quyền «xử lý các
+vấn đề và phát triển dự án». Claude tự chọn việc rủi ro thấp, kiểm được bằng dữ liệu tổng hợp; KHÔNG đổi so khớp, ngưỡng,
+34 cột Sheets, lược đồ DB; không gọi YouTube/Google; không xoá dữ liệu. Quyết định Claude tự chốt (người dùng xem lại):
+(1) «Tạo lại kho từ đầu» luôn hỏi tick khi kho đã có vân tay; hai nút ghi đè Sheets cũng hỏi; (2) tiếng báo khi việc dài
+xong/lỗi MẶC ĐỊNH BẬT (ô tắt ở thanh bên), máy không ngủ khi có việc (SetThreadExecutionState theo luồng việc); (3) ổ đầy /
+không ghi được = lỗi của MÁY (DISK_FULL/WRITE_DENIED): lô quét, đồng bộ kênh, Giám sát dừng ngay, không tính vào cầu dao
+YouTube; quét không tải audio khi ổ còn dưới 2 GB; (4) KHÔNG làm nút dọn đệm — đo 25/11: đệm 100,3 GB thì 94,5 GB là audio
+của video CÓ vi phạm, luật dọn hiện có (theo tuổi) sẽ xoá bằng chứng → chờ DT-02; (5) ô «Bỏ qua link đã quét» mặc định
+KHÔNG tick; (6) cảnh báo «clip chưa có vân tay» bỏ clip đã thử mà 0 hash; (7) bộ test tự chặn mạng (tests/conftest.py).
+Nhánh: A `feature/pc2/canh-bao-kho-link`, B `feature/pc2/bao-viec-xong`, C `fix/pc2/chong-bam-nham`, D
+`feature/pc2/loc-theo-kho`, E `fix/pc2/luoi-an-toan-test`, gộp + sửa review độc lập ở `fix/pc2/gop-dem-2511`.
+Bằng chứng: nhanh 4523 = 4519/4/0, chậm 28/28; review độc lập: 0 «phải sửa», 4 «nên sửa» đã sửa (test đỏ→xanh).
+
 ## D-64 File kiểm claim: màn đen 144p + tiếng của video, giữ nguyên tiếng gốc (người dùng, 2026-11-23)
 Ô «🎧 Tạo file kiểm claim» ở trang «🛠️ Video trong máy»: ghép tiếng của file vào khung đen 256×144, 1 hình/giây, ra
 `<tên>_kiem_claim.mp4` — file nhẹ để tải lên kênh phụ cho YouTube Checks quét claim về TIẾNG (Bước 1 của bản thiết kế
