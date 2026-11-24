@@ -53,6 +53,7 @@ from common_original_jobs import TEN_PHA as TEN_PHA_NGUON_CHUNG
 from common_original_jobs import CommonOriginalJobController, xuat_csv
 from engine import Engine, LoiXoaJob, ScanResult, hhmmss, hhmmss_tp, mo_ta_pham_vi, o_bang_tinh_an_toan
 from engine import GHVD_TOAN_BO, GHVD_TU_DONG, NHAN_GHVD
+from engine import Config
 from fingerprint_progress import FingerprintJobController
 from khoa import DangChayRoi
 from publication_date import format_publication_date
@@ -895,19 +896,28 @@ with st.sidebar:
         dùng) mà nằm ngoài khung thì Streamlit ném lỗi và trang dừng ngay ở thanh bên (audit 16/11)."""
         return min(lo, v), max(hi, v)
 
+    # Ô thuộc chính sách nhận diện (engine.TRUONG_CHINH_SACH): đổi là đổi chữ ký chính sách → Giám sát không còn tin
+    # các lần «không vi phạm» quét với số cũ (Engine.ids_da_quet).
+    _O_NHAN_DIEN = {"chunk_s": "Độ dài mỗi khúc", "overlap_s": "Khúc gối nhau", "min_hash": "Số hash tối thiểu",
+                    "min_match_s": "Đoạn khớp tối thiểu", "shifts_quet": "Subframe shifts khi quét",
+                    "min_hash_floor": "Loại hẳn nếu dưới"}
+    _GHI_CHU_NHAN_DIEN = ("Thuộc cách nhận diện: đổi thì kết quả quét khác đi, và các lần quét «không vi phạm» trước đó "
+                          "không còn được Giám sát tính (sẽ quét lại).")
+
     with st.expander("Mở để tinh chỉnh", expanded=False):
         c = eng.config
         c.chunk_s = st.number_input("Độ dài mỗi khúc (giây)", *_khung(300, 7200, c.chunk_s), c.chunk_s, 300,
-                                    help="Máy yếu RAM thì giảm xuống 1800.")
+                                    help=_GHI_CHU_NHAN_DIEN)
         c.overlap_s = st.number_input("Khúc gối nhau (giây)", *_khung(60, 3600, c.overlap_s), c.overlap_s, 60,
                                       help="Giá trị đề xuất khi thiếu metadata. Giá trị hiệu lực "
                                            "luôn bị giới hạn bởi trần khúc gối "
                                            f"({c.overlap_max_s} giây); clip dài hơn có thể được ghép lại "
-                                           "từ nhiều mảnh ở ranh giới khúc.")
+                                           "từ nhiều mảnh ở ranh giới khúc. " + _GHI_CHU_NHAN_DIEN)
         c.min_hash = st.slider("Số hash tối thiểu", *_khung(5, 100, c.min_hash), c.min_hash,
-                               help="Bị báo nhầm → tăng lên. Bỏ sót → giảm xuống.")
+                               help="Số hash khớp tối thiểu của một đoạn. Hạ thấp dễ biến nhạc nền dùng chung thành "
+                                    "«vi phạm» giả. " + _GHI_CHU_NHAN_DIEN)
         c.min_match_s = st.slider("Đoạn khớp tối thiểu (giây)", *_khung(1.0, 60.0, float(c.min_match_s)),
-                                  float(c.min_match_s), 1.0)
+                                  float(c.min_match_s), 1.0, help=_GHI_CHU_NHAN_DIEN)
         c.ncores = st.slider(
             "Số nhân CPU", *_khung(0, 8, c.ncores), c.ncores,
             help="Đặt 0 để tự dò, chừa một nhân cho hệ thống và dùng tối đa 8 nhân.")
@@ -916,13 +926,13 @@ with st.sidebar:
             help="Cao hơn: vân tay chính xác hơn nhưng tạo kho chậm và nặng hơn. 0 = như cũ.")
         c.shifts_quet = st.number_input(
             "Subframe shifts khi quét", 0, 8, max(0, c.shifts_quet), 1,
-            help="Cao hơn: chịu video bị nén lại tốt hơn nhưng quét chậm hơn. 0 = như cũ.")
+            help="Cao hơn: chịu video bị nén lại tốt hơn nhưng quét chậm hơn. 0 = như cũ. " + _GHI_CHU_NHAN_DIEN)
 
         st.markdown("**Chọn lọc kết quả**")
         c.top_n = st.number_input("Chỉ lấy bao nhiêu kết quả tốt nhất", *_khung(1, 50, c.top_n), c.top_n)
         c.min_hash_floor = st.number_input(
             "Loại hẳn nếu dưới (hash)", *_khung(0, 100000, c.min_hash_floor), c.min_hash_floor, 100,
-            help="Kết quả yếu hơn ngưỡng này bị vứt bỏ, không đưa vào báo cáo.")
+            help="Kết quả yếu hơn ngưỡng này bị vứt bỏ, không đưa vào báo cáo. " + _GHI_CHU_NHAN_DIEN)
         c.min_hash_strong = st.number_input(
             "Coi là bằng chứng mạnh từ (hash)", *_khung(0, 200000, c.min_hash_strong), c.min_hash_strong, 500,
             help="Những kết quả đạt ngưỡng này được ưu tiên chọn trước.")
@@ -967,6 +977,13 @@ with st.sidebar:
         st.caption(
             f"Khúc gối tối đa: {c.overlap_max_s} giây."
         )
+    # Ngoài ô mở rộng: thấy được cả khi ô đang đóng.
+    _mac_dinh = Config()
+    _lech = [f"«{nhan}» {getattr(c, k):g} (mặc định {getattr(_mac_dinh, k):g})" for k, nhan in _O_NHAN_DIEN.items()
+             if getattr(c, k) != getattr(_mac_dinh, k)]
+    if _lech:
+        st.warning("⚠️ Tham số nhận diện đang khác mặc định: " + "; ".join(_lech) + ". Kết quả quét có thể khác, và "
+                   "Giám sát sẽ quét lại các video từng «không vi phạm» với số khác.")
 
     st.divider()
     st.subheader("🔐 Kết nối YouTube")

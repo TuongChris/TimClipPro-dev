@@ -104,3 +104,27 @@ def test_day_danh_sach_len_sheet_phai_tick_theo_tung_kho(tmp_path, monkeypatch):
     _chay(at.selectbox(key="dsv_kho").set_value("Kho B"))
     _chay(at.button(key="dsv_quet").click())
     assert at.button(key="dsv_day_sheet").disabled and at.button(key="dsv_day_tat_ca").disabled, "đổi kho: tick lại"
+
+
+# ---------------------------------------------------------------- #6: gợi ý sai ở thanh bên + cảnh báo lệch mặc định
+def test_canh_bao_khi_tham_so_nhan_dien_khac_mac_dinh(tmp_path, monkeypatch):
+    import json
+
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "cau_hinh.json").write_text(json.dumps({"min_hash": 10, "chunk_s": 1800}), encoding="utf-8")
+    at = _app(tmp_path, monkeypatch)
+    canh = [w.value for w in at.sidebar.warning if "khác mặc định" in w.value]
+    assert len(canh) == 1, canh
+    assert "Số hash tối thiểu" in canh[0] and "10" in canh[0] and "15" in canh[0]
+    assert "Độ dài mỗi khúc" in canh[0] and "1800" in canh[0] and "3600" in canh[0]
+    assert "Giám sát" in canh[0] and "Khúc gối" not in canh[0]
+    goi_y_hash = next(s for s in at.sidebar.slider if s.label == "Số hash tối thiểu").help
+    goi_y_khuc = next(n for n in at.sidebar.number_input if n.label.startswith("Độ dài mỗi khúc")).help
+    assert "giảm xuống" not in goi_y_hash and "1800" not in goi_y_khuc
+    assert "Giám sát" in goi_y_hash and "Giám sát" in goi_y_khuc
+
+
+def test_tham_so_mac_dinh_thi_khong_canh_bao(tmp_path, monkeypatch):
+    at = _app(tmp_path, monkeypatch)
+    assert not [w for w in at.sidebar.warning if "khác mặc định" in w.value]
