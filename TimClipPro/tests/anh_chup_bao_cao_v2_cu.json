@@ -1,0 +1,124 @@
+{
+ "chinh_sach": "v2",
+ "thoi_diem_quet": "2026-10-20 08:15:30",
+ "trang_thai": "ok",
+ "ghi_chu": "",
+ "nguon_loai": "youtube",
+ "video_id": "vidthu00003",
+ "link_video": "https://www.youtube.com/watch?v=vidthu00003",
+ "tieu_de": "Video tổng hợp thử (Phần 3)",
+ "nguon_tieu_de": "yt_dlp.title",
+ "ly_do_thieu_tieu_de": "",
+ "kenh_ten": "Kênh thử",
+ "kenh_id": "UCkenhthu0000000000000a",
+ "kenh_link": "https://www.youtube.com/channel/UCkenhthu0000000000000a",
+ "thoi_luong_s": 18760.0,
+ "ngay_dang": {
+  "gia_tri": "20261018",
+  "nguon": "yt_dlp.upload_date",
+  "ly_do_thieu": ""
+ },
+ "pham_vi": {
+  "quet_day_du": false,
+  "quet_mot_phan": true,
+  "ly_do": "gioi_han_tai",
+  "mo_ta": "đã quét 03:00:00 đầu của video dài 05:12:40 (giới hạn video dài)",
+  "vung_da_khop": [
+   [
+    0.0,
+    5400.0
+   ],
+   [
+    5460.0,
+    10800.0
+   ]
+  ],
+  "vung_loi": [
+   [
+    5400.0,
+    5460.0
+   ]
+  ],
+  "pham_vi_quet_s": 10800.0,
+  "dat_muc_tieu": true
+ },
+ "doan": [
+  {
+   "goc": {
+    "clip": "20260301 - Clip gốc thử A [goc0000000A].opus",
+    "video_id": "goc0000000A",
+    "url": "https://www.youtube.com/watch?v=goc0000000A",
+    "tieu_de": "Clip gốc thử A",
+    "nguon_tieu_de": "clips_meta",
+    "ngay_dang": {
+     "gia_tri": "20260301",
+     "nguon": "yt_dlp.upload_date",
+     "ly_do_thieu": ""
+    },
+    "ngay_kho_quy_doi": "2026-03-01",
+    "nguon_ngay_kho": "clips_meta.upload_date",
+    "thoi_luong_s": 1500.25,
+    "trang_thai_metadata": "ok",
+    "canh_bao": [
+     "cảnh báo thử"
+    ]
+   },
+   "start_s": 915.5,
+   "end_s": 2350.0,
+   "vung_khop_s": 971.0,
+   "matched_s": 1300.5,
+   "clip_offset_s": 55.5,
+   "hashes": 20000,
+   "ty_le": 70.0,
+   "confidence": "Rất chắc chắn",
+   "vung": "Đầu",
+   "giay_bat_dau": 915,
+   "giay_ket_thuc": 2350,
+   "link": "https://www.youtube.com/watch?v=vidthu00003&t=915"
+  },
+  {
+   "goc": {
+    "clip": "20260302 - Clip gốc thử B [goc0000000B].opus",
+    "video_id": "goc0000000B",
+    "url": "https://www.youtube.com/watch?v=goc0000000B",
+    "tieu_de": "Clip gốc thử B",
+    "nguon_tieu_de": "clips_meta",
+    "ngay_dang": {
+     "gia_tri": "",
+     "nguon": "",
+     "ly_do_thieu": "kho không có ngày đăng"
+    },
+    "ngay_kho_quy_doi": "",
+    "nguon_ngay_kho": "",
+    "thoi_luong_s": 600.0,
+    "trang_thai_metadata": "ok",
+    "canh_bao": []
+   },
+   "start_s": 7322.25,
+   "end_s": 7801.0,
+   "vung_khop_s": 7322.25,
+   "matched_s": 452.0,
+   "clip_offset_s": 0.0,
+   "hashes": 3100,
+   "ty_le": 41.5,
+   "confidence": "Chắc chắn",
+   "vung": "Giữa",
+   "giay_bat_dau": 7322,
+   "giay_ket_thuc": 7801,
+   "link": "https://www.youtube.com/watch?v=vidthu00003&t=7322"
+  }
+ ],
+ "so_dat_nguong": 3,
+ "co_ket_qua_loai": true,
+ "kho_id": "kho-thu-0001",
+ "kho_ten": "Kho thử",
+ "kho_phien_ban": "kho-thu-0001@3",
+ "chinh_sach_nhan_dien": "nhan-dien-thu-v1",
+ "bo_sung_ngay": [
+  [
+   "goc0000000B",
+   "chưa bổ sung — đã hết lượt hỏi của job này"
+  ]
+ ],
+ "phien_ban_anh_chup": 1
+}
