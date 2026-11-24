@@ -37,7 +37,7 @@ chạm file) — không phải audit lại mã. Thêm/xoá/đổi vai trò modul
 | `engine.py` | Lõi: cắt khúc, fingerprint, so khớp, gộp trùng, SQLite, xuất CSV | Thêm/đổi logic xử lý |
 | `channel.py` | Đồng bộ kênh YouTube → kho audio nén + `clips_meta.json` | Đổi cách tải/nén/đặt tên |
 | `am_luong.py` | Đưa âm lượng file đã tải về mức YouTube -14 LUFS (`loudnorm` hai lượt, hình chép nguyên) + `doc_ffprobe` dùng chung (D-43) | Đổi mức/đỉnh âm lượng, mã hoá tiếng |
-| `video_trong_may.py` | Cắt đoạn / chỉnh âm lượng video có sẵn trong máy (D-46), file gốc không bao giờ bị sửa | Đổi luồng xử lý file trong máy |
+| `video_trong_may.py` | Cắt đoạn / chỉnh âm lượng video có sẵn trong máy (D-46), file gốc không bao giờ bị sửa; `tao_file_kiem_claim` (D-64): tiếng của file + hình đen 256×144 → `<tên>_kiem_claim.mp4` nhẹ để kiểm claim tiếng | Đổi luồng xử lý file trong máy |
 | `cat_video_goc.py` | Tải theo link rồi cắt chính xác một đoạn «Từ … Đến …» (nén lại đoạn cắt, kiểm độ dài) (D-42); bỏ nhiều đoạn rồi nối phần còn lại (`bo_doan`, D-59; dùng chung với tab «Video trong máy») | Đổi cách cắt, định dạng đoạn ra, cách đọc mốc |
 | `ghep_video_goc.py` | Ghép video gốc theo link thành một video dài (nối không nén lại) + file mốc CSV + mốc chương (D-39) | Đổi định dạng tải chung, cách kiểm thông số, cột file mốc |
 | `tai_video_goc.py` | Tải video gốc theo link hoặc cả kênh (chọn chất lượng tối đa), tải thumbnail JPG; hộp thoại chọn thư mục (D-37); danh sách tiêu đề kênh ra CSV/TXT (D-38) | Đổi định dạng/cách đặt tên file tải |
@@ -63,7 +63,7 @@ chạm file) — không phải audit lại mã. Thêm/xoá/đổi vai trò modul
 | `danh_sach_video.py` | Liệt kê tên video thật của một kho (chỉ đọc, offline) rồi ghi đè lên trang tính riêng | Đổi cách kiểm kê kho / cột danh sách |
 | `tim_nghi_van.py` | Tab «🔎 Tìm video nghi vấn» (D-51): tiêu đề clip của kho (`clips_meta.json`, chỉ đọc) → `search.list` qua `youtube_api.tim_video` (hạn mức RIÊNG 100 lượt/ngày, phiên con riêng), bỏ kênh gốc (MỘT `videos.list` ≤ 50 mã), xếp theo số truy vấn khớp rồi thời lượng, đánh dấu đã quét; chỉ tìm — không tải, không quét, không yt-dlp | Đổi cách dựng truy vấn / xếp hạng / loại kênh gốc |
 | `thong_ke.py` | THUẦN, CHỈ ĐỌC `lichsu.db` (`mode=ro`): số liệu tab «📊 Thống kê» — lần quét, video vi phạm, đoạn/thời lượng khớp (mỗi cặp video–clip một lần), kênh vi phạm (chỉ từ ảnh chụp V2, đọc theo `doc_anh_chup_da_luu`), clip gốc, theo tháng, lọc ngày quét | Đổi chỉ số / cách đếm thống kê |
-| `app.py` | Giao diện Streamlit 7 tab | Đổi giao diện |
+| `app.py` | Giao diện Streamlit: menu 5 nhóm, 15 trang (`st.navigation`, D-63 — mỗi lần vẽ lại chỉ chạy trang đang mở) | Đổi giao diện |
 | `cli.py` | Giao diện dòng lệnh, dùng chung engine | Thêm lệnh tự động hoá |
 | `bao_cao_v2.py` | THUẦN: chính sách báo cáo V2 — ảnh chụp `BaoCaoV2`, mốc/link, URL gốc `watch?v=`, ngày nguyên bản, dòng 34/16 cột + phạm vi; «Đoạn vi phạm» theo mốc đã tinh chỉnh khi có (D-50, `_moc_tinh_chinh`) | Đổi cách trình bày báo cáo lượt quét mới |
 | `common_original.py` | Chế độ «Một video gốc chung cho cả lô» — phần THUẦN: bằng chứng, kết luận, lập kế hoạch, báo cáo | Đổi luật kết luận / chọn nguồn chung |
@@ -73,6 +73,7 @@ chạm file) — không phải audit lại mã. Thêm/xoá/đổi vai trò modul
 
 | File | Vai trò (docstring) | Dòng | Commit cuối |
 |---|---|---|---|
+| `audfprint_match_runner.py` | Chạy `audfprint match` với hai thay đổi, KHÔNG sửa source vendored, KHÔNG đổi kết quả: báo «khúc đã tra kho xong» + tra kho nhanh «cắt lát» (`_exact_cat_lat`); canh bởi `tests/test_lop_boc_audfprint.py`. | 99 | `f4629fb 2026-11-23` |
 | `audfprint_progress_runner.py` | Adapter quan sát audfprint mà không sửa source vendored; phát clip cho worker theo RAM (D-31). | 452 | `8f0558f 2026-10-02` |
 | `bang_ngang.py` | Dựng một dòng báo cáo ngang cho mỗi video vi phạm. | 131 | `35c7fc1 2026-10-04` |
 | `cau_hinh.py` | Lưu tùy chọn người dùng; không lưu khóa API, mật khẩu hay nội dung google_key.json. | 72 | `354da23 2026-08-19` |
@@ -94,23 +95,29 @@ chạm file) — không phải audit lại mã. Thêm/xoá/đổi vai trò modul
 | `kiem_thoi_luong.py` | Kiểm tra và bổ sung độ dài media thật cho metadata clip gốc. | 193 | `8f0558f 2026-10-02` |
 | `lich_su.py` | Lược đồ ``lichsu.db`` có phiên bản — lịch sử quét gắn với KHO (audit TCP-07). | 424 | `c981450 2026-10-08` |
 | `luu_tru.py` | Đọc và ghi dữ liệu cấu hình theo cách nguyên tử, có khả năng phục hồi. | 330 | `8f0558f 2026-10-02` |
+| `markdown_an_toan.py` | Thoát chữ NGOÀI trước khi chèn vào Markdown — hàm thuần, không phụ thuộc Streamlit/engine (audit D-8, E-3). | 55 | `f8c5e97 2026-10-26` |
 | `nhat_ky.py` | Ghi song song console và file log, đồng thời quản lý thời hạn lưu log. | 188 | `f95345c 2026-10-03` |
 | `process_runner.py` | Subprocess runner đọc output liên tục, heartbeat khi im lặng và hủy đúng cây PID. | 662 | `8f0558f 2026-10-02` |
 | `publication_date.py` | Nguồn chân lý duy nhất cho “Ngày đăng video”. | 294 | `6cad9d9 2026-08-07` |
 | `scan_jobs.py` | Điều phối một batch quét: tiến độ, kết quả streaming, trạng thái giao Sheets. | 398 | `ce5a64b 2026-10-07` |
 | `scan_ui.py` | Dựng dữ liệu bảng trạng thái quét. **Không import streamlit.** | 234 | `83fb6c3 2026-10-07` |
+| `tac_vu_nen.py` | Tác vụ nền dài của giao diện (đồng bộ kênh, lấy lại tên video, vá metadata) ở mức TIẾN TRÌNH — tải lại trang vẫn thấy việc đang chạy. | 242 | `dd111e8 2026-10-27` |
 | `thiet_lap_may_phu.py` | thiet_lap_may_phu.py — Chạy MỘT LẦN trên máy phụ sau khi giải nén gói. | 143 | `8f0558f 2026-10-02` |
+| `tien_do_dong_bo.py` | Tiến độ + hiệu suất của MỘT lượt đồng bộ kênh (`channel.ChannelSync.sync`) — số đo có cấu trúc, an toàn luồng. | 622 | `4e3fdc5 2026-11-07` |
 | `tien_do_quet.py` | Tiến độ THẬT của một lô quét: số đo từ pipeline, nhịp sống, nhật ký ngắn. | 278 | nhánh `fix/pc2/live-progress-smart-marathon` (PC2, 13/10) |
 | `tinh_chinh_moc.py` | Tinh chỉnh mốc từng giây SAU khi đã chọn kết quả: độ tương đồng phổ từng giây, đoạn dùng thật, chỗ cắt (P-8/D-49; `docs/KHOP_TUNG_GIAY.md`). Không đổi kết quả tìm thấy; mốc đầu–cuối vào báo cáo V2 (D-50). | 1138 | nhánh `feature/pc2/khop-tung-giay` (PC2, 14/11) |
 | `toc_do_khop.py` | Phát hiện video vi phạm đã bị ĐỔI TỐC ĐỘ để né vân tay âm thanh; `he_so_moc_theo_troi` cho mốc nhóm lượt thường trôi (D-49). | 273 | `1d8b6d9 2026-11-14` |
+| `ui_tien_do_dong_bo.py` | Màn tiến độ ĐỒNG BỘ KÊNH — chỉ ĐỌC ảnh chụp `tien_do_dong_bo.AnhDongBo` (không sửa, không gọi worker). | 205 | `3e0be8b 2026-11-23` |
 | `ui_tien_do_quet.py` | Màn hình tiến độ khi ĐANG quét (Streamlit) — chỉ ĐỌC ảnh chụp ``scan_jobs.BatchSnapshot``. | 146 | nhánh `fix/pc2/live-progress-smart-marathon` (PC2, 13/10) |
 | `ui_thao_tac.py` | Nút bớt thao tác tay dùng chung (Streamlit): «📂 Chọn…» thư mục/file bằng hộp thoại Windows (`tai_video_goc.chon_thu_muc` / `chon_file`), «📂 Mở thư mục» kết quả. | 54 | nhánh `feature/pc2/giao-dien-gd3` (PC2, 23/11) |
 | `watch.py` | Mô hình dữ liệu và lưu trữ danh sách nguồn YouTube cần theo dõi. | 729 | `ce5a64b 2026-10-07` |
 
 ## Bộ giả và dữ liệu test dùng chung (`TimClipPro/tests/`)
-`conftest.py` (cách ly `__main__`, thư mục tạm), `golden_quet.py` + `golden/` (golden hành vi quét cũ, sinh trên
+`conftest.py` (cách ly `__main__`, thư mục tạm, tự chặn mạng — `chan_mang/sitecustomize.py`, cả tiến trình con Python),
+`golden_quet.py` + `golden/` (golden hành vi quét cũ, sinh trên
 `f87cc85`), `sheets_http_gia.py` (máy chủ Google Sheets GIẢ ở tầng HTTP, gspread thật), `outbox_gia.py`, `kho_gia.py`,
-`ytdlp_gia.py`, `cap_nhat_gia.py`.
+`ytdlp_gia.py`, `cap_nhat_gia.py`, `youtube_api_gia.py`, `am_thanh_lap.py` (âm thanh LẶP cho matcher), `apps_script_gia.js`,
+`anh_chup_bao_cao_v2_cu.json` (ảnh chụp báo cáo V2 CỐ ĐỊNH — báo cáo đã lưu phải còn đọc được).
 
 ## Tài liệu thiết kế (`TimClipPro/docs/` trừ khi ghi khác) — đọc theo vùng của task
 

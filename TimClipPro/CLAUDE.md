@@ -133,14 +133,14 @@ thời điểm clip bắt đầu; khi chẩn đoán vân tay mới dùng vùng k
 
 ## Kiểm thử — LÀM ƠN CHẠY TRƯỚC KHI BÁO XONG
 
-Dự án có khoảng 2.450 test nhanh và 14 test chậm (số thật trên e49340d và cách chọn test theo vùng:
+Dự án có khoảng 4.440 test nhanh và 28 test chậm (đếm `--collect-only` 25/11/2026; số chạy thật và chọn test theo vùng:
 `docs/ai/TEST_MATRIX.md` ở gốc repo). Trước khi kết luận một thay đổi là xong, phải chạy tối thiểu:
 
 ```bash
 # 1) Toàn bộ suite nhanh
 python -m pytest -q
 
-# 2) Hai test tích hợp audio tổng hợp
+# 2) Test chậm (audio tổng hợp thật, cần ffmpeg)
 python -m pytest -m slow
 
 # 3) Lõi còn import sạch không
@@ -163,7 +163,7 @@ trên `data/` mặc định — `conftest._tra_lai_main_module` trả lại `__m
 - **Đừng commit** `google_key.json` (khoá riêng Google) — đã có trong `.gitignore`.
 - **Đừng đổi** thuật toán gộp trùng (`_merge`) hay ngưỡng mặc định nếu tôi không yêu cầu:
   chúng đã được hiệu chỉnh bằng thực nghiệm.
-- **Đừng thêm** thư viện nặng (torch, tensorflow...) nếu chưa hỏi tôi — máy tôi không có GPU.
+- **Đừng thêm** thư viện nặng (torch, tensorflow...) nếu chưa hỏi tôi — ứng dụng hiện chỉ dùng CPU (PC2 có card RTX 4070).
 - Thay đổi lớn: giải thích phương án **trước**, chờ tôi đồng ý rồi mới code.
 
 ## Quy tắc rút ra từ lỗi đã gặp — chi tiết, số đo, bối cảnh: `docs/LOI_DA_GAP.md` (giữ nguyên số mục)
