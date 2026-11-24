@@ -152,3 +152,50 @@ def test_lich_su_chu_viet_ba_nut_tai_co_giai_thich_thong_ke_noi_ro_ngay(tmp_path
 def test_chu_thich_trung_ten_dung_voi_ma():
     nguon = APP_PY.read_text(encoding="utf-8")
     assert "« (2)»" not in nguon and "«_2»" in nguon
+
+
+# ---------------------------------------------------------------- #26: nút chọn còn sót + mở thư mục kết quả
+def _thay_chon(monkeypatch, files: list):
+    import tai_video_goc
+
+    monkeypatch.setattr(tai_video_goc, "chon_file", lambda ban_dau="", nhieu=False, tieu_de="": list(files))
+
+
+def test_chon_file_cookie_youtube_o_thanh_ben(tmp_path, monkeypatch):
+    ck = str(tmp_path / "cookies.txt")
+    _thay_chon(monkeypatch, [ck])
+    at = _app(tmp_path, monkeypatch)
+    _chay(at.button(key="chon_cookie_youtube").click())
+    assert at.text_input(key="ytdlp_cookiefile").value == ck
+    assert at.session_state.eng.config.ytdlp_cookiefile == ck
+    _chay(at.text_input(key="ytdlp_cookiefile").set_value("gõ dở"))
+    assert at.session_state.eng.config.ytdlp_cookiefile == "gõ dở"
+    _chay(at.button(key="chon_cookie_youtube").click())
+    assert at.text_input(key="ytdlp_cookiefile").value == ck, "chọn lại đúng file cũ vẫn có tác dụng"
+    assert at.session_state.eng.config.ytdlp_cookiefile == ck
+
+
+def test_chon_file_khoa_google(tmp_path, monkeypatch):
+    khoa = str(tmp_path / "khoa_gia.json")
+    _thay_chon(monkeypatch, [khoa])
+    at = _app(tmp_path, monkeypatch)
+    _chay(at.button(key="chon_xt_duong").click())
+    assert at.text_input(key="xt_duong").value == khoa
+
+
+def test_luu_csv_xong_co_nut_mo_thu_muc_ketqua(tmp_path, monkeypatch):
+    import os
+
+    from test_app_cau_tom_tat_ket_qua import _ok
+
+    mo = []
+    monkeypatch.setattr(os, "startfile", mo.append, raising=False)
+    at = _app(tmp_path, monkeypatch)
+    at.session_state.job.update({"running": False, "kind": "scan", "results": [_ok("Video mot", "vidthu00000")],
+                                 "error": "", "pct": 1.0, "msg": ""})
+    _chay(at)
+    assert not [b for b in at.button if b.key == "mo_tm_ketqua"], "chưa lưu gì thì chưa cần nút mở"
+    _chay(_nut(at, "💾 Lưu CSV vào thư mục ketqua\\").click())
+    assert any("Đã lưu" in s.value for s in at.success)
+    _chay(at.button(key="mo_tm_ketqua").click())
+    assert mo == [str(tmp_path / "ketqua")]

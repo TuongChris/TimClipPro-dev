@@ -756,6 +756,7 @@ def bang_ket_qua(results: list[ScanResult]) -> None:
     with c2:
         if st.button("💾 Lưu CSV vào thư mục ketqua\\", width="stretch"):
             st.success(f"Đã lưu: {eng.export_csv(results)}")
+            st.session_state.da_luu_ketqua = True
     with c4:
         if st.button("📄 Xuất hồ sơ khiếu nại", width="stretch"):
             try:
@@ -765,8 +766,12 @@ def bang_ket_qua(results: list[ScanResult]) -> None:
                 else:
                     st.success(f"Đã tạo {len(fs)} hồ sơ trong ketqua\\")
                     st.code("\n".join(fs))
+                    st.session_state.da_luu_ketqua = True
             except Exception as e:  # noqa: BLE001
                 st.error(str(e))
+    # Nhớ qua các lượt vẽ lại: nút đặt trong nhánh «vừa bấm Lưu» sẽ mất ngay ở lượt bấm chính nó.
+    if st.session_state.get("da_luu_ketqua"):
+        ui_thao_tac.nut_mo_thu_muc(eng.out_dir, "mo_tm_ketqua", "📂 Mở thư mục ketqua")
     ui_gui.nut_gui_thu_cong(eng, results, key="gui_thu_cong_lo")
 
 
@@ -1020,8 +1025,16 @@ with st.sidebar:
                  + ", ".join(ytdlp_chung.TRINH_DUYET_HO_TRO)
                  + ". Có nhiều profile thì thêm dấu hai chấm, ví dụ «edge:Profile 1». "
                    "Đóng hẳn trình duyệt trước khi quét, nếu không nó khoá file cookie.")
-        c.ytdlp_cookiefile = st.text_input(
-            "Hoặc đường dẫn file cookies.txt", c.ytdlp_cookiefile,
+        # Ô có key = biến phiên (như ô kho_dir): chọn lại đúng file cũ sau khi gõ đè vẫn hiện. Ô vẽ TRÊN nút chọn (khung giữ
+        # chỗ) nhưng nút phải chạy trước để ghi đường dẫn vào ô trước khi ô được tạo.
+        st.session_state.setdefault("ytdlp_cookiefile", c.ytdlp_cookiefile)
+        _o_cookie = st.container()
+        _chon_ck_yt = ui_thao_tac.nut_chon("chon_cookie_youtube", st.session_state.ytdlp_cookiefile, "file",
+                                           "📄 Chọn file…", tieu_de="Chọn file cookies.txt")
+        if _chon_ck_yt:
+            st.session_state.ytdlp_cookiefile = _chon_ck_yt[0]
+        c.ytdlp_cookiefile = _o_cookie.text_input(
+            "Hoặc đường dẫn file cookies.txt", key="ytdlp_cookiefile", persist_state="session",
             placeholder=r"D:\cookies.txt",
             help="File xuất từ tiện ích «Get cookies.txt». Tool chỉ lưu ĐƯỜNG DẪN, "
                  "không bao giờ đọc hay lưu lại nội dung cookie vào cấu hình. Có cookie thì các cách tải không "
