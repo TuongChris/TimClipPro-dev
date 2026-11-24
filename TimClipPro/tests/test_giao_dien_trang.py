@@ -132,7 +132,7 @@ def test_o_nhap_co_key_giu_gia_tri_tru_o_xac_nhan_va_o_doc_lai_trang_thai():
                 if giu == khong_giu:
                     sai.append(f"{f.name}:{n.lineno} {ast.unparse(kw['key'])}")
     assert not sai
-    assert so_khong_giu >= 16  # 8 ở app.py + 8 ở ui_gui_sheets.py (23/11)
+    assert so_khong_giu >= 18  # 10 ở app.py + 8 ở ui_gui_sheets.py (25/11: + 2 ô xác nhận đẩy danh sách kho)
 
 
 def test_vong_tu_ve_lai_cua_viec_dang_chay_nam_sau_menu():

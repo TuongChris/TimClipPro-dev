@@ -2176,13 +2176,17 @@ def _trang_kho() -> None:
     da_xac_nhan_thay = True
     if nguon_kho:
         getattr(st, nguon_kho[0])(nguon_kho[1])
-        if nguon_kho[2]:
-            da_xac_nhan_thay = st.checkbox(
-                f"Tôi hiểu: «Tạo lại kho từ đầu» sẽ THAY toàn bộ {len(clips)} clip của kho «{eng.kho_dang_dung}» bằng "
-                "thư mục này", value=False, key=f"xac_nhan_thay_kho::{eng.kho_dang_dung}::{thumuc}")
+    # «Tạo lại» xoá vân tay đang có rồi dựng lại (kho lớn: nhiều giờ) → phải tick; key gắn kho + thư mục nên đổi là tick
+    # lại. File vân tay có mà không đọc được (clips rỗng) vẫn là thứ sẽ mất.
+    if thumuc and eng.kho_dang_dung and (clips or os.path.exists(eng.db_file)):
+        mat_gi = (f"sẽ THAY toàn bộ {len(clips)} clip của kho «{eng.kho_dang_dung}» bằng thư mục này"
+                  if nguon_kho and nguon_kho[2] else
+                  f"xoá vân tay đang có của kho «{eng.kho_dang_dung}» rồi dựng lại từ đầu (kho lớn mất nhiều giờ)")
+        da_xac_nhan_thay = st.checkbox(f"Tôi hiểu: «Tạo lại kho từ đầu» {mat_gi}", value=False,
+                                       key=f"xac_nhan_thay_kho::{eng.kho_dang_dung}::{thumuc}")
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("🔄 Tạo lại kho từ đầu", type="primary", width="stretch",
+        if st.button("🔄 Tạo lại kho từ đầu", width="stretch",
                      disabled=not (thumuc and eng.kho_dang_dung and da_xac_nhan_thay) or _kho_dong_bo_khac):
             chay_van_tay(thumuc.strip('" '), "new")
     with c2:
@@ -2446,9 +2450,12 @@ def _trang_ds_kho() -> None:
                                "Sheets» ở thanh bên: dán link bảng tính, bấm «🔌 "
                                "Kiểm tra kết nối», và chia sẻ quyền «Người chỉnh "
                                "sửa» cho địa chỉ email hiện ở đó.")
+                # Đẩy = VIẾT LẠI TOÀN BỘ trang tính → phải tick; key gắn kho đang xem nên đổi kho là tick lại.
+                xn_day = st.checkbox(f"Tôi hiểu: trang tính «{danh_sach_video.ten_trang_tinh(ten_chon)}» sẽ bị viết lại "
+                                     "toàn bộ", key=f"xac_nhan_day_dsv::{ten_chon}")
                 if st.button(f"📤 Đẩy {len(kq.dong)} video lên Google Sheets (ghi đè)",
                              key="dsv_day_sheet", width="stretch",
-                             disabled=not sx_dsv.san_sang()):
+                             disabled=not (sx_dsv.san_sang() and xn_day)):
                     with st.spinner("Đang ghi đè trang tính..."):
                         ok, tb = danh_sach_video.day_len_sheet(
                             kq, st.session_state.sheet_link)
@@ -2457,11 +2464,14 @@ def _trang_ds_kho() -> None:
                         st.link_button("🔗 Mở Google Sheet",
                                        st.session_state.sheet_link, width="stretch")
 
+                xn_tat_ca = len(khos) > 1 and st.checkbox(
+                    f"Tôi hiểu: cả {len(khos)} trang tính (mỗi kho một trang) sẽ bị viết lại toàn bộ",
+                    key=f"xac_nhan_day_tat_ca::{ten_chon}")
                 if len(khos) > 1 and st.button(
                         f"📤 Đẩy TẤT CẢ {len(khos)} kho lên Google Sheets "
                         "(mỗi kho một trang tính riêng)",
                         key="dsv_day_tat_ca", width="stretch",
-                        disabled=not sx_dsv.san_sang()):
+                        disabled=not (sx_dsv.san_sang() and xn_tat_ca)):
                     bao_cao = []
                     with st.spinner("Đang đẩy từng kho..."):
                         for k in khos:
