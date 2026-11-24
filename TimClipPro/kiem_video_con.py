@@ -126,9 +126,12 @@ def dong_bang(vi_pham: list, so: dict) -> list:
     bang = []
     for v in vi_pham:
         muc = so.get(v["ma"], {})
+        tren = str(muc.get("ket_qua") or CHUA_KIEM)
+        if nhom(tren) == "con" and muc.get("lan_dau_khong_con"):
+            tren += " — đã trở lại"   # từng thấy không còn, nay xem lại được; mốc «Lần đầu thấy không còn» vẫn giữ
         bang.append({"Video vi phạm": v["tieu_de"], "Link": f"https://www.youtube.com/watch?v={v['ma']}",
                      "Kênh": v["kenh_ten"] or v["kenh_link"], "Lần quét gần nhất": v["lan_quet_cuoi"],
-                     "Số lần quét": v["so_lan_quet"], "Trên YouTube": str(muc.get("ket_qua") or CHUA_KIEM),
+                     "Số lần quét": v["so_lan_quet"], "Trên YouTube": tren,
                      "Kiểm lúc": gio(muc.get("kiem_luc")),
                      "Lần đầu thấy không còn": gio(muc.get("lan_dau_khong_con"))})
     return bang

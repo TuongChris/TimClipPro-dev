@@ -272,3 +272,29 @@ def test_so_co_truong_video_sai_cau_truc_giu_nguyen_file(tmp_path, video):
     with pytest.raises(luu_tru.LoiDuLieu):
         kv.kiem_tra(_phien(), str(tmp_path), [])
     assert so.read_bytes() == truoc
+
+
+def test_video_bi_go_roi_xem_lai_duoc_co_nhan_da_tro_lai_va_giu_moc_go(tmp_path, monkeypatch):
+    """Video từng «không còn xem được» rồi xem lại được: cột «Trên YouTube» thêm nhãn «đã trở lại», mốc lần đầu thấy
+    không còn vẫn giữ; bị gỡ lần nữa thì hết nhãn. Hàm gọi API thay bằng hàm giả — không mạng."""
+    a, data, xem_duoc = "vidkiemtraA", str(tmp_path / "data"), {}
+
+    def lay_video_gia(phien, data_dir, ids, **kw):
+        ids = list(ids)
+        thong_tin = {m: {"privacy_status": "public", "upload_status": "processed"} for m in ids if xem_duoc[m]}
+        thieu = tuple(m for m in ids if m not in thong_tin)
+        return ya.KetQuaApi(thong_tin, thieu, "", {m: ya.LY_DO_VANG for m in thieu})
+
+    monkeypatch.setattr(ya, "lay_video", lay_video_gia)
+    vp = {"ma": a, "tieu_de": "A", "lan_quet_cuoi": "", "so_lan_quet": 1, "kenh_ten": "", "kenh_link": ""}
+    for luc, duoc in (("2026-11-02T08:00:00", False), ("2026-11-05T08:00:00", True)):
+        xem_duoc[a] = duoc
+        monkeypatch.setattr(kv, "_bay_gio", lambda luc=luc: luc)
+        kv.kiem_tra(None, data, [a])
+    (dong,) = kv.dong_bang([vp], kv.doc_so(data))
+    assert (dong["Trên YouTube"], dong["Lần đầu thấy không còn"]) == (CON + " — đã trở lại", "2026-11-02 08:00:00")
+    assert kv.dem([dong]) == {"con": 1}
+    xem_duoc[a] = False
+    kv.kiem_tra(None, data, [a])
+    (dong,) = kv.dong_bang([vp], kv.doc_so(data))
+    assert (dong["Trên YouTube"], dong["Lần đầu thấy không còn"]) == (KHONG_CON, "2026-11-02 08:00:00")
