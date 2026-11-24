@@ -30,6 +30,7 @@ import pandas as pd
 
 import bang_ngang
 import bao_cao_v2
+import bao_viec
 import common_original as nguon_chung
 import danh_sach_video
 import kiem_video_con
@@ -1056,6 +1057,11 @@ with st.sidebar:
             st.caption("Chưa có khoá Google (`google_key.json`) — cách tạo: đầu file `sheets.py`.")
 
     st.divider()
+    st.toggle("🔔 Kêu khi việc dài xong hoặc lỗi", key="bao_tieng_xong", persist_state="session",
+              help="Quét, dựng kho, tải, đồng bộ kênh… xong thì kêu hai tiếng đi lên; lỗi hoặc bị YouTube chặn thì "
+                   "kêu ba tiếng trầm. Bấm Dừng thì không kêu. Lúc có việc dài, máy không tự ngủ. Bấm «💾 Lưu cấu "
+                   "hình» để nhớ lựa chọn.")
+    bao_viec.bat_tieng = st.session_state.bao_tieng_xong   # luồng nền của việc đọc giá trị này lúc kết thúc
     c_luu, c_mac_dinh = st.columns(2)
     with c_luu:
         if st.button(

@@ -29,6 +29,7 @@ import csv
 from datetime import datetime
 
 import bao_cao_v2
+import bao_viec
 import common_original as co
 import maintenance_gate
 import youtube_api
@@ -227,6 +228,7 @@ class CommonOriginalJobController:
 
     def _chay(self, ma_lo: str, nguon: list, source_type: str) -> None:
         try:
+            bao_viec.bat_dau()
             with maintenance_gate.vao_cong_cua(self.engine, "lô nguồn chung"), \
                     KhoaTienTrinh(os.path.join(self.engine.data_dir, "tool.lock"),
                                   "quét nguồn chung cả lô"):
@@ -253,9 +255,11 @@ class CommonOriginalJobController:
                     message=(co.TEN_TRANG_THAI_LO.get(kq.trang_thai, "") if kq
                              else (self._error or "Đã dừng.")),
                     error=self._error)
+                kieu = None if self._anh.cancelled else bao_viec.kieu_ket_thuc(self._error, self._phien)
             _SO_NGUON_CHUNG.xong(self.engine, self)   # tới khi một phiên chép kết quả
             LOGGER.info("event=scan.common.finished batch_id=%s status=%s", ma_lo,
                         kq.trang_thai if kq else "error")
+            bao_viec.ket_thuc(kieu)
 
     def _tu_luu_csv(self, ket):
         """``KetQuaLo`` không ghi lịch sử (D-5): F5 hay tab khác bắt đầu việc là mất kết quả của lô chạy hàng giờ."""

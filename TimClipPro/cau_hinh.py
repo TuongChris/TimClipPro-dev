@@ -23,6 +23,8 @@ GIA_TRI_GIAO_DIEN_MAC_DINH = {
     # ĐƯỜNG DẪN (không phải nội dung) file proxy + file cookie Twitch (D-44).
     "twitch_proxy_file": "",
     "twitch_cookie_file": "",
+    # Kêu khi việc dài xong / lỗi (bao_viec) — ô ở thanh bên.
+    "bao_tieng_xong": True,
 }
 
 

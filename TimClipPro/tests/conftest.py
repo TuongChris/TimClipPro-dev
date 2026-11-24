@@ -12,6 +12,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # trang trong 15 tab như trước 23/11 (nhánh TIMCLIP_UI_VE_MOI_TRANG ở cuối app.py). Test của chính menu tự bỏ biến này.
 os.environ.setdefault("TIMCLIP_UI_VE_MOI_TRANG", "1")
 
+import bao_viec  # noqa: E402
+
+# Việc dài xong thì kêu + giữ máy thức (bao_viec). Thay cho CẢ phiên test, không trả lại sau từng test: luồng của việc
+# giả có thể kết thúc SAU khi test đã xong (TacVuNen báo xong trước khi gọi bao_viec.ket_thuc) — không được kêu thật
+# hay gọi SetThreadExecutionState thật trên máy chạy test. Test của chính hai hàm xin fixture ``bao_viec_that``.
+_BAO_VIEC_THAT = (bao_viec.phat_tieng, bao_viec._dat_trang_thai_luong)
+bao_viec.phat_tieng = lambda kieu: None
+bao_viec._dat_trang_thai_luong = lambda co: None
+
 
 def _ghi_wav(path, sig, sr=22050):
     with wave.open(str(path), "wb") as w:
@@ -77,6 +86,12 @@ def _giu_nguyen_path():
         os.environ.pop("PATH", None)
     else:
         os.environ["PATH"] = cu
+
+
+@pytest.fixture()
+def bao_viec_that():
+    """``(phat_tieng, _dat_trang_thai_luong)`` THẬT của bao_viec — chỉ cho test của chính hai hàm đó."""
+    return _BAO_VIEC_THAT
 
 
 @pytest.fixture()
