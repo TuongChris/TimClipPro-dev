@@ -71,6 +71,7 @@ from scan_ui import (
     dong_trang_thai_api_youtube,
     dong_trang_thai_youtube,
     goi_y_quet_mot_phan,
+    gop_link_trung,
     huong_dan_kho_sau_dong_bo,
     thoat_markdown,
     thong_bao_lo_da_dung,
@@ -520,7 +521,8 @@ def bao_cao_khong_co_ket_qua(results: list[ScanResult]) -> None:
         if cd is None:
             them = (f" (CHỈ QUÉT MỘT PHẦN: {pham_vi} — đây KHÔNG phải kết luận cho toàn "
                     "video)" if pham_vi else "")
-            st.warning(f"**{tieu_de}** — không tìm thấy clip gốc nào{them}.")
+            kho = f" trong kho «{thoat_markdown(x.kho_ten)}»" if x.kho_ten else ""
+            st.warning(f"**{tieu_de}** — không tìm thấy clip gốc nào{kho}{them}.")
             continue
 
         st.warning(f"**{tieu_de}** — không có đoạn nào đạt tiêu chí.\n\n"
@@ -1103,6 +1105,79 @@ with st.sidebar:
 _kho_da_ve = False
 
 
+@st.cache_data(max_entries=8, ttl=300, show_spinner=False)
+def _file_chua_van_tay(thu_muc: str, mtime_ns: int, khoa_kho: tuple, _clips: list) -> list | None:
+    """``Engine.file_chua_van_tay`` cho mỗi lượt vẽ lại: liệt kê cả thư mục kho (ổ HDD) + ffprobe file lớn mới thì chậm.
+    Nhớ theo mtime THƯ MỤC + chữ ký file kho: đồng bộ thêm file, «Bổ sung» xong là tính lại ngay; ``ttl`` cho file đổi
+    trong thư mục con (mtime thư mục gốc không đổi). ``None`` = không đọc được thư mục (nhớ cả lỗi: khỏi duyệt lại)."""
+    try:
+        return Engine.file_chua_van_tay(thu_muc, _clips)
+    except (OSError, RuntimeError):
+        return None
+
+
+def _canh_bao_thieu_van_tay() -> None:
+    """Đồng bộ kênh xong mà quên «Bổ sung»: lượt quét sau vẫn dùng kho cũ, video dùng clip mới ra «không tìm thấy» mà
+    không ai biết (DT-05). Chỉ cảnh báo, không chặn quét. Kho chưa có vân tay / thư mục không có: giữ câu cũ. Đang tạo /
+    bổ sung vân tay: không nhắc bấm «Bổ sung»."""
+    tm = (eng.kho_thu_muc or "").strip().strip('"')
+    if not clips or not tm or (job["running"] and job.get("kind") == "db"):
+        return
+    try:
+        s_kho = os.stat(eng.db_file)    # chữ ký kho TRƯỚC khi đọc danh sách clip: kho đổi giữa chừng thì lượt sau tính lại
+        ds_clip = eng.db_clips()
+        moi = _file_chua_van_tay(tm, os.stat(tm).st_mtime_ns, (eng.db_file, s_kho.st_mtime_ns, s_kho.st_size),
+                                 ds_clip) if ds_clip else []
+    except OSError:                     # thư mục / file kho không có
+        return
+    if moi:
+        vd = ", ".join(thoat_markdown(os.path.basename(p)) for p in moi[:3]) + (" …" if len(moi) > 3 else "")
+        st.warning(f"Kho «{thoat_markdown(eng.kho_dang_dung)}» có **{len(moi)}** clip chưa có vân tay (vd. {vd}) — quét "
+                   "sẽ không nhận ra chúng. Vào trang «🎬 Kho clip gốc» bấm «➕ Bổ sung clip mới vào kho».")
+
+
+def _ve_kho_quet() -> None:
+    """Cạnh nút «Bắt đầu quét»: kho sẽ dùng (#25) + cảnh báo clip chưa có vân tay."""
+    if env["database"] and eng.kho_dang_dung:
+        st.caption(f"🗄️ Quét với kho «{thoat_markdown(eng.kho_dang_dung)}».")
+    _canh_bao_thieu_van_tay()
+
+
+def _loc_link_da_quet(links: list) -> list:
+    """Link YouTube đã có kết luận với kho đang dùng (DT-09): báo ra kèm ngày quét + có/không vi phạm; tick ô thì lô chỉ
+    nhận link chưa quét — mặc định không tick (hành vi cũ). Chỉ đọc lịch sử, đúng luật ``Engine.ids_da_quet``."""
+    ma = {x: youtube_api.ma_video_cho_api(x) for x in links}
+    try:
+        lan = eng.lan_quet_voi_kho(ma.values())
+    except sqlite3.Error as e:
+        st.caption(f"Chưa đọc được lịch sử để báo link đã quét ({type(e).__name__}).")
+        return links
+    da_quet = [x for x in links if lan.get(ma[x], {}).get("da_quet")]
+    kho_cu = sum(1 for v in lan.values() if not v["da_quet"])
+    if kho_cu:
+        st.caption(f"{kho_cu} link từng quét với kho này nhưng kho đã đổi từ đó (bổ sung vân tay hoặc đổi tham số) — "
+                   "sẽ quét lại.")
+    if not da_quet:
+        return links
+    dong = []
+    for x in da_quet[:10]:
+        v = lan[ma[x]]
+        ket = f"**có vi phạm** ({v['so_doan']} đoạn)" if v["so_doan"] else "không thấy vi phạm"
+        dong.append(f"- {thoat_markdown(v['tieu_de'] or x)} — quét {v['ngay'][:16]}: {ket}")
+    if len(da_quet) > 10:
+        dong.append(f"- … và {len(da_quet) - 10} link khác")
+    ten_kho = f"«{thoat_markdown(eng.kho_dang_dung)}»" if eng.kho_dang_dung else "đang dùng"
+    st.info(f"**{len(da_quet)}/{len(links)} link đã quét với kho {ten_kho}:**\n\n" + "\n".join(dong))
+    if not st.checkbox("Bỏ qua các link đã quét với kho này", key="bo_qua_da_quet", persist_state="session",
+                       help="Không tick: quét lại cả các link đã quét, như trước."):
+        return links
+    bo = set(da_quet)
+    con = [x for x in links if x not in bo]
+    st.caption(f"Lô chỉ quét {len(con)} link chưa quét." if con
+               else "Mọi link đều đã quét với kho này — bỏ tick nếu muốn quét lại.")
+    return con
+
+
 def _ve_o_kho() -> None:
     """Ô «🗄️ Kho đang dùng» ở thanh bên — trang quét / kho / tìm nghi vấn (_TRANG_CAN_KHO), và lúc có việc đang chạy
     (vòng tự vẽ lại của việc đó chạy TRƯỚC menu — trước đây thanh bên luôn cho thấy kho đang quét). Mỗi lượt vẽ một lần."""
@@ -1129,6 +1204,7 @@ def _ve_o_kho() -> None:
 
         if clips:
             st.info(f"Kho «{eng.kho_dang_dung}» có **{len(clips)}** clip gốc.")
+            _canh_bao_thieu_van_tay()
         elif khos:
             st.warning(f"Kho «{eng.kho_dang_dung}» chưa có vân tay.")
 
@@ -1503,6 +1579,9 @@ def _ve_khu_tren() -> None:
                            "— sẽ tải lại ở lần đồng bộ tới.")
         else:
             res = job["results"]
+            kho_lo = sorted({x.kho_ten for x in res if getattr(x, "kho_ten", "")})
+            if kho_lo:
+                st.caption("🗄️ Quét với kho " + ", ".join(f"«{thoat_markdown(k)}»" for k in kho_lo) + ".")
             if loi_lo_quet_co_ket_qua:
                 st.error(f"Lỗi: {job['error']}")
                 st.info(f"Lô dừng giữa chừng vì lỗi trên. Kết quả của {len(res)} video đã quét xong TRƯỚC lỗi vẫn ở "
@@ -2492,10 +2571,10 @@ def _trang_quet_youtube() -> None:
     links_text = st.text_area("Dán link YouTube — mỗi dòng một link", height=160, key=O_LINK_QUET_YT,
                               placeholder="https://www.youtube.com/watch?v=xxxxxxxxxxx\n"
                                           "https://youtu.be/yyyyyyyyyyy", persist_state="session")
-    links = [x.strip() for x in links_text.splitlines()
-             if x.strip() and not x.strip().startswith("#")]
+    links, so_gop = gop_link_trung([x.strip() for x in links_text.splitlines()
+                                    if x.strip() and not x.strip().startswith("#")])
     if links:
-        st.caption(f"Đã nhận {len(links)} link.")
+        st.caption(f"Đã nhận {len(links)} link." + (f" Đã gộp {so_gop} link trùng." if so_gop else ""))
     che_do = st.radio(
         "Cách chọn kết quả",
         ["Mỗi video tự chọn kết quả", "Một video gốc chung cho cả lô"],
@@ -2528,6 +2607,9 @@ def _trang_quet_youtube() -> None:
             chua_xac_nhan_toan_bo = not st.checkbox(
                 "Tôi chủ động chọn quét toàn bộ video dài", key="xac_nhan_quet_toan_bo")
     dich_yt, tu_dong_yt = ui_gui.chon_dich(eng, key="quet_yt", nguon_chung=nguon_chung_bat)
+    if links and not nguon_chung_bat:
+        links = _loc_link_da_quet(links)
+    _ve_kho_quet()
     if st.button("🚀 Bắt đầu quét", type="primary",
                  disabled=(not links or not env["database"] or thieu_link
                            or chua_xac_nhan_toan_bo)):
@@ -2571,6 +2653,7 @@ def _trang_quet_file() -> None:
         else:
             st.error("Không tìm thấy đường dẫn này.")
     dich_file, tu_dong_file = ui_gui.chon_dich(eng, key="quet_file")
+    _ve_kho_quet()
     if st.button("🚀 Bắt đầu quét", key="quet_file", type="primary",
                  disabled=not ds_file or not env["database"]):
         chay_quet(ds_file, "file", dich_id=dich_file, tu_dong=tu_dong_file, tab_key="quet_file")
