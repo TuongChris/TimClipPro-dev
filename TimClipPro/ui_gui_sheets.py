@@ -16,6 +16,7 @@ import streamlit as st
 
 import bang_ngang
 import bao_cao_v2
+import lich_su
 import outbox
 import sheet_destinations as sd
 
@@ -45,12 +46,22 @@ def _header(eng, schema_id: str) -> list:
     return list(bang_ngang.HEADER_NGANG) if schema_id == sd.SCHEMA_NGANG else list(eng.HEADER)
 
 
-def dam_bao_nguoi_gui(eng, *, bat_buoc: bool = False) -> None:
+def dam_bao_nguoi_gui(eng, *, bat_buoc: bool = False) -> dict:
     """Người gửi nền của tiến trình app: chạy khi có việc chờ (hoặc khi bắt đầu lô có đích).
-    Một luồng mỗi DB cho mọi phiên trình duyệt; Watch đang giữ quyền thì luồng này tự chờ."""
+    Một luồng mỗi DB cho mọi phiên trình duyệt; Watch đang giữ quyền thì luồng này tự chờ.
+    Trả ``outbox.tom_tat`` vừa đọc — khu đầu trang dùng lại cho cảnh báo việc kẹt, khỏi đọc DB thêm lần nữa."""
     tt = outbox.tom_tat(_db(eng))
     if bat_buoc or any(tt[t] for t in _VIEC_DANG_CHO):
         outbox.dam_bao_chay_nen(_db(eng), eng.data_dir)
+    return tt
+
+
+def canh_bao_viec_ket(tt: dict) -> str:
+    """Một câu cho khu đầu trang khi hàng đợi (``outbox.tom_tat``) có việc bị chặn / không rõ đã gửi chưa — các việc
+    này không tự đi tiếp, chỉ người dùng xử lý được. "" = không có."""
+    chan, khong_ro = tt[outbox.BLOCKED_CONFIG] + tt[outbox.BLOCKED_REPORT], tt[outbox.UNKNOWN]
+    phan = [cau for n, cau in ((chan, f"{chan} việc bị chặn"), (khong_ro, f"{khong_ro} việc không rõ đã gửi chưa")) if n]
+    return f"📤 Gửi Google Sheets: {', '.join(phan)} — cần bạn xem." if phan else ""
 
 
 # ---------------------------------------------------------------------------
@@ -258,12 +269,14 @@ def _ve_hang_doi(eng) -> None:
 
     # Chụp MỘT lần cho cả bảng (tạm dừng, hồ sơ tạm dừng, mốc nhận việc, người gửi nền) — không mở DB từng dòng.
     nen, anh = outbox.nguoi_gui_nen(db), outbox.anh_chup_cho_gui(db)
+    kho = lich_su.kho_cua_viec_gui(db)
 
     def gio(t: float) -> str:
         return datetime.fromtimestamp(t).strftime("%H:%M:%S")
 
     st.dataframe(pd.DataFrame([{
         "Mã": v.id[:8], "Lần quét": f"#{v.job_id}" if v.job_id else "—",
+        "Kho": kho.get(v.job_id, "—"),
         "Nguồn": "tự động" if v.nguon == outbox.NGUON_AUTO else "thủ công",
         "Đích (đã ghim)": nhan_dich(v), "Trạng thái": outbox.NHAN_TRANG_THAI.get(v.trang_thai),
         "Lần thử": v.so_lan_thu, "Dòng": v.so_dong,

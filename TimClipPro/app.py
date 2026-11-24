@@ -221,7 +221,7 @@ with _khu_tren:
     ui_cap_nhat.canh_bao_ban_cu()
 # Gửi Google Sheets: hàng đợi BỀN trong lichsu.db + MỘT người gửi nền mỗi tiến trình (không đọc
 # st.session_state). Còn việc chờ từ lần chạy trước (tắt app, mất điện) thì gửi tiếp ngay.
-ui_gui.dam_bao_nguoi_gui(eng)
+_tom_tat_gui = ui_gui.dam_bao_nguoi_gui(eng)   # khu đầu trang dùng lại để cảnh báo việc gửi kẹt (_ve_khu_tren)
 
 
 def dang_co_tac_vu() -> bool:
@@ -1237,6 +1237,10 @@ def _form_dong_bo_song_song() -> None:
 def _ve_khu_tren() -> None:
     """Thân trang phía trên các trang: lượt đồng bộ, tiến độ việc đang chạy (vòng tự vẽ lại), kết quả việc vừa xong.
     Gọi SAU ``st.navigation`` — vòng tự vẽ lại chạy trước menu thì F5 / tab mới lúc có việc mất trang đang mở."""
+    _cau_ket = ui_gui.canh_bao_viec_ket(_tom_tat_gui)
+    if _cau_ket:
+        st.warning(_cau_ket)
+        _link_trang("Gửi Google Sheets", "📤 Sang trang Gửi Google Sheets để xử lý")
     _ve_lan_dong_bo()
 
 
@@ -1346,6 +1350,7 @@ def _ve_khu_tren() -> None:
                 anh_cuoi = scan_controller.snapshot()
                 job["lo_da_dung"] = anh_cuoi.cancelled
                 job["chua_quet"] = chua_quet_cua_lo(anh_cuoi, len(job["results"]))
+                job["lo_gui"] = (anh_cuoi.dich_gui, anh_cuoi.lo_id)   # màn kết quả đếm việc gửi của ĐÚNG lô này
 
             st.header("🔍 Đang quét video")
             # Chỉ số đo THẬT (ui_tien_do_quet): thanh lô đếm video đã xong; bước hiện tại chỉ có thanh
@@ -1551,6 +1556,9 @@ def _ve_khu_tren() -> None:
             if loi:
                 st.error("Có nguồn bị lỗi: " + "; ".join(f"{thoat_markdown(x.source_name)} ({thoat_markdown(x.note)})"
                                                           for x in loi))
+            _lo_gui = job.get("lo_gui") or ("", "")
+            if _lo_gui[1]:      # lô có đích gửi: đã gửi / đang chờ / kẹt, đếm lại mỗi lần vẽ (một truy vấn nhỏ)
+                st.caption(ui_gui.mo_ta_lo(eng, *_lo_gui))
             bang_ket_qua(res)
             # Báo cáo V2 lỗi không được xuất theo bất kỳ đường nào — kể cả CSV tinh chỉnh (audit 16/11).
             hien_tinh_chinh(bao_cao_v2.tach_loi_bao_cao(res)[0])
@@ -1569,6 +1577,19 @@ def _link_trang(ten: str, nhan: str) -> None:
     """Lối tắt sang trang ``ten`` của menu (``_TRANG``). Bộ test vẽ mọi trang trong tab (không có menu) → không vẽ."""
     if os.environ.get("TIMCLIP_UI_VE_MOI_TRANG") != "1":
         st.page_link(next(p for ds in _TRANG.values() for p in ds if p.title == ten), label=nhan)
+
+
+def _o_chon_kho(khoa: str):
+    """Ô «Kho» (mặc định «Tất cả kho») của trang Lịch sử / Thống kê → mã kho để lọc NGAY trong truy vấn; ``None`` = mọi
+    kho. Lịch sử chưa có hai kho thì không vẽ ô (chọn gì cũng như nhau)."""
+    try:
+        nhom = lich_su.kho_trong_lich_su(eng.sqlite_file)
+    except sqlite3.Error:   # lịch sử bị khoá lâu: trang vẫn vẽ (không lọc), không traceback
+        nhom = {}
+    if len(nhom) < 2:
+        return None
+    return nhom.get(st.selectbox("Kho", ["Tất cả kho", *nhom], key=khoa, persist_state="session",
+                                 help="Chỉ xem lần quét của một kho. Kho xoá rồi tạo lại cùng tên được gộp chung."))
 
 
 # ---------------------------------------------------------------- TẢI VIDEO GỐC / THUMBNAIL / CẢ KÊNH
@@ -2578,9 +2599,10 @@ def _trang_quet_file() -> None:
 # ---------------------------------------------------------------- TAB 5
 def _trang_lich_su() -> None:
     st.subheader("Lịch sử các lần quét")
+    _kho_ls = _o_chon_kho("ls_kho")
     # Video vi phạm còn trên YouTube? (D-51) — CHỈ YouTube Data API, mạng chỉ trong nhánh nút; không tool.lock, outbox,
     # Google Sheets. Vẽ bảng chỉ đọc lịch sử + sổ kiem_video_con.json.
-    _vi_pham = eng.video_vi_pham()
+    _vi_pham = eng.video_vi_pham(_kho_ls)
     if _vi_pham:
         _khoa_api = youtube_api.trang_thai_khoa(eng.data_dir)
         _co_khoa_api = _khoa_api.ma == youtube_api.CO_KHOA
@@ -2619,7 +2641,7 @@ def _trang_lich_su() -> None:
                      column_config={"Link": st.column_config.LinkColumn()})
         st.caption("Google Sheets không bị đổi — muốn ghi vào cột «Trạng thái» của Sheet thì tự chép.")
         st.divider()
-    jobs = eng.list_jobs(200)
+    jobs = eng.list_jobs(200, _kho_ls)
     if len(jobs) >= 200:   # audit 09/11: trước đây lặng lẽ cắt
         st.caption("Chỉ hiện 200 lần quét gần nhất — các lần cũ hơn vẫn được lưu.")
     if not jobs:
@@ -2832,21 +2854,22 @@ def _trang_tim_nghi_van() -> None:
 
 # ---------------------------------------------------------------- THỐNG KÊ (chỉ đọc lịch sử)
 @st.cache_data(max_entries=16, show_spinner=False)
-def _thong_ke(duong_dan: str, chu_ky: tuple, tu_ngay, den_ngay) -> thong_ke.ThongKe:
-    """Mọi tab vẽ lại sau MỖI cú bấm: chỉ tính lại khi lichsu.db đổi hoặc đổi khoảng ngày. ``chu_ky`` = (mtime, cỡ)
-    của file — journal mặc định của SQLite (không WAL) ghi thẳng vào file DB mỗi lần commit."""
-    return thong_ke.tinh(duong_dan, tu_ngay, den_ngay)
+def _thong_ke(duong_dan: str, chu_ky: tuple, tu_ngay, den_ngay, kho_ids=None) -> thong_ke.ThongKe:
+    """Mọi tab vẽ lại sau MỖI cú bấm: chỉ tính lại khi lichsu.db đổi hoặc đổi khoảng ngày / kho. ``chu_ky`` = (mtime,
+    cỡ) của file — journal mặc định của SQLite (không WAL) ghi thẳng vào file DB mỗi lần commit."""
+    return thong_ke.tinh(duong_dan, tu_ngay, den_ngay, kho_ids)
 
 
 def _trang_thong_ke() -> None:
     st.subheader("Thống kê vi phạm")
     st.caption("Chỉ đọc lịch sử quét trên máy này — không quét lại, không hỏi YouTube.")
+    tk_kho = _o_chon_kho("tk_kho")
     c_tu, c_den = st.columns(2)
     tk_tu = c_tu.date_input("Từ ngày quét", value=None, format="DD/MM/YYYY", key="tk_tu_ngay", persist_state="session")
     tk_den = c_den.date_input("Đến ngày quét", value=None, format="DD/MM/YYYY", key="tk_den_ngay", persist_state="session")
     try:
         tk_file = os.stat(eng.sqlite_file)
-        tke = _thong_ke(eng.sqlite_file, (tk_file.st_mtime_ns, tk_file.st_size), tk_tu, tk_den)
+        tke = _thong_ke(eng.sqlite_file, (tk_file.st_mtime_ns, tk_file.st_size), tk_tu, tk_den, tk_kho)
     except (OSError, sqlite3.Error) as e:   # vd. lịch sử đang bị khoá lâu: báo gọn thay vì traceback
         tke = None
         st.error(f"Chưa đọc được lịch sử để thống kê ({type(e).__name__}: {e}). Thử lại sau ít phút.")

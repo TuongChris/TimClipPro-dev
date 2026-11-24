@@ -25,10 +25,10 @@ import re
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Optional
+from typing import Iterable, Optional
 
 import bao_cao_v2
-from lich_su import BANG_BAO_CAO, _co_bang, _cot_jobs, _mo_chi_doc
+from lich_su import BANG_BAO_CAO, _co_bang, _cot_jobs, _mo_chi_doc, dk_kho
 
 _THANG = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
 
@@ -68,8 +68,10 @@ def _du_thang(dem: dict) -> list:
     return ra + [(k, v) for k, v in dem.items() if not _THANG.fullmatch(k)]
 
 
-def tinh(db_path: str, tu_ngay: Optional[date] = None, den_ngay: Optional[date] = None) -> ThongKe:
-    """Thống kê các lần quét có ngày quét trong ``[tu_ngay, den_ngay]`` (bỏ trống = không giới hạn).
+def tinh(db_path: str, tu_ngay: Optional[date] = None, den_ngay: Optional[date] = None,
+         kho_ids: Optional[Iterable[str]] = None) -> ThongKe:
+    """Thống kê các lần quét có ngày quét trong ``[tu_ngay, den_ngay]`` (bỏ trống = không giới hạn) của các kho
+    ``kho_ids`` (``None`` = mọi kho, ``lich_su.dk_kho``).
 
     DB chưa có / rỗng / lược đồ cũ → số 0 hoặc phần đọc được; không tạo, không nâng cấp, không ghi gì.
     """
@@ -81,14 +83,19 @@ def tinh(db_path: str, tu_ngay: Optional[date] = None, den_ngay: Optional[date] 
         con.execute("BEGIN")    # mọi truy vấn cùng một ảnh chụp: Watch/lô quét có thể đang lưu lần quét mới
         if not _co_bang(con, "jobs"):
             return tk
-        dk, tham = [], []
+        cot = _cot_jobs(con)
+        # Lọc kho ngay ở ``ja``: «lần đầu thấy vi phạm» cũng chỉ xét lịch sử của kho đã chọn. DB rất cũ chưa có cột kho
+        # = mọi lần quét «chưa rõ kho». Tham số kho đứng trước tham số ngày (đúng thứ tự dấu ? trong câu SQL).
+        loc_kho, tham = dk_kho(kho_ids, "COALESCE(kho_id, '')" if "kho_id" in cot else "''")
+        dk = []
         for ngay, so_sanh in ((tu_ngay, ">="), (den_ngay, "<=")):
             if ngay:
                 dk.append(f"substr(created_at, 1, 10) {so_sanh} ?")
                 tham.append(ngay.isoformat())
-        ma = "NULLIF(source_id, ''), " if "source_id" in _cot_jobs(con) else ""   # DB rất cũ chưa có cột này
+        ma = "NULLIF(source_id, ''), " if "source_id" in cot else ""   # DB rất cũ chưa có cột này
         j = (f"ja AS (SELECT id, status, created_at, COALESCE({ma}NULLIF(source_ref, ''), NULLIF(source_name, ''),"
-             f" '#' || id) AS vid FROM jobs), j AS (SELECT * FROM ja{' WHERE ' + ' AND '.join(dk) if dk else ''})")
+             f" '#' || id) AS vid FROM jobs{' WHERE ' + loc_kho if loc_kho else ''}),"
+             f" j AS (SELECT * FROM ja{' WHERE ' + ' AND '.join(dk) if dk else ''})")
         hang = con.execute(f"WITH {j} SELECT COUNT(*), COALESCE(SUM(status IS NOT 'ok'), 0),"
                            " replace(substr(MIN(created_at), 1, 10), '-', ''),"
                            " replace(substr(MAX(created_at), 1, 10), '-', '') FROM j", tham).fetchone()

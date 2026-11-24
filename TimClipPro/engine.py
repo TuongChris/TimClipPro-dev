@@ -7056,9 +7056,13 @@ class Engine:
                 viec = dict(header=list(header), rows=rows)
         return outbox.them_viec(con, y, job_id=job_id, chinh_sach=chinh_sach, **viec) is not None
 
-    def list_jobs(self, limit: int = 200) -> list:
+    def list_jobs(self, limit: int = 200, kho_ids: Optional[Iterable[str]] = None) -> list:
+        """Lần quét mới nhất trước. ``kho_ids`` lọc NGAY trong truy vấn (``lich_su.dk_kho``; ``None`` = mọi kho) nên
+        ``limit`` tính sau khi lọc — kho ít quét không bị lần quét của kho khác đẩy ra ngoài."""
+        loc, tham = lich_su.dk_kho(kho_ids)
         with self._db() as c:
-            rows = c.execute("SELECT * FROM jobs ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+            rows = c.execute(f"SELECT * FROM jobs{' WHERE ' + loc if loc else ''} ORDER BY id DESC LIMIT ?",
+                             (*tham, limit)).fetchall()
         return [dict(r) for r in rows]
 
     def ids_da_quet(self, chi_thanh_cong: bool = True) -> set:
@@ -7093,17 +7097,20 @@ class Engine:
             rows = c.execute(sql, tham_so).fetchall()
         return {row["source_id"] for row in rows}
 
-    def video_vi_pham(self) -> list:
-        """Video YouTube từng bị thấy vi phạm (lần quét ``ok`` có kết quả) trong TOÀN BỘ lịch sử, mọi kho — mỗi mã một
+    def video_vi_pham(self, kho_ids: Optional[Iterable[str]] = None) -> list:
+        """Video YouTube từng bị thấy vi phạm (lần quét ``ok`` có kết quả) trong TOÀN BỘ lịch sử của các kho ``kho_ids``
+        (``None`` = mọi kho; lọc trong truy vấn, số lần quét cũng chỉ đếm trong các kho đó) — mỗi mã một
         dòng theo lần quét MỚI NHẤT, mới nhất trước: ``ma``, ``tieu_de``, ``lan_quet_cuoi``, ``so_lan_quet`` (số lần quét
         ``ok`` có kết quả), ``kenh_ten``/``kenh_link`` (ảnh chụp V2 của lần quét đó khi đọc được, như ``bao_cao_cua_job``
         nhưng một truy vấn cho cả bảng — tab Lịch sử gọi mỗi lần vẽ). Chỉ đọc."""
+        loc, tham = lich_su.dk_kho(kho_ids)
         with self._db() as c:
             rows = c.execute(
                 "SELECT j.source_id, j.source_ref, j.source_name, j.created_at, g.so_lan, b.chinh_sach, b.du_lieu FROM"
                 " (SELECT MAX(id) AS id, COUNT(*) AS so_lan FROM jobs WHERE status = 'ok' AND n_matches > 0"
-                " AND source_id IS NOT NULL AND source_id != '' GROUP BY source_id) g"
-                " JOIN jobs j ON j.id = g.id LEFT JOIN bao_cao_job b ON b.job_id = j.id ORDER BY j.id DESC").fetchall()
+                f" AND source_id IS NOT NULL AND source_id != ''{' AND ' + loc if loc else ''} GROUP BY source_id) g"
+                " JOIN jobs j ON j.id = g.id LEFT JOIN bao_cao_job b ON b.job_id = j.id ORDER BY j.id DESC",
+                tham).fetchall()
         ra = []
         for row in rows:
             ma = bao_cao_v2.ma_video_hop_le(row["source_id"])

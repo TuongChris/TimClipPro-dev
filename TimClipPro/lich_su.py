@@ -361,6 +361,41 @@ def thong_ke(path: str) -> dict:
         con.close()
 
 
+def dk_kho(kho_ids, cot: str = "COALESCE(kho_id, '')") -> tuple:
+    """Điều kiện SQL lọc ``jobs`` theo tập mã kho (``""`` = lịch sử cũ chưa rõ kho) → ``(điều_kiện, tham_số)``; ``None``
+    = mọi kho → ``("", [])``. ``cot``: biểu thức mã kho (DB rất cũ chưa có cột kho thì ``"''"``)."""
+    if kho_ids is None:
+        return "", []
+    ids = list(kho_ids)
+    return f"{cot} IN ({','.join('?' * len(ids))})", ids
+
+
+def kho_trong_lich_su(path: str) -> dict:
+    """{tên kho như cột «Kho» (``mo_ta_kho``): mã kho} của mọi kho từng có lần quét, kho quét gần nhất trước — ô «Kho»
+    của trang Lịch sử / Thống kê. Kho xoá rồi tạo lại cùng tên (mã khác) gộp một tên. CHỈ ĐỌC."""
+    con = _mo_chi_doc(path)
+    try:
+        hang = con.execute("SELECT COALESCE(kho_id, '') AS kho_id, kho_ten FROM jobs"
+                           " GROUP BY 1, 2 ORDER BY MAX(id) DESC").fetchall()
+    finally:
+        con.close()
+    nhom: dict = {}
+    for h in hang:
+        nhom.setdefault(mo_ta_kho(dict(h)), set()).add(h["kho_id"])
+    return {ten: tuple(sorted(ids)) for ten, ids in nhom.items()}
+
+
+def kho_cua_viec_gui(path: str) -> dict:
+    """{mã lần quét: tên kho (``mo_ta_kho``)} của các lần quét có việc gửi Google Sheets — cột «Kho» của hàng đợi gửi.
+    CHỈ ĐỌC; lần quét đã xoá không có mặt."""
+    con = _mo_chi_doc(path)
+    try:
+        return {h["id"]: mo_ta_kho(dict(h)) for h in con.execute(
+            "SELECT id, kho_id, kho_ten FROM jobs WHERE id IN (SELECT job_id FROM hang_doi_gui)")}
+    finally:
+        con.close()
+
+
 def khoi_phuc(ban_sao: str, dich: str, *, ghi_de: bool = False) -> str:
     """Khôi phục bản sao lưu ra ``dich`` bằng backup API.
 
