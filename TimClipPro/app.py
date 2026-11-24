@@ -121,6 +121,10 @@ for khoa, mac_dinh in GIA_TRI_GIAO_DIEN_MAC_DINH.items():
         st.session_state[khoa] = (
             gia_tri if type(gia_tri) is type(mac_dinh) else mac_dinh
         )
+        if khoa == "bao_tieng_xong":
+            # Cờ dùng chung cả tiến trình: đặt lúc phiên nạp cấu hình và khi bấm ô (on_change) — KHÔNG ở mỗi lượt vẽ,
+            # kẻo tab khác (vòng vẽ lại 0,75 giây khi có việc) bật lại tiếng người dùng vừa tắt (review đêm 24/11).
+            bao_viec.bat_tieng = st.session_state[khoa]
 if "job" not in st.session_state:
     st.session_state.job = {"running": False, "pct": 0.0, "msg": "", "results": [],
                             "error": "", "kind": ""}
@@ -1123,10 +1127,10 @@ with st.sidebar:
 
     st.divider()
     st.toggle("🔔 Kêu khi việc dài xong hoặc lỗi", key="bao_tieng_xong", persist_state="session",
+              on_change=lambda: setattr(bao_viec, "bat_tieng", st.session_state.bao_tieng_xong),
               help="Quét, dựng kho, tải, đồng bộ kênh… xong thì kêu hai tiếng đi lên; lỗi hoặc bị YouTube chặn thì "
                    "kêu ba tiếng trầm. Bấm Dừng thì không kêu. Lúc có việc dài, máy không tự ngủ. Bấm «💾 Lưu cấu "
                    "hình» để nhớ lựa chọn.")
-    bao_viec.bat_tieng = st.session_state.bao_tieng_xong   # luồng nền của việc đọc giá trị này lúc kết thúc
     c_luu, c_mac_dinh = st.columns(2)
     with c_luu:
         if st.button(

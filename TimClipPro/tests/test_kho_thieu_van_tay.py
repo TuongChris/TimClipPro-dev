@@ -42,9 +42,10 @@ def test_file_chua_van_tay_theo_dung_luat_bo_sung(tmp_path, monkeypatch):
     nguon = _thu_muc(tmp_path)
     _dai_3_gio(monkeypatch)
     clips = [{"duong_dan": str(nguon / "a.opus"), "so_hash": 9},
-             {"duong_dan": str(nguon / "c.opus"), "so_hash": 0}]      # 0 hash = chưa có vân tay dùng được
+             {"duong_dan": str(nguon / "c.opus"), "so_hash": 0}]      # 0 hash = đã thử, im lặng/hỏng
     ra = Engine.file_chua_van_tay(str(nguon), clips)
-    assert sorted(os.path.relpath(p, nguon) for p in ra) == ["b.opus", "c.opus", os.path.join("sub", "d.m4a")]
+    # c.opus đã thử mà 0 hash: «Bổ sung» lại cũng không tạo được → không nhắc mãi (review đêm 24/11).
+    assert sorted(os.path.relpath(p, nguon) for p in ra) == ["b.opus", os.path.join("sub", "d.m4a")]
 
 
 def test_kho_chep_tu_thu_muc_khac_khong_bao_oan(tmp_path):
@@ -73,7 +74,8 @@ def test_canh_bao_trung_dung_danh_sach_bo_sung_se_tao_van_tay(tmp_path, monkeypa
     kq = e.build_database(str(nguon), "add")
 
     assert kq.get("da_ghi_kho") is True
-    assert sorted(canh_bao) == sorted(lenh[-1][1])
+    # Cảnh báo = đúng các file «Bổ sung» tạo vân tay, trừ clip đã thử mà 0 hash (c.opus) — thử lại cũng vô ích.
+    assert sorted(canh_bao) == sorted(p for p in lenh[-1][1] if not p.endswith("c.opus"))
 
 
 def _app(tmp_path, monkeypatch):
@@ -135,3 +137,22 @@ def test_man_ket_qua_ghi_kho_da_dung_va_cau_khong_tim_thay_neu_ten_kho(tmp_path,
     assert not at.exception, [e.value for e in at.exception]
     assert any("Quét với kho «SML»" in c.value for c in at.main.caption)
     assert any("không tìm thấy clip gốc nào trong kho «SML»" in w.value for w in at.main.warning)
+
+
+def test_loc_file_qua_dai_khong_do_lai_file_khong_doi(tmp_path, monkeypatch):
+    """Review đêm 24/11: cảnh báo kho tính lại mỗi 5 phút trong lượt vẽ — file lớn không đổi thì không ffprobe lại."""
+    import channel
+
+    monkeypatch.setattr(channel, "_DO_DAI_DA_DO", {})
+    f = tmp_path / "dai.opus"
+    with open(f, "wb") as fh:
+        fh.truncate(channel.BYTE_CHAC_CHAN_NGAN)   # file thưa: đủ «lớn» mà không tốn đĩa
+    do = []
+    monkeypatch.setattr(channel, "do_dai_media", lambda p: do.append(p) or 3 * 3600.0)
+    assert channel.loc_file_qua_dai([str(f)], 7200) == {str(f)}
+    assert channel.loc_file_qua_dai([str(f)], 7200) == {str(f)}
+    assert len(do) == 1, "file không đổi mà vẫn ffprobe lại"
+    moc = time.time() + 5
+    os.utime(f, (moc, moc))                      # file đổi → đo lại
+    assert channel.loc_file_qua_dai([str(f)], 7200) == {str(f)}
+    assert len(do) == 2

@@ -57,8 +57,6 @@ _TUNG_DONG = ("có chủ ý: hook quét TỪNG dòng thêm nên cần mẫu cho 
               "quét CẢ file, mà file khoá luôn có dòng loại tài khoản dịch vụ (đã bắt)")
 _DINH_DANH = ("có chủ ý: định danh, không phải bí mật — chỉ hook chặn vì lịch sử repo CÔNG KHAI giữ mãi; gói phát hành "
               "dựng từ commit đã qua hook")
-_HO_AUDIT = ("CHỖ HỞ: gói audit nguồn (dong_goi.tao_goi) chỉ quét bằng danh sách của dong_goi — file dữ liệu mang mẫu "
-             "này lọt vào gói (gói phát hành thì vẫn chặn nhờ MAU_BI_MAT)")
 _HO_HOOK = "CHỖ HỞ: hook chỉ bắt TÊN trường JSON — giá trị dán trần (ghi chú, câu lệnh) lọt lên repo công khai"
 
 # (loại, bộ quét KHÔNG bắt) → lý do.
@@ -76,13 +74,6 @@ KHONG_BAT = {
     ("id_bang_tinh_tran", "dong_goi"): _DINH_DANH,
     ("ma_cai_dat", "release_tool"): _DINH_DANH,
     ("ma_cai_dat", "dong_goi"): _DINH_DANH,
-    ("token_oauth", "dong_goi"): _HO_AUDIT,
-    ("token_github", "dong_goi"): _HO_AUDIT,
-    ("pat_github", "dong_goi"): _HO_AUDIT,
-    ("link_bang_tinh", "dong_goi"): _HO_AUDIT,
-    ("cookie_phien_youtube", "dong_goi"): _HO_AUDIT,
-    ("gia_tri_bi_mat_ung_dung", "dong_goi"): _HO_AUDIT,
-    ("gia_tri_token_lam_moi", "dong_goi"): _HO_AUDIT,
     ("cookie_phien_youtube", "hook"): ("CHỖ HỞ: hook chỉ bắt cookie dạng dòng file Netscape — dán dạng header "
                                        "(«Cookie: tên=giá trị») lọt; lệnh grep tay của GIT_WORKFLOW.md thì bắt"),
     ("gia_tri_bi_mat_ung_dung", "hook"): _HO_HOOK,

@@ -94,6 +94,15 @@ MAU_NOI_DUNG_NHAY_CAM = (
     ("client secret", re.compile(r'"client_secret"\s*:')),
     ("refresh token", re.compile(r'"refresh_token"\s*:')),
     ("khoá API Google", re.compile(r"AIza[0-9A-Za-z_-]{35}")),
+    # Cùng các mẫu GIÁ TRỊ của release_tool.MAU_BI_MAT (test_mau_bi_mat_ba_noi so ba danh sách) — đêm 24/11 test tìm ra
+    # gói audit thiếu 7 mẫu này.
+    ("token OAuth Google", re.compile(r"ya29\.[0-9A-Za-z_\-]{20,}")),
+    ("token GitHub", re.compile(r"gh[pousr]_[0-9A-Za-z]{30,}")),
+    ("token GitHub", re.compile(r"github_pat_[0-9A-Za-z_]{22,}")),
+    ("cookie phiên YouTube", re.compile(r"__Secure-[0-9A-Z]*PSID[A-Z]*\s*[=\t]\s*[^\s;]{10,}")),
+    ("client secret OAuth Google", re.compile(r"GOCSPX-[0-9A-Za-z_\-]{20,}")),
+    ("refresh token Google", re.compile(r"1//0[0-9A-Za-z_\-]{30,}")),
+    ("link Google Sheet thật", re.compile(r"docs\.google\.com/spreadsheets/d/[A-Za-z0-9_\-]{20,}")),
     ("cookie Netscape", re.compile(r"(?im)^#\s*(?:netscape\s+)?http\s+cookie\s+file")),
     ("dòng cookie", re.compile(
         r"(?m)^[^\t#\r\n]+\t(?:TRUE|FALSE)\t[^\t\r\n]*\t(?:TRUE|FALSE)\t\d+\t[^\t\r\n]+\t")),

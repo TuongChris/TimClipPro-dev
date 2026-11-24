@@ -3059,10 +3059,12 @@ class Engine:
     @staticmethod
     def file_chua_van_tay(thumuc: str, ds_clip: list) -> list:
         """File media trong ``thumuc`` mà «Bổ sung» SẼ tạo vân tay cho kho có danh sách clip ``ds_clip`` (``db_clips``) —
-        cùng luật chọn với ``_build_database_da_khoa``: bỏ ``_tam``/``_hong``, bỏ clip đã có hash, bỏ file quá trần
-        D-31/D-34. Chỉ đọc; thư mục con không đọc được → ``RuntimeError``. Vân tay dựng từ thư mục KHÁC (kho chép sang
-        máy/ổ khác) → ``[]``: «Bổ sung» ở đó nạp trùng mọi clip, không được xui bấm (DT-05)."""
+        cùng luật chọn với ``_build_database_da_khoa``: bỏ ``_tam``/``_hong``, bỏ file quá trần D-31/D-34 — trừ một chỗ:
+        clip ĐÃ có tên trong vân tay mà 0 hash (im lặng / hỏng) cũng bỏ, vì «Bổ sung» thử lại cũng không tạo được, nhắc
+        mãi chỉ tốn thêm lượt dựng kho (review đêm 24/11). Chỉ đọc; thư mục con không đọc được → ``RuntimeError``. Vân
+        tay dựng từ thư mục KHÁC (kho chép sang máy/ổ khác) → ``[]``: «Bổ sung» ở đó nạp trùng mọi clip (DT-05)."""
         da_co = {Engine._khoa_duong_dan(c["duong_dan"]) for c in ds_clip if int(c.get("so_hash") or 0) > 0}
+        da_thu = {Engine._khoa_duong_dan(c["duong_dan"]) for c in ds_clip}
         goc = Engine._khoa_duong_dan(thumuc)
 
         def trong_thu_muc(k: str) -> bool:
@@ -3073,7 +3075,7 @@ class Engine:
 
         if da_co and not any(trong_thu_muc(k) for k in da_co):
             return []
-        moi = [p for p in liet_ke_media(thumuc, bo_thu_muc_lam_viec=True) if Engine._khoa_duong_dan(p) not in da_co]
+        moi = [p for p in liet_ke_media(thumuc, bo_thu_muc_lam_viec=True) if Engine._khoa_duong_dan(p) not in da_thu]
         qua_dai = channel.loc_file_qua_dai(moi, channel.tran_clip_giay(thumuc))
         return [p for p in moi if p not in qua_dai]
 

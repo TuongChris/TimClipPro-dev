@@ -18,7 +18,7 @@ from don_dep import don_job_quet, don_kho_dem, don_rac_job_tam
 from engine import LoiLuuBen
 from khoa import DangChayRoi, KhoaTienTrinh
 from luu_tru import doc_json_an_toan, ghi_json_an_toan
-from truy_cap_youtube import PhienYouTube, dong_trang_thai_api
+from truy_cap_youtube import LOAI_MAY, PhienYouTube, dong_trang_thai_api, phan_loai_loi
 from ytdlp_chung import giai_thich_loi
 
 
@@ -749,6 +749,13 @@ def _thuc_hien_giam_sat(
                 bao_cao.loi.append(
                     f"Không quét được {ung_vien_moi.url}: {giai_thich_loi(e)}"
                 )
+                if phan_loai_loi(e).category in LOAI_MAY:
+                    # Ổ đầy / không ghi được (lỗi của MÁY): video nào sau cũng hỏng y hệt — dừng như LoiLuuBen, không
+                    # hỏi YouTube và Data API thêm cho từng video còn lại (review đêm 24/11).
+                    bao_cao.loi.append(
+                        f"Đã dừng lượt: còn {tong_can_quet - i - 1} video chưa quét (lượt sau quét lại)."
+                    )
+                    break
                 if dung_neu_duoc_yeu_cau(tong_can_quet - i - 1):
                     break
                 continue

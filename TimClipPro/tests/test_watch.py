@@ -826,3 +826,25 @@ def test_vuot_gioi_han_moi_luot_khong_bi_tinh_la_da_quet(engine, monkeypatch, tm
     bc = chay_giam_sat(engine, wl, lister=lambda url, limit: videos + [SimpleNamespace(id="x9", title="cu", url="u9")])
     assert (bc.quet_moi, bc.da_quet_truoc, bc.con_cho_luot_sau) == (2, 1, 3)
     assert "để lượt sau: 3" in bc.tom_tat()
+
+
+def test_o_day_dung_ca_luot_khong_hoi_youtube_cho_video_con_lai(engine, monkeypatch):
+    """Review đêm 24/11: ổ đầy (lỗi của MÁY) — video nào sau cũng hỏng y hệt. Trước đây Giám sát bắt lỗi rồi sang video
+    kế: hỏi thông tin (Data API) cho từng video, mỗi video một dòng lỗi giống hệt. Nay dừng lượt như LoiLuuBen."""
+    import truy_cap_youtube as tcy
+
+    videos = [SimpleNamespace(id=f"x{i}", title=f"Video {i}", url=f"u{i}") for i in range(1, 5)]
+    da_goi = []
+    that_bai = tcy.phan_loai_loi(OSError(28, "No space left on device"))
+    assert that_bai.category in tcy.LOAI_MAY
+
+    def scan_gia(url, progress=None):
+        da_goi.append(url)
+        raise tcy.loi_may(that_bai, "D:/data/downloads")
+
+    monkeypatch.setattr(engine, "list_jobs", lambda limit: [])
+    monkeypatch.setattr(engine, "scan_youtube", scan_gia)
+    bao_cao = chay_giam_sat(engine, WatchList(muc=[MucTheoDoi("kenh", "kenh-1")]),
+                            lister=lambda url, limit: videos)
+    assert da_goi == ["u1"]
+    assert any("Đã dừng lượt: còn 3 video chưa quét" in dong for dong in bao_cao.loi), bao_cao.loi

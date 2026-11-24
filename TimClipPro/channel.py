@@ -303,19 +303,29 @@ def dang_dong_bo_khac(thu_muc: str) -> str:
     return "" if chu.startswith(f"PID: {os.getpid()}\n") else chu
 
 
+# Thời lượng đã đo theo (đường dẫn, cỡ, mtime_ns): file không đổi thì không ffprobe lại — cảnh báo «clip chưa có vân
+# tay» gọi hàm này trong lượt vẽ trang, mỗi 5 phút (review đêm 24/11). Không đo được (None) thì không nhớ.
+_DO_DAI_DA_DO: dict = {}
+
+
 def loc_file_qua_dai(paths: Iterable[str], tran_giay: int = GIAY_CLIP_TOI_DA) -> set:
     """Các file dài hơn ``tran_giay``. Không đo được thời lượng thì coi là không quá dài."""
-    def du_lon(path: str) -> bool:
+    def khoa_neu_lon(path: str):
         try:
-            return os.path.getsize(path) >= BYTE_CHAC_CHAN_NGAN
+            st = os.stat(path)
         except OSError:
-            return False
+            return None
+        return (path, st.st_size, st.st_mtime_ns) if st.st_size >= BYTE_CHAC_CHAN_NGAN else None
 
-    lon = [p for p in paths if du_lon(p)]
+    lon = {p: k for p in paths if (k := khoa_neu_lon(p))}
+    can_do = [p for p, k in lon.items() if k not in _DO_DAI_DA_DO]
     with ThreadPoolExecutor(max_workers=8) as nhom:
-        do_dai = list(nhom.map(do_dai_media, lon))
+        moi_do = dict(zip(can_do, nhom.map(do_dai_media, can_do)))
+    if len(_DO_DAI_DA_DO) > 50_000:
+        _DO_DAI_DA_DO.clear()
+    _DO_DAI_DA_DO.update({lon[p]: giay for p, giay in moi_do.items() if giay})
     # `round`: thời lượng YouTube ở bước đồng bộ đã làm tròn, file đúng 2 giờ đo được 7200,4 giây vẫn phải qua.
-    return {p for p, giay in zip(lon, do_dai) if giay and round(giay) > tran_giay}
+    return {p for p, k in lon.items() if (giay := _DO_DAI_DA_DO.get(k) or moi_do.get(p)) and round(giay) > tran_giay}
 
 
 def do_dai_luong_tieng(path: str) -> Optional[float]:

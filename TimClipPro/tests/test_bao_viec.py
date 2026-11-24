@@ -248,3 +248,37 @@ def test_o_tieng_thanh_ben_mac_dinh_bat_tat_ngay_va_luu_vao_cau_hinh(tmp_path, m
     assert not at.exception, [e.value for e in at.exception]
     luu = json.loads((tmp_path / "data" / "cau_hinh.json").read_text(encoding="utf-8"))
     assert luu["bao_tieng_xong"] is False
+
+
+def test_bo_sung_ma_moi_clip_moi_deu_loi_thi_keu_kieu_loi(tmp_path, viec):
+    """Review đêm 24/11: «Chưa bổ sung được clip nào … kho giữ nguyên» (màn kết quả đỏ) mà job «completed» thì trước
+    đây kêu tiếng «xong» — người dùng ở ứng dụng khác sẽ quét tiếp với kho thiếu clip."""
+    class EngineGia:
+        data_dir = str(tmp_path / "data")
+
+        def build_database(self, folder, mode, progress_event, job_id):
+            return {"thanh_cong": 0, "that_bai": 2, "da_ghi_kho": False}
+
+        def cancel(self):
+            pass
+
+    FingerprintJobController(EngineGia()).start(str(tmp_path / "kho"), "add")
+    _kiem(viec, bao_viec.LOI)
+
+
+def test_tab_khac_ve_lai_khong_bat_lai_tieng_da_tat(tmp_path, monkeypatch):
+    """Review đêm 24/11: cờ tiếng dùng chung cả tiến trình. Tab khác vẽ lại (vòng 0,75 giây khi có việc) không được ghi
+    đè lựa chọn tắt tiếng; chỉ bấm ô (on_change) hay phiên mới nạp cấu hình mới đổi cờ."""
+    monkeypatch.delenv("TIMCLIP_UI_VE_MOI_TRANG", raising=False)
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    monkeypatch.setattr(bao_viec, "bat_tieng", True)
+    tab_b = AppTest.from_file(str(APP_PY), default_timeout=120).run()
+    assert not tab_b.exception, [e.value for e in tab_b.exception]
+    assert tab_b.toggle(key="bao_tieng_xong").value is True
+    bao_viec.bat_tieng = False                     # tab A vừa tắt tiếng
+    tab_b.run()                                    # tab B (ô vẫn bật) vẽ lại
+    assert bao_viec.bat_tieng is False
+    tab_b.toggle(key="bao_tieng_xong").set_value(False).run()
+    tab_b.toggle(key="bao_tieng_xong").set_value(True).run()
+    assert bao_viec.bat_tieng is True              # bấm ô thì đổi ngay

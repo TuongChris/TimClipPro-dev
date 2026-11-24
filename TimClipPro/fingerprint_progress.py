@@ -575,8 +575,12 @@ class FingerprintJobController:
                     with self._lock:
                         self._running = False
                     _SO_DUNG_KHO.xong(self.engine, self)   # tới khi một phiên chép kết quả
-                    bao_viec.ket_thuc({"completed": bao_viec.XONG, "failed": bao_viec.LOI}.get(
-                        self.snapshot().status))          # «cancelled» / «cancel_requested»: bấm Dừng — im
+                    kieu = {"completed": bao_viec.XONG, "failed": bao_viec.LOI}.get(
+                        self.snapshot().status)           # «cancelled» / «cancel_requested»: bấm Dừng — im
+                    kq = self._result or {}
+                    if kieu == bao_viec.XONG and kq.get("that_bai") and kq.get("da_ghi_kho") is False:
+                        kieu = bao_viec.LOI               # «Chưa bổ sung được clip nào»: màn kết quả đỏ, tiếng cũng lỗi
+                    bao_viec.ket_thuc(kieu)
 
             self._thread = threading.Thread(
                 target=target,
