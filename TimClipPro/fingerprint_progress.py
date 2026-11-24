@@ -20,6 +20,7 @@ from dataclasses import dataclass, replace
 from logging.handlers import RotatingFileHandler
 from typing import Callable, Optional
 
+import bao_viec
 from tac_vu_nen import SoViecDai
 
 
@@ -541,6 +542,7 @@ class FingerprintJobController:
 
             def target() -> None:
                 try:
+                    bao_viec.bat_dau()
                     result = self.engine.build_database(
                         folder,
                         mode,
@@ -573,6 +575,8 @@ class FingerprintJobController:
                     with self._lock:
                         self._running = False
                     _SO_DUNG_KHO.xong(self.engine, self)   # tới khi một phiên chép kết quả
+                    bao_viec.ket_thuc({"completed": bao_viec.XONG, "failed": bao_viec.LOI}.get(
+                        self.snapshot().status))          # «cancelled» / «cancel_requested»: bấm Dừng — im
 
             self._thread = threading.Thread(
                 target=target,

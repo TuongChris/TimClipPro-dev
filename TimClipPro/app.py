@@ -10,6 +10,7 @@ Dữ liệu KHÔNG đi đâu cả — server chỉ lắng nghe ở localhost tr�
 """
 
 import os
+import shutil
 import sqlite3
 import threading
 import time
@@ -30,6 +31,7 @@ import pandas as pd
 
 import bang_ngang
 import bao_cao_v2
+import bao_viec
 import common_original as nguon_chung
 import danh_sach_video
 import kiem_video_con
@@ -855,6 +857,29 @@ def hien_ket_qua_nguon_chung(kql: nguon_chung.KetQuaLo) -> None:
 #  Thanh bên: tình trạng hệ thống + tham số
 # =====================================================================
 
+TRONG_CANH_BAO_GB = 30   # ổ dữ liệu còn ít hơn chừng này: cảnh báo vàng ở thanh bên
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _dung_luong_dem(thu_muc_dem: str, thu_muc_du_lieu: str) -> tuple:
+    """``(số file, byte)`` của đệm audio lượt quét + byte trống của ổ dữ liệu (``None``: không đọc được). Đệm có thể gần
+    nghìn file và thanh bên vẽ lại mỗi 0,75 giây lúc có việc: nhớ 5 phút."""
+    so_file = tong = 0
+    try:
+        with os.scandir(thu_muc_dem) as ds:
+            for f in ds:
+                if f.is_file(follow_symlinks=False):
+                    so_file += 1
+                    tong += f.stat(follow_symlinks=False).st_size
+    except OSError:   # chưa có thư mục đệm
+        pass
+    try:
+        trong = shutil.disk_usage(thu_muc_du_lieu).free
+    except OSError:
+        trong = None
+    return so_file, tong, trong
+
+
 with st.sidebar:
     st.title("🔎 TimClip Pro")
     st.caption("Tìm video gốc bên trong video dài — chạy hoàn toàn trên máy bạn.")
@@ -889,6 +914,15 @@ with st.sidebar:
             st.write(d)
     if not all(env[k] for k in ("ffmpeg", "ffprobe", "audfprint")):
         st.error("Thiếu công cụ — hãy chạy lại `cai_dat.bat`.")
+    # Không có nút xoá đệm: luật giữ / xoá đệm đang chờ người dùng quyết (đề tài DT-02).
+    _so_dem, _byte_dem, _trong = _dung_luong_dem(eng.dl_dir, eng.data_dir)
+    st.caption(f"💾 Đệm audio của lượt quét: {_so_dem} file, {_byte_dem / 2 ** 30:.1f} GB"
+               + ("" if _trong is None else f" · ổ dữ liệu còn trống {_trong / 2 ** 30:.0f} GB")
+               + ". Luật dọn đệm đang chờ bạn quyết.",
+               help="Audio tải về để quét, giữ lại khi bật «Giữ lại audio đã tải» (⚙️ Tham số) — lần quét sau khỏi "
+                    "tải lại. Số liệu cập nhật 5 phút một lần.")
+    if _trong is not None and _trong < TRONG_CANH_BAO_GB * 2 ** 30:
+        st.warning(f"⚠️ Ổ chứa dữ liệu chỉ còn {_trong / 2 ** 30:.1f} GB trống — dọn bớt trước khi quét hay tải dài.")
 
     # «🗄️ Kho đang dùng» chỉ vẽ ở trang dùng kho vân tay (_ve_o_kho, gọi trước trang); chỗ giữ sẵn giữ đúng vị trí.
     _cho_kho = st.container()
@@ -1088,6 +1122,11 @@ with st.sidebar:
             st.caption("Chưa có khoá Google (`google_key.json`) — cách tạo: đầu file `sheets.py`.")
 
     st.divider()
+    st.toggle("🔔 Kêu khi việc dài xong hoặc lỗi", key="bao_tieng_xong", persist_state="session",
+              help="Quét, dựng kho, tải, đồng bộ kênh… xong thì kêu hai tiếng đi lên; lỗi hoặc bị YouTube chặn thì "
+                   "kêu ba tiếng trầm. Bấm Dừng thì không kêu. Lúc có việc dài, máy không tự ngủ. Bấm «💾 Lưu cấu "
+                   "hình» để nhớ lựa chọn.")
+    bao_viec.bat_tieng = st.session_state.bao_tieng_xong   # luồng nền của việc đọc giá trị này lúc kết thúc
     c_luu, c_mac_dinh = st.columns(2)
     with c_luu:
         if st.button(

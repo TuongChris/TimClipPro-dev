@@ -27,6 +27,7 @@ import pytest
 import channel
 import engine as engine_module
 import process_runner
+import truy_cap_youtube
 from channel import ChannelSync, VideoInfo
 from process_runner import KetQuaLenh
 
@@ -127,9 +128,13 @@ def test_file_nen_khong_qua_kiem_tra_thi_khong_cong_bo(tmp_path, monkeypatch, ca
         return _kq(1, stderr="av_interleaved_write_frame(): No space left on device")
 
     monkeypatch.setattr(channel, "chay_lenh_media", _ffmpeg_gia(hanh_vi))
-    r = cs.sync("kenh")
-
-    assert r["moi"] == 0 and len(r["loi"]) == 1, r
+    if ca == "het_dia":
+        # Ổ kho đầy (DT-02, đổi hành vi có chủ ý): dừng cả lượt, câu nêu thư mục — không còn là lỗi của một video.
+        with pytest.raises(truy_cap_youtube.LoiTruyCapYouTube, match="dọn bớt"):
+            cs.sync("kenh")
+    else:
+        r = cs.sync("kenh")
+        assert r["moi"] == 0 and len(r["loi"]) == 1, r
     assert _opus_trong_kho(cs) == []
     assert cs.load_meta() == {} and cs.done_ids() == set()
     assert not any(Path(cs.dest, "_tam").rglob("*.opus")), "phải dọn file tạm của lượt này"

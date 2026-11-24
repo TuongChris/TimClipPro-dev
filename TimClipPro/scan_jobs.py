@@ -18,6 +18,7 @@ from collections import deque
 from dataclasses import dataclass, field, replace
 from typing import Callable, Optional
 
+import bao_viec
 import maintenance_gate
 import tien_do_quet as tdq
 
@@ -297,6 +298,7 @@ class ScanJobController:
 
     def _chay_trong_cong(self, nguon: list, source_type: str, on_result: Optional[Callable]) -> None:
         try:
+            bao_viec.bat_dau()
             def tien_do(pct: float, msg: str) -> None:
                 # Engine gắn tiền tố "[i/n] " ở scan_iter; bóc ra để biết video nào.
                 index, thong_bao = self._tach_chi_so(msg)
@@ -355,6 +357,7 @@ class ScanJobController:
                         else bi_chan or "Quét hoàn tất."
                     )
                 ket = f"Lô quét lỗi: {self._error[:160]}" if self._error else self._message
+                kieu = None if self._cancelled else bao_viec.kieu_ket_thuc(self._error, phien)
             self.so_tien_do.ghi(ket)
             LOGGER.info(
                 "event=scan.batch.finished batch_id=%s completed=%d failed=%d",
@@ -362,6 +365,7 @@ class ScanJobController:
                 sum(1 for v in self._videos if v.scan_status == QUET_XONG),
                 sum(1 for v in self._videos if v.scan_status == QUET_LOI),
             )
+            bao_viec.ket_thuc(kieu)
 
     @staticmethod
     def _tach_chi_so(msg: str) -> tuple:

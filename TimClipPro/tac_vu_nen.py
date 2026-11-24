@@ -25,6 +25,8 @@ import threading
 import uuid
 from typing import Callable, Optional
 
+import bao_viec
+
 
 class DangCoTacVuKhac(RuntimeError):
     """Một phiên khác của Tool vừa khởi động tác vụ nền trên cùng thư mục dữ liệu."""
@@ -178,6 +180,7 @@ class TacVuNen:
         self._results = []
         self._error = ""
         self._running = False
+        self._da_huy = False                  # người dùng bấm Dừng: xong thì không kêu
 
     @property
     def running(self) -> bool:
@@ -186,6 +189,7 @@ class TacVuNen:
 
     def huy(self) -> None:
         """Nút Dừng (phiên nào cũng được): đặt cờ huỷ mà tác vụ đang đọc."""
+        self._da_huy = True
         self._huy()
 
     def anh(self) -> dict:
@@ -214,6 +218,7 @@ class TacVuNen:
         def target():
             ket_qua, loi = [], ""
             try:
+                bao_viec.bat_dau()
                 ket_qua = ham(*args, progress=bao_tien_do, **kwargs)
             except Exception as e:  # noqa: BLE001
                 loi = str(e)
@@ -226,6 +231,7 @@ class TacVuNen:
                 SO_TAC_VU_NEN.xong(engine, self)   # tới khi một phiên nhận (phiên đã bấm có thể đã chết)
                 job["results"], job["error"] = ket_qua, loi
                 job["running"] = False
+                bao_viec.ket_thuc(None if self._da_huy else bao_viec.kieu_ket_thuc(loi, self.phien_youtube, ket_qua))
 
         try:
             threading.Thread(target=target, daemon=True, name=f"tac-vu-nen-{self.kind}").start()

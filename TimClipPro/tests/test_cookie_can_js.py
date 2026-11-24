@@ -304,15 +304,18 @@ def test_hai_lan_dung_lien_tiep_sau_canh_bao_js_khong_mo_cau_dao(may):
     assert so["js_challenge_warnings"] == 2, "cảnh báo JS vẫn được đếm — chỉ lỗi cuối không bị đổ cho JS"
 
 
-def test_loi_chua_phan_loai_sau_canh_bao_js_giu_nguyen_loi_goc(may):
-    """Đĩa đầy (hay lỗi máy chưa phân loại — UNKNOWN) sau cảnh báo JS: không có bằng chứng là do JS → giữ lỗi gốc, đúng
-    loại của nó, như đường không-cookie."""
+@pytest.mark.parametrize("loi, loai", [
+    (OSError(28, "No space left on device"), t.DISK_FULL),     # lỗi GHI của máy có loại riêng từ DT-02 (trước: UNKNOWN)
+    (OSError(5, "Input/output error"), t.UNKNOWN_YOUTUBE_ERROR),
+])
+def test_loi_chua_phan_loai_sau_canh_bao_js_giu_nguyen_loi_goc(may, loi, loai):
+    """Đĩa đầy (lỗi GHI của máy — DISK_FULL) hay lỗi máy chưa phân loại (UNKNOWN) sau cảnh báo JS: không có bằng chứng
+    là do JS → giữ lỗi gốc, đúng loại của nó, như đường không-cookie."""
     bo_ghi = y.BoGhiYtdlp(t.PhienYouTube())
-    loi = OSError(28, "No space left on device")
     with pytest.raises(OSError) as ei:
         y.chay_kem_duong_lui_cookie(CO_COOKIE, _hong_sau_canh_bao_js(bo_ghi, loi), bo_ghi=bo_ghi)
     assert ei.value is loi
-    assert t.phan_loai_loi(ei.value).category == t.UNKNOWN_YOUTUBE_ERROR
+    assert t.phan_loai_loi(ei.value).category == loai
 
 
 def test_dung_trong_luot_lui_khong_cookie_van_la_dung(may):
