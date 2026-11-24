@@ -10,6 +10,7 @@ paths:
   - "TimClipPro/scan_jobs.py"
   - "TimClipPro/scan_ui.py"
   - "TimClipPro/audfprint_progress_runner.py"
+  - "TimClipPro/audfprint_match_runner.py"
   - "TimClipPro/audfprint-master/**"
   - "TimClipPro/tests/golden/**"
   - "TimClipPro/tests/golden_quet.py"
@@ -36,7 +37,9 @@ Tự nạp khi đọc/sửa file khớp `paths` ở trên. Bất biến chung v�
 ## Trước khi sửa
 - Hành vi quét cũ bị khoá bằng golden (`tests/test_golden_quet_cu.py`, dữ liệu `tests/golden/`, sinh trên `f87cc85`).
   Golden đổi = hành vi cũ đổi → phải có lý do và người dùng duyệt; không «sinh lại golden cho xanh».
-- `audfprint-master/` là thư viện vendored: không sửa, bọc trong `engine.py`.
+- `audfprint-master/` là thư viện vendored: không sửa, bọc ngoài — `engine.py` gọi `audfprint_match_runner.py` /
+  `audfprint_progress_runner.py`, hai file này thay hàm audfprint lúc chạy. Băm thư viện + mọi chỗ vá:
+  `tests/test_lop_boc_audfprint.py`.
 - Không đổi `_merge`, ngưỡng mặc định, trần `max_matches` khi người dùng chưa yêu cầu (đã hiệu chỉnh bằng đo thật).
 - Tái hiện bằng audio synthetic (chèn clip vào file dài ở mốc đã biết) — mẫu: `tests/test_nguon_chung_audio_that.py`.
   Dữ liệu cho matcher phải có cả âm thanh LẶP (`tests/am_thanh_lap.py`): `_giai_dieu` là nốt ngẫu nhiên, không bao giờ
