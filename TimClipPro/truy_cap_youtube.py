@@ -25,7 +25,7 @@ import os
 import re
 import threading
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from typing import Any, Callable, Optional
 
@@ -60,13 +60,18 @@ INVALID_INPUT = "INVALID_INPUT"                     # link không phải video /
 UPCOMING_NOT_STARTED = "UPCOMING_NOT_STARTED"
 UNKNOWN_YOUTUBE_ERROR = "UNKNOWN_YOUTUBE_ERROR"
 BLOCKED_BY_BREAKER = "BLOCKED_BY_BREAKER"           # chưa gửi request: cầu dao đã mở
+# Lỗi của MÁY khi GHI file — không phải YouTube, không phải video: đổi player client hay thử lại đều vô ích, video nào
+# sau cũng hỏng y hệt. Dừng việc ngay; KHÔNG vào cầu dao YouTube — người dùng phải thấy «dọn ổ / sửa thư mục», không
+# phải «YouTube chặn» (đề tài DT-02/DT-14).
+DISK_FULL = "DISK_FULL"                             # ổ hết chỗ trống
+WRITE_DENIED = "WRITE_DENIED"                       # không ghi được file: quyền, ổ chỉ đọc, file bị chương trình khác giữ
 
 CAC_LOAI = (PERMANENT_UNAVAILABLE, AUTH_REQUIRED, AGE_RESTRICTED, MEMBERS_ONLY, BOT_CHALLENGE, RATE_LIMITED,
             HTTP_FORBIDDEN,
             TRANSIENT_NETWORK, COOKIE_INVALID_OR_EXPIRED, FORMAT_OR_EXTRACTOR_ERROR,
             JS_CHALLENGE_ERROR, PLAYER_CLIENT_ERROR,
             PARTIAL_OR_CORRUPT_DOWNLOAD, INVALID_INPUT, UPCOMING_NOT_STARTED, UNKNOWN_YOUTUBE_ERROR,
-            BLOCKED_BY_BREAKER)
+            BLOCKED_BY_BREAKER, DISK_FULL, WRITE_DENIED)
 
 # Lỗi do PHÍA TRUY CẬP (YouTube từ chối, mạng, cookie) — khác lỗi của chính video. `cli.py`/youtube-doctor in «YouTube
 # chặn truy cập» + mã 3 cho nhóm này: thiếu bộ chạy JS (lỗi của MÁY) và lỗi player client giữ như lỗi định dạng (mã 1).
@@ -74,6 +79,7 @@ LOAI_TRUY_CAP = frozenset({AUTH_REQUIRED, AGE_RESTRICTED, MEMBERS_ONLY, BOT_CHAL
                            TRANSIENT_NETWORK, COOKIE_INVALID_OR_EXPIRED, BLOCKED_BY_BREAKER})
 # Lỗi của RIÊNG một video (hạn chế đặt trên video đó): không nói gì về phiên — cầu dao chỉ có trần hàng loạt.
 LOAI_TUNG_VIDEO = frozenset({AGE_RESTRICTED, MEMBERS_ONLY})
+LOAI_MAY = frozenset({DISK_FULL, WRITE_DENIED})
 # `availability` (yt-dlp) của nội dung YouTube CHỈ phục vụ tài khoản có quyền: tải được bằng cookie = bằng chứng YouTube
 # nhận tài khoản. KHÔNG gồm "needs_auth" (giới hạn tuổi): yt-dlp tự thêm client web_embedded vượt được cổng tuổi của một
 # số video mà không cần đăng nhập (`extractor/youtube/_video.py`). Video công khai càng không chứng minh gì.
@@ -166,6 +172,14 @@ _CLIENT = ("page needs to be reloaded", "failed to extract any player response",
 _DINH_DANG = ("requested format is not available", "no video formats found", "no formats found",
               "n challenge", "unable to extract", "drm protected",
               "precondition check failed", "http error 400")
+# Lỗi GHI của máy. Hết chỗ: errno 28 (ENOSPC — Windows cũng ánh xạ ERROR_DISK_FULL về đây) và WinError 112 nhận theo MÃ
+# (câu theo ngôn ngữ của Windows). Không ghi được: câu yt-dlp khi mở / ghi file tải hay tạo thư mục (downloader/http.py,
+# YoutubeDL.py), ổ chỉ đọc — KHÔNG nhận «permission denied» trần: chép cơ sở dữ liệu cookie của Chrome đang mở cũng ra
+# câu đó (cookies.py).
+_DIA_DAY = ("no space left on device", "[errno 28]", "[winerror 112]", "not enough space on the disk",
+            "disk quota exceeded")
+_KHONG_GHI = ("unable to open for writing", "unable to write data", "unable to create directory",
+              "read-only file system")
 _TAI_HONG = ("không thấy file sau khi tải", "did not get any data blocks",
              "downloaded file is empty", "content too short", "contenttooshort",
              "downloaded file is corrupted", "file is empty")
@@ -223,6 +237,18 @@ THONG_BAO = {
         "YouTube trả lỗi chưa phân loại được. Video này chưa được quét."),
     BLOCKED_BY_BREAKER: (
         "Chưa quét — Tool đã dừng yêu cầu mới tới YouTube để tránh lặp lỗi."),
+    DISK_FULL: (
+        "Ổ đĩa đã hết chỗ trống nên không ghi được file — dọn bớt rồi chạy lại. Đây là lỗi của máy, không phải "
+        "YouTube chặn."),
+    WRITE_DENIED: (
+        "Không ghi được file vào thư mục (không có quyền ghi, ổ chỉ đọc, hoặc file đang bị chương trình khác giữ) — "
+        "kiểm tra thư mục rồi chạy lại. Đây là lỗi của máy, không phải YouTube chặn."),
+}
+# Câu dừng việc kèm thư mục đang ghi (``loi_may``) — người dùng biết dọn ổ nào / sửa thư mục nào.
+_CAU_MAY = {
+    DISK_FULL: "Ổ đĩa chứa «{thu_muc}» đã hết (hoặc gần hết) chỗ trống — dọn bớt rồi chạy lại.",
+    WRITE_DENIED: ("Không ghi được file vào «{thu_muc}» (không có quyền ghi, ổ chỉ đọc, hoặc file đang bị chương trình "
+                   "khác giữ) — kiểm tra thư mục rồi chạy lại."),
 }
 
 
@@ -262,6 +288,12 @@ class LoiTruyCapYouTube(RuntimeError):
         if that_bai.technical_summary:
             tin = f"{tin} — {DAU_CHI_TIET} {that_bai.technical_summary}"
         super().__init__(tin)
+
+
+def loi_may(f: YoutubeAccessFailure, thu_muc: str) -> LoiTruyCapYouTube:
+    """Ngoại lệ DỪNG VIỆC cho lỗi GHI của máy ``f`` (``LOAI_MAY``), câu nêu thư mục đang ghi. Video nào sau cũng hỏng
+    y hệt nên nơi gọi ném nó ra khỏi vòng lặp từng video (như ``engine.LoiLuuBen``)."""
+    return LoiTruyCapYouTube(replace(f, human_message_vi=_CAU_MAY[f.category].format(thu_muc=thu_muc)))
 
 
 def _chuoi_ngoai_le(loi: BaseException) -> list:
@@ -336,6 +368,10 @@ def _co(thap: str, cum: tuple) -> bool:
 
 
 def _xac_dinh_loai(thap: str, ma: Optional[int], lop: set) -> str:
+    if _co(thap, _DIA_DAY):
+        return DISK_FULL
+    if _co(thap, _KHONG_GHI):
+        return WRITE_DENIED
     if lop & _LOP_JS:
         # Lỗi của ytdlp_chung, câu do tool viết: xét TRƯỚC mọi cụm chữ (câu có chữ «cookie» không được thành lỗi cookie).
         return JS_CHALLENGE_ERROR
@@ -752,7 +788,7 @@ NGUONG_MO = {
 # cũng nhận cùng lịch phát.
 DUNG_DOI_CLIENT = frozenset({BOT_CHALLENGE, AUTH_REQUIRED, AGE_RESTRICTED, MEMBERS_ONLY, RATE_LIMITED,
                              PERMANENT_UNAVAILABLE, COOKIE_INVALID_OR_EXPIRED, INVALID_INPUT, JS_CHALLENGE_ERROR,
-                             UPCOMING_NOT_STARTED})
+                             UPCOMING_NOT_STARTED, DISK_FULL, WRITE_DENIED})
 
 _LY_DO_DUNG = {
     BOT_CHALLENGE: ("xác minh", "YouTube yêu cầu xác minh không phải bot cho địa chỉ mạng này. "
@@ -1031,6 +1067,8 @@ class PhienYouTube:
         # Bằng chứng PHÍA YOUTUBE: đã tải được nội dung chỉ tài khoản có quyền mới xem (NOI_DUNG_CHI_TAI_KHOAN) bằng
         # cookie. Cookie đã nạp + video công khai thành công KHÔNG đủ (cookie có thể chỉ trùng tên).
         self.youtube_xac_nhan_tai_khoan = False
+        # Lỗi GHI đầu tiên của máy trong lượt (``LOAI_MAY``): không đếm, không mở cầu dao; mọi request sau bị từ chối.
+        self._loi_may: Optional[YoutubeAccessFailure] = None
         self.bat_dau = time.time()
 
     # ---------- trạng thái ----------
@@ -1084,6 +1122,10 @@ class PhienYouTube:
 
     def kiem_truoc(self, thao_tac: str = "", video_id: str = "") -> None:
         """Ném ``LoiTruyCapYouTube(BLOCKED_BY_BREAKER)`` nếu cầu dao đã mở — KHÔNG gửi request."""
+        if self._loi_may is not None:   # ổ đầy / không ghi được: video nào sau cũng hỏng y hệt — không gửi gì thêm
+            loi = LoiTruyCapYouTube(self._loi_may)
+            loi.phien = self
+            raise loi
         if not self.mo:
             return
         loi = LoiTruyCapYouTube(self.bo_qua(video_id, thao_tac))
@@ -1242,6 +1284,9 @@ class PhienYouTube:
 
     def _ghi_that_bai(self, f: YoutubeAccessFailure) -> None:
         with self._lock:
+            if f.category in LOAI_MAY:
+                self._loi_may = self._loi_may or f
+                return
             self._so[_DEM_THEO_LOAI.get(f.category, "other_failures")] += 1
             so = self._lien_tiep.get(f.category, 0) + 1
             self._lien_tiep[f.category] = so

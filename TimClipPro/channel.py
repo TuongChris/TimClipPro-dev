@@ -45,12 +45,14 @@ from tien_do_dong_bo import GD_LUU, GD_NEN, GD_TRICH_XUAT, GD_XAC_MINH, SoDongBo
 from truy_cap_youtube import (
     AGE_RESTRICTED,
     INVALID_INPUT,
+    LOAI_MAY,
     MEMBERS_ONLY,
     LoiTruyCapYouTube,
     PhienYouTube,
     YoutubeAccessFailure,
     che_bi_mat,
     la_muc_khong_phai_video,
+    loi_may,
     ma_tu_url,
 )
 from ytdlp_chung import (
@@ -1674,6 +1676,9 @@ class ChannelSync:
                     # Video lỗi KHÔNG vào archive/metadata (chỉ ghi sau khi tải + kiểm xong) — lượt sau thử lại.
                     f_loi = self.phien.ghi_loi(e, "download", v.id)
                     td.video_xong("loi", loai=f_loi.category, ly_do=f_loi.human_message_vi)
+                    if f_loi.category in LOAI_MAY:
+                        # Ổ kho đầy / không ghi được: video nào sau cũng hỏng y hệt — dừng cả lượt, câu nêu thư mục.
+                        raise loi_may(f_loi, self.dest) from e
                     kq["so_loi"] += 1
                     if f_loi.category == AGE_RESTRICTED:
                         kq["gioi_han_tuoi"] += 1

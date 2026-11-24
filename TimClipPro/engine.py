@@ -25,6 +25,7 @@ from __future__ import annotations
 import contextlib
 import copy
 import csv
+import errno
 import glob
 import hashlib
 import io
@@ -678,6 +679,9 @@ DUNG_SAI_TAI_LAI_S = 1.0
 # lượt đang tải, kiểm Dừng mỗi chu kỳ này. Dọn đệm (``don_dep.don_kho_dem``) xoá file dưới CÙNG khoá này.
 THU_MUC_KHOA_TAI = don_dep.THU_MUC_KHOA_TAI
 CHU_KY_CHO_KHOA_TAI_S = 0.5
+# Ổ chứa thư mục tải còn ít hơn chừng này thì không bắt đầu tải audio của lượt quét: đầy ổ giữa lượt tải là phí cả
+# lượt (video dài nhiều GB), tool báo «ổ đầy» ngay từ đầu (đề tài DT-02).
+TRONG_TOI_THIEU_TAI_AUDIO = 2 * 1024 ** 3
 # Đo độ dài âm thanh THẬT (``Engine.do_dai_audio_that``): bỏ cuộc khi bấy nhiêu giây không đọc thêm gói nào.
 IM_LANG_DO_AUDIO_S = 120.0
 
@@ -4143,6 +4147,10 @@ class Engine:
             with contextlib.suppress(OSError):
                 os.utime(san_co[0])
             return san_co[0]
+        trong = shutil.disk_usage(self.dl_dir).free
+        if trong < TRONG_TOI_THIEU_TAI_AUDIO:
+            raise OSError(errno.ENOSPC, f"Ổ chỉ còn {trong / 1024 ** 3:.1f} GB trống — cần ít nhất "
+                                        f"{TRONG_TOI_THIEU_TAI_AUDIO // 1024 ** 3} GB để tải audio")
         # Tải một phần đi qua ffmpeg: chỉ biết byte ffmpeg GHI ra file (đầu ra), không biết byte mạng.
         dem_byte = {"byte_dau_ra": 0} if gioi_han_giay else {"byte_da_nhan": 0}
         self._td(tdq.GD_TAI, audio_can_s=float(gioi_han_giay) if gioi_han_giay else None,
@@ -6360,6 +6368,10 @@ class Engine:
             kq.status, kq.note = "error", "Đã hủy theo yêu cầu."
             kq.ly_do_pham_vi = "huy"
         except Exception as e:
+            f_may = truy_cap_youtube.phan_loai_loi(e)
+            if f_may.category in truy_cap_youtube.LOAI_MAY:
+                # Ổ đầy / không ghi được: video nào sau cũng hỏng y hệt — dừng cả lô (như LoiLuuBen), câu nêu thư mục.
+                raise truy_cap_youtube.loi_may(f_may, self.dl_dir) from e
             kq.status, kq.note = "error", ytdlp_chung.giai_thich_loi(
                 e, self.cau_hinh_mang().co_cookie)
             # Lỗi YouTube đã phân loại (bị chặn, cần đăng nhập, gỡ, mạng...) — để Watch/UI phân
