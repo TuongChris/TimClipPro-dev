@@ -497,13 +497,19 @@ def test_nut_tao_lai_kho_khoa_den_khi_xac_nhan_thay_vay_tay(tmp_path, monkeypatc
     def nut_tao_lai():
         return next(b for b in at.button if b.label == "🔄 Tạo lại kho từ đầu")
 
-    assert not nut_tao_lai().disabled, "cùng thư mục nguồn: không cần xác nhận thêm"
+    # Kho đã có vân tay: «Tạo lại» LUÔN hỏi lại (25/11, việc nhỏ #24) — cùng nguồn thì câu xác nhận nói «xoá … dựng lại».
+    assert nut_tao_lai().disabled, "kho đã có vân tay: «Tạo lại» xoá vân tay đang có — phải xác nhận trước"
+    xn = next(c for c in at.checkbox if c.label.startswith("Tôi hiểu"))
+    assert "THAY" not in xn.label
+    xn.check().run()
+    assert not nut_tao_lai().disabled
     o = next(x for x in at.text_input if x.label == "Đường dẫn thư mục chứa video gốc của kho này")
     o.set_value(str(kenh_b)).run()
     assert not at.exception
-    assert nut_tao_lai().disabled, "thư mục khác nguồn: «Tạo lại» thay toàn bộ vân tay — phải xác nhận trước"
+    assert nut_tao_lai().disabled, "thư mục khác nguồn: «Tạo lại» thay toàn bộ vân tay — phải xác nhận LẠI"
     assert any("THAY" in w.value and "Tạo lại kho từ đầu" in w.value for w in at.warning)
     xn = next(c for c in at.checkbox if c.label.startswith("Tôi hiểu"))
+    assert "THAY" in xn.label
     xn.check().run()
     assert not nut_tao_lai().disabled
 

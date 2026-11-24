@@ -53,6 +53,7 @@ from common_original_jobs import TEN_PHA as TEN_PHA_NGUON_CHUNG
 from common_original_jobs import CommonOriginalJobController, xuat_csv
 from engine import Engine, LoiXoaJob, ScanResult, hhmmss, hhmmss_tp, mo_ta_pham_vi, o_bang_tinh_an_toan
 from engine import GHVD_TOAN_BO, GHVD_TU_DONG, NHAN_GHVD
+from engine import Config
 from fingerprint_progress import FingerprintJobController
 from khoa import DangChayRoi
 from publication_date import format_publication_date
@@ -757,6 +758,7 @@ def bang_ket_qua(results: list[ScanResult]) -> None:
     with c2:
         if st.button("💾 Lưu CSV vào thư mục ketqua\\", width="stretch"):
             st.success(f"Đã lưu: {eng.export_csv(results)}")
+            st.session_state.da_luu_ketqua = True
     with c4:
         if st.button("📄 Xuất hồ sơ khiếu nại", width="stretch"):
             try:
@@ -766,8 +768,12 @@ def bang_ket_qua(results: list[ScanResult]) -> None:
                 else:
                     st.success(f"Đã tạo {len(fs)} hồ sơ trong ketqua\\")
                     st.code("\n".join(fs))
+                    st.session_state.da_luu_ketqua = True
             except Exception as e:  # noqa: BLE001
                 st.error(str(e))
+    # Nhớ qua các lượt vẽ lại: nút đặt trong nhánh «vừa bấm Lưu» sẽ mất ngay ở lượt bấm chính nó.
+    if st.session_state.get("da_luu_ketqua"):
+        ui_thao_tac.nut_mo_thu_muc(eng.out_dir, "mo_tm_ketqua", "📂 Mở thư mục ketqua")
     ui_gui.nut_gui_thu_cong(eng, results, key="gui_thu_cong_lo")
 
 
@@ -897,19 +903,28 @@ with st.sidebar:
         dùng) mà nằm ngoài khung thì Streamlit ném lỗi và trang dừng ngay ở thanh bên (audit 16/11)."""
         return min(lo, v), max(hi, v)
 
+    # Ô thuộc chính sách nhận diện (engine.TRUONG_CHINH_SACH): đổi là đổi chữ ký chính sách → Giám sát không còn tin
+    # các lần «không vi phạm» quét với số cũ (Engine.ids_da_quet).
+    _O_NHAN_DIEN = {"chunk_s": "Độ dài mỗi khúc", "overlap_s": "Khúc gối nhau", "min_hash": "Số hash tối thiểu",
+                    "min_match_s": "Đoạn khớp tối thiểu", "shifts_quet": "Subframe shifts khi quét",
+                    "min_hash_floor": "Loại hẳn nếu dưới"}
+    _GHI_CHU_NHAN_DIEN = ("Thuộc cách nhận diện: đổi thì kết quả quét khác đi, và các lần quét «không vi phạm» trước đó "
+                          "không còn được Giám sát tính (sẽ quét lại).")
+
     with st.expander("Mở để tinh chỉnh", expanded=False):
         c = eng.config
         c.chunk_s = st.number_input("Độ dài mỗi khúc (giây)", *_khung(300, 7200, c.chunk_s), c.chunk_s, 300,
-                                    help="Máy yếu RAM thì giảm xuống 1800.")
+                                    help=_GHI_CHU_NHAN_DIEN)
         c.overlap_s = st.number_input("Khúc gối nhau (giây)", *_khung(60, 3600, c.overlap_s), c.overlap_s, 60,
                                       help="Giá trị đề xuất khi thiếu metadata. Giá trị hiệu lực "
                                            "luôn bị giới hạn bởi trần khúc gối "
                                            f"({c.overlap_max_s} giây); clip dài hơn có thể được ghép lại "
-                                           "từ nhiều mảnh ở ranh giới khúc.")
+                                           "từ nhiều mảnh ở ranh giới khúc. " + _GHI_CHU_NHAN_DIEN)
         c.min_hash = st.slider("Số hash tối thiểu", *_khung(5, 100, c.min_hash), c.min_hash,
-                               help="Bị báo nhầm → tăng lên. Bỏ sót → giảm xuống.")
+                               help="Số hash khớp tối thiểu của một đoạn. Hạ thấp dễ biến nhạc nền dùng chung thành "
+                                    "«vi phạm» giả. " + _GHI_CHU_NHAN_DIEN)
         c.min_match_s = st.slider("Đoạn khớp tối thiểu (giây)", *_khung(1.0, 60.0, float(c.min_match_s)),
-                                  float(c.min_match_s), 1.0)
+                                  float(c.min_match_s), 1.0, help=_GHI_CHU_NHAN_DIEN)
         c.ncores = st.slider(
             "Số nhân CPU", *_khung(0, 8, c.ncores), c.ncores,
             help="Đặt 0 để tự dò, chừa một nhân cho hệ thống và dùng tối đa 8 nhân.")
@@ -918,13 +933,13 @@ with st.sidebar:
             help="Cao hơn: vân tay chính xác hơn nhưng tạo kho chậm và nặng hơn. 0 = như cũ.")
         c.shifts_quet = st.number_input(
             "Subframe shifts khi quét", 0, 8, max(0, c.shifts_quet), 1,
-            help="Cao hơn: chịu video bị nén lại tốt hơn nhưng quét chậm hơn. 0 = như cũ.")
+            help="Cao hơn: chịu video bị nén lại tốt hơn nhưng quét chậm hơn. 0 = như cũ. " + _GHI_CHU_NHAN_DIEN)
 
         st.markdown("**Chọn lọc kết quả**")
         c.top_n = st.number_input("Chỉ lấy bao nhiêu kết quả tốt nhất", *_khung(1, 50, c.top_n), c.top_n)
         c.min_hash_floor = st.number_input(
             "Loại hẳn nếu dưới (hash)", *_khung(0, 100000, c.min_hash_floor), c.min_hash_floor, 100,
-            help="Kết quả yếu hơn ngưỡng này bị vứt bỏ, không đưa vào báo cáo.")
+            help="Kết quả yếu hơn ngưỡng này bị vứt bỏ, không đưa vào báo cáo. " + _GHI_CHU_NHAN_DIEN)
         c.min_hash_strong = st.number_input(
             "Coi là bằng chứng mạnh từ (hash)", *_khung(0, 200000, c.min_hash_strong), c.min_hash_strong, 500,
             help="Những kết quả đạt ngưỡng này được ưu tiên chọn trước.")
@@ -969,6 +984,13 @@ with st.sidebar:
         st.caption(
             f"Khúc gối tối đa: {c.overlap_max_s} giây."
         )
+    # Ngoài ô mở rộng: thấy được cả khi ô đang đóng.
+    _mac_dinh = Config()
+    _lech = [f"«{nhan}» {getattr(c, k):g} (mặc định {getattr(_mac_dinh, k):g})" for k, nhan in _O_NHAN_DIEN.items()
+             if getattr(c, k) != getattr(_mac_dinh, k)]
+    if _lech:
+        st.warning("⚠️ Tham số nhận diện đang khác mặc định: " + "; ".join(_lech) + ". Kết quả quét có thể khác, và "
+                   "Giám sát sẽ quét lại các video từng «không vi phạm» với số khác.")
 
     st.divider()
     st.subheader("🔐 Kết nối YouTube")
@@ -1005,8 +1027,16 @@ with st.sidebar:
                  + ", ".join(ytdlp_chung.TRINH_DUYET_HO_TRO)
                  + ". Có nhiều profile thì thêm dấu hai chấm, ví dụ «edge:Profile 1». "
                    "Đóng hẳn trình duyệt trước khi quét, nếu không nó khoá file cookie.")
-        c.ytdlp_cookiefile = st.text_input(
-            "Hoặc đường dẫn file cookies.txt", c.ytdlp_cookiefile,
+        # Ô có key = biến phiên (như ô kho_dir): chọn lại đúng file cũ sau khi gõ đè vẫn hiện. Ô vẽ TRÊN nút chọn (khung giữ
+        # chỗ) nhưng nút phải chạy trước để ghi đường dẫn vào ô trước khi ô được tạo.
+        st.session_state.setdefault("ytdlp_cookiefile", c.ytdlp_cookiefile)
+        _o_cookie = st.container()
+        _chon_ck_yt = ui_thao_tac.nut_chon("chon_cookie_youtube", st.session_state.ytdlp_cookiefile, "file",
+                                           "📄 Chọn file…", tieu_de="Chọn file cookies.txt")
+        if _chon_ck_yt:
+            st.session_state.ytdlp_cookiefile = _chon_ck_yt[0]
+        c.ytdlp_cookiefile = _o_cookie.text_input(
+            "Hoặc đường dẫn file cookies.txt", key="ytdlp_cookiefile", persist_state="session",
             placeholder=r"D:\cookies.txt",
             help="File xuất từ tiện ích «Get cookies.txt». Tool chỉ lưu ĐƯỜNG DẪN, "
                  "không bao giờ đọc hay lưu lại nội dung cookie vào cấu hình. Có cookie thì các cách tải không "
@@ -1889,7 +1919,7 @@ def _trang_ghep() -> None:
 
 def _trang_video_trong_may() -> None:
     st.subheader("Cắt đoạn, bỏ đoạn, chụp ảnh, chỉnh âm lượng, tạo file kiểm claim cho video trong máy")
-    st.caption("File gốc KHÔNG bị sửa, đổi tên hay xoá — kết quả ra file MỚI (trùng tên thì thêm « (2)»). "
+    st.caption("File gốc KHÔNG bị sửa, đổi tên hay xoá — kết quả ra file MỚI (trùng tên thì thêm «_2»). "
                "Muốn ghép các file trong máy: dùng trang «🎞️ Ghép video gốc».")
     c_vb_may, c_chon_may = st.columns([5, 1], vertical_alignment="bottom")
     with c_chon_may:
@@ -2276,13 +2306,17 @@ def _trang_kho() -> None:
     da_xac_nhan_thay = True
     if nguon_kho:
         getattr(st, nguon_kho[0])(nguon_kho[1])
-        if nguon_kho[2]:
-            da_xac_nhan_thay = st.checkbox(
-                f"Tôi hiểu: «Tạo lại kho từ đầu» sẽ THAY toàn bộ {len(clips)} clip của kho «{eng.kho_dang_dung}» bằng "
-                "thư mục này", value=False, key=f"xac_nhan_thay_kho::{eng.kho_dang_dung}::{thumuc}")
+    # «Tạo lại» xoá vân tay đang có rồi dựng lại (kho lớn: nhiều giờ) → phải tick; key gắn kho + thư mục nên đổi là tick
+    # lại. File vân tay có mà không đọc được (clips rỗng) vẫn là thứ sẽ mất.
+    if thumuc and eng.kho_dang_dung and (clips or os.path.exists(eng.db_file)):
+        mat_gi = (f"sẽ THAY toàn bộ {len(clips)} clip của kho «{eng.kho_dang_dung}» bằng thư mục này"
+                  if nguon_kho and nguon_kho[2] else
+                  f"xoá vân tay đang có của kho «{eng.kho_dang_dung}» rồi dựng lại từ đầu (kho lớn mất nhiều giờ)")
+        da_xac_nhan_thay = st.checkbox(f"Tôi hiểu: «Tạo lại kho từ đầu» {mat_gi}", value=False,
+                                       key=f"xac_nhan_thay_kho::{eng.kho_dang_dung}::{thumuc}")
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("🔄 Tạo lại kho từ đầu", type="primary", width="stretch",
+        if st.button("🔄 Tạo lại kho từ đầu", width="stretch",
                      disabled=not (thumuc and eng.kho_dang_dung and da_xac_nhan_thay) or _kho_dong_bo_khac):
             chay_van_tay(thumuc.strip('" '), "new")
     with c2:
@@ -2546,9 +2580,12 @@ def _trang_ds_kho() -> None:
                                "Sheets» ở thanh bên: dán link bảng tính, bấm «🔌 "
                                "Kiểm tra kết nối», và chia sẻ quyền «Người chỉnh "
                                "sửa» cho địa chỉ email hiện ở đó.")
+                # Đẩy = VIẾT LẠI TOÀN BỘ trang tính → phải tick; key gắn kho đang xem nên đổi kho là tick lại.
+                xn_day = st.checkbox(f"Tôi hiểu: trang tính «{danh_sach_video.ten_trang_tinh(ten_chon)}» sẽ bị viết lại "
+                                     "toàn bộ", key=f"xac_nhan_day_dsv::{ten_chon}")
                 if st.button(f"📤 Đẩy {len(kq.dong)} video lên Google Sheets (ghi đè)",
                              key="dsv_day_sheet", width="stretch",
-                             disabled=not sx_dsv.san_sang()):
+                             disabled=not (sx_dsv.san_sang() and xn_day)):
                     with st.spinner("Đang ghi đè trang tính..."):
                         ok, tb = danh_sach_video.day_len_sheet(
                             kq, st.session_state.sheet_link)
@@ -2557,11 +2594,14 @@ def _trang_ds_kho() -> None:
                         st.link_button("🔗 Mở Google Sheet",
                                        st.session_state.sheet_link, width="stretch")
 
+                xn_tat_ca = len(khos) > 1 and st.checkbox(
+                    f"Tôi hiểu: cả {len(khos)} trang tính (mỗi kho một trang) sẽ bị viết lại toàn bộ",
+                    key=f"xac_nhan_day_tat_ca::{ten_chon}")
                 if len(khos) > 1 and st.button(
                         f"📤 Đẩy TẤT CẢ {len(khos)} kho lên Google Sheets "
                         "(mỗi kho một trang tính riêng)",
                         key="dsv_day_tat_ca", width="stretch",
-                        disabled=not sx_dsv.san_sang()):
+                        disabled=not (sx_dsv.san_sang() and xn_tat_ca)):
                     bao_cao = []
                     with st.spinner("Đang đẩy từng kho..."):
                         for k in khos:
@@ -2735,7 +2775,7 @@ def _trang_lich_su() -> None:
         st.dataframe(pd.DataFrame([{
             "ID": j["id"], "Thời điểm": j["created_at"], "Loại": j["source_type"],
             "Nguồn": j["source_name"], "Thời lượng": hhmmss(j["duration_s"] or 0),
-            "Kết quả": j["n_matches"], "Trạng thái": j["status"],
+            "Kết quả": j["n_matches"], "Trạng thái": {"ok": "Quét xong", "error": "Lỗi"}.get(j["status"], j["status"]),
             "Kho": lich_su.mo_ta_kho(j), "Phạm vi": lich_su.mo_ta_pham_vi(j),
         } for j in jobs]), width="stretch", hide_index=True)
 
@@ -2771,14 +2811,14 @@ def _trang_lich_su() -> None:
                                      columns=bang_ngang.HEADER_NGANG)
                         .to_csv(index=False).encode("utf-8-sig"),
                         file_name=f"baocao_ngang_job{chon}.csv", mime="text/csv",
-                        key=f"ls_ngang_{chon}")
+                        key=f"ls_ngang_{chon}", help="Mỗi video vi phạm MỘT dòng, đúng 34 cột như trang Google Sheets.")
             with ch2:
                 st.download_button(
                     "⬇️ Tải báo cáo dọc (16 cột)",
                     pd.DataFrame([[o_bang_tinh_an_toan(o) for o in d] for d in doc_chon],
                                  columns=eng.HEADER).to_csv(index=False).encode("utf-8-sig"),
                     file_name=f"baocao_doc_job{chon}.csv", mime="text/csv",
-                    key=f"ls_doc_{chon}")
+                    key=f"ls_doc_{chon}", help="Mỗi đoạn vi phạm một dòng (16 cột), như file «⬇️ Tải báo cáo CSV» lúc quét xong.")
         else:
             st.caption("Lần quét cũ: lịch sử không lưu tên, ngày đăng, link video gốc nên không dựng lại được "
                        "báo cáo — bên dưới chỉ là dữ liệu khớp.")
@@ -2801,7 +2841,8 @@ def _trang_lich_su() -> None:
                 st.download_button("⬇️ Tải CSV lần quét này",
                                    df.map(o_bang_tinh_an_toan).to_csv(index=False)
                                    .encode("utf-8-sig"),
-                                   file_name=f"ketqua_job{chon}.csv", mime="text/csv")
+                                   file_name=f"ketqua_job{chon}.csv", mime="text/csv",
+                                   help="Bảng số đo kỹ thuật ngay trên (số hash, giây khớp…) — không phải báo cáo để khiếu nại.")
         else:
             st.info("Lần quét này không có kết quả nào.")
         viec_job = outbox.ds_viec(eng.sqlite_file, job_id=chon)
@@ -2988,7 +3029,8 @@ def _trang_thong_ke() -> None:
                 "Clip gốc": c["clip"], "Tên video gốc (lúc quét)": c["tieu_de"], "Video vi phạm": c["so_video"],
                 "Đoạn khớp": c["so_doan"], "Thời lượng khớp": hhmmss(c["tong_giay"]),
             } for c in tke.clip]), width="stretch", hide_index=True)
-            st.markdown("**📈 Video vi phạm phát hiện lần đầu theo tháng**")
+            st.markdown("**📈 Video vi phạm phát hiện lần đầu theo tháng** — tính theo ngày quét đầu tiên thấy vi phạm, "
+                        "không phải ngày video được đăng")
             if tke.theo_thang:
                 st.bar_chart(pd.DataFrame({"Tháng": [thong_ke.nhan_thang(t) for t, _ in tke.theo_thang],
                                            "Video vi phạm mới": [n for _, n in tke.theo_thang]}),

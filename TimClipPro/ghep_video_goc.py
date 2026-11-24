@@ -485,7 +485,7 @@ def ghep(
                     return that_bai(f"Đã dừng theo yêu cầu trong lúc chuyển {vat} lệch; phần chuyển dở đã xoá.")
                 if r.returncode != 0 or not os.path.isfile(dich_khop):
                     return that_bai(f"Chưa ghép: chuyển {vat} {i + 1} «{ten}» cho khớp bị lỗi: "
-                                    f"{(r.stderr or r.ly_do or '').strip()[-300:]}")
+                                    f"{r.mo_ta_loi()}")
             da_chuyen[duong] = dich_khop
         phan[i] = (ten, link, da_chuyen[duong])
     if can_chuyen:
@@ -576,7 +576,7 @@ def ghep(
         if r.cancelled:
             return that_bai("Đã dừng theo yêu cầu trong lúc ghép; phần ghép dở đã xoá.")
         return that_bai(
-            f"FFmpeg ghép lỗi: {(r.stderr or r.ly_do or '').strip()[-300:]}"
+            f"FFmpeg ghép lỗi: {r.mo_ta_loi()}"
         )
     os.replace(dang_ghi, dich)
     duong_moc = os.path.splitext(dich)[0] + ".moc.csv"

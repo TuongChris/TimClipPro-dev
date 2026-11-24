@@ -582,6 +582,16 @@ class KetQuaLenh:
     # (chỉ giữ ``GIOI_HAN_STDOUT_KY_TU`` ký tự ĐẦU nên khối tiến độ cuối có thể không còn trong đó).
     tien_do_cuoi: dict = field(default_factory=dict)
 
+    def mo_ta_loi(self, toi_da: int = 300) -> str:
+        """Lý do lỗi để HIỆN cho người dùng: lệnh bị canh dừng thì nói bằng câu tiếng Việt (không in mã ``ly_do``), kèm
+        đuôi stderr; không có gì thì mã thoát (thoát 0 mà vẫn hỏng = không ghi ra file)."""
+        canh = {"huy": "đã dừng theo yêu cầu",
+                "im_lang": "FFmpeg đứng im quá lâu (không xử lý thêm được gì) nên tool đã dừng nó",
+                "tran_tong": "lệnh chạy quá thời gian cho phép nên tool đã dừng nó"}.get(self.ly_do, "")
+        duoi = (self.stderr or "").strip()[-toi_da:]
+        return " — ".join(x for x in (canh, duoi) if x) or (
+            f"mã thoát {self.returncode}" if self.returncode else "không có thông báo lỗi")
+
 
 def chay_lenh_media(
     lenh: list[str],

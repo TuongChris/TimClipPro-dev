@@ -83,7 +83,7 @@ Tốc độ thực đo: ~40× thời gian thực mỗi nhân CPU → 300 clip ×
 ### 📋 Tab «Danh sách video trong kho»
 
 Chọn một kho → **Quét danh sách video trong kho** → hiện bảng **STT + Tên video** của
-toàn bộ file audio đã tải về. Bấm **Đẩy lên Google Sheets (ghi đè)** để lưu danh sách
+toàn bộ file audio đã tải về. Tick ô «Tôi hiểu…» rồi bấm **Đẩy lên Google Sheets (ghi đè)** để lưu danh sách
 đó thành một trang tính riêng tên `DanhSachVideo_<Tên kho>`.
 
 Tên video lấy từ `clips_meta.json` nên là **tên thật trên YouTube**, không phải tên file:
@@ -133,10 +133,14 @@ Khoảng "từ → đến" thường ngắn hơn clip thật vài giây — bìn
 
 | Tham số | Mặc định | Khi nào sửa |
 |---|---|---|
-| Độ dài mỗi khúc | 3600s | Máy yếu RAM → 1800 |
+| Độ dài mỗi khúc | 3600s | Giữ mặc định (thuộc cách nhận diện — xem dưới bảng) |
 | Khúc gối đề xuất | 600s | Giá trị hiệu lực bị kẹp bởi `overlap_max_s` (mặc định 180s) |
-| Số hash tối thiểu | 15 | Báo nhầm → tăng 30–40; bỏ sót → giảm 8–10 |
+| Số hash tối thiểu | 15 | Giữ mặc định. Hạ thấp dễ biến nhạc nền dùng chung thành «vi phạm» giả |
 | Số nhân CPU | 1 | Máy nhiều nhân → 4 |
+
+Các ô thuộc **cách nhận diện** (Độ dài mỗi khúc, Khúc gối nhau, Số hash tối thiểu, Đoạn khớp tối thiểu, Subframe
+shifts khi quét, Loại hẳn nếu dưới): đổi thì kết quả quét khác đi, và Giám sát quét lại các video từng «không vi
+phạm». Ô nào đang khác mặc định thì thanh bên hiện một dòng cảnh báo vàng.
 
 ## 8. Bản dòng lệnh (chạy tự động theo lịch)
 
@@ -159,7 +163,7 @@ Ghép với Task Scheduler của Windows để chạy lúc 2h sáng.
 | Cổng 8501 bị chiếm | Sửa `--server.port=8502` trong `ChayTool.bat` |
 | yt-dlp lỗi 403 / tải hỏng | `pip install -U yt-dlp` (YouTube đổi cơ chế thường xuyên) |
 | Video giới hạn tuổi | Không chép cookie/token vào source. Cấu hình xác thực yt-dlp ở môi trường riêng và kiểm tra điều khoản sử dụng trước khi chạy |
-| Quét ra 0 kết quả dù chắc chắn có | ① Video dài còn tiếng gốc không? ② Giảm «Số hash tối thiểu» ③ Kiểm tra kho đã đủ clip |
+| Quét ra 0 kết quả dù chắc chắn có | ① Video dài còn tiếng gốc không? ② Kiểm tra kho đã đủ clip ③ Xem «🔎 Chi tiết chẩn đoán» dưới kết quả — đừng hạ «Số hash tối thiểu» (dễ ra báo cáo sai) |
 | Báo nhầm | Tăng «Số hash tối thiểu» lên 30–40 |
 
 ## 10. Giới hạn cần biết

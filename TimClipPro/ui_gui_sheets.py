@@ -19,6 +19,7 @@ import bao_cao_v2
 import lich_su
 import outbox
 import sheet_destinations as sd
+import ui_thao_tac
 
 CHI_LUU = ""          # giá trị lựa chọn «Chỉ lưu cục bộ»
 _VIEC_DANG_CHO = (outbox.PENDING, outbox.RETRY_WAIT, outbox.CLAIMED, outbox.SENDING)
@@ -477,8 +478,15 @@ def _ve_khoa(eng) -> None:
     with st.expander("➕ Đăng ký / cập nhật khoá Google (binding)", expanded=False):
         ref = st.text_input("Tên binding (chữ thường không dấu)", value=sd.REF_MAC_DINH,
                             key="xt_ref", persist_state="session")
-        duong = st.text_input("Đường dẫn file khoá JSON trên máy này",
-                              value=eng.runtime.khoa_google_mac_dinh, key="xt_duong", persist_state="session")
+        # Ô có key = biến phiên (như ô kho_dir của app.py): nút «Chọn» ghi thẳng vào ô, chọn lại đúng file cũ vẫn hiện.
+        st.session_state.setdefault("xt_duong", eng.runtime.khoa_google_mac_dinh)
+        c_duong, c_chon = st.columns([5, 1], vertical_alignment="bottom")
+        with c_chon:
+            chon = ui_thao_tac.nut_chon("chon_xt_duong", st.session_state.xt_duong, "file",
+                                        tieu_de="Chọn file khoá Google (JSON)")
+        if chon:
+            st.session_state.xt_duong = chon[0]
+        duong = c_duong.text_input("Đường dẫn file khoá JSON trên máy này", key="xt_duong", persist_state="session")
         if st.button("Đăng ký khoá", key="xt_luu"):
             try:
                 x = sd.dang_ky_xac_thuc(db, ref, duong)
