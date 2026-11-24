@@ -3052,6 +3052,27 @@ class Engine:
             if int(c.get("so_hash") or 0) > 0
         }
 
+    @staticmethod
+    def file_chua_van_tay(thumuc: str, ds_clip: list) -> list:
+        """File media trong ``thumuc`` mà «Bổ sung» SẼ tạo vân tay cho kho có danh sách clip ``ds_clip`` (``db_clips``) —
+        cùng luật chọn với ``_build_database_da_khoa``: bỏ ``_tam``/``_hong``, bỏ clip đã có hash, bỏ file quá trần
+        D-31/D-34. Chỉ đọc; thư mục con không đọc được → ``RuntimeError``. Vân tay dựng từ thư mục KHÁC (kho chép sang
+        máy/ổ khác) → ``[]``: «Bổ sung» ở đó nạp trùng mọi clip, không được xui bấm (DT-05)."""
+        da_co = {Engine._khoa_duong_dan(c["duong_dan"]) for c in ds_clip if int(c.get("so_hash") or 0) > 0}
+        goc = Engine._khoa_duong_dan(thumuc)
+
+        def trong_thu_muc(k: str) -> bool:
+            try:
+                return os.path.commonpath([k, goc]) == goc
+            except ValueError:   # khác ổ đĩa
+                return False
+
+        if da_co and not any(trong_thu_muc(k) for k in da_co):
+            return []
+        moi = [p for p in liet_ke_media(thumuc, bo_thu_muc_lam_viec=True) if Engine._khoa_duong_dan(p) not in da_co]
+        qua_dai = channel.loc_file_qua_dai(moi, channel.tran_clip_giay(thumuc))
+        return [p for p in moi if p not in qua_dai]
+
     def _ghi_thu_muc_kho_ghim(self, thumuc: str) -> None:
         """Ghi thư mục nguồn cho ĐÚNG kho đã ghim — không đổi kho đang chọn của ai."""
         if not self.kho_dang_dung:
@@ -7092,6 +7113,30 @@ class Engine:
         with self._db() as c:
             rows = c.execute(sql, tham_so).fetchall()
         return {row["source_id"] for row in rows}
+
+    def lan_quet_voi_kho(self, ma_video: Iterable[str]) -> dict:
+        """Lần quét CÓ KẾT LUẬN của từng mã với kho đang dùng — chỉ đọc, đúng luật ``ids_da_quet`` (DT-09):
+        ``{mã: {"tieu_de", "ngay", "so_doan", "da_quet"}}``. Lần có vi phạm thắng (mọi phiên bản kho), không thì âm tính
+        quét trọn cùng phiên bản kho + chính sách; mới nhất trước. Chỉ có âm tính với kho CŨ hơn (đã bổ sung vân tay /
+        đổi ngưỡng) → ``da_quet=False``: phải quét lại. Lỗi, huỷ, quét dở: không có mục."""
+        ma = sorted({m for m in ma_video if m})
+        dt = self._danh_tinh_kho()
+        if not ma or not dt["kho_id"]:
+            return {}
+        with self._db() as c:
+            rows = c.execute(
+                "SELECT source_id, source_name, created_at, n_matches,"
+                " (kho_phien_ban = ? AND chinh_sach = ?) AS cung_ban FROM jobs"
+                " WHERE kho_id = ? AND status = 'ok' AND (n_matches > 0 OR day_du = 1)"
+                f" AND source_id IN ({','.join('?' * len(ma))})"
+                " ORDER BY n_matches > 0 DESC, cung_ban DESC, id DESC",
+                (dt["kho_phien_ban"], chu_ky_chinh_sach(self.config), dt["kho_id"], *ma)).fetchall()
+        ra: dict = {}
+        for r in rows:
+            ra.setdefault(r["source_id"], {"tieu_de": r["source_name"] or "", "ngay": r["created_at"] or "",
+                                           "so_doan": int(r["n_matches"] or 0),
+                                           "da_quet": bool(r["n_matches"] or r["cung_ban"])})
+        return ra
 
     def video_vi_pham(self) -> list:
         """Video YouTube từng bị thấy vi phạm (lần quét ``ok`` có kết quả) trong TOÀN BỘ lịch sử, mọi kho — mỗi mã một

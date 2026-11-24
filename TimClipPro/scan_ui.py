@@ -318,6 +318,15 @@ def huong_dan_kho_sau_dong_bo(thu_muc_dong_bo: str, kho_dang_dung: str, thu_muc_
                        f"chọn kho đó ở thanh bên, đặt thư mục `{thu_muc_dong_bo}`, rồi «Bổ sung clip mới vào kho».")
 
 
+def gop_link_trung(links: Sequence[str]) -> tuple:
+    """``(link không trùng, số link đã gộp)``: cùng mã video YouTube (``youtube_api.ma_video_cho_api``) hoặc cùng chữ là
+    một link; giữ lần xuất hiện đầu, đúng thứ tự (DT-09: link dán hai lần trong một lô từng bị quét hai lần)."""
+    theo_khoa: dict = {}
+    for x in links:
+        theo_khoa.setdefault(youtube_api.ma_video_cho_api(x) or x, x)
+    return list(theo_khoa.values()), len(links) - len(theo_khoa)
+
+
 def thong_bao_youtube_chan(ket_qua: Sequence[Any]) -> str:
     """Lý do cầu dao YouTube đã mở trong batch (rỗng nếu không): lấy từ chính kết quả "chưa
     quét" để không phụ thuộc trạng thái engine sau này."""
