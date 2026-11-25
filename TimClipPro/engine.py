@@ -1290,19 +1290,27 @@ class Engine:
             tren_dia = cau_hinh.doc_cau_hinh(self.data_dir)
         except Exception:  # noqa: BLE001
             return
-        self._nhan_cau_hinh_mot_phan({khoa: tren_dia[khoa] for khoa in cac_khoa if khoa in tren_dia})
+        # Khoá THIẾU trong file đọc được = giá trị mặc định, không phải bộ nhớ cũ của tab này: tab khác vừa «Khôi phục
+        # mặc định» (đổi tên cau_hinh.json) thì tự dọn phải hiện TẮT, không bật lại (review 25/11 vòng 3).
+        mac_dinh = Config()
+        self._nhan_cau_hinh_mot_phan({khoa: tren_dia.get(khoa, getattr(mac_dinh, khoa)) for khoa in cac_khoa})
 
     def _nhan_cau_hinh_mot_phan(self, gia_tri: dict) -> None:
+        """Nhận các giá trị đọc từ đĩa vào phiên: kiểm KIỂU từng khoá như lúc khởi động (``ap_vao_config``: «false» trong
+        ngoặc kép không thành BẬT) rồi kiểm miền giá trị; khoá sai bị bỏ, phiên giữ giá trị đang có của khoá đó."""
         if not gia_tri:
             return
+        mau = Config()
+        bo = set(cau_hinh.ap_vao_config(mau, gia_tri))
         try:
-            Config(**gia_tri).validate()
-        except Exception:  # noqa: BLE001 — file sửa tay sai kiểu: giữ giá trị phiên đang có
+            mau.validate()
+        except Exception:  # noqa: BLE001 — sửa tay ra giá trị âm…: giữ giá trị phiên đang có
             return
-        for khoa, v in gia_tri.items():
+        hop_le = {khoa: getattr(mau, khoa) for khoa in gia_tri if khoa not in bo}
+        for khoa, v in hop_le.items():
             setattr(self.config, khoa, v)
-        self.cau_hinh_da_luu = {**self.cau_hinh_da_luu, **gia_tri}
-        self._moc_cau_hinh = {**self._moc_cau_hinh, **gia_tri}
+        self.cau_hinh_da_luu = {**self.cau_hinh_da_luu, **hop_le}
+        self._moc_cau_hinh = {**self._moc_cau_hinh, **hop_le}
 
     def khoi_phuc_cau_hinh_mac_dinh(self) -> None:
         """Bỏ cấu hình đã lưu và áp Config mặc định ngay trong phiên hiện tại. Bản đang lưu được giữ lại ở
@@ -5636,8 +5644,9 @@ class Engine:
                 r.status = "error"
                 tin += " Chưa thể kết luận video này không chứa clip gốc."
                 if thieu and self._trong_thu_muc_dem(f):
-                    with contextlib.suppress(OSError):
-                        self._bo_file_dem(f)   # có thể là bản cụt: lượt sau tải lại, không quét lại nó
+                    # Có thể là bản cụt: lượt sau tải lại, không quét lại nó. Video đã có vi phạm ghi lịch sử: đổi tên
+                    # giữ lại thay vì xoá (review 25/11 vòng 3).
+                    self._bo_ban_cut(f, r, dai_file, info["id"], luu_lich_su)
             r.note = "\n".join(x for x in (r.note, tin) if x)
             return r, f
         r.duration_s = tong
@@ -6516,17 +6525,18 @@ class Engine:
         dai_that, dai_file = float(dai_that or 0), float(dai_file or 0)
         return dai_that > 0 and dai_file > 0 and dai_that - dai_file > DUNG_SAI_TAI_THIEU_S
 
-    def _bo_ban_dem(self, video_id: str) -> bool:
-        """Bỏ MỌI bản đệm đầy đủ của video. True = không còn bản nào, nên lần tải sau chắc
-        chắn là một bản MỚI chứ không phải bản cũ lấy lại từ đệm."""
+    def _bo_ban_dem(self, video_id: str, r: Optional["ScanResult"] = None, dai_s: float = 0.0,
+                    luu_lich_su: bool = True) -> bool:
+        """Bỏ MỌI bản đệm đầy đủ của video. True = không còn bản nào (tên ``<mã>.*`` trống), nên lần tải sau chắc
+        chắn là một bản MỚI chứ không phải bản cũ lấy lại từ đệm. Video có vi phạm (lượt này / lịch sử): đổi tên
+        giữ lại thay vì xoá (``_bo_ban_cut``) — tải lại hỏng (429, đứt mạng, video đã gỡ) thì vẫn còn audio
+        (review 25/11 vòng 3)."""
         con_lai = []
         for p in self._file_trong_dem(video_id):
             if p.endswith((".part", ".ytdl")):
                 continue
-            try:
-                if not self._bo_file_dem(p):
-                    con_lai.append(p)
-            except OSError:
+            if not self._bo_ban_cut(p, r if r is not None else ScanResult(source_name=""), dai_s, video_id,
+                                    luu_lich_su):
                 con_lai.append(p)
         return not con_lai
 
@@ -6562,7 +6572,7 @@ class Engine:
             can_tai_lai = True
         else:
             can_tai_lai = not muc_tieu.da_dat(r.ung_vien_dat)
-        if can_tai_lai and self._trong_thu_muc_dem(f) and self._bo_ban_dem(info["id"]):
+        if can_tai_lai and self._trong_thu_muc_dem(f) and self._bo_ban_dem(info["id"], r, dai_file, luu_lich_su):
             self._bao(progress, 0.40,
                       f"File tải về chỉ dài {hhmmss(dai_file)}/{hhmmss(dai_that)} — tải lại "
                       "một lần để kiểm...")

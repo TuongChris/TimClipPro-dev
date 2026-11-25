@@ -150,7 +150,7 @@ def tu_don_dem(engine) -> Optional[threading.Thread]:
         tren_dia = cau_hinh.doc_cau_hinh(getattr(engine, "data_dir", "") or os.path.dirname(engine.dl_dir))
     except Exception:  # noqa: BLE001 — không đọc được cấu hình: không tự xoá gì
         return None
-    tu_dong = tren_dia.get("dem_tu_dong", cfg.dem_tu_dong)
+    tu_dong = tren_dia.get("dem_tu_dong", False)    # file không có khoá (vd. vừa «Khôi phục mặc định») = mặc định TẮT
     max_gb = tren_dia.get("dem_max_gb", cfg.dem_max_gb)
     max_ngay = tren_dia.get("dem_max_ngay", cfg.dem_max_ngay)
     if (tu_dong is not True or isinstance(max_gb, bool) or not isinstance(max_gb, (int, float)) or max_gb < 0
