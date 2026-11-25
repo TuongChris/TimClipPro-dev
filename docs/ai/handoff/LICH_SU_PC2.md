@@ -3,6 +3,9 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-11-25 — đêm: khảo sát + cảnh báo kho/link, tiếng báo, ổ đầy, chống bấm nhầm, lọc kho, lưới test (D-65)
+- 5 agent song song (worktree TimClipPro_Dem A–E) → gộp, review độc lập (4 «nên sửa», đã sửa). Nhanh 4523 = 4519/4/0,
+  chậm 28/28. Đo chỉ đọc DEV: đệm 850 file/100,3 GB, ổ C trống 54,6 GB (`dem_dem_audio.py` cùng thư mục khảo sát).
 ### 2026-11-23 — tra kho nhanh (nhánh fix/pc2/tra-kho-nhanh)
 - `_exact_match_counts` gốc quét lại MỌI hits cho mỗi (clip, mode). Bản «cắt lát» trong `audfprint_match_runner`
   (gom theo clip, sắp theo độ lệch, mỗi mode đọc đúng lát; gắn cả worker joblib) — y hệt từng phần tử. Thật:

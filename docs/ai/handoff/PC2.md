@@ -9,7 +9,8 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   không xoá. Claude KHÔNG đọc/ghi/chạy gì trong ba thư mục này (chặn trong `.claude/settings.json`).
 - Development VẬN HÀNH (D-26, ngoài Git):
   - mã: worktree `C:\Dev\TimClipPro_VanHanh` (nhánh cục bộ `pc2-van-hanh`, chỉ fast-forward theo `integration/current`);
-  - Python: `C:\Dev\TimClipPro_DevRuntime\py312-f955a32807a9` (offline, lock có băm, yt-dlp-ejs 0.8.0; Node 24);
+  - Python: `C:\Dev\TimClipPro_DevRuntime\py312-fdb738800e4c` (25/11; yt-dlp 2026.11.23, ejs 0.8.0; Node 24) — bản cũ
+    `py312-f955a32807a9` giữ để lùi (`GIT_WORKFLOW.md` «Làn nâng yt-dlp»);
   - dữ liệu THẬT: `C:\Dev\TimClipPro_DevState\data`; output `…\output`; sao lưu `D:\TimClipPro_Dev_SaoLuu`;
   - launcher trong `C:\Dev\TimClipPro_DevState`: `TimClipPro_DEV.bat` (icon Desktop «TimClipPro DEV»; 127.0.0.1:8502,
     `fileWatcherType=none`), `_CLI`, `_SaoLuu`, `_CapNhat`, chung `_env`. Cập nhật: `GIT_WORKFLOW.md` «Development vận hành PC2».
@@ -27,11 +28,10 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 ## Tiếp theo
 0o. 25/11 (đêm, toàn quyền): khảo sát 25 đề tài + 66 việc nhỏ (D-65; `C:\Dev\pc2_test_runs\2026-11-24_khao_sat_nang_cap`) + 5 nhánh đêm gộp ở `fix/pc2/gop-dem-2511`. Người dùng: thử theo `C:\Dev\Tool_Quet\BAO_CAO_SANG_25_11.md`;
     → 25/11 người dùng quyết (D-66): giữ đoạn quanh mốc; không sao lưu ngoài máy; giữ mặc định D-65; DT-02 → DT-04 → DT-03.
-0p. 25/11: luật giữ đệm D-66 (`feature/pc2/don-dem-bang-chung`, 3 vòng review): GỘP + DEV (người dùng duyệt). Người dùng: mở
-    «🧹 Dọn đệm audio…» → xem trước (~88 GB) → tick → «Dọn ngay» (lần đầu ~20–30 phút, nền). DT-04 (yt-dlp + certifi CVE):
-    `C:\Dev\pc2_test_runs\2026-11-25_dt04_ytdlp\BAO_CAO_DT04.md` — chờ duyệt tải 2 wheel + 1 lượt YouTube thật.
-0n. 23/11: tra kho nhanh (`fix/pc2/tra-kho-nhanh`) — GỘP `f4629fb`, DEV 20:57; đo thật 401 → 45 s (`C:\Dev\pc2_test_runs\2026-11-23_tien_do_khop`).
-0m/0l. 23/11: «🎧 Tạo file kiểm claim» (D-64) + sửa 14 mục review D-63 — GỘP 23/11 (người dùng duyệt); người dùng thử file claim trên kênh phụ.
+0q. 25/11: DT-04 yt-dlp 2026.11.23 + certifi 2026.11.20 — GỘP `e617240`, DEV 12:43 runtime mới (sao lưu `data_20261125_124307`).
+    Người dùng: quét/tải YouTube như thường; lỗi lạ → báo Claude (lùi = 1 phút). Còn mở: DT-03 (cần duyệt).
+0p. 25/11: luật giữ đệm D-66 — GỘP `33fcf7a` + DEV. Người dùng: «🧹 Dọn đệm audio…» → xem trước (~88 GB) → tick → «Dọn ngay».
+0n–0l. 23/11: tra kho nhanh (GỘP `f4629fb`) + «🎧 Tạo file kiểm claim» D-64 + sửa review D-63 — người dùng thử file claim.
 0k. 23/11: tiến độ so khớp trung thực (`fix/pc2/tien-do-so-khop`) — GỘP `34c5403` (người dùng duyệt), DEV 19:23
     (sao lưu `data_20261123_192339`), health ok, mở lại bằng icon. Người dùng: quét thử, xem dòng «tra kho xong».
 0j. 23/11: giao diện D-63 (menu 5 nhóm + mở nhanh + bớt thao tác tay + gọn chữ, `feature/pc2/giao-dien-tong2`): nhanh 4356 = 4352/4/0 trên 8a9045d, chậm 25/25 trên bc16ef9 — GỘP integration, DEV cập nhật — người dùng thử.
@@ -70,11 +70,11 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 10. Mỗi task: mẫu «PC2» trong `docs/ai/SESSION_START.md`.
 
 ## Nhật ký
+### 2026-11-25 — nâng yt-dlp 2026.11.23 + certifi 2026.11.20 (DT-04, nhánh feature/pc2/ytdlp-2026-11-23)
+- Lock đổi 2 dòng (trùng byte bản `release_tool lock`), runtime `py312-fdb738800e4c`; 3 test canh; bỏ lời dặn `pip -U`. Nhanh
+  4565 = 4561/4/0 + 3 mới. Thử thật `dSfZMQXvlfY` 60 s: không cookie + file cookie/Node ĐẠT, rò rỉ 0 (`…\2026-11-25_dt04_nang`).
 ### 2026-11-25 — luật giữ đệm audio (D-66, nhánh feature/pc2/don-dem-bang-chung)
 - `trich_doan_dem.py` mới + `don_dep.don_kho_dem` xử lý theo `lichsu.db`; hộp «🧹 Dọn đệm audio» (xem trước → tick → nền);
   `scan_jobs.tu_don_dem`; Watch/CLI cùng luật; engine đổi tên bản cụt có vi phạm. Review 1 + 5 góc + 2 vòng nữa (27 lỗi
   thật đã sửa, test đỏ→xanh). Nhanh 4565 = 4561/4/0, chậm 28/28. Bằng chứng: `C:\Dev\pc2_test_runs\2026-11-25_don_dem`.
-### 2026-11-25 — đêm: khảo sát + cảnh báo kho/link, tiếng báo, ổ đầy, chống bấm nhầm, lọc kho, lưới test (D-65)
-- 5 agent song song (worktree TimClipPro_Dem A–E) → gộp, review độc lập (4 «nên sửa», đã sửa). Nhanh 4523 = 4519/4/0,
-  chậm 28/28. Đo chỉ đọc DEV: đệm 850 file/100,3 GB, ổ C trống 54,6 GB (`dem_dem_audio.py` cùng thư mục khảo sát).
-- Mục cũ hơn (2026-11-23 tra kho nhanh; 2026-11-23 file kiểm claim; 2026-11-23 sửa 14 mục review D-63; 2026-11-23 so khớp «4/4 khúc, 99%» rồi đứng ~15 phút; 2026-11-23 giao diện D-63: menu 5 nhóm + mở nhanh + bớt thao tác tay + gọn chữ; 2026-11-23 khoá JSON chậm; 2026-11-23 test «Dừng giữa chừng»; 2026-11-20 3 việc hoãn của review Codex; 2026-11-20 review Codex + 14 bản sửa; 2026-11-20 ghép chỉ audio D-61; 2026-11-19 chụp ảnh D-60; 2026-11-17 giữ tab đang mở; 2026-11-17 bỏ nhiều đoạn D-59; 2026-11-16 YouTube Data API + 7 tính năng D-51…D-58; 2026-11-16 audit toàn repo 20 mục; 2026-11-15 «Đoạn vi phạm» theo mốc tinh chỉnh D-50; 2026-11-14/15 tinh chỉnh mốc từng giây D-49; 2026-11-11 audit tổng Codex; 2026-11-12 thumbnail tên = mã D-47/D-48; 2026-11-11 video trong máy D-46; 2026-11-11 thumbnail cả kênh D-45; 2026-11-11 Twitch 1440p D-44; 2026-11-10 âm lượng D-43; 2026-11-10 audit phần video mới; 2026-11-09 cắt đoạn D-42; 2026-11-09 tải 4 kết nối D-40; 2026-11-09 ghép video gốc D-39/D-41 + chương QuickTime; 2026-11-09 tiêu đề kênh D-38 + audit 09/11; 2026-11-08 tải video gốc D-37 + review/audit 08/11; 2026-11-07 Codex bước 2 audit 14 + 18; 2026-11-07 Codex review PR #27–#29 D-36; 2026-11-07 đồng bộ nén song song D-35; 2026-11-07 audit số 15, 19, 20; 2026-11-07 kho video dài D-34; 2026-11-07 dựng kho nhường ổ cứng D-33; 2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
+- Mục cũ hơn (2026-11-25 đêm khảo sát D-65; 2026-11-23 tra kho nhanh; 2026-11-23 file kiểm claim; 2026-11-23 sửa 14 mục review D-63; 2026-11-23 so khớp «4/4 khúc, 99%» rồi đứng ~15 phút; 2026-11-23 giao diện D-63: menu 5 nhóm + mở nhanh + bớt thao tác tay + gọn chữ; 2026-11-23 khoá JSON chậm; 2026-11-23 test «Dừng giữa chừng»; 2026-11-20 3 việc hoãn của review Codex; 2026-11-20 review Codex + 14 bản sửa; 2026-11-20 ghép chỉ audio D-61; 2026-11-19 chụp ảnh D-60; 2026-11-17 giữ tab đang mở; 2026-11-17 bỏ nhiều đoạn D-59; 2026-11-16 YouTube Data API + 7 tính năng D-51…D-58; 2026-11-16 audit toàn repo 20 mục; 2026-11-15 «Đoạn vi phạm» theo mốc tinh chỉnh D-50; 2026-11-14/15 tinh chỉnh mốc từng giây D-49; 2026-11-11 audit tổng Codex; 2026-11-12 thumbnail tên = mã D-47/D-48; 2026-11-11 video trong máy D-46; 2026-11-11 thumbnail cả kênh D-45; 2026-11-11 Twitch 1440p D-44; 2026-11-10 âm lượng D-43; 2026-11-10 audit phần video mới; 2026-11-09 cắt đoạn D-42; 2026-11-09 tải 4 kết nối D-40; 2026-11-09 ghép video gốc D-39/D-41 + chương QuickTime; 2026-11-09 tiêu đề kênh D-38 + audit 09/11; 2026-11-08 tải video gốc D-37 + review/audit 08/11; 2026-11-07 Codex bước 2 audit 14 + 18; 2026-11-07 Codex review PR #27–#29 D-36; 2026-11-07 đồng bộ nén song song D-35; 2026-11-07 audit số 15, 19, 20; 2026-11-07 kho video dài D-34; 2026-11-07 dựng kho nhường ổ cứng D-33; 2026-11-06 audit số 7–13; 2026-11-06 audit số 1–6; 2026-11-06 gộp D-31; 2026-11-06 dựng kho theo RAM D-31; 2026-11-06 phân tích tải dựng kho; 2026-11-02 ngày đăng D-30 + máy mới; 2026-10-27 đồng bộ song song D-29; 2026-10-26 audit độc lập 25/10; 2026-10-26 13 lỗi YouTube; 2026-10-25 P0 «bóng» D-27 + P0-1; 2026-10-25 link «Đoạn vi phạm» dạng watch; 2026-10-15 DEV-ONLY D-26, tích hợp PR #9 + gom #10/#11, thanh bên cookie PR #11, nghiệm thu PR #9 + pilot, tiến độ + hiệu suất đồng bộ kênh, PR #8, chuyển quyền phát hành, review PR #6; 2026-10-14 trở về trước): `docs/ai/handoff/LICH_SU_PC2.md`.
