@@ -30,9 +30,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 0p. 25/11: luật giữ đệm D-66 (`feature/pc2/don-dem-bang-chung`, 3 vòng review): GỘP + DEV (người dùng duyệt). Người dùng: mở
     «🧹 Dọn đệm audio…» → xem trước (~88 GB) → tick → «Dọn ngay» (lần đầu ~20–30 phút, nền). DT-04 (yt-dlp + certifi CVE):
     `C:\Dev\pc2_test_runs\2026-11-25_dt04_ytdlp\BAO_CAO_DT04.md` — chờ duyệt tải 2 wheel + 1 lượt YouTube thật.
-0n. 23/11: tra kho nhanh (`fix/pc2/tra-kho-nhanh`) — GỘP `f4629fb` (người dùng duyệt), DEV 20:57 (sao lưu
-    `data_20261123_205731`), health ok, mở lại bằng icon. Người dùng: quét thử, bước so khớp phải nhanh hẳn. Đo thật 4 khúc video 1
-    × kho Mr Ballen, 3 worker: 401 → 45 s, 800 dòng kết quả TRÙNG (`C:\Dev\pc2_test_runs\2026-11-23_tien_do_khop`).
+0n. 23/11: tra kho nhanh (`fix/pc2/tra-kho-nhanh`) — GỘP `f4629fb`, DEV 20:57; đo thật 401 → 45 s (`C:\Dev\pc2_test_runs6-11-23_tien_do_khop`).
 0m/0l. 23/11: «🎧 Tạo file kiểm claim» (D-64) + sửa 14 mục review D-63 — GỘP 23/11 (người dùng duyệt); người dùng thử file claim trên kênh phụ.
 0k. 23/11: tiến độ so khớp trung thực (`fix/pc2/tien-do-so-khop`) — GỘP `34c5403` (người dùng duyệt), DEV 19:23
     (sao lưu `data_20261123_192339`), health ok, mở lại bằng icon. Người dùng: quét thử, xem dòng «tra kho xong».
