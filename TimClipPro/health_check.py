@@ -52,7 +52,7 @@ def _phien_ban_thu_vien() -> dict:
     from importlib import metadata
 
     kq = {}
-    for ten in ("streamlit", "gspread", "google-auth", "requests", "yt-dlp", "cryptography", "numpy",
+    for ten in ("streamlit", "gspread", "google-auth", "requests", "yt-dlp", "yt-dlp-ejs", "cryptography", "numpy",
                 "scipy", "pandas"):
         try:
             kq[ten] = metadata.version(ten)

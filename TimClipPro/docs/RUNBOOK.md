@@ -503,7 +503,8 @@ Tìm client nào còn sống bằng cách thử tay:
 ```
 
 Chuỗi rỗng `""` nghĩa là để yt-dlp tự chọn. Nếu mọi client đều hỏng thì mới nên nghi
-yt-dlp cũ: `& ".\.venv\Scripts\python.exe" -m pip install -U yt-dlp`.
+yt-dlp cũ: báo Claude chạy làn nâng yt-dlp (lock có băm, runtime mới cạnh runtime cũ, lùi bằng `DEV_PY`).
+KHÔNG `pip install -U yt-dlp`: runtime không còn khớp lock.
 
 Từ 2026-08-18, **cả hai đường tải** đều có đường lui này: quét video dài
 (`engine.download_audio`) và đồng bộ kênh (`ChannelSync._tai_va_nen`). Cả hai đọc

@@ -9,7 +9,7 @@ altair==6.2.2
 anyio==4.14.2
 attrs==26.1.0
 blinker==1.9.0
-certifi==2026.7.22
+certifi==2026.11.20
 cffi==2.1.1
 charset-normalizer==3.5.1
 click==8.4.2
@@ -56,5 +56,5 @@ urllib3==2.7.0
 uvicorn==0.52.4
 watchdog==6.0.0
 websockets==16.1.1
-yt-dlp==2026.8.19
+yt-dlp==2026.11.23
 yt-dlp-ejs==0.8.0

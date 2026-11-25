@@ -150,6 +150,14 @@ Không GitHub Release, không ký, không Managed Updater cho Development. Cập
   Claude đã xác nhận: `git reset --keep <commit trước>` (DEV đã tắt) + dữ liệu từ bản sao lưu nếu cần.
 - Lock Python đổi: dựng venv MỚI cạnh venv cũ (`pip install --require-hashes --no-deps --only-binary=:all: --no-index`
   từ wheel đã kiểm), đổi `DEV_PY` trong `TimClipPro_DEV_env.bat`, giữ venv cũ để lùi.
+- Làn nâng yt-dlp (DT-04, lần đầu 25/11: 2026.8.19 → 2026.11.23 + certifi 2026.11.20). KHÔNG `pip install -U`.
+  1. Tải wheel từ PyPI vào thư mục MỚI, so sha256 với JSON PyPI (`pypi.org/pypi/<gói>/<bản>/json`).
+  2. Thư mục wheel MỚI = wheel cũ (kiểm băm theo lock) + wheel mới; sửa dòng gói ở CẢ HAI lock (test
+     `test_nang_ytdlp_canh.py` bắt lệch); đối chiếu bằng `release_tool.py lock --python <runtime mới> --wheelhouse …`.
+  3. Runtime MỚI `py312-<sha256(lock)[:12]>` cạnh runtime cũ (lệnh ở trên) + `pip check`; venv test riêng thêm pytest.
+  4. Bộ test nhanh trên runtime mới; thử thật nhỏ (người dùng duyệt): `C:\Dev\pc2_test_tools\cookie_js\pilot_dt04.py`
+     `--khong-cookie` và `--cookie-file`, mỗi chế độ 1 video, 60 giây.
+  5. Đổi `DEV_PY` (env.bat) + `$LockMong` (`TimClipPro_DEV_tienich.ps1`) khi DEV rảnh. Lùi = trỏ cả hai về runtime cũ.
 
 ## Lịch sử (tóm tắt — chi tiết ở `DECISIONS.md`)
 - 09/10: tạo repo `TimClipPro-dev` (private lúc đó), đẩy `integration/current` từ `e49340d` giữ nguyên lịch sử; PC2 clone

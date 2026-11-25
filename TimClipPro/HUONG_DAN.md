@@ -161,7 +161,7 @@ Ghép với Task Scheduler của Windows để chạy lúc 2h sáng.
 | `'python' is not recognized` | Cài lại Python, tick "Add to PATH", mở cmd mới |
 | Trình duyệt không tự mở | Tự vào `http://localhost:8501` |
 | Cổng 8501 bị chiếm | Sửa `--server.port=8502` trong `ChayTool.bat` |
-| yt-dlp lỗi 403 / tải hỏng | `pip install -U yt-dlp` (YouTube đổi cơ chế thường xuyên) |
+| yt-dlp lỗi 403 / tải hỏng | Báo Claude chạy làn nâng yt-dlp (lock có băm + runtime mới cạnh bản cũ). KHÔNG `pip install -U yt-dlp` |
 | Video giới hạn tuổi | Không chép cookie/token vào source. Cấu hình xác thực yt-dlp ở môi trường riêng và kiểm tra điều khoản sử dụng trước khi chạy |
 | Quét ra 0 kết quả dù chắc chắn có | ① Video dài còn tiếng gốc không? ② Kiểm tra kho đã đủ clip ③ Xem «🔎 Chi tiết chẩn đoán» dưới kết quả — đừng hạ «Số hash tối thiểu» (dễ ra báo cáo sai) |
 | Báo nhầm | Tăng «Số hash tối thiểu» lên 30–40 |
