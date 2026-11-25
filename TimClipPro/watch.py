@@ -452,7 +452,8 @@ def _chay_giam_sat_da_khoa(
                 engine.dl_dir,
                 max_gb=engine.config.dem_max_gb,
                 max_ngay=engine.config.dem_max_ngay,
-                cancel_event=getattr(engine, "cancel_event", None),   # Ctrl+C / `cli dung` dừng cả phần cắt giữ
+                # Ctrl+C / `cli dung` (file dừng) dừng cả phần cắt giữ: YeuCauDung.is_set xét cả hai.
+                cancel_event=dung_lai if dung_lai is not None else getattr(engine, "cancel_event", None),
             )
             bao_cao.ghi_chu_don_dem = list(ket_qua_don.get("canh_bao", []))
             # Video vi phạm: bản đầy đủ bỏ, đoạn quanh mốc giữ (D-66) — đếm cả hai; GB = phần thật sự trả lại ổ.

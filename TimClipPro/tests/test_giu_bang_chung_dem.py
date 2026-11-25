@@ -528,13 +528,13 @@ def test_ban_cut_co_ket_qua_doi_ten_giu_bang_chung(engine):
             fh.write(b"x")
         return p
 
-    e._bo_ban_cut(tao("AAAAAAAAAAA.webm"), co_kq, 1234.5)
-    e._bo_ban_cut(tao("CCCCCCCCCCC__p10800.webm"), co_kq, 5000.2)
-    e._bo_ban_cut(tao("BBBBBBBBBBB.webm"), ScanResult(source_name="V"), 100.0)            # không có kết quả: bỏ như cũ
+    e._bo_ban_cut(tao("AAAAAAAAAAA.webm"), co_kq, 1234.5, "AAAAAAAAAAA")
+    e._bo_ban_cut(tao("CCCCCCCCCCC__p10800.webm"), co_kq, 5000.2, "CCCCCCCCCCC")
+    e._bo_ban_cut(tao("BBBBBBBBBBB.webm"), ScanResult(source_name="V"), 100.0, "BBBBBBBBBBB")            # không có kết quả: bỏ như cũ
     d = tao("DDDDDDDDDDD.webm")
     dau = don_dep.dat_dau_dang_dung(e.dl_dir, "DDDDDDDDDDD.webm")
     try:
-        e._bo_ban_cut(d, co_kq, 100.0)                                     # lượt khác đang dùng: giữ nguyên
+        e._bo_ban_cut(d, co_kq, 100.0, "DDDDDDDDDDD")                                     # lượt khác đang dùng: giữ nguyên
     finally:
         don_dep.nha_dau_dang_dung(dau)
     assert sorted(f for f in os.listdir(e.dl_dir) if os.path.isfile(os.path.join(e.dl_dir, f))) == [
@@ -613,3 +613,187 @@ def test_don_dem_ban_khong_lam_giam_sat_bao_loi_va_dong_lenh_thoat_ma_2(engine, 
     with pytest.raises(SystemExit) as thoat:
         cli.main()
     assert thoat.value.code == 2
+
+
+# ------------------------------------------------------------------ review 25/11 vòng 2
+
+def _engine_tai_gia(tmp_path, ket_qua_quet, keep=False):
+    """Engine thật (lịch sử thật) với tải / quét giả: mỗi lần quét trả phần tử kế của ``ket_qua_quet``."""
+    from engine import Engine, ScanResult
+    e = Engine(root=str(tmp_path), data_dir=str(tmp_path / "data"), out_dir=str(tmp_path / "out"))
+    e.require = lambda *a, **k: None
+    e.config.keep_downloads = keep
+    e.youtube_info = lambda url: {"title": "V", "id": "AAAAAAAAAAA", "channel": "", "channel_id": "",
+                                  "channel_url": "", "upload_date": "", "duration": 600.0}
+
+    def tai_gia(url, vid, progress=None, gioi_han_giay=None):
+        p = os.path.join(e.dl_dir, f"{vid}.webm")
+        if not os.path.exists(p):
+            with open(p, "wb") as fh:
+                fh.write(b"x")
+        return p
+
+    lan = iter(ket_qua_quet)
+    e.download_audio = tai_gia
+    e.scan_media = lambda path, **kw: ScanResult(source_name="V", duration_s=600.0, vung_da_khop=[(0.0, 600.0)],
+                                                 matches=list(next(lan)))
+    return e
+
+
+def _khop():
+    from engine import Match
+    return Match(clip="c.opus", start_s=100.0, end_s=130.0, matched_s=30.0, clip_offset_s=0.0, hashes=5000,
+                 confidence="cao")
+
+
+def test_khong_giu_dem_video_da_co_vi_pham_trong_lich_su_van_giu_audio(tmp_path):
+    """Lượt 1 thấy vi phạm (đã ghi lịch sử) → giữ audio. Lượt quét lại không thấy gì (kho khác / bấm Dừng) hay lô «video
+    gốc chung» (không ghi lịch sử) từng xoá bản audio duy nhất trước khi dọn đệm kịp cắt đoạn (review 25/11 vòng 2)."""
+    e = _engine_tai_gia(tmp_path, [[_khop()], [], [_khop()]])
+    f = os.path.join(e.dl_dir, "AAAAAAAAAAA.webm")
+    e.scan_youtube("https://youtu.be/AAAAAAAAAAA")
+    assert os.path.exists(f)
+    e.scan_youtube("https://youtu.be/AAAAAAAAAAA")                          # quét lại, không thấy gì
+    assert os.path.exists(f)
+    e.scan_youtube("https://youtu.be/AAAAAAAAAAA", luu_lich_su=False)       # lô «video gốc chung»
+    assert os.path.exists(f)
+    assert e._vi_pham_da_ghi("AAAAAAAAAAA") == 130.0 and e._vi_pham_da_ghi("BBBBBBBBBBB") is None
+
+
+def test_ban_cut_xet_ca_vi_pham_da_ghi_lich_su(engine):
+    from engine import ScanResult
+    e = engine
+    os.makedirs(e.dl_dir, exist_ok=True)
+    ghi_lich_su(e.data_dir, vi_pham={"AAAAAAAAAAA": [(100, 130)]}, sach=["BBBBBBBBBBB"])
+
+    def tao(ten):
+        p = os.path.join(e.dl_dir, ten)
+        with open(p, "wb") as fh:
+            fh.write(b"x")
+        return p
+
+    trong = ScanResult(source_name="V")
+    assert e._bo_ban_cut(tao("AAAAAAAAAAA.webm"), trong, 300.4, "AAAAAAAAAAA")       # lịch sử có vi phạm: đổi tên
+    assert e._bo_ban_cut(tao("BBBBBBBBBBB.webm"), trong, 300.4, "BBBBBBBBBBB")       # sạch: bỏ
+    assert e._bo_ban_cut(tao("CCCCCCCCCCC.webm"), ScanResult(source_name="V", matches=[_khop()]), 0.0,
+                         "CCCCCCCCCCC")                                                # không đo được: theo mốc + đệm
+    assert e._bo_ban_cut(tao("DDDDDDDDDDD.webm"), ScanResult(source_name="V", matches=[_khop()]), 50.0,
+                         "DDDDDDDDDDD", luu_lich_su=False)                             # lô không ghi lịch sử: bỏ
+    assert sorted(f for f in os.listdir(e.dl_dir) if os.path.isfile(os.path.join(e.dl_dir, f))) == [
+        "AAAAAAAAAAA__p300.webm", "CCCCCCCCCCC__p191.webm"]
+
+
+def test_video_dai_ban_dem_cut_co_vi_pham_da_ghi_doi_ten_roi_tai_lai(engine, monkeypatch):
+    """Nhánh «bản đệm cũ bị cụt» của giới hạn video dài từng XOÁ bản cũ trước khi tải lại — tải lại hỏng (video đã bị gỡ)
+    là mất audio của vi phạm đã ghi. Giờ đổi tên giữ lại, tên phần đầu trống nên vẫn tải lại (review 25/11 vòng 2)."""
+    from engine import ScanResult
+    e = engine
+    os.makedirs(e.dl_dir, exist_ok=True)
+    ghi_lich_su(e.data_dir, vi_pham={"AAAAAAAAAAA": [(100, 130)]}, thoi_luong={"AAAAAAAAAAA": 40000})
+    with open(os.path.join(e.dl_dir, "AAAAAAAAAAA__p10800.webm"), "wb") as fh:
+        fh.write(b"cu")
+    tai = []
+
+    def tai_gia(url, vid, progress=None, gioi_han_giay=None):
+        tai.append(gioi_han_giay)
+        p = os.path.join(e.dl_dir, f"{vid}__p{int(gioi_han_giay)}.webm")
+        if not os.path.exists(p):
+            with open(p, "wb") as fh:
+                fh.write(b"moi")
+        return p
+
+    def do_dai(p):
+        with open(p, "rb") as fh:
+            return 5000.0 if fh.read() == b"cu" else 10800.0
+
+    monkeypatch.setattr(e, "download_audio", tai_gia)
+    monkeypatch.setattr(e, "do_dai_audio_that", do_dai)
+    monkeypatch.setattr(e, "scan_media", lambda path, **kw: ScanResult(source_name="V", duration_s=10800.0,
+                                                                         vung_da_khop=[(0.0, 10800.0)]))
+    info = {"id": "AAAAAAAAAAA", "title": "V", "duration": 40000.0}
+    e._quet_video_dai_gioi_han("https://youtu.be/AAAAAAAAAAA", info, "V", 10800.0, None)
+    assert sorted(os.listdir(e.dl_dir)) == ["AAAAAAAAAAA__p10800.webm", "AAAAAAAAAAA__p5000.webm"] and len(tai) == 2
+
+
+def test_luu_mot_phan_khong_de_lua_chon_tab_khac_vua_luu(tmp_path):
+    import cau_hinh
+    from engine import Engine
+    goc = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    tab1 = Engine(root=goc, data_dir=str(tmp_path / "data"), out_dir=str(tmp_path / "ketqua"))
+    tab2 = Engine(root=goc, data_dir=str(tmp_path / "data"), out_dir=str(tmp_path / "ketqua"))   # mở từ trước
+    tab1.luu_cau_hinh_mot_phan({"dem_tu_dong": True, "dem_max_ngay": 7, "dem_max_gb": 20.0})
+    tab2.luu_cau_hinh_mot_phan({"dem_tu_dong": False, "dem_max_ngay": 10, "dem_max_gb": 20.0})  # chỉ đổi số ngày
+    so = cau_hinh.doc_cau_hinh(str(tmp_path / "data"))
+    assert so["dem_tu_dong"] is True and so["dem_max_ngay"] == 10 and tab2.config.dem_tu_dong is True
+    tab1.doc_lai_cau_hinh_mot_phan(("dem_max_ngay", "dem_tu_dong"))                       # hộp mở lại ở tab 1
+    assert tab1.config.dem_max_ngay == 10
+
+
+def test_tu_don_dem_theo_lua_chon_dang_luu_tren_dia(tmp_path):
+    import types
+
+    from engine import Config
+    from scan_jobs import tu_don_dem
+    data = tmp_path / "data"
+    dl = data / "downloads"
+    dl.mkdir(parents=True)
+    ghi_lich_su(data, sach=["BBBBBBBBBBB"])
+    f = dl / "BBBBBBBBBBB.webm"
+    f.write_bytes(b"x" * 100)
+    os.utime(f, (time.time() - 9 * NGAY,) * 2)
+    (data / "cau_hinh.json").write_text(json.dumps({"dem_tu_dong": False}), encoding="utf-8")   # tab khác vừa TẮT
+    eng = types.SimpleNamespace(config=Config(dem_tu_dong=True), dl_dir=str(dl), data_dir=str(data))
+    assert tu_don_dem(eng) is None and f.exists()
+
+
+def test_giam_sat_co_yeu_cau_dung_khong_cat_giu_cuoi_luot(engine, monkeypatch, tmp_path):
+    from dung_lai import YeuCauDung
+    from watch import MucTheoDoi, WatchList, chay_giam_sat
+    os.makedirs(engine.dl_dir, exist_ok=True)
+    ghi_lich_su(engine.data_dir, sach=["BBBBBBBBBBB"])
+    f = os.path.join(engine.dl_dir, "BBBBBBBBBBB.webm")
+    with open(f, "wb") as fh:
+        fh.write(b"x" * 100)
+    os.utime(f, (time.time() - 9 * NGAY,) * 2)
+    file_dung = tmp_path / "DUNG"
+    yc = YeuCauDung(engine, str(file_dung), moc_bat_dau=time.time() - 60)
+    file_dung.write_text("dung", encoding="utf-8")                       # `cli.py dung` trong lượt
+    monkeypatch.setattr(engine, "list_jobs", lambda limit: [])
+    chay_giam_sat(engine, WatchList(muc=[MucTheoDoi("kenh", "kenh-1")]), lister=lambda url, limit: [], dung_lai=yc)
+    assert os.path.exists(f)
+
+
+def test_file_bien_mat_giua_luc_liet_ke_va_luc_xu_ly_khong_phai_loi(tmp_path, monkeypatch):
+    data = tmp_path / "data"
+    dl = data / "downloads"
+    dl.mkdir(parents=True)
+    ghi_lich_su(data, sach=["BBBBBBBBBBB"])
+    f = dl / "BBBBBBBBBBB.webm"
+    f.write_bytes(b"x" * 100)
+    os.utime(f, (time.time() - 9 * NGAY,) * 2)
+    goc_chon = don_dep.chon_can_xoa
+
+    def chon_roi_mat(*a, **k):
+        chon = goc_chon(*a, **k)
+        os.remove(f)                                                      # lượt quét khác vừa bỏ bản cụt
+        return chon
+
+    monkeypatch.setattr(don_dep, "chon_can_xoa", chon_roi_mat)
+    kq = don_dep.don_kho_dem(str(dl), max_gb=20, max_ngay=7)
+    assert not kq["loi"] and kq["bo_qua_dang_dung"] == 1, kq
+
+
+def test_hop_don_dem_siet_luat_khi_tu_don_dang_bat_phai_dong_y(tmp_path, monkeypatch):
+    data, _dl = _dl_hai_file(tmp_path)                                    # 2 file 9 ngày tuổi
+    (data / "cau_hinh.json").write_text(json.dumps({"dem_tu_dong": True, "dem_max_ngay": 30, "dem_max_gb": 0.0}),
+                                        encoding="utf-8")
+    at = _app(tmp_path, monkeypatch)
+    at.button(key="mo_don_dem").click().run()
+    assert not at.button(key="don_dem_luu").disabled                      # luật 30 ngày: chưa file nào tới hạn
+    o_ngay = next(n for n in at.number_input if n.label.startswith("Giữ trọn audio"))
+    o_ngay.set_value(7)
+    at.button(key="mo_don_dem").click().run()
+    assert at.button(key="don_dem_luu").disabled                          # siết → 2 file tới hạn ở lô kế: phải đồng ý
+    next(n for n in at.number_input if n.label.startswith("Giữ trọn audio")).set_value(60)
+    at.button(key="mo_don_dem").click().run()
+    assert not at.button(key="don_dem_luu").disabled                      # nới luật: lưu thẳng

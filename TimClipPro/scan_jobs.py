@@ -19,6 +19,7 @@ from dataclasses import dataclass, field, replace
 from typing import Callable, Optional
 
 import bao_viec
+import cau_hinh
 import don_dep
 import maintenance_gate
 import tien_do_quet as tdq
@@ -144,6 +145,17 @@ def tu_don_dem(engine) -> Optional[threading.Thread]:
     cfg = getattr(engine, "config", None)
     if getattr(cfg, "dem_tu_dong", False) is not True or not getattr(engine, "dl_dir", ""):
         return None
+    # Bộ nhớ của tab này có thể cũ: tab khác vừa TẮT tự dọn hay đổi luật → theo lựa chọn ĐANG LƯU (review 25/11 vòng 2).
+    try:
+        tren_dia = cau_hinh.doc_cau_hinh(getattr(engine, "data_dir", "") or os.path.dirname(engine.dl_dir))
+    except Exception:  # noqa: BLE001 — không đọc được cấu hình: không tự xoá gì
+        return None
+    tu_dong = tren_dia.get("dem_tu_dong", cfg.dem_tu_dong)
+    max_gb = tren_dia.get("dem_max_gb", cfg.dem_max_gb)
+    max_ngay = tren_dia.get("dem_max_ngay", cfg.dem_max_ngay)
+    if (tu_dong is not True or isinstance(max_gb, bool) or not isinstance(max_gb, (int, float)) or max_gb < 0
+            or isinstance(max_ngay, bool) or not isinstance(max_ngay, int) or max_ngay < 0):
+        return None
 
     def chay() -> None:
         try:
@@ -152,9 +164,12 @@ def tu_don_dem(engine) -> Optional[threading.Thread]:
             LOGGER.info("event=cache.auto_clean_skipped reason=cong_bao_tri")
             return
         try:
-            kq = don_dep.don_kho_dem(engine.dl_dir, max_gb=cfg.dem_max_gb, max_ngay=cfg.dem_max_ngay)
-            LOGGER.info("event=cache.auto_clean bo=%d cat_giu=%d giu_chua_ro=%d loi=%d", kq["xoa_file"],
-                        kq["trich_file"], kq["giu_chua_ro"], len(kq["loi"]))
+            kq = don_dep.don_kho_dem(engine.dl_dir, max_gb=float(max_gb), max_ngay=max_ngay)
+            LOGGER.info("event=cache.auto_clean bo=%d cat_giu=%d giu_chua_ro=%d ban=%s loi=%d canh_bao=%d",
+                        kq["xoa_file"], kq["trich_file"], kq["giu_chua_ro"], kq["dang_chay_noi_khac"], len(kq["loi"]),
+                        len(kq["canh_bao"]))
+            for dong in kq["loi"] + kq["canh_bao"]:
+                LOGGER.warning("event=cache.auto_clean_note %s", dong[:300])
         except Exception:  # noqa: BLE001 — dọn đệm hỏng không được làm hỏng gì của lô đã xong
             LOGGER.exception("event=cache.auto_clean_failed")
         finally:

@@ -897,6 +897,7 @@ def _dung_luong_dem(thu_muc_dem: str, thu_muc_du_lieu: str) -> tuple:
 def _hop_don_dem() -> None:
     """Xem trước rồi mới dọn (luật giữ D-66). Ô số không có key: hộp mở lại là đọc lại từ cấu hình. Ô «Tôi đồng ý» gắn
     với luật đang xem (key chứa số ngày + GB): đổi luật là phải tick lại (review 25/11)."""
+    eng.doc_lai_cau_hinh_mot_phan(("dem_max_ngay", "dem_max_gb", "dem_tu_dong"))   # tab khác có thể vừa lưu
     c = eng.config
     st.markdown(
         "Audio tải về để quét được giữ lại để lần quét sau khỏi tải lại. Dọn đệm chỉ đụng tới file **không được dùng "
@@ -939,11 +940,16 @@ def _hop_don_dem() -> None:
             st.error(f"Không lưu được lựa chọn: {e}")
             return False
 
-    # Bật tự dọn lúc đang có file tới hạn = lô quét kế tiếp sẽ xoá chúng: phải qua ô «Tôi đồng ý» + «Dọn ngay».
-    bat_khi_co_viec = co_viec and tu_dong and not c.dem_tu_dong
+    def _siet_hon(moi: float, cu: float) -> bool:      # 0 = không giới hạn
+        return moi > 0 and (cu <= 0 or moi < cu)
+
+    # Bật tự dọn — hay SIẾT luật khi tự dọn đang bật — lúc đang có file tới hạn = lô quét kế tiếp sẽ xoá chúng mà chưa
+    # ai đồng ý: phải qua ô «Tôi đồng ý» + «Dọn ngay» (review 25/11 vòng 2). Nới luật / tắt tự dọn thì lưu thẳng.
+    siet = _siet_hon(int(ngay), int(c.dem_max_ngay)) or _siet_hon(float(gb), float(c.dem_max_gb))
+    bat_khi_co_viec = co_viec and tu_dong and (not c.dem_tu_dong or siet)
     if st.button("Lưu lựa chọn", key="don_dem_luu", disabled=bat_khi_co_viec,
-                 help=("Bật tự dọn lúc đang có file cần dọn: tick đồng ý rồi bấm «Dọn ngay»." if bat_khi_co_viec
-                       else "Chỉ lưu lựa chọn — không xoá file nào.")):
+                 help=("Tự dọn sẽ xoá các file trên ở lô quét kế tiếp: tick đồng ý rồi bấm «Dọn ngay»."
+                       if bat_khi_co_viec else "Chỉ lưu lựa chọn — không xoá file nào.")):
         if luu():
             st.rerun()
     if not co_viec:

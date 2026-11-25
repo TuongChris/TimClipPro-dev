@@ -1267,9 +1267,38 @@ class Engine:
     def luu_cau_hinh_mot_phan(self, gia_tri: dict) -> None:
         """Lưu RIÊNG vài trường Config (hộp «🧹 Dọn đệm audio», D-66): đọc-sửa-ghi ``cau_hinh.json`` dưới khoá — mọi khoá
         khác trên đĩa (link Sheet, thư mục kho, đường dẫn Twitch…) và ô thanh bên CHƯA bấm «💾 Lưu cấu hình» giữ nguyên.
-        ``luu_cau_hinh()`` không có ``them`` ghi lại cả file chỉ với trường Config → mất các khoá giao diện (review 25/11)."""
+        ``luu_cau_hinh()`` không có ``them`` ghi lại cả file chỉ với trường Config → mất các khoá giao diện (review 25/11).
+        Chỉ ghi khoá phiên này ĐỔI so với mốc đã nạp (hay khoá chưa có) — luật của ``cau_hinh.gop_va_ghi``: tab mở trước,
+        bộ nhớ cũ, không đè lựa chọn tab khác vừa lưu (vd. vừa TẮT tự dọn). Sau khi ghi, phiên nhận đúng giá trị trên đĩa.
+        """
         Config(**gia_tri).validate()   # kiểm riêng các trường này: không vướng ô thanh bên đang sửa dở
-        cap_nhat_json(os.path.join(self.data_dir, cau_hinh.TEN_FILE), lambda du_lieu: du_lieu.update(gia_tri), {})
+        tren_dia: dict = {}
+
+        def sua(du_lieu: dict) -> None:
+            for khoa, v in gia_tri.items():
+                if khoa not in du_lieu or self._moc_cau_hinh.get(khoa) != v:
+                    du_lieu[khoa] = v
+            tren_dia.update({khoa: du_lieu[khoa] for khoa in gia_tri})
+
+        cap_nhat_json(os.path.join(self.data_dir, cau_hinh.TEN_FILE), sua, {})
+        self._nhan_cau_hinh_mot_phan(tren_dia)
+
+    def doc_lai_cau_hinh_mot_phan(self, cac_khoa) -> None:
+        """Đọc lại vài trường Config từ ``cau_hinh.json`` (tab khác có thể vừa lưu): hộp «🧹 Dọn đệm audio» mở ra là thấy
+        lựa chọn ĐANG lưu. Đọc lỗi / thiếu khoá / sai kiểu: giữ giá trị đang có."""
+        try:
+            tren_dia = cau_hinh.doc_cau_hinh(self.data_dir)
+        except Exception:  # noqa: BLE001
+            return
+        self._nhan_cau_hinh_mot_phan({khoa: tren_dia[khoa] for khoa in cac_khoa if khoa in tren_dia})
+
+    def _nhan_cau_hinh_mot_phan(self, gia_tri: dict) -> None:
+        if not gia_tri:
+            return
+        try:
+            Config(**gia_tri).validate()
+        except Exception:  # noqa: BLE001 — file sửa tay sai kiểu: giữ giá trị phiên đang có
+            return
         for khoa, v in gia_tri.items():
             setattr(self.config, khoa, v)
         self.cau_hinh_da_luu = {**self.cau_hinh_da_luu, **gia_tri}
@@ -4169,20 +4198,51 @@ class Engine:
         LOGGER_SCAN.info("event=scan.cache_keep_in_use file=%s", os.path.basename(goc))
         return False
 
-    def _bo_ban_cut(self, f: str, r: "ScanResult", dai_s: float) -> None:
-        """Bỏ bản đệm CỤT để lượt sau tải lại thay vì quét lại file cụt. Video có kết quả: KHÔNG xoá (bản audio duy nhất
-        của đoạn vi phạm) mà đổi tên thành ``<mã>__p<giây âm thanh có thật>`` — bộ đệm không nhận nó là bản đầy đủ
+    def _vi_pham_da_ghi(self, video_id: str) -> Optional[float]:
+        """Mốc cuối (giây) của các đoạn vi phạm ĐÃ GHI lịch sử cho video — ``None`` = chưa có. Đọc lỗi → ``0.0`` (coi như
+        CÓ: giữ file — như dọn đệm không dọn gì khi không đọc được lịch sử). Hỏi trước mỗi lần engine tự bỏ một file đệm:
+        lượt hiện tại không thấy gì (kho khác, bấm Dừng, lô «video gốc chung») không có nghĩa là video sạch (review 25/11
+        vòng 2)."""
+        try:
+            with self._db() as c:
+                hang = c.execute("SELECT MAX(m.end_s) FROM matches m JOIN jobs j ON j.id = m.job_id"
+                                 " WHERE j.source_id = ? AND m.start_s IS NOT NULL", (video_id,)).fetchone()
+        except sqlite3.Error:
+            return 0.0
+        return None if hang is None or hang[0] is None else float(hang[0])
+
+    def _bo_ban_cut(self, f: str, r: "ScanResult", dai_s: float, video_id: str, luu_lich_su: bool = True) -> bool:
+        """Bỏ bản đệm CỤT để lượt sau tải lại thay vì quét lại file cụt. Trả True khi tên cũ đã trống (đã bỏ / đã đổi tên),
+        False khi file còn nguyên chỗ (lượt khác đang dùng).
+
+        Video có vi phạm — lượt này có kết quả SẼ GHI lịch sử, hoặc lịch sử ĐÃ có — KHÔNG xoá (có thể là bản audio duy
+        nhất của đoạn vi phạm) mà đổi tên thành ``<mã>__p<giây âm thanh có thật>``: bộ đệm không nhận nó là bản đầy đủ
         (``<mã>.*``) hay bản phần đầu đang cần (``<mã>__p<giới hạn>.*``) nên lượt sau vẫn tải lại; dọn đệm thấy bản «N
-        giây đầu» của video vi phạm và cắt giữ đoạn quanh mốc như mọi file khác (D-66, review 25/11). Đang có lượt khác
-        dùng: giữ nguyên. File ngoài kho đệm / không có kết quả: bỏ như cũ (``_bo_file_dem``)."""
-        if r.matches and dai_s >= 1 and self._trong_thu_muc_dem(f):
-            ten = os.path.basename(f)
-            moi = f"{trich_doan_dem.ma_video(ten)}__p{int(dai_s)}{os.path.splitext(ten)[1]}"
-            if moi != ten and not don_dep.doi_ten_file_dem_neu_ranh(self.dl_dir, ten, moi):
-                LOGGER_SCAN.info("event=scan.cut_file_kept file=%s", ten)
-            return
-        with contextlib.suppress(OSError):
-            self._bo_file_dem(f)
+        giây đầu» của video vi phạm và cắt giữ đoạn quanh mốc như mọi file khác (D-66, review 25/11). Không đo được độ dài
+        thật: đặt N theo mốc vi phạm xa nhất (+ đệm) — dọn đệm còn đo lại trước khi cắt. File ngoài kho đệm / video không
+        có vi phạm: bỏ như cũ (``_bo_file_dem``)."""
+        if not self._trong_thu_muc_dem(f):
+            with contextlib.suppress(OSError):
+                return self._bo_file_dem(f)
+            return False
+        moc_ls = self._vi_pham_da_ghi(video_id)
+        if not (r.matches and luu_lich_su) and moc_ls is None:
+            try:
+                return self._bo_file_dem(f)
+            except OSError:
+                return False
+        if dai_s >= 1:
+            dai = int(dai_s)
+        else:
+            dai = int(max([float(m.end_s) for m in r.matches] + [moc_ls or 0.0]) + trich_doan_dem.DEM_GIAY) + 1
+        ten = os.path.basename(f)
+        moi = f"{video_id}__p{dai}{os.path.splitext(ten)[1]}"
+        if moi == ten:
+            return False
+        if don_dep.doi_ten_file_dem_neu_ranh(self.dl_dir, ten, moi):
+            return True
+        LOGGER_SCAN.info("event=scan.cut_file_kept file=%s", ten)
+        return False
 
     def _tai_audio_trong_khoa(self, url: str, video_id: str, ten: str,
                               progress: Optional[Callable],
@@ -5498,7 +5558,7 @@ class Engine:
         return gioi_han
 
     def _quet_video_dai_gioi_han(self, url: str, info: dict, ten: str, gioi_han: float,
-                                 progress: Optional[Callable]) -> tuple:
+                                 progress: Optional[Callable], luu_lich_su: bool = True) -> tuple:
         """Tải và quét CHỈ ``gioi_han`` giây đầu của video dài. Trả ``(kết quả, file)``.
 
         * Giới hạn đặt ở ĐƯỜNG TẢI (``download_audio(gioi_han_giay=…)`` → yt-dlp ``download_ranges``
@@ -5539,11 +5599,12 @@ class Engine:
         if co_san and (dai_file <= 0 if tong <= 0 else thieu_that(dai_file)):
             # Bản đệm của lượt trước bị cụt (tải đứt giữa chừng): không dùng lại, tải lại MỘT lần.
             self._td(ghi=f"Bản đệm cũ chỉ có {hhmmss(dai_file)} âm thanh — bỏ và tải lại một lần")
-            with contextlib.suppress(OSError):
-                if not self._bo_file_dem(f):
-                    # Lượt khác đang quét chính bản này: không tải chồng lên — dùng nó, phần thiếu
-                    # thành vùng chưa kiểm ở dưới.
-                    self._td(ghi="Bản đệm đang được một lượt quét khác dùng — giữ nguyên, không tải lại")
+            # Video đã có vi phạm ghi lịch sử: đổi tên giữ bằng chứng thay vì xoá — tải lại hỏng (video đã bị gỡ) thì
+            # vẫn còn audio (review 25/11 vòng 2).
+            if not self._bo_ban_cut(f, ScanResult(source_name=ten), dai_file, info["id"], luu_lich_su):
+                # Lượt khác đang quét chính bản này: không tải chồng lên — dùng nó, phần thiếu
+                # thành vùng chưa kiểm ở dưới.
+                self._td(ghi="Bản đệm đang được một lượt quét khác dùng — giữ nguyên, không tải lại")
             f = self.download_audio(url, info["id"], progress, gioi_han_giay=gioi_han)
             dai_file = float(self.do_dai_audio_that(f) or 0)
         thieu = thieu_that(dai_file)
@@ -5594,7 +5655,7 @@ class Engine:
                 r.status = "error"
                 tin += " Chưa thể kết luận — hãy quét lại."
             if self._trong_thu_muc_dem(f):
-                self._bo_ban_cut(f, r, dai_file)  # bản cụt không được dùng lại ở lượt sau (có kết quả: đổi tên, giữ)
+                self._bo_ban_cut(f, r, dai_file, info["id"], luu_lich_su)  # bản cụt không dùng lại; có vi phạm: đổi tên
         else:
             r.pham_vi_quet_s = min(r.pham_vi_quet_s or can_den, can_den)
             if not r.vung_loi and not r.ly_do_pham_vi:
@@ -6305,7 +6366,7 @@ class Engine:
             gioi_han_cung = self._gioi_han_video_dai_s(che_do, info.get("duration") or 0)
             if gioi_han_cung:
                 r, f = self._quet_video_dai_gioi_han(url, info, kq.source_name, gioi_han_cung,
-                                                     progress)
+                                                     progress, luu_lich_su)
             else:
                 if che_do is not None:
                     dai = float(info.get("duration") or 0)
@@ -6360,9 +6421,11 @@ class Engine:
                               "tải nốt phần còn lại để quét trọn...")
                     self._td(ghi=f"{thieu.capitalize()} trong {hhmmss(gioi_han)} đầu — tải nốt "
                              "phần còn lại (chế độ quét toàn bộ)")
-                    if not self.config.keep_downloads:
+                    if (not self.config.keep_downloads and not (r.matches and luu_lich_su)
+                            and self._vi_pham_da_ghi(info["id"]) is None):
                         # Bản tải MỘT PHẦN `<id>__p<giây>` đã quét xong: không giữ đệm thì bỏ
-                        # luôn, trước đây nó nằm lại mãi (phản biện vòng 3).
+                        # luôn, trước đây nó nằm lại mãi (phản biện vòng 3). Có vi phạm (lượt này / lịch sử):
+                        # giữ tới lần dọn đệm — tải nốt hỏng thì đây là bản audio duy nhất (review 25/11 vòng 2).
                         with contextlib.suppress(OSError):
                             self._bo_file_dem(f)
                     f = self.download_audio(url, info["id"], progress)
@@ -6397,23 +6460,25 @@ class Engine:
                 # thiếu chưa từng được quét — không được thành "quét trọn" (phản biện TCP-04).
                 if (r.ly_do_pham_vi != "gioi_han_tai" and r.vung_da_khop is not None
                         and self._thieu_duoi(info.get("duration"), r.duration_s)):
-                    r, f = self._xu_ly_tai_thieu(url, info, r, f, progress, **mt)
+                    r, f = self._xu_ly_tai_thieu(url, info, r, f, progress, luu_lich_su=luu_lich_su, **mt)
                 elif ((r.vung_loi or (r.status == "error" and r.vung_da_khop is None))
                       and not gioi_han and r.ly_do_pham_vi != "huy"):
                     # Metadata đầu file báo đủ (hoặc hỏng tới mức 0 khúc) nên nhánh trên không thấy bản cụt: lượt sau sẽ
                     # dùng lại đúng file này và lỗi y hệt. Đọc được đủ âm thanh thì lỗi không do file: giữ, khỏi tải lại.
                     dai_am_thanh = float(self.do_dai_audio_that(f) or 0)
                     if dai_am_thanh <= 0 or self._thieu_duoi(info.get("duration"), dai_am_thanh):
-                        self._bo_ban_cut(f, r, dai_am_thanh)
+                        self._bo_ban_cut(f, r, dai_am_thanh, info["id"], luu_lich_su)
             r.source_ref = url
             r.source_id = info["id"]
             r.channel_name = info["channel"]
             r.channel_id = info["channel_id"]
             r.channel_url = info["channel_url"]
             r.upload_date = info["upload_date"]
-            if not self.config.keep_downloads and not (r.matches and luu_lich_su):
+            if (not self.config.keep_downloads and not (r.matches and luu_lich_su)
+                    and self._vi_pham_da_ghi(info["id"]) is None):
                 # Có kết quả vi phạm ĐÃ GHI LỊCH SỬ: giữ audio tới lần dọn đệm — dọn đệm cắt giữ đoạn quanh mốc rồi mới bỏ
-                # (D-66). Lô «video gốc chung» không ghi lịch sử nên dọn đệm không nhận ra file đó: bỏ ngay như cũ.
+                # (D-66). Lô «video gốc chung» không ghi lịch sử nên dọn đệm không nhận ra file đó: bỏ ngay như cũ — trừ
+                # khi lịch sử ĐÃ có vi phạm của video (lượt quét lại không thấy gì / bấm Dừng — review 25/11 vòng 2).
                 with contextlib.suppress(Exception):
                     self._bo_file_dem(f)
             kq = r
@@ -6467,7 +6532,7 @@ class Engine:
 
     def _xu_ly_tai_thieu(self, url: str, info: dict, r: ScanResult, f: str,
                          progress: Optional[Callable], *,
-                         muc_tieu: Optional[ScanObjective] = None) -> tuple:
+                         muc_tieu: Optional[ScanObjective] = None, luu_lich_su: bool = True) -> tuple:
         """File tải về ngắn hơn video: trả ``(kết quả, file)`` sau khi đã giải thích được.
 
         Chỉ một lần tải ĐỘC LẬP thứ hai mới phân biệt được hai nguyên nhân, nên khi chưa có
@@ -6552,7 +6617,7 @@ class Engine:
         r.note = "\n".join(x for x in (r.note, tin) if x)
         if self._trong_thu_muc_dem(f):
             # Bỏ bản đệm thiếu để lần quét sau tải lại, không dùng lại file cụt (có kết quả: đổi tên, giữ bằng chứng).
-            self._bo_ban_cut(f, r, dai_file)
+            self._bo_ban_cut(f, r, dai_file, info["id"], luu_lich_su)
         return r, f
 
     def scan_iter(

@@ -404,7 +404,11 @@ def _don_kho_dem(thu_muc, max_gb, max_ngay, thuc_hien, dem_giay, cancel_event, p
                 # mtime dưới cùng khoá này rồi nhả khoá, và chỉ đặt dấu sau khi đo xong độ dài file (có
                 # thể hàng chục giây): file đổi kể từ lúc liệt kê = vừa được dùng/tải lại → không xoá
                 # theo lựa chọn cũ, để lần dọn sau (audit WR-4).
-                st = os.stat(item.path, follow_symlinks=False)
+                try:
+                    st = os.stat(item.path, follow_symlinks=False)
+                except FileNotFoundError:
+                    ket_qua["bo_qua_dang_dung"] += 1    # lượt quét / lượt dọn khác vừa bỏ nó: không phải lỗi
+                    continue
                 if st.st_mtime != item.lan_dung_cuoi or st.st_size != item.kich_thuoc:
                     ket_qua["bo_qua_dang_dung"] += 1
                     continue

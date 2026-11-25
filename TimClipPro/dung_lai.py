@@ -66,6 +66,10 @@ class YeuCauDung:
             return False
         return mtime_file_dung_cu(self.file_dung, self.moc_bat_dau) is None
 
+    # Dùng được ở chỗ cần ``threading.Event`` chỉ đọc (vd. ``don_dep.don_kho_dem(cancel_event=…)`` cuối lượt Giám sát):
+    # file dừng của `cli.py dung` cũng dừng được việc đó, không chỉ cờ của Engine (review 25/11 vòng 2).
+    is_set = can_dung
+
     def dat(self) -> None:
         """Đặt cờ nội bộ và chuyển yêu cầu xuống Engine nếu có."""
         self._da_dat = True
