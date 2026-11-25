@@ -29,7 +29,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 0o. 25/11 (đêm, toàn quyền): khảo sát 25 đề tài + 66 việc nhỏ (D-65; `C:\Dev\pc2_test_runs\2026-11-24_khao_sat_nang_cap`) + 5 nhánh đêm gộp ở `fix/pc2/gop-dem-2511`. Người dùng: thử theo `C:\Dev\Tool_Quet\BAO_CAO_SANG_25_11.md`;
     → 25/11 người dùng quyết (D-66): giữ đoạn quanh mốc; không sao lưu ngoài máy; giữ mặc định D-65; DT-02 → DT-04 → DT-03.
 0q. 25/11: DT-04 yt-dlp 2026.11.23 + certifi 2026.11.20 — GỘP `e617240`, DEV 12:43 runtime mới (sao lưu `data_20261125_124307`).
-    Người dùng: quét/tải YouTube như thường; lỗi lạ → báo Claude (lùi = 1 phút). Còn mở: DT-03 (cần duyệt).
+    Người dùng: quét/tải YouTube như thường; lỗi lạ → báo Claude (lùi = 1 phút). DT-03 đo xong (tools/do_do_dung/BAO_CAO_DT03_GD2.md) — chờ duyệt D-49/P-6/bù cao độ/top_n.
 0p. 25/11: luật giữ đệm D-66 — GỘP `33fcf7a` + DEV. Người dùng: «🧹 Dọn đệm audio…» → xem trước (~88 GB) → tick → «Dọn ngay».
 0n–0l. 23/11: tra kho nhanh (GỘP `f4629fb`) + «🎧 Tạo file kiểm claim» D-64 + sửa review D-63 — người dùng thử file claim.
 0k. 23/11: tiến độ so khớp trung thực (`fix/pc2/tien-do-so-khop`) — GỘP `34c5403` (người dùng duyệt), DEV 19:23
