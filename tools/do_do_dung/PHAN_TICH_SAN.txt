@@ -1,0 +1,29 @@
+Dòng bị loại: đúng clip+vùng 158, sai 133
+Dòng sai bị loại, hash cao nhất (hash, tỉ lệ, giây khớp, ca):
+   (954, 1.5, 57.200000000000045, 'dai_600_giong_de_2.m4a')
+   (362, 0.7, 15.299999999999955, 'bien_nen_24k_1.opus')
+   (358, 0.5, 23.899999999999977, 'dai_600_giong_de_2.m4a')
+   (289, 0.6, 34.89999999999998, 'dai_600_giong_de_2.m4a')
+   (249, 0.4, 26.399999999999977, 'dai_300_giong_de_1.m4a')
+   (129, 0.2, 11.200000000000045, 'bien_nhac_de_8.m4a')
+   (115, 0.2, 174.0, 'dai_600_giong_de_2.m4a')
+   (103, 0.2, 5.100000000000023, 'cao_goc_2.m4a')
+   (101, 0.2, 5.100000000000023, 'cao_goc_2.m4a')
+   (88, 0.2, 5.100000000000023, 'cao_goc_2.m4a')
+   (84, 0.1, 58.89999999999998, 'cao_goc_2.m4a')
+   (81, 0.0, 95.59999999999997, 'bien_nen_24k_11.opus')
+   (77, 0.1, 5.100000000000023, 'cao_goc_2.m4a')
+   (76, 0.1, 5.100000000000023, 'cao_goc_2.m4a')
+   (72, 0.1, 5.0, 'cao_goc_2.m4a')
+Trong đối chứng âm: 0 dòng bị loại, hash lớn nhất 0
+sàn 500: cứu thêm ≤111 dòng đúng, thêm 1 dòng nhầm
+sàn 600: cứu thêm ≤101 dòng đúng, thêm 1 dòng nhầm
+sàn 700: cứu thêm ≤92 dòng đúng, thêm 1 dòng nhầm
+sàn 800: cứu thêm ≤75 dòng đúng, thêm 1 dòng nhầm
+sàn 900: cứu thêm ≤58 dòng đúng, thêm 1 dòng nhầm
+sàn 1000: cứu thêm ≤37 dòng đúng, thêm 0 dòng nhầm
+Ca tinh chỉnh lệch > 1 s:
+   dai_600_giong_de_2.m4a dài 600 s hash 14710 quét 36.64/-52.46 tc 20.55/-0.01
+   dai_900_goc_2.m4a dài 900 s hash 40944 quét 38.2/-175.7 tc -0.01/-77.09
+   bien_nhac_de_10.m4a dài 30 s hash 1002 quét 3.89/-2.91 tc 1.9/-0.0
+   bien_giong_de_11.m4a dài 40 s hash 1324 quét 5.55/-3.25 tc 1.52/0.02
