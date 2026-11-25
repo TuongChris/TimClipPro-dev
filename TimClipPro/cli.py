@@ -658,6 +658,9 @@ def dong_ket_qua(kq) -> list:
         return van_tay
     ra = [f"   • {d.goc.clip} | {bao_cao_v2.hien_thi_moc(d.giay_bat_dau)} → {bao_cao_v2.hien_thi_moc(d.giay_ket_thuc)}"
           f"{' (tinh chỉnh từng giây)' if d.da_tinh_chinh else ''} | {d.hashes} hash ({d.confidence})" for d in bc.doan]
+    if bc.clip_khac:
+        ra += ["   Các clip khác tìm thấy (đạt ngưỡng, ngoài báo cáo):"] + [
+            "     · " + x for x in bao_cao_v2.dong_clip_khac(bc)]
     if any(d.da_tinh_chinh for d in bc.doan):
         ra += ["   Số đo vân tay của lượt quét (chẩn đoán — khiếu nại dùng mốc ở trên):"] + ["  " + x for x in van_tay]
     return ra

@@ -114,9 +114,9 @@ def test_man_ket_qua_khong_co_tinh_chinh_thi_khong_hien_muc(tmp_path, monkeypatc
     assert not any("Mốc tinh chỉnh" in x.label for x in at.expander)
 
 
-def test_o_bat_tinh_chinh_o_thanh_ben_mac_dinh_tat(tmp_path, monkeypatch):
+def test_o_bat_tinh_chinh_o_thanh_ben_mac_dinh_bat_d67(tmp_path, monkeypatch):
     from test_app_cau_tom_tat_ket_qua import _man_ket_qua
 
     at = _man_ket_qua(tmp_path, monkeypatch, [])
     o = [c for c in at.sidebar.checkbox if c.label == "🎯 Tinh chỉnh mốc từng giây (thử nghiệm)"]
-    assert len(o) == 1 and o[0].value is False
+    assert len(o) == 1 and o[0].value is True

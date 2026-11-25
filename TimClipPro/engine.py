@@ -73,6 +73,7 @@ from chan_doan_quet import (
 import chong_bong_lap
 from chap_nhan_khop import loc_chap_nhan
 from toc_do_khop import (
+    HO_CAO_DO,
     HO_RESAMPLE,
     HO_TEMPO,
     bo_loc_ffmpeg,
@@ -263,13 +264,17 @@ class Config:
     luoi_resample: list = field(default_factory=lambda: [0.96, 0.98, 1.02, 1.04])
     # Đổi tốc độ giữ cao độ đã được bộ dò độ trôi phủ tới ±6% nên lưới này để rỗng.
     luoi_tempo: list = field(default_factory=list)
-    toc_do_toi_da_thu: int = 6        # Trần số lượt so khớp phụ mỗi video
+    # Đổi cao độ GIỮ tốc độ (bán cung, dấu = video bị đổi lên/xuống): hai lưới trên không bù được — DT-03 0/18 ca.
+    # Chỉ chạy khi lượt thường không có kết quả, sau lưới resample; mỗi mức ≈ một lượt quét nữa.
+    luoi_cao_do: list = field(default_factory=lambda: [-1.0, -0.5, 0.5, 1.0])
+    toc_do_toi_da_thu: int = 8        # Trần số lượt so khớp phụ mỗi video
     # --- Tinh chỉnh mốc từng giây (P-8, thử nghiệm; tinh_chinh_moc.py) ---
     # SAU khi đã chọn kết quả: đo độ tương đồng phổ từng giây giữa clip gốc và video quanh mỗi kết quả đã chọn, ra
     # đoạn dùng thật + chỗ cắt + hồ sơ từng giây. Không tạo/bỏ kết quả nào nên KHÔNG thuộc chính sách nhận diện
     # (không có trong TRUONG_CHINH_SACH). Dòng tinh chỉnh được: «Đoạn vi phạm» của báo cáo V2 / Sheets / ảnh chụp lịch
-    # sử dùng mốc đo được (D-50, ``bao_cao_v2._moc_tinh_chinh``); bảng ``matches`` giữ số engine. Tắt mặc định.
-    tinh_chinh_moc: bool = False
+    # sử dùng mốc đo được (D-50, ``bao_cao_v2._moc_tinh_chinh``); bảng ``matches`` giữ số engine. Bật mặc định (D-49,
+    # DT-03: đoạn 300–900 s mốc quét lệch ~32 s mỗi mép, tinh chỉnh 0,0 s; 0/147 ca tệ hơn lượt quét).
+    tinh_chinh_moc: bool = True
     phan_bo_deu: bool = True     # Chia video vi phạm thành N vùng, mỗi vùng lấy 1 kết quả
     uu_tien_clip_khac_nhau: bool = True  # Ưu tiên 5 clip GỐC KHÁC NHAU thay vì trùng lặp
     # Hai ứng viên chênh nhau trong dung sai này thì coi là NGANG BẰNG về bằng
@@ -376,6 +381,9 @@ class Config:
             for k in getattr(self, ten):
                 if not isinstance(k, (int, float)) or not 0.5 <= float(k) <= 2.0:
                     raise ValueError(f"{ten} chỉ nhận hệ số trong khoảng 0,5..2,0.")
+        for k in self.luoi_cao_do:
+            if isinstance(k, bool) or not isinstance(k, (int, float)) or not 0 < abs(float(k)) <= 3.0:
+                raise ValueError("luoi_cao_do chỉ nhận số bán cung khác 0, trong khoảng -3..3.")
         if self.dem_max_gb < 0 or self.dem_max_ngay < 0:
             raise ValueError("Giới hạn kho đệm không được âm.")
 
@@ -606,7 +614,7 @@ TRUONG_CHINH_SACH = (
     "min_match_s", "max_matches", "dedup_s", "shifts_quet", "min_hash_floor",
     "ty_le_chap_nhan", "min_match_chap_nhan", "mat_do_toi_thieu", "mat_do_bac_a",
     "quet_da_toc_do", "toc_do_min_manh", "toc_do_thang_hang", "toc_do_lech_toi_thieu",
-    "toc_do_lech_toi_da", "luoi_resample", "luoi_tempo", "toc_do_toi_da_thu",
+    "toc_do_lech_toi_da", "luoi_resample", "luoi_tempo", "luoi_cao_do", "toc_do_toi_da_thu",
 )
 
 
@@ -618,6 +626,8 @@ NEO_TOI_DA = 6
 def chu_ky_chinh_sach(cfg) -> str:
     """Chữ ký ngắn của chính sách nhận diện; tiền tố là phiên bản danh sách trường."""
     gia_tri = {k: getattr(cfg, k, None) for k in TRUONG_CHINH_SACH}
+    if not gia_tri.get("luoi_cao_do"):    # lưới cao độ rỗng = đúng chính sách trước DT-03: chữ ký giữ nguyên
+        gia_tri.pop("luoi_cao_do", None)
     tom = hashlib.sha256(json.dumps(gia_tri, sort_keys=True, ensure_ascii=False,
                                     default=str).encode("utf-8")).hexdigest()[:16]
     return f"v1:{tom}"
@@ -4777,7 +4787,9 @@ class Engine:
                     # Khúc đã bị đổi tốc độ để bù né tránh thì mọi mốc thời gian
                     # ĐO TRONG khúc phải nhân ngược lại mới về đúng trục thời gian
                     # của video gốc. Mốc bắt đầu khúc (offset) thì không đổi.
-                    he_so = giai_ma_he_so(mk.group(2) if mk else None)
+                    ho_bu = luot_bu.split("_", 1)[1] if "_" in luot_bu else ""
+                    # Lượt bù cao độ giữ nguyên độ dài khúc: hệ số trong tên file là tỉ lệ CAO ĐỘ, không phải tốc độ.
+                    he_so = 1.0 if ho_bu == HO_CAO_DO else giai_ma_he_so(mk.group(2) if mk else None)
                     bat_dau = offset + t_khuc * he_so
                     khop = khop * he_so
                     # `t_clip` ở trục CLIP GỐC, không nhân hệ số. Trên trục khúc đã
@@ -4789,7 +4801,7 @@ class Engine:
                                 "khop": khop, "t_clip": t_clip, "hash": so_hash,
                                 "he_so": he_so,
                                 "align": bat_dau - he_so * t_clip,
-                                "ho": luot_bu.split("_", 1)[1] if "_" in luot_bu else ""})
+                                "ho": ho_bu})
 
         # Lớp phòng thủ thứ hai, theo NỘI DUNG khúc chứ không theo stdout: khúc 0 hash mà
         # bộ đọc WAV của tool không đọc được, hoặc đọc được mà CÓ TIẾNG RÕ, thì audfprint
@@ -5832,6 +5844,10 @@ class Engine:
             for k in cfg.luoi_resample:
                 ke_hoach.append((1.0 / float(k), HO_RESAMPLE,
                                  f"lưới cao độ {float(k):.3f}"))
+        # Luôn xếp cả khi đọc được độ trôi: vài mảnh yếu cho ước lượng tốc độ giả không được chặn mất lưới cao độ.
+        for b in cfg.luoi_cao_do:
+            ke_hoach.append((2.0 ** (-float(b) / 12.0), HO_CAO_DO,
+                             f"lưới đổi cao độ giữ tốc độ {float(b):+g} bán cung"))
         return ke_hoach[: max(0, cfg.toc_do_toi_da_thu)]
 
     def _quet_da_toc_do(self, chunks: list, tho: list,
@@ -5931,7 +5947,8 @@ class Engine:
             # nên độ dốc luôn cho ra TỔNG tỉ lệ, không phải phần dư — cứ ước lượng
             # lại trên toàn bộ mảnh đã có là hội tụ dần. Giữ nguyên họ biến đổi:
             # sai cao độ thì phải bù bằng resample, đổi tốc độ suông không cứu được.
-            for u in uoc_lai(tho + them):
+            # Lượt bù cao độ: độ trôi đo TỐC ĐỘ, không phải cao độ — không có gì để ước lượng lại.
+            for u in ([] if ho == HO_CAO_DO else uoc_lai(tho + them)):
                 moi = (round(u.he_so_bu, 5), ho)
                 if moi in da_thu:
                     continue
@@ -6292,8 +6309,8 @@ class Engine:
         if m.moc_mo_ho:
             return ("Âm thanh lặp y hệt — có nhiều mốc đúng như nhau, bước tinh chỉnh không phân biệt được: "
                     "giữ mốc của lượt quét.")
-        if m.ho == HO_RESAMPLE:
-            return "Video bị đổi cả cao độ (lượt bù «lưới cao độ») — chưa hỗ trợ tinh chỉnh."
+        if m.ho in (HO_RESAMPLE, HO_CAO_DO):
+            return "Video bị đổi cao độ (lượt bù «lưới cao độ») — chưa hỗ trợ tinh chỉnh."
         if not m.duong_dan_kho or not os.path.isfile(m.duong_dan_kho):
             return "Không đọc được file clip gốc của kho trên máy này."
         return ""

@@ -286,6 +286,8 @@ class BaoCaoV2:
     kho_phien_ban: str = ""
     chinh_sach_nhan_dien: str = ""
     bo_sung_ngay: tuple = ()            # ((mã video, kết quả), …) — số lần hỏi YouTube
+    # ((clip, đầu s, cuối s, hash), …): ĐẠT ngưỡng nhưng ngoài Top-N nên không vào báo cáo/Sheets (DT-03).
+    clip_khac: tuple = ()
     phien_ban_anh_chup: int = PHIEN_BAN_ANH_CHUP
 
     # ---------- lưu / đọc ----------
@@ -315,6 +317,10 @@ class BaoCaoV2:
                 thoi_luong_s=x.get("thoi_luong_s"),
                 trang_thai_metadata=str(x.get("trang_thai_metadata") or ""),
                 canh_bao=tuple(x.get("canh_bao") or ()))
+
+        def clip_khac(x) -> tuple:      # sai cấu trúc → ValueError/TypeError = ảnh chụp hỏng (không văng ở giao diện)
+            c, a, b, h = x
+            return str(c), _so_hoac_none(a), _so_hoac_none(b), int(h)
 
         def khoang(ds):
             return None if ds is None else tuple(tuple(float(v) for v in k) for k in ds)
@@ -352,6 +358,7 @@ class BaoCaoV2:
             kho_phien_ban=str(d.get("kho_phien_ban") or ""),
             chinh_sach_nhan_dien=str(d.get("chinh_sach_nhan_dien") or ""),
             bo_sung_ngay=tuple(tuple(x) for x in d.get("bo_sung_ngay") or ()),
+            clip_khac=tuple(clip_khac(x) for x in d.get("clip_khac") or ()),
         )
 
 
@@ -362,7 +369,9 @@ class BaoCaoV2:
 LOI_TAO = "loi_tao"     # lượt quét mang chính sách V2 nhưng không dựng được ảnh chụp
 LOI_HONG = "hong"       # ảnh chụp đã lưu không đọc được (JSON hỏng, cụt, phiên bản/chính sách lạ)
 KHOA_LOI = "loi_bao_cao"
-_TRUONG_ANH_CHUP = frozenset(f.name for f in fields(BaoCaoV2))
+# Trường thêm SAU khi đã có ảnh chụp thật trong lịch sử: ảnh chụp cũ vắng trường → đọc bằng giá trị mặc định.
+_TRUONG_THEM_SAU = frozenset({"clip_khac"})
+_TRUONG_ANH_CHUP = frozenset(f.name for f in fields(BaoCaoV2)) - _TRUONG_THEM_SAU
 
 
 @dataclass(frozen=True)
@@ -515,6 +524,44 @@ def goc_tu_metadata(clip: str, meta: Any, ngay_bo_sung: Optional[NgayNguon] = No
         canh_bao=tuple(str(x) for x in (getattr(meta, "warnings", ()) or ())))
 
 
+def nhan_moc(tc: Any, m: Any, moc: Optional[tuple]) -> str:
+    """Ô «Đánh giá» của báo cáo V2 (P-6): trạng thái MỐC. Nhãn tin cậy cũ theo số hash ra «Rất chắc chắn» ở
+    1.103/1.103 dòng DEV nên không giúp chọn dòng cần kiểm; mốc mới là thứ người dùng phải kiểm (DT-03)."""
+    if moc:
+        return "Mốc đã tinh chỉnh"
+    if isinstance(tc, Mapping) and tc.get("trang_thai") == "chua_tinh_chinh":
+        ly_do = str(tc.get("ly_do") or "").strip()
+        if ly_do.startswith("Lỗi khi tinh chỉnh"):      # chữ ngoại lệ thô (có thể chứa đường dẫn máy) chỉ ở log
+            ly_do = "lỗi khi tinh chỉnh"
+        return "Kiểm lại mốc — " + (ly_do or "chưa tinh chỉnh được")
+    if isinstance(tc, Mapping) and tc.get("trang_thai") == "da_tinh_chinh":
+        return "Kiểm lại mốc — số đo tinh chỉnh không dùng được"
+    if getattr(m, "moc_mo_ho", False):
+        return "Kiểm lại mốc — âm thanh lặp, có nhiều mốc đúng như nhau"
+    return "Mốc ước lượng"
+
+
+def _clip_khac(kq: Any) -> tuple:
+    """Ứng viên đạt ngưỡng (``ung_vien_dat``) không phải dòng đã chọn: khác clip, hoặc cùng clip mà không giao đoạn."""
+    chon = list(getattr(kq, "matches", None) or [])
+    ra = []
+    for m in getattr(kq, "ung_vien_dat", None) or ():
+        s, e = _so_hoac_none(getattr(m, "start_s", None)), _so_hoac_none(getattr(m, "end_s", None))
+        if any(c is m or (c.clip == m.clip and s is not None and e is not None
+                          and s < float(getattr(c, "end_s", 0.0) or 0.0)
+                          and e > float(getattr(c, "start_s", 0.0) or 0.0)) for c in chon):
+            continue
+        ra.append((str(m.clip), s, e, int(getattr(m, "hashes", 0) or 0)))
+    ra.sort(key=lambda x: (x[1] is None, x[1] or 0.0))
+    return tuple(ra)
+
+
+def dong_clip_khac(bc: Any) -> list:
+    """Mỗi clip khác một dòng chữ: «clip | đầu → cuối | N hash» (mốc lượt quét, chưa tinh chỉnh)."""
+    return [f"{c} | {hien_thi_moc(giay_moc(a))} → {hien_thi_moc(giay_moc(b))} | {h} hash"
+            for c, a, b, h in getattr(bc, "clip_khac", ()) or ()]
+
+
 def _so_hoac_none(x: Any) -> Optional[float]:
     if isinstance(x, bool) or not isinstance(x, (int, float)):
         return None
@@ -605,7 +652,7 @@ def dung_bao_cao(
             matched_s=float(getattr(m, "matched_s", 0.0) or 0.0),
             clip_offset_s=float(getattr(m, "clip_offset_s", 0.0) or 0.0),
             hashes=int(getattr(m, "hashes", 0) or 0), ty_le=float(getattr(m, "ty_le", 0.0) or 0.0),
-            confidence=str(getattr(m, "confidence", "") or ""), vung=vung,
+            confidence=nhan_moc(tinh_chinh[i] if i < len(tinh_chinh) else None, m, moc), vung=vung,
             giay_bat_dau=g0, giay_ket_thuc=g1, link=link_nhay(source_id, source_ref, g0),
             da_tinh_chinh=bool(moc)))
     if co_moc_moi:      # engine xếp dòng theo mốc CỦA NÓ; «Đoạn vi phạm 1…5» phải theo mốc hiển thị
@@ -635,6 +682,7 @@ def dung_bao_cao(
         kho_phien_ban=str(getattr(kq, "kho_phien_ban", "") or ""),
         chinh_sach_nhan_dien=str(getattr(kq, "chinh_sach", "") or ""),
         bo_sung_ngay=tuple(tuple(x) for x in bo_sung_ngay),
+        clip_khac=_clip_khac(kq) if ok else (),
     )
 
 

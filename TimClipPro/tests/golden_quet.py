@@ -62,6 +62,10 @@ CAU_HINH_GOC = {
     "quet_tang_dan_tu_gio": 0.25,
     "quet_tang_dan_buoc_gio": 0.2,
     "ncores": 1,
+    # Golden ghi trước DT-03: ghim lượt bù như lúc ghi (không lưới cao độ, trần 6 lượt).
+    "luoi_cao_do": [],
+    "toc_do_toi_da_thu": 6,
+    "tinh_chinh_moc": False,      # D-49 bật mặc định sau khi ghi golden
 }
 
 

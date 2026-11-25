@@ -741,6 +741,11 @@ def bang_ket_qua(results: list[ScanResult]) -> None:
     csv_bytes = df_csv.to_csv(index=False).encode("utf-8-sig")
     # Phạm vi quét của báo cáo V2: tên video đã sạch nên phạm vi đi kèm ở file riêng.
     bcs = [r.bao_cao for r in results if getattr(r, "bao_cao", None) is not None]
+    for bc in bcs:
+        if getattr(bc, "clip_khac", ()):
+            with st.expander(f"Các clip khác tìm thấy ({len(bc.clip_khac)}) — {bc.tieu_de or bc.link_video}"):
+                st.caption("Đạt ngưỡng nhưng ngoài số dòng của báo cáo (Top-N) — không gửi lên Sheets.")
+                st.text("\n".join(bao_cao_v2.dong_clip_khac(bc)))
     pham_vi_bytes = b""
     if bcs and any(not bc.pham_vi.quet_day_du for bc in bcs):
         pham_vi_bytes = pd.DataFrame(
@@ -2954,6 +2959,10 @@ def _trang_lich_su() -> None:
             st.error("⛔ " + bc_chon.thong_bao())
         elif bc_chon is not None:
             st.caption("📄 Báo cáo được lưu lúc quét — tải lại luôn ra đúng tên, ngày, link như lúc quét.")
+            if bc_chon.clip_khac:
+                with st.expander(f"Các clip khác tìm thấy ({len(bc_chon.clip_khac)})"):
+                    st.caption("Đạt ngưỡng nhưng ngoài số dòng của báo cáo (Top-N) — không gửi lên Sheets.")
+                    st.text("\n".join(bao_cao_v2.dong_clip_khac(bc_chon)))
             ngang_chon = eng.dong_bao_cao_job(chon, dang_ngang=True) or []
             doc_chon = eng.dong_bao_cao_job(chon, dang_ngang=False) or []
             ch1, ch2 = st.columns(2)

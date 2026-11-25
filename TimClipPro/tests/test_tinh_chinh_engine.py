@@ -48,8 +48,8 @@ def _bat(kb):
     return dataclasses.replace(kb, cau_hinh={**kb.cau_hinh, "tinh_chinh_moc": True})
 
 
-def test_tuy_chon_tat_mac_dinh_va_khong_thuoc_chinh_sach_nhan_dien():
-    assert engine.Config().tinh_chinh_moc is False
+def test_tuy_chon_bat_mac_dinh_d49_va_khong_thuoc_chinh_sach_nhan_dien():
+    assert engine.Config().tinh_chinh_moc is True
     assert "tinh_chinh_moc" not in TRUONG_CHINH_SACH
     assert chu_ky_chinh_sach(engine.Config()) == chu_ky_chinh_sach(engine.Config(tinh_chinh_moc=True))
 

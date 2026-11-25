@@ -161,7 +161,8 @@ def test_ke_hoach_uu_tien_do_troi_hon_luoi():
     assert ke, "phải có phương án"
     assert "độ trôi" in ke[0][2]
     assert ke[0][0] == pytest.approx(1 / 1.03, abs=1e-4)
-    assert all(ho == HO_TEMPO for _, ho, _ in ke)
+    # Đọc được độ trôi thì bỏ lưới quét mù tốc độ; lưới cao độ (D-67) vẫn xếp sau.
+    assert {ho for _, ho, _ in ke} <= {HO_TEMPO, "cao_do"} and ke[-1][1] == "cao_do"
 
 
 def test_ke_hoach_lui_ve_luoi_khi_khong_doc_duoc_do_troi():
@@ -169,8 +170,8 @@ def test_ke_hoach_lui_ve_luoi_khi_khong_doc_duoc_do_troi():
     ke = e._ke_hoach_toc_do([])
     assert [round(k, 5) for k, _, _ in ke] == [
         round(1 / x, 5) for x in e.config.luoi_resample
-    ]
-    assert all(ho == HO_RESAMPLE for _, ho, _ in ke)
+    ] + [round(2 ** (-b / 12), 5) for b in e.config.luoi_cao_do]
+    assert [ho for _, ho, _ in ke] == [HO_RESAMPLE] * len(e.config.luoi_resample) + ["cao_do"] * len(e.config.luoi_cao_do)
 
 
 def test_ke_hoach_ton_trong_tran_so_luot():
@@ -189,6 +190,7 @@ def test_luoi_rong_thi_khong_bia_phuong_an():
     e = _eng()
     e.config.luoi_resample = []
     e.config.luoi_tempo = []
+    e.config.luoi_cao_do = []
     assert e._ke_hoach_toc_do([]) == []
 
 
@@ -227,6 +229,7 @@ def test_khong_co_phuong_an_thi_ghi_ro_LY_DO(tmp_path):
     e = _eng_quet_rong(tmp_path)
     e.config.luoi_resample = []
     e.config.luoi_tempo = []
+    e.config.luoi_cao_do = []
 
     assert e._quet_da_toc_do([], [], None, 0.9, 1.0, str(tmp_path)) == []
 

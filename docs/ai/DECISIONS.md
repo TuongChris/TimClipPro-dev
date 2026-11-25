@@ -8,12 +8,25 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-4 Lịch sử repo public** — có dữ liệu cần xử lý (chi tiết ngoài Git); đóng repo public hay viết lại lịch sử đều
   cần duyệt (force-push đang bị cấm).
 - **P-5 Bật ruleset GitHub** (`release/github/*.json`, D-25) — một lệnh `gh api`, chủ repo duyệt.
-- **P-6 Thể hiện cờ «mốc mơ hồ» (D-27)** trên giao diện, CSV, Google Sheets, lịch sử — đổi chính sách báo cáo V2, PR
+- **P-6 Thể hiện cờ «mốc mơ hồ» (D-27)** — CSV/giao diện/ảnh chụp lịch sử XONG ở D-67; còn Google Sheets 34 cột. Gốc: trên giao diện, CSV, Google Sheets, lịch sử — đổi chính sách báo cáo V2, PR
   riêng (`TimClipPro/docs/BONG_AM_THANH_LAP.md` §4 có phương án giữ hợp đồng 34 cột). Chưa có thì dòng mơ hồ (âm thanh lặp
   y hệt, nhiều mốc đúng như nhau) vẫn gửi như mốc chắc chắn. Từng là BLOCKER phát hành Stable; PC2 DEV-ONLY (D-26) dùng
   D-27 hằng ngày vì nó đã tốt hơn hẳn mã cũ (mã cũ gửi cả dòng «bóng» lẫn mốc lệch như chắc chắn).
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
+
+## D-67 Áp dụng DT-03: tinh chỉnh mốc BẬT mặc định, nhãn trạng thái mốc, lượt bù đổi cao độ, «Các clip khác tìm thấy» (người dùng, 2026-11-25) — thay «TẮT mặc định» của D-49
+Người dùng duyệt cả 5 đề xuất sau DT-03 (bộ đo + báo cáo: nhánh `feature/pc2/dt03-bo-do-dung`, `tools/do_do_dung/BAO_CAO_DT03_GD2.md`):
+(1) `Config.tinh_chinh_moc` mặc định True — đoạn 300–900 s mốc quét lệch trung vị ~32 s mỗi mép, tinh chỉnh 0,0 s, 0/147 ca
+tệ hơn lượt quét. (2) P-6 phần báo cáo: ô «Đánh giá» của báo cáo V2 (CSV 16 cột, giao diện, CLI, ảnh chụp lịch sử MỚI) ghi
+trạng thái mốc `bao_cao_v2.nhan_moc`: «Mốc đã tinh chỉnh» / «Mốc ước lượng» / «Kiểm lại mốc — <lý do>» (gồm âm thanh lặp
+`moc_mo_ho`); nhãn theo số hash cũ ra «Rất chắc chắn» ở 1.103/1.103 dòng DEV. Bảng `matches` của lịch sử giữ nhãn cũ; Sheets
+34 cột KHÔNG có ô này (không đổi hợp đồng) — dòng mơ hồ trên Sheets vẫn chưa được đánh dấu. (3) `Config.luoi_cao_do`
+[-1, -0,5, 0,5, 1] bán cung (họ `HO_CAO_DO`: asetrate + atempo, mốc thời gian không đổi), chạy sau lưới resample CHỈ khi
+lượt thường không có kết quả; `toc_do_toi_da_thu` 6 → 8; thuộc chính sách nhận diện (lưới rỗng giữ chữ ký cũ). Dòng tìm
+bằng lượt này chưa tinh chỉnh được. (4) Top-N giữ nguyên; ảnh chụp V2 thêm `clip_khac` (≤30 ứng viên đạt ngưỡng ngoài Top-N),
+hiện ở giao diện (sau quét + Lịch sử) và CLI, không gửi Sheets. (5) Sàn 1.000 hash giữ nguyên tới khi đo báo nhầm bằng video
+SML ngoài kho. Bộ golden `tests/golden_quet.py` ghim cấu hình lúc ghi (không lưới cao độ, trần 6, tinh chỉnh tắt).
 
 ## D-66 Luật giữ đệm audio: video vi phạm chỉ giữ đoạn quanh mốc; không dời đệm, không sao lưu ngoài máy (người dùng, 2026-11-25)
 Người dùng đọc báo cáo D-65 và chọn: (b) video có vi phạm chỉ giữ đoạn quanh các mốc; hỏi thêm (c) dời đệm sang ổ khác

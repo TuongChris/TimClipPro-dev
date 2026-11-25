@@ -62,6 +62,7 @@ from dataclasses import dataclass
 # Hai họ biến đổi cần bù, khác nhau ở chỗ có đụng tới cao độ hay không.
 HO_TEMPO = "tempo"      # đổi tốc độ, giữ cao độ
 HO_RESAMPLE = "resample"  # đổi cả tốc độ lẫn cao độ
+HO_CAO_DO = "cao_do"     # đổi cao độ, giữ tốc độ (DT-03: lưới tốc độ không bù được — 0/18 ca)
 
 
 @dataclass
@@ -257,6 +258,9 @@ def bo_loc_ffmpeg(he_so: float, ho: str = HO_TEMPO, sr: int = 11025) -> str:
     if ho == HO_RESAMPLE:
         return (f"aresample={sr},asetrate={int(round(sr * he_so))},"
                 f"aresample={sr}")
+    if ho == HO_CAO_DO:     # ``he_so`` = tỉ lệ cao độ; atempo kéo độ dài về đúng như cũ (mốc thời gian không đổi)
+        return (f"aresample={sr},asetrate={int(round(sr * he_so))},"
+                f"aresample={sr},atempo={1.0 / he_so:.6f}")
     return f"atempo={he_so:.6f}"
 
 
