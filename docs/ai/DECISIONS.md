@@ -15,6 +15,31 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-66 Luật giữ đệm audio: video vi phạm chỉ giữ đoạn quanh mốc; không dời đệm, không sao lưu ngoài máy (người dùng, 2026-11-25)
+Người dùng đọc báo cáo D-65 và chọn: (b) video có vi phạm chỉ giữ đoạn quanh các mốc; hỏi thêm (c) dời đệm sang ổ khác
+(«có chậm hơn không?»); KHÔNG cần bản sao lưu ngoài máy (DT-01 đóng); giữ các mặc định Claude chốt ở D-65; thứ tự nghiên cứu
+DT-02 → DT-04 → DT-03; «làm phương án tối ưu nhất». Làm: `don_dep.don_kho_dem` xử lý file đệm không dùng quá `dem_max_ngay`
+ngày (hay vượt `dem_max_gb`) theo `lichsu.db` — video có dòng `matches`: `trich_doan_dem.giu_doan` chép NGUYÊN luồng tiếng
+(`ffmpeg -ss A -to B -i … -c copy`) các đoạn [mốc − 60 s, mốc + 60 s] (gộp đoạn chồng) vào `downloads/bang_chung/<mã>/` +
+sổ `trich_doan.json` (mốc trên video gốc, file nguồn), kiểm độ dài từng đoạn RỒI mới bỏ bản đầy đủ (cắt hỏng → giữ nguyên,
+báo lỗi); video đã quét không vi phạm / chỉ lượt lỗi → bỏ; file không có trong lịch sử (lô «video gốc chung» không ghi lịch
+sử, chưa có `lichsu.db`) → GIỮ; `lichsu.db` đọc lỗi → không dọn gì. Một lượt dọn tại một thời điểm (`data/don_dem.lock`),
+mỗi file một dòng ở `data/nhat_ky_don_dem.jsonl`. Đoạn trích nằm trong `downloads/`: bộ đệm (`glob(<tên>.*)`) và lượt dọn
+sau không đụng tới, sao lưu DEV bỏ qua như đệm. Giao diện: «🧹 Dọn đệm audio…» ở thanh bên → hộp xem trước (số file/GB
+từng nhóm, ước giải phóng) → tick đồng ý → «Dọn ngay» (tác vụ nền, có Dừng); ô «Từ nay tự dọn sau mỗi lô quét»
+(`Config.dem_tu_dong`, mặc định TẮT) chạy luồng riêng sau mỗi lô (không chạy khi bấm Dừng). Giám sát và `cli dondep` dùng
+cùng luật (trước đây xoá theo tuổi cả audio vi phạm). «Giữ lại audio đã tải» tắt: video có kết quả vẫn giữ audio tới lần
+dọn. KHÔNG dời đệm (c): C là SSD NVMe; D và E là hai phân vùng của CÙNG một ổ cứng WD 4 TB (kho audio + sao lưu); đọc file
+đệm cũ đo được SSD ~200 MB/s, ổ cứng ~167 MB/s — quét gần như không chậm hơn (file 3 giờ ~130 MB, file vừa tải nằm sẵn
+trong RAM) nhưng tranh ổ khi dựng kho / đồng bộ kênh và dồn mọi thứ vào một ổ cứng; sau (b) ổ C trống thêm ~88 GB.
+Đo trước (chỉ đọc, đệm DEV 25/11): 94,6 GB audio video vi phạm → ~12,2 GB đoạn trích (đệm 60 s; 30 s: 11,6; 120 s: 13,4),
+5,7 GB video không vi phạm. Cắt thử trên file webm THẬT của YouTube (bản sao): điểm cuối đúng mốc, điểm đầu nhảy về chỉ
+mục ngay trước mốc (sớm 1,8 s) → sổ ghi mốc đầu THẬT = cuối − độ dài đo (lệch < 0,02 s theo tương quan âm thanh); cửa sổ
+cắt theo mốc hết âm thanh thật đo trước. Review 25/11 (1 agent + 5 góc nhìn có phản biện): sửa hộp lưu xoá mất cài đặt
+giao diện (nay chỉ ghi 3 trường `dem_*`), fsync đoạn trích + sổ trước khi bỏ bản đầy đủ, không xử lý file dùng trong 1 giờ
+qua, file «chưa rõ» không tính ngân sách, ô đồng ý gắn với luật, Giám sát không thoát mã lỗi khi dọn đệm bận, bản tải CỤT
+có kết quả được đổi tên `<mã>__p<giây có thật>` thay vì xoá. Test: `tests/test_giu_bang_chung_dem.py` (FFmpeg thật).
+
 ## D-65 Đêm 24→25/11: khảo sát toàn dự án + 5 nhánh sửa nhỏ (người dùng cấp toàn quyền qua đêm, 2026-11-24)
 Người dùng nhờ Fable 5.2 (rồi Opus 5.5 khi hết hạn mức) khảo sát CHỈ ĐỌC toàn dự án: 18 mảng, 201 đề xuất, mỗi đề xuất
 được một agent khác kiểm trên mã (giữ 190, loại 11) → 25 đề tài + 66 việc nhỏ, 3 giám khảo chấm ưu tiên. Kết quả ngoài Git:

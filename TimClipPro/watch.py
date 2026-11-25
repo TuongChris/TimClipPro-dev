@@ -56,6 +56,8 @@ class BaoCao:
     tong_bang_chung: int = 0
     da_don_file: int = 0
     da_don_gb: float = 0.0
+    da_trich_file: int = 0   # trong da_don_file: video vi phạm chỉ giữ đoạn quanh mốc (D-66)
+    ghi_chu_don_dem: list = field(default_factory=list)   # «lưu ý» của dọn đệm — KHÔNG phải lỗi (không thoát mã 1)
     csv_path: str = ""
     sheets_ok: bool = False
     sheets_so_dong: int = 0
@@ -123,7 +125,10 @@ class BaoCao:
             (
                 f"Đã dọn kho đệm: {self.da_don_file} file "
                 f"({self.da_don_gb:.3f} GB)"
+                + (f" — {self.da_trich_file} file video vi phạm chỉ giữ đoạn quanh mốc"
+                   if self.da_trich_file else "")
             ),
+            *[f"Lưu ý dọn đệm: {x}" for x in self.ghi_chu_don_dem],
             f"File CSV: {trang_thai_csv}",
             f"Google Sheets: {trang_thai_sheets}",
         ]
@@ -447,9 +452,14 @@ def _chay_giam_sat_da_khoa(
                 engine.dl_dir,
                 max_gb=engine.config.dem_max_gb,
                 max_ngay=engine.config.dem_max_ngay,
+                cancel_event=getattr(engine, "cancel_event", None),   # Ctrl+C / `cli dung` dừng cả phần cắt giữ
             )
-            bao_cao.da_don_file = ket_qua_don["xoa_file"]
-            bao_cao.da_don_gb = ket_qua_don["xoa_gb"]
+            bao_cao.ghi_chu_don_dem = list(ket_qua_don.get("canh_bao", []))
+            # Video vi phạm: bản đầy đủ bỏ, đoạn quanh mốc giữ (D-66) — đếm cả hai; GB = phần thật sự trả lại ổ.
+            bao_cao.da_trich_file = ket_qua_don.get("trich_file", 0)
+            bao_cao.da_don_file = ket_qua_don["xoa_file"] + bao_cao.da_trich_file
+            bao_cao.da_don_gb = (ket_qua_don["xoa_gb"] + ket_qua_don.get("trich_gb_nguon", 0.0)
+                                 - ket_qua_don.get("trich_gb_giu", 0.0))
             bao_cao.loi.extend(
                 f"Dọn kho đệm: {dong}"
                 for dong in ket_qua_don["loi"]

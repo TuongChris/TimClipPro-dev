@@ -165,6 +165,7 @@ Ghép với Task Scheduler của Windows để chạy lúc 2h sáng.
 | Video giới hạn tuổi | Không chép cookie/token vào source. Cấu hình xác thực yt-dlp ở môi trường riêng và kiểm tra điều khoản sử dụng trước khi chạy |
 | Quét ra 0 kết quả dù chắc chắn có | ① Video dài còn tiếng gốc không? ② Kiểm tra kho đã đủ clip ③ Xem «🔎 Chi tiết chẩn đoán» dưới kết quả — đừng hạ «Số hash tối thiểu» (dễ ra báo cáo sai) |
 | Báo nhầm | Tăng «Số hash tối thiểu» lên 30–40 |
+| Ổ dữ liệu sắp đầy (thanh bên báo vàng) | Thanh bên → **🧹 Dọn đệm audio…**: xem trước, tick đồng ý, «Dọn ngay». Video không vi phạm bỏ audio (quét lại thì tự tải lại); video vi phạm chỉ giữ đoạn quanh mốc ±60 giây ở `data\downloads\bang_chung\<mã video>\` (sổ `trich_doan.json` ghi mốc). Tick «tự dọn sau mỗi lô quét» để khỏi phải nhớ |
 
 ## 10. Giới hạn cần biết
 

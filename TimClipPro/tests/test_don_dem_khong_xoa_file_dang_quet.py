@@ -25,6 +25,7 @@ import pytest
 import cli
 import engine as engine_module
 from engine import Config, Engine
+from lich_su_dem_gia import ghi_lich_su
 from watch import WatchList, chay_giam_sat
 
 VID = "AbCdEfGhIjK"
@@ -32,6 +33,13 @@ URL = f"https://www.youtube.com/watch?v={VID}"
 NGAY = 24 * 3600
 MB = 1024 * 1024
 DAI_VIDEO_S = 12 * 3600.0     # > quet_tang_dan_tu_gio (10 giờ) → quét tăng dần 4 đoạn × 3 giờ
+
+
+@pytest.fixture(autouse=True)
+def _lich_su_sach(tmp_path):
+    """Hai video của file này đã quét, không vi phạm: luật giữ D-66 không bao giờ dọn file không có trong lịch sử —
+    thiếu dòng này mọi test «không xoá» dưới đây đạt mà không chứng minh gì."""
+    ghi_lich_su(tmp_path / "data", sach=(VID, "ZzZzZzZzZzZ"))
 
 
 def _engine_cung_data(data_dir: str, out_dir: str) -> Engine:

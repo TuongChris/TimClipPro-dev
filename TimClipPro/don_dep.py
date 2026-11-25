@@ -5,13 +5,17 @@ from __future__ import annotations
 
 import contextlib
 import glob
+import json
 import os
 import shutil
+import sqlite3
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
 
+import trich_doan_dem
 from khoa import DangChayRoi, KhoaTienTrinh
 
 
@@ -28,6 +32,12 @@ _DUOI_DANG_TAI = (".part", ".ytdl")
 #   nên dấu của lượt bị kill/crash không giữ file mãi (dọn đệm lấy được khoá = dấu mồ côi, bỏ dấu).
 THU_MUC_KHOA_TAI = "khoa_tai"
 THU_MUC_DANG_DUNG = "dem_dang_dung"
+# Một lượt ``don_kho_dem`` tại một thời điểm giữa GUI / Watch / CLI (sổ đoạn trích của một video chỉ một người ghi).
+TEN_KHOA_DON_DEM = "don_dem.lock"
+# File dùng trong bấy nhiêu giây gần nhất không bao giờ bị xử lý: lượt quét vừa xong có thể chưa ghi kết quả.
+GIU_VUA_DUNG_S = 3600
+# Mỗi file đã bỏ / đã cắt giữ một dòng JSON — tra lại được audio nào đã đi đâu (D-66).
+TEN_NHAT_KY_DON_DEM = "nhat_ky_don_dem.jsonl"
 # Lần dò dấu của dọn đệm chỉ giữ khoá dấu trong lúc ghi + fsync vài dòng thông tin: chờ tối đa bấy nhiêu.
 _CHO_LAN_DO_DAU_S = 2.0
 
@@ -167,35 +177,126 @@ def xoa_file_dem_neu_ranh(thu_muc_dem: str, ten_file: str) -> bool:
         khoa.__exit__()
 
 
+def _ghi_nhat_ky(f, dong: dict) -> None:
+    if f is not None:
+        with contextlib.suppress(OSError, ValueError):
+            f.write(json.dumps(dong, ensure_ascii=False) + "\n")
+            f.flush()
+
+
+def doi_ten_file_dem_neu_ranh(thu_muc_dem: str, ten_file: str, ten_moi: str) -> bool:
+    """Đổi tên file đệm ``ten_file`` → ``ten_moi`` (cùng thư mục) CHỈ khi không lượt nào đang tải / nhận / dùng nó — cùng
+    giao thức với ``xoa_file_dem_neu_ranh``, giữ thêm khoá tải của tên MỚI (không đè lên lượt đang tải tên đó). True =
+    đã đổi; False = đang bận hay không đổi được (file giữ nguyên chỗ cũ)."""
+    khoa = KhoaTienTrinh(duong_khoa_tai(thu_muc_dem, ten_muc_dem(ten_file)), f"Đổi tên file đệm: {ten_file}")
+    khoa_moi = KhoaTienTrinh(duong_khoa_tai(thu_muc_dem, ten_muc_dem(ten_moi)), f"Đổi tên file đệm: {ten_moi}")
+    try:
+        khoa.__enter__()
+    except (DangChayRoi, OSError):
+        return False
+    try:
+        try:
+            khoa_moi.__enter__()
+        except (DangChayRoi, OSError):
+            return False
+        try:
+            if _dang_duoc_dung(thu_muc_dem, ten_file, bo_dau_mo_coi=True):
+                return False
+            os.replace(os.path.join(thu_muc_dem, ten_file), os.path.join(thu_muc_dem, ten_moi))
+            return True
+        except OSError:
+            return False
+        finally:
+            khoa_moi.__exit__()
+    finally:
+        khoa.__exit__()
+
+
 def don_kho_dem(
     thu_muc: str,
     max_gb: float = 20.0,
     max_ngay: int = 7,
     thuc_hien: bool = True,
+    *,
+    dem_giay: float = trich_doan_dem.DEM_GIAY,
+    cancel_event=None,
+    progress=None,
 ) -> dict:
     """Quét và dọn các file trực tiếp trong kho đệm, không đi vào thư mục con.
 
-    File một lượt quét ĐANG dùng (dấu ``dem_dang_dung``, audit C-9) không bao giờ bị chọn: GUI, CLI và
-    Watch dùng chung ``data/``, lượt quét chỉ giữ lease cổng bảo trì (không giữ ``tool.lock``) và cắt
-    khúc bằng từng lệnh FFmpeg riêng — giữa hai lệnh không ai mở file, nên xoá vẫn thành công và lượt
-    quét hỏng giữa chừng với câu lỗi đổ cho file. File đang dùng vẫn tính vào ngân sách dung lượng
-    (nó chiếm ổ thật): vượt ngân sách thì bỏ file nhàn rỗi thay vì file đang quét.
+    Chọn file như cũ: quá ``max_ngay`` ngày không dùng, rồi file cũ nhất tới khi lọt ngân sách ``max_gb``. File được
+    chọn XỬ LÝ theo kết quả quét trong ``<data>/lichsu.db`` (luật giữ D-66, người dùng chọn 25/11):
+
+    - video có kết quả vi phạm → cắt giữ đoạn quanh mốc vào ``downloads/bang_chung/<mã>/``
+      (``trich_doan_dem.giu_doan``) rồi mới bỏ bản đầy đủ; cắt hỏng → GIỮ NGUYÊN bản đầy đủ, báo lỗi;
+    - video đã quét, không vi phạm (hay chỉ có lượt lỗi) → bỏ: quét lại thì tải lại;
+    - file không có trong lịch sử (lô «video gốc chung» không ghi lịch sử, lượt bị huỷ…) → GIỮ: không biết nó có là
+      bằng chứng không; KHÔNG tính vào ngân sách. Chưa có ``lichsu.db`` → mọi file thuộc nhóm này. ``lichsu.db`` đọc
+      lỗi → không dọn gì.
+    - file dùng trong ``GIU_VUA_DUNG_S`` giây gần nhất → không xử lý (lượt quét vừa xong có thể chưa ghi kết quả).
+
+    File một lượt quét ĐANG dùng (dấu ``dem_dang_dung``, audit C-9) không bao giờ bị chọn: GUI, CLI và Watch dùng chung
+    ``data/``, lượt quét chỉ giữ lease cổng bảo trì (không giữ ``tool.lock``) và cắt khúc bằng từng lệnh FFmpeg riêng —
+    giữa hai lệnh không ai mở file, nên xoá vẫn thành công và lượt quét hỏng giữa chừng với câu lỗi đổ cho file. File
+    đang dùng và file «chưa rõ» vẫn tính vào ngân sách dung lượng (chúng chiếm ổ thật): vượt ngân sách thì xử lý file
+    nhàn rỗi khác thay vì chúng. ``loi`` = lỗi thật; ``canh_bao`` = điều cần biết nhưng không hỏng gì (đang bận; file
+    của video vi phạm giữ nguyên vì chưa cắt giữ được đoạn) — Giám sát không thoát mã lỗi vì chúng.
+
+    Một lượt dọn tại một thời điểm (khoá ``data/don_dem.lock``; lượt khác đang chạy → ``dang_chay_noi_khac``). Mỗi file
+    đã bỏ / đã cắt giữ ghi một dòng vào ``data/nhat_ky_don_dem.jsonl``. ``cancel_event`` (nút Dừng) được xét giữa hai
+    file và trong lúc cắt; ``progress(pct, câu)`` cho tác vụ nền của giao diện.
     """
     ket_qua = {
         "tong_file": 0,
         "tong_gb": 0.0,
         "xoa_file": 0,
         "xoa_gb": 0.0,
+        "trich_file": 0,
+        "trich_gb_nguon": 0.0,
+        "trich_gb_giu": 0.0,
+        "uoc_giu_gb": 0.0,
+        "giu_chua_ro": 0,
+        "giu_chua_ro_gb": 0.0,
         "bo_qua_dang_dung": 0,
         "loi": [],
+        "canh_bao": [],
+        "da_dung": False,
+        "dang_chay_noi_khac": False,
+        "thu_muc_bang_chung": os.path.join(thu_muc, trich_doan_dem.THU_MUC_BANG_CHUNG),
     }
     if not os.path.isdir(thu_muc):
+        return ket_qua
+    khoa_chung = None
+    if thuc_hien:
+        khoa_chung = KhoaTienTrinh(os.path.join(_goc_du_lieu(thu_muc), TEN_KHOA_DON_DEM), "Dọn kho đệm audio")
+        try:
+            khoa_chung.__enter__()
+        except DangChayRoi:
+            ket_qua["dang_chay_noi_khac"] = True
+            ket_qua["canh_bao"].append("Một lượt dọn đệm khác (giao diện / Giám sát / dòng lệnh) đang chạy — để lần sau.")
+            return ket_qua
+        except OSError as e:
+            ket_qua["loi"].append(f"Không mở được khoá dọn đệm ({TEN_KHOA_DON_DEM}): {e}")
+            return ket_qua
+    try:
+        return _don_kho_dem(thu_muc, max_gb, max_ngay, thuc_hien, dem_giay, cancel_event, progress, ket_qua)
+    finally:
+        if khoa_chung is not None:
+            khoa_chung.__exit__()
+
+
+def _don_kho_dem(thu_muc, max_gb, max_ngay, thuc_hien, dem_giay, cancel_event, progress, ket_qua) -> dict:
+    try:
+        ls = trich_doan_dem.doc_lich_su(os.path.join(_goc_du_lieu(thu_muc), "lichsu.db"))
+    except (sqlite3.Error, OSError) as e:
+        ket_qua["loi"].append(f"Không đọc được lịch sử quét (lichsu.db) nên chưa dọn gì — tránh bỏ nhầm audio của "
+                              f"video vi phạm: {e}")
         return ket_qua
 
     tat_ca = []
     tai_do_qua_tuoi: list = []
     co_the_xoa = []
-    dang_dung = []
+    giu_co_dinh = []        # đang / vừa dùng: không xử lý, nhưng chiếm ngân sách
     try:
         cac_muc = list(os.scandir(thu_muc))
     except OSError as e:
@@ -207,6 +308,8 @@ def don_kho_dem(
             if not entry.is_file(follow_symlinks=False):
                 continue
             stat = entry.stat(follow_symlinks=False)
+        except FileNotFoundError:
+            continue        # vừa bị bỏ (lượt quét bỏ bản cụt, lượt dọn khác) giữa lúc liệt kê
         except OSError as e:
             ket_qua["loi"].append(f"{entry.path}: {e}")
             continue
@@ -221,8 +324,17 @@ def don_kho_dem(
             if max_ngay > 0 and time.time() - stat.st_mtime > max_ngay * _GIAY_MOI_NGAY:
                 tai_do_qua_tuoi.append(item)
             continue
-        if _dang_duoc_dung(thu_muc, entry.name, bo_dau_mo_coi=False):
-            dang_dung.append(item)
+        if trich_doan_dem.ma_video(entry.name, ls.da_quet) not in ls.da_quet:
+            # Không xử lý, KHÔNG tính vào ngân sách: tính vào thì khi chúng vượt ngân sách mọi file khác bị xử lý bất kể
+            # tuổi — kể cả audio lô vừa quét (review 25/11).
+            ket_qua["giu_chua_ro"] += 1
+            ket_qua["giu_chua_ro_gb"] += stat.st_size / _BYTE_MOI_GB
+        elif (time.time() - stat.st_mtime < GIU_VUA_DUNG_S
+              or _dang_duoc_dung(thu_muc, entry.name, bo_dau_mo_coi=False)):
+            # Vừa dùng: lượt quét nhả dấu «đang dùng» rồi còn tinh chỉnh mốc, tra ngày đăng… mới ghi kết quả — xử lý
+            # theo lịch sử đọc lúc này có thể bỏ trắng audio của video vừa thấy vi phạm (review 25/11).
+            ket_qua["bo_qua_dang_dung"] += 1
+            giu_co_dinh.append(item)
         else:
             co_the_xoa.append(item)
 
@@ -230,62 +342,106 @@ def don_kho_dem(
     ket_qua["tong_gb"] = (
         sum(item.kich_thuoc for item in tat_ca) / _BYTE_MOI_GB
     )
-    ket_qua["bo_qua_dang_dung"] = len(dang_dung)
     ngan_sach = int(max_gb * _BYTE_MOI_GB)
-    if ngan_sach > 0 and dang_dung:
-        # Phần ngân sách còn lại cho file nhàn rỗi; file đang dùng một mình đã vượt thì bỏ mọi
-        # file nhàn rỗi (``chon_can_xoa`` hiểu ngân sách <= 0 là «không giới hạn» nên giữ >= 1).
-        ngan_sach = max(1, ngan_sach - sum(item.kich_thuoc for item in dang_dung))
-    can_xoa = tai_do_qua_tuoi + chon_can_xoa(
-        co_the_xoa,
-        ngan_sach,
-        max_ngay * _GIAY_MOI_NGAY,
-    )
+    if ngan_sach > 0 and giu_co_dinh:
+        # Phần ngân sách còn lại cho file xử lý được; file đang / vừa dùng một mình đã vượt thì xử lý mọi file nhàn rỗi
+        # (``chon_can_xoa`` hiểu ngân sách <= 0 là «không giới hạn» nên giữ >= 1).
+        ngan_sach = max(1, ngan_sach - sum(item.kich_thuoc for item in giu_co_dinh))
+    chon = chon_can_xoa(co_the_xoa, ngan_sach, max_ngay * _GIAY_MOI_NGAY)
+
+    def la_vi_pham(item) -> bool:
+        return bool(ls.doan.get(trich_doan_dem.ma_video(os.path.basename(item.path), ls.da_quet)))
+
+    # Bỏ trước (trả chỗ trống), cắt giữ sau — cắt cần ghi đoạn trích TRƯỚC khi bỏ bản đầy đủ.
+    viec = ([(item, False) for item in tai_do_qua_tuoi + [x for x in chon if not la_vi_pham(x)]]
+            + [(item, True) for item in chon if la_vi_pham(item)])
 
     if not thuc_hien:
-        ket_qua["xoa_file"] = len(can_xoa)
-        ket_qua["xoa_gb"] = (
-            sum(item.kich_thuoc for item in can_xoa) / _BYTE_MOI_GB
-        )
+        ket_qua["xoa_file"] = sum(1 for _item, trich in viec if not trich)
+        ket_qua["xoa_gb"] = sum(item.kich_thuoc for item, trich in viec if not trich) / _BYTE_MOI_GB
+        ket_qua["trich_file"] = sum(1 for _item, trich in viec if trich)
+        ket_qua["trich_gb_nguon"] = sum(item.kich_thuoc for item, trich in viec if trich) / _BYTE_MOI_GB
+        ket_qua["uoc_giu_gb"] = sum(
+            trich_doan_dem.uoc_giu_byte(os.path.basename(item.path), item.kich_thuoc, ls, dem_giay)
+            for item, trich in viec if trich) / _BYTE_MOI_GB
         return ket_qua
 
-    da_xoa_byte = 0
-    for item in can_xoa:
-        ten_file = os.path.basename(item.path)
-        # Kiểm lại dấu và xoá DƯỚI khoá tải của mục: lượt quét nhận file đệm và đặt dấu dưới cùng
-        # khoá này, nên không lọt vào giữa lần kiểm ở trên và lúc xoá.
-        khoa = KhoaTienTrinh(duong_khoa_tai(thu_muc, ten_muc_dem(ten_file)),
-                             f"Dọn kho đệm: {ten_file}")
+    nhat_ky = None
+    if viec:
         try:
-            khoa.__enter__()
-        except DangChayRoi:
-            # Đang có lượt tải / nhận đúng mục này: để lần dọn sau.
-            ket_qua["bo_qua_dang_dung"] += 1
-            continue
+            nhat_ky = open(os.path.join(_goc_du_lieu(thu_muc), TEN_NHAT_KY_DON_DEM), "a", encoding="utf-8")
         except OSError as e:
-            ket_qua["loi"].append(f"{item.path}: {e}")
-            continue
-        try:
-            if _dang_duoc_dung(thu_muc, ten_file, bo_dau_mo_coi=True):
+            ket_qua["loi"].append(f"Không mở được nhật ký dọn đệm (vẫn dọn; sổ đoạn trích vẫn ghi): {e}")
+    try:
+        for i, (item, la_trich) in enumerate(viec):
+            if cancel_event is not None and cancel_event.is_set():
+                ket_qua["da_dung"] = True
+                break
+            ten_file = os.path.basename(item.path)
+            if progress is not None:
+                progress(i / len(viec), f"Dọn đệm audio: {i}/{len(viec)} file"
+                                        + (" — đang cắt giữ đoạn quanh mốc vi phạm" if la_trich else ""))
+            luc = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            # Kiểm lại dấu, cắt giữ và xoá DƯỚI khoá tải của mục: lượt quét nhận file đệm và đặt dấu dưới cùng khoá
+            # này, nên không lọt vào giữa lần kiểm ở trên và lúc xoá.
+            khoa = KhoaTienTrinh(duong_khoa_tai(thu_muc, ten_muc_dem(ten_file)),
+                                 f"Dọn kho đệm: {ten_file}")
+            try:
+                khoa.__enter__()
+            except DangChayRoi:
+                # Đang có lượt tải / nhận đúng mục này: để lần dọn sau.
                 ket_qua["bo_qua_dang_dung"] += 1
                 continue
-            # Lựa chọn ở trên dựa trên ảnh chụp mtime lúc LIỆT KÊ. Lượt quét nhận lại bản đệm làm mới
-            # mtime dưới cùng khoá này rồi nhả khoá, và chỉ đặt dấu sau khi đo xong độ dài file (có
-            # thể hàng chục giây): file đổi kể từ lúc liệt kê = vừa được dùng/tải lại → không xoá
-            # theo lựa chọn cũ, để lần dọn sau (audit WR-4).
-            st = os.stat(item.path, follow_symlinks=False)
-            if st.st_mtime != item.lan_dung_cuoi or st.st_size != item.kich_thuoc:
-                ket_qua["bo_qua_dang_dung"] += 1
+            except OSError as e:
+                ket_qua["loi"].append(f"{item.path}: {e}")
                 continue
-            os.remove(item.path)
-        except OSError as e:
-            ket_qua["loi"].append(f"{item.path}: {e}")
-            continue
-        finally:
-            khoa.__exit__()
-        ket_qua["xoa_file"] += 1
-        da_xoa_byte += item.kich_thuoc
-    ket_qua["xoa_gb"] = da_xoa_byte / _BYTE_MOI_GB
+            trich = None
+            try:
+                if _dang_duoc_dung(thu_muc, ten_file, bo_dau_mo_coi=True):
+                    ket_qua["bo_qua_dang_dung"] += 1
+                    continue
+                # Lựa chọn ở trên dựa trên ảnh chụp mtime lúc LIỆT KÊ. Lượt quét nhận lại bản đệm làm mới
+                # mtime dưới cùng khoá này rồi nhả khoá, và chỉ đặt dấu sau khi đo xong độ dài file (có
+                # thể hàng chục giây): file đổi kể từ lúc liệt kê = vừa được dùng/tải lại → không xoá
+                # theo lựa chọn cũ, để lần dọn sau (audit WR-4).
+                st = os.stat(item.path, follow_symlinks=False)
+                if st.st_mtime != item.lan_dung_cuoi or st.st_size != item.kich_thuoc:
+                    ket_qua["bo_qua_dang_dung"] += 1
+                    continue
+                if la_trich:
+                    trich = trich_doan_dem.giu_doan(thu_muc, ten_file, ls, dem_giay, cancel_event, luc)
+                os.remove(item.path)
+            except trich_doan_dem.DaDungTrichDoan:
+                ket_qua["da_dung"] = True
+                break
+            except trich_doan_dem.LoiTrichDoan as e:
+                ket_qua["canh_bao"].append(f"{ten_file}: giữ nguyên bản đầy đủ vì chưa cắt giữ được đoạn vi phạm — {e}")
+                _ghi_nhat_ky(nhat_ky, {"luc": luc, "file": ten_file, "byte": item.kich_thuoc, "hanh_dong": "giu",
+                                       "loi": str(e)[:300]})
+                continue
+            except OSError as e:
+                ket_qua["loi"].append(f"{item.path}: {e}")
+                continue
+            except Exception as e:  # noqa: BLE001 — lỗi lạ ở một file không được bỏ dở cả lượt; file đó giữ nguyên
+                ket_qua["loi"].append(f"{ten_file}: giữ nguyên — lỗi không lường trước: {e!r}"[:400])
+                continue
+            finally:
+                khoa.__exit__()
+            if la_trich:
+                ket_qua["trich_file"] += 1
+                ket_qua["trich_gb_nguon"] += item.kich_thuoc / _BYTE_MOI_GB
+                ket_qua["trich_gb_giu"] += trich["byte"] / _BYTE_MOI_GB
+                _ghi_nhat_ky(nhat_ky, {"luc": luc, "file": ten_file, "byte": item.kich_thuoc, "hanh_dong": "cat_giu",
+                                       "doan_moi": [d["file"] for d in trich["doan"]]})
+            else:
+                ket_qua["xoa_file"] += 1
+                ket_qua["xoa_gb"] += item.kich_thuoc / _BYTE_MOI_GB
+                _ghi_nhat_ky(nhat_ky, {"luc": luc, "file": ten_file, "byte": item.kich_thuoc, "hanh_dong": "bo"})
+    finally:
+        if nhat_ky is not None:
+            nhat_ky.close()
+    if progress is not None:
+        progress(1.0, "Dọn đệm audio: xong")
     return ket_qua
 
 

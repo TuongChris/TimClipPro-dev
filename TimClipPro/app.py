@@ -34,6 +34,7 @@ import bao_cao_v2
 import bao_viec
 import common_original as nguon_chung
 import danh_sach_video
+import don_dep
 import kiem_video_con
 import lich_su
 import luu_tru
@@ -48,6 +49,7 @@ import ui_gui_sheets as ui_gui
 from cau_hinh import GIA_TRI_GIAO_DIEN_MAC_DINH
 from clip_metadata import configure_metadata_logging
 import tim_nghi_van
+import trich_doan_dem
 import truy_cap_youtube
 import youtube_api
 import ytdlp_chung
@@ -866,9 +868,10 @@ TRONG_CANH_BAO_GB = 30   # ổ dữ liệu còn ít hơn chừng này: cảnh b�
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _dung_luong_dem(thu_muc_dem: str, thu_muc_du_lieu: str) -> tuple:
-    """``(số file, byte)`` của đệm audio lượt quét + byte trống của ổ dữ liệu (``None``: không đọc được). Đệm có thể gần
-    nghìn file và thanh bên vẽ lại mỗi 0,75 giây lúc có việc: nhớ 5 phút."""
-    so_file = tong = 0
+    """``(số file, byte)`` của đệm audio lượt quét + byte trống của ổ dữ liệu (``None``: không đọc được) + byte đoạn trích
+    bằng chứng (``downloads/bang_chung``, D-66). Đệm có thể gần nghìn file và thanh bên vẽ lại mỗi 0,75 giây lúc có việc:
+    nhớ 5 phút."""
+    so_file = tong = bang_chung = 0
     try:
         with os.scandir(thu_muc_dem) as ds:
             for f in ds:
@@ -877,11 +880,85 @@ def _dung_luong_dem(thu_muc_dem: str, thu_muc_du_lieu: str) -> tuple:
                     tong += f.stat(follow_symlinks=False).st_size
     except OSError:   # chưa có thư mục đệm
         pass
+    for goc_bc, _thu_muc_con, files in os.walk(os.path.join(thu_muc_dem, trich_doan_dem.THU_MUC_BANG_CHUNG)):
+        for ten in files:
+            try:
+                bang_chung += os.path.getsize(os.path.join(goc_bc, ten))
+            except OSError:
+                pass
     try:
         trong = shutil.disk_usage(thu_muc_du_lieu).free
     except OSError:
         trong = None
-    return so_file, tong, trong
+    return so_file, tong, trong, bang_chung
+
+
+@st.dialog("🧹 Dọn đệm audio", width="large")
+def _hop_don_dem() -> None:
+    """Xem trước rồi mới dọn (luật giữ D-66). Ô số không có key: hộp mở lại là đọc lại từ cấu hình. Ô «Tôi đồng ý» gắn
+    với luật đang xem (key chứa số ngày + GB): đổi luật là phải tick lại (review 25/11)."""
+    c = eng.config
+    st.markdown(
+        "Audio tải về để quét được giữ lại để lần quét sau khỏi tải lại. Dọn đệm chỉ đụng tới file **không được dùng "
+        "quá số ngày dưới đây** (hoặc khi đệm vượt số GB tối đa — file cũ nhất trước):\n"
+        "- video đã quét, **không vi phạm**: bỏ audio — quét lại thì tool tự tải lại;\n"
+        f"- video **có vi phạm**: chỉ giữ **đoạn quanh các mốc vi phạm** (thêm {trich_doan_dem.DEM_GIAY:.0f} giây mỗi "
+        "bên, chép nguyên âm thanh gốc) vào thư mục đoạn trích bằng chứng, rồi mới bỏ bản đầy đủ;\n"
+        "- file chưa có trong lịch sử quét: giữ nguyên.")
+    o1, o2 = st.columns(2)
+    ngay = o1.number_input("Giữ trọn audio dùng trong (ngày, 0 = không tính theo ngày)", 0,
+                           max(365, int(c.dem_max_ngay)), int(c.dem_max_ngay))
+    gb = o2.number_input("Đệm audio trọn tối đa (GB, 0 = không giới hạn)", 0.0, max(5000.0, float(c.dem_max_gb)),
+                         float(c.dem_max_gb), 1.0)
+    xem = don_dep.don_kho_dem(eng.dl_dir, max_gb=float(gb), max_ngay=int(ngay), thuc_hien=False)
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Bỏ audio — video không vi phạm", f"{xem['xoa_file']} file", help=f"{xem['xoa_gb']:.1f} GB")
+    m2.metric("Giữ đoạn quanh mốc — video vi phạm", f"{xem['trich_file']} file",
+              help=f"{xem['trich_gb_nguon']:.1f} GB còn khoảng {xem['uoc_giu_gb']:.1f} GB đoạn trích")
+    m3.metric("Ước giải phóng", f"{xem['xoa_gb'] + xem['trich_gb_nguon'] - xem['uoc_giu_gb']:.1f} GB")
+    them = [f"giữ nguyên {xem['giu_chua_ro']} file chưa có trong lịch sử quét ({xem['giu_chua_ro_gb']:.1f} GB)"
+            ] if xem["giu_chua_ro"] else []
+    if xem["bo_qua_dang_dung"]:
+        them.append(f"bỏ qua {xem['bo_qua_dang_dung']} file đang hoặc vừa có lượt quét dùng (trong 1 giờ qua)")
+    if them:
+        st.caption("Ngoài ra: " + "; ".join(them) + ".")
+    for loi in xem["loi"] + xem["canh_bao"]:
+        st.warning(loi)
+    tu_dong = st.checkbox("Từ nay tự dọn theo luật này sau mỗi lô quét", c.dem_tu_dong,
+                          help="Chạy nền khi lô quét xong, theo cả số ngày lẫn số GB ở trên: đệm vượt số GB thì xử lý "
+                               "file cũ nhất trước, kể cả file mới dùng trong số ngày đó (không đụng file dùng trong 1 "
+                               "giờ qua). Bỏ tick rồi bấm «Lưu lựa chọn» để tắt.")
+    co_viec = bool(xem["xoa_file"] or xem["trich_file"])
+
+    def luu() -> bool:
+        """Chỉ ghi 3 trường dọn đệm — không đụng cài đặt khác trong cau_hinh.json."""
+        try:
+            eng.luu_cau_hinh_mot_phan({"dem_max_ngay": int(ngay), "dem_max_gb": float(gb), "dem_tu_dong": bool(tu_dong)})
+            return True
+        except Exception as e:  # noqa: BLE001
+            st.error(f"Không lưu được lựa chọn: {e}")
+            return False
+
+    # Bật tự dọn lúc đang có file tới hạn = lô quét kế tiếp sẽ xoá chúng: phải qua ô «Tôi đồng ý» + «Dọn ngay».
+    bat_khi_co_viec = co_viec and tu_dong and not c.dem_tu_dong
+    if st.button("Lưu lựa chọn", key="don_dem_luu", disabled=bat_khi_co_viec,
+                 help=("Bật tự dọn lúc đang có file cần dọn: tick đồng ý rồi bấm «Dọn ngay»." if bat_khi_co_viec
+                       else "Chỉ lưu lựa chọn — không xoá file nào.")):
+        if luu():
+            st.rerun()
+    if not co_viec:
+        st.info("Chưa có file nào cần dọn theo luật này.")
+        return
+    if dang_dong_bo():
+        st.info("Đang đồng bộ kênh — dọn đệm chạy được khi lượt đồng bộ xong.")
+        return
+    dong_y = st.checkbox(f"Tôi đồng ý xoá audio đầy đủ của {xem['xoa_file'] + xem['trich_file']} file trên (video vi "
+                         "phạm vẫn giữ đoạn quanh mốc)", key=f"don_dem_xac_nhan::{int(ngay)}::{float(gb)}")
+    if st.button("🧹 Dọn ngay", type="primary", disabled=not dong_y, key="don_dem_chay"):
+        if luu():
+            _dung_luong_dem.clear()
+            chay_nen("don_dem", don_dep.don_kho_dem, eng.dl_dir, max_gb=float(gb), max_ngay=int(ngay),
+                     cancel_event=eng.cancel_event)
 
 
 with st.sidebar:
@@ -918,15 +995,20 @@ with st.sidebar:
             st.write(d)
     if not all(env[k] for k in ("ffmpeg", "ffprobe", "audfprint")):
         st.error("Thiếu công cụ — hãy chạy lại `cai_dat.bat`.")
-    # Không có nút xoá đệm: luật giữ / xoá đệm đang chờ người dùng quyết (đề tài DT-02).
-    _so_dem, _byte_dem, _trong = _dung_luong_dem(eng.dl_dir, eng.data_dir)
+    _so_dem, _byte_dem, _trong, _byte_bc = _dung_luong_dem(eng.dl_dir, eng.data_dir)
     st.caption(f"💾 Đệm audio của lượt quét: {_so_dem} file, {_byte_dem / 2 ** 30:.1f} GB"
+               + (f" · đoạn trích bằng chứng {_byte_bc / 2 ** 30:.1f} GB" if _byte_bc else "")
                + ("" if _trong is None else f" · ổ dữ liệu còn trống {_trong / 2 ** 30:.0f} GB")
-               + ". Luật dọn đệm đang chờ bạn quyết.",
+               + (" · tự dọn sau mỗi lô: bật" if eng.config.dem_tu_dong else "") + ".",
                help="Audio tải về để quét, giữ lại khi bật «Giữ lại audio đã tải» (⚙️ Tham số) — lần quét sau khỏi "
-                    "tải lại. Số liệu cập nhật 5 phút một lần.")
+                    "tải lại. Dọn đệm: video không vi phạm bỏ audio, video vi phạm chỉ giữ đoạn quanh mốc. Số liệu "
+                    "cập nhật 5 phút một lần.")
     if _trong is not None and _trong < TRONG_CANH_BAO_GB * 2 ** 30:
-        st.warning(f"⚠️ Ổ chứa dữ liệu chỉ còn {_trong / 2 ** 30:.1f} GB trống — dọn bớt trước khi quét hay tải dài.")
+        st.warning(f"⚠️ Ổ chứa dữ liệu chỉ còn {_trong / 2 ** 30:.1f} GB trống — bấm «🧹 Dọn đệm audio» trước khi "
+                   "quét hay tải dài.")
+    if st.button("🧹 Dọn đệm audio…", key="mo_don_dem", disabled=job["running"],
+                 help="Xem trước rồi mới dọn: không file nào bị xoá cho tới khi bạn bấm «Dọn ngay»."):
+        _hop_don_dem()
 
     # «🗄️ Kho đang dùng» chỉ vẽ ở trang dùng kho vân tay (_ve_o_kho, gọi trước trang); chỗ giữ sẵn giữ đúng vị trí.
     _cho_kho = st.container()
@@ -994,7 +1076,9 @@ with st.sidebar:
                  "được thì giữ mốc của lượt quét). Mỗi kết quả tốn thêm vài giây. Xem mục «🎯 Mốc tinh chỉnh từng "
                  "giây» dưới bảng kết quả.")
         c.keep_downloads = st.checkbox("Giữ lại audio đã tải", c.keep_downloads,
-                                       help="Bỏ tick để tiết kiệm ổ cứng (lần sau phải tải lại).")
+                                       help="Bỏ tick: xoá audio ngay sau khi quét (lần sau phải tải lại). Video có "
+                                            "kết quả vi phạm (đã ghi lịch sử) vẫn giữ audio cho tới khi «🧹 Dọn đệm "
+                                            "audio» chọn tới nó — khi đó chỉ giữ đoạn quanh mốc.")
         c.quet_tang_dan = st.checkbox(
             "Quét tăng dần cho video rất dài", c.quet_tang_dan,
             help="Quét từng đoạn từ đầu; thấy đủ bằng chứng thì dừng, không thấy thì quét tiếp "
@@ -1655,6 +1739,27 @@ def _ve_khu_tren() -> None:
             if r["ma_bi_ghi_thua"]:
                 st.warning(f"Có {len(r['ma_bi_ghi_thua'])} mã trong sổ nhưng KHÔNG thấy file "
                            "— sẽ tải lại ở lần đồng bộ tới.")
+        elif job["kind"] == "don_dem":
+            r = job["results"]
+            if not r.get("_da_doc_lai_dung_luong"):
+                r["_da_doc_lai_dung_luong"] = True      # thanh bên đã vẽ số cũ (nhớ 5 phút) ở lượt này: đọc lại một lần
+                _dung_luong_dem.clear()
+                st.rerun()
+            if r.get("dang_chay_noi_khac"):
+                st.warning("⏳ Chưa dọn: một lượt dọn đệm khác (tự dọn sau lô quét / Giám sát / dòng lệnh) đang chạy — "
+                           "chờ một lát rồi mở lại «🧹 Dọn đệm audio…».")
+            else:
+                (st.warning if r["loi"] or r.get("canh_bao") or r["da_dung"] else st.success)(
+                    ("⏹️ Đã dừng giữa chừng. " if r["da_dung"] else "🧹 ")
+                    + f"Dọn đệm audio: giải phóng {r['xoa_gb'] + r['trich_gb_nguon'] - r['trich_gb_giu']:.1f} GB — bỏ "
+                    f"audio {r['xoa_file']} file (video không vi phạm / tải dở), giữ đoạn quanh mốc cho "
+                    f"{r['trich_file']} file video vi phạm ({r['trich_gb_giu']:.1f} GB đoạn trích).")
+                chua_xong = r["loi"] + r.get("canh_bao", [])
+                if chua_xong:
+                    with st.expander(f"⚠️ {len(chua_xong)} việc chưa xong — bấm xem"):
+                        st.code("\n".join(chua_xong[:50]))
+            ui_thao_tac.nut_mo_thu_muc(r["thu_muc_bang_chung"], "mo_tm_bang_chung",
+                                       "📂 Mở thư mục đoạn trích bằng chứng")
         else:
             res = job["results"]
             kho_lo = sorted({x.kho_ten for x in res if getattr(x, "kho_ten", "")})

@@ -415,6 +415,8 @@ def _main():
                 max_ngay=eng.config.dem_max_ngay,
                 thuc_hien=not a.xem_truoc,
             )
+            if ket_qua.get("dang_chay_noi_khac"):
+                raise DangChayRoi(ket_qua["canh_bao"][0])     # bận, không phải lỗi: mã 2 như mọi lệnh khác
             hanh_dong = "Sẽ xóa" if a.xem_truoc else "Đã xóa"
             print(
                 f"Kho đệm: {ket_qua['tong_file']} file, "
@@ -424,6 +426,16 @@ def _main():
             )
             if ket_qua.get("bo_qua_dang_dung"):
                 print(f"Giữ lại {ket_qua['bo_qua_dang_dung']} file đệm đang có lượt quét dùng.")
+            if ket_qua.get("trich_file"):
+                giu = ket_qua["uoc_giu_gb"] if a.xem_truoc else ket_qua["trich_gb_giu"]
+                print(f"{'Sẽ cắt giữ' if a.xem_truoc else 'Đã cắt giữ'} đoạn quanh mốc vi phạm của "
+                      f"{ket_qua['trich_file']} file ({ket_qua['trich_gb_nguon']:.3f} GB → giữ "
+                      f"{'khoảng ' if a.xem_truoc else ''}{giu:.3f} GB) ở {ket_qua['thu_muc_bang_chung']}.")
+            if ket_qua.get("giu_chua_ro"):
+                print(f"Giữ nguyên {ket_qua['giu_chua_ro']} file ({ket_qua['giu_chua_ro_gb']:.3f} GB) chưa có "
+                      "trong lịch sử quét — không biết có là bằng chứng không.")
+            for dong in ket_qua.get("canh_bao", []):
+                print(f"Lưu ý: {dong}")
             # Thư mục job quét mồ côi: quét xong bình thường là engine tự xoá, nên còn
             # sót nghĩa là có lượt bị kill/crash. Mỗi thư mục giữ chunk WAV đã giải mã,
             # đo thật 246 MB đến 3,2 GB một cái — không dọn thì đầy ổ lúc nào không hay.

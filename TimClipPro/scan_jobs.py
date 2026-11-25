@@ -19,6 +19,7 @@ from dataclasses import dataclass, field, replace
 from typing import Callable, Optional
 
 import bao_viec
+import don_dep
 import maintenance_gate
 import tien_do_quet as tdq
 
@@ -133,6 +134,36 @@ _KHOA_DANG_CHAY = threading.Lock()
 def _khoa_lo(engine) -> str:
     thu_muc = getattr(engine, "data_dir", None)
     return os.path.normcase(os.path.abspath(thu_muc)) if thu_muc else f"id:{id(engine)}"
+
+
+def tu_don_dem(engine) -> Optional[threading.Thread]:
+    """«Tự dọn đệm» đang bật (``Config.dem_tu_dong`` — người dùng bật ở hộp «🧹 Dọn đệm audio»): sau mỗi lô quét, dọn
+    đệm theo luật giữ D-66 trong luồng RIÊNG — lô đã báo xong, nút Quét không phải chờ. File lô vừa quét mới được dùng
+    (mtime mới) nên không bị chọn theo tuổi. Đang cập nhật (cổng bảo trì đóng) hay lượt dọn khác đang chạy → bỏ lượt
+    này, lô sau thử lại."""
+    cfg = getattr(engine, "config", None)
+    if getattr(cfg, "dem_tu_dong", False) is not True or not getattr(engine, "dl_dir", ""):
+        return None
+
+    def chay() -> None:
+        try:
+            lease = maintenance_gate.nhan_viec_cua(engine, "tự dọn đệm audio sau lô quét")
+        except Exception:  # noqa: BLE001 — đang cập nhật (DangChayRoi) / cổng lỗi: bỏ lượt này, lô sau thử lại
+            LOGGER.info("event=cache.auto_clean_skipped reason=cong_bao_tri")
+            return
+        try:
+            kq = don_dep.don_kho_dem(engine.dl_dir, max_gb=cfg.dem_max_gb, max_ngay=cfg.dem_max_ngay)
+            LOGGER.info("event=cache.auto_clean bo=%d cat_giu=%d giu_chua_ro=%d loi=%d", kq["xoa_file"],
+                        kq["trich_file"], kq["giu_chua_ro"], len(kq["loi"]))
+        except Exception:  # noqa: BLE001 — dọn đệm hỏng không được làm hỏng gì của lô đã xong
+            LOGGER.exception("event=cache.auto_clean_failed")
+        finally:
+            if lease is not None:
+                lease.tra()
+
+    luong = threading.Thread(target=chay, daemon=True, name="tu-don-dem")
+    luong.start()
+    return luong
 
 
 class ScanJobController:
@@ -365,6 +396,8 @@ class ScanJobController:
                 sum(1 for v in self._videos if v.scan_status == QUET_XONG),
                 sum(1 for v in self._videos if v.scan_status == QUET_LOI),
             )
+            if not self._cancelled:
+                tu_don_dem(self.engine)
             bao_viec.ket_thuc(kieu)
 
     @staticmethod

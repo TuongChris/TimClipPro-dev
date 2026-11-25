@@ -82,7 +82,8 @@ chạm file) — không phải audit lại mã. Thêm/xoá/đổi vai trò modul
 | `chong_bong_lap.py` | Chống «bóng» của âm thanh lặp khi gộp mảnh khớp — phần thuần của `Engine._merge` (P0, D-27; `docs/BONG_AM_THANH_LAP.md`). | 252 | `fix/pc2/chong-bong-lap` (PC2: viết 10/10, đưa lên `fe461bd` 25/10) |
 | `chia_watchlist.py` | chia_watchlist.py — Chia watchlist thành N phần cho N máy chạy song song. | 109 | `1682ce6 2026-08-08` |
 | `clip_metadata.py` | Resolver metadata clip gốc độc lập UI, I/O mạng và thuật toán fingerprint. | 1147 | `35c7fc1 2026-10-04` |
-| `don_dep.py` | Quản lý vòng đời kho đệm và thư mục job quét theo tuổi/ngân sách dung lượng. | 243 | `0a4a572 2026-08-21` |
+| `don_dep.py` | Quản lý vòng đời kho đệm và thư mục job quét theo tuổi/ngân sách dung lượng; luật giữ D-66 (video vi phạm → cắt giữ đoạn quanh mốc rồi mới bỏ). | 360 | `feature/pc2/don-dem-bang-chung` (25/11) |
+| `trich_doan_dem.py` | Giữ bằng chứng khi dọn đệm (D-66): đọc mốc vi phạm từ `lichsu.db`, chép nguyên luồng tiếng các đoạn quanh mốc vào `downloads/bang_chung/<mã>/` + sổ `trich_doan.json`. | 230 | `feature/pc2/don-dem-bang-chung` (25/11) |
 | `dong_goi.py` | dong_goi.py — Đóng gói MÃ NGUỒN dự án để gửi audit. | 301 | `8f0558f 2026-10-02` |
 | `dong_goi_may_chay.py` | dong_goi_may_chay.py — Đóng gói bản CHẠY ĐƯỢC để đem sang máy khác. | 292 | `8f0558f 2026-10-02` |
 | `dossier.py` | Mô hình dữ liệu và hàm dựng hồ sơ vi phạm. | 165 | `c7c78bc 2026-10-05` |

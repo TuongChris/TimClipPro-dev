@@ -3,6 +3,10 @@
 Mục cũ chuyển từ `docs/ai/handoff/PC2.md` khi file đó chạm giới hạn 80 dòng hoặc «Nhật ký» quá 6 mục. Mới hơn ở trên.
 Không ghi bí mật, link Sheet thật, dữ liệu khách hàng.
 
+### 2026-11-23 — tra kho nhanh (nhánh fix/pc2/tra-kho-nhanh)
+- `_exact_match_counts` gốc quét lại MỌI hits cho mỗi (clip, mode). Bản «cắt lát» trong `audfprint_match_runner`
+  (gom theo clip, sắp theo độ lệch, mỗi mode đọc đúng lát; gắn cả worker joblib) — y hệt từng phần tử. Thật:
+  khúc 29 phút 53 → 0,9 s, khúc 60 phút 205 → 2,2 s; trọn 4 khúc 401 → 45 s. `tests/test_tra_kho_nhanh.py` 11/11.
 ### 2026-11-23 — file kiểm claim (D-64, nhánh feature/pc2/file-kiem-claim)
 - `video_trong_may.tao_file_kiem_claim`: khung đen 256×144 1 fps `d=<độ dài>` + `1:a:0` (copy khi AAC, không thì AAC 320k; tuỳ chọn 96k/48k); ô ở «Video trong máy». 7 test mới (MD5 tiếng, độ dài, độ trễ, MP3, không tiếng, UI).
 ### 2026-11-23 — sửa 14 mục review D-63 (nhánh fix/pc2/review-d63)

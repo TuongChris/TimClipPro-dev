@@ -7,6 +7,16 @@ from types import SimpleNamespace
 import don_dep
 from don_dep import MucDem, chon_can_xoa, don_kho_dem, duong_khoa_tai, ten_muc_dem
 from khoa import KhoaTienTrinh
+from lich_su_dem_gia import ghi_lich_su
+
+
+def _dem(tmp_path, *sach):
+    """Thư mục đệm ``<tmp>/downloads`` + ``<tmp>/lichsu.db`` ghi ``sach`` là đã quét, không vi phạm — luật giữ D-66:
+    file không có trong lịch sử không bao giờ bị dọn (test của luật đó: ``test_giu_bang_chung_dem.py``)."""
+    ghi_lich_su(tmp_path, sach=sach)
+    dl = tmp_path / "downloads"
+    dl.mkdir()
+    return dl
 
 
 def test_xoa_theo_tuoi():
@@ -86,6 +96,7 @@ def test_co_bay_gio_thi_ham_thuan_khong_doc_dong_ho(monkeypatch):
 
 
 def test_xem_truoc_khong_xoa_file_that(tmp_path):
+    tmp_path = _dem(tmp_path, "cu")
     path = tmp_path / "cu.opus"
     path.write_bytes(b"x" * 20)
     os.utime(path, (100, 100))
@@ -103,6 +114,7 @@ def test_xem_truoc_khong_xoa_file_that(tmp_path):
 
 
 def test_file_moi_duoi_ngan_sach_khong_bi_xoa(tmp_path):
+    tmp_path = _dem(tmp_path, "moi")
     path = tmp_path / "moi.opus"
     path.write_bytes(b"x" * 20)
 
@@ -113,6 +125,7 @@ def test_file_moi_duoi_ngan_sach_khong_bi_xoa(tmp_path):
 
 
 def test_hai_gioi_han_bang_0_khong_xoa_file_that(tmp_path):
+    tmp_path = _dem(tmp_path, "rat-cu")
     path = tmp_path / "rat-cu.opus"
     path.write_bytes(b"x")
     os.utime(path, (100, 100))
@@ -124,6 +137,7 @@ def test_hai_gioi_han_bang_0_khong_xoa_file_that(tmp_path):
 
 
 def test_file_tai_do_con_moi_khong_bi_xoa_du_vuot_ngan_sach(tmp_path):
+    tmp_path = _dem(tmp_path, "video")
     dang_tai = tmp_path / "video.part"
     ytdl = tmp_path / "video.ytdl"
     hoan_chinh = tmp_path / "video.opus"
@@ -186,6 +200,7 @@ def test_thu_muc_khong_ton_tai_khong_bi_tao(tmp_path):
 
 
 def test_loi_xoa_mot_file_van_tiep_tuc_file_ke(tmp_path, monkeypatch):
+    tmp_path = _dem(tmp_path, "loi", "ok")
     file_loi = tmp_path / "loi.opus"
     file_ok = tmp_path / "ok.opus"
     file_loi.write_bytes(b"x")
