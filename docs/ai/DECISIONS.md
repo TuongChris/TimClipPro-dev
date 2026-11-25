@@ -38,7 +38,10 @@ mục ngay trước mốc (sớm 1,8 s) → sổ ghi mốc đầu THẬT = cuố
 cắt theo mốc hết âm thanh thật đo trước. Review 25/11 (1 agent + 5 góc nhìn có phản biện): sửa hộp lưu xoá mất cài đặt
 giao diện (nay chỉ ghi 3 trường `dem_*`), fsync đoạn trích + sổ trước khi bỏ bản đầy đủ, không xử lý file dùng trong 1 giờ
 qua, file «chưa rõ» không tính ngân sách, ô đồng ý gắn với luật, Giám sát không thoát mã lỗi khi dọn đệm bận, bản tải CỤT
-có kết quả được đổi tên `<mã>__p<giây có thật>` thay vì xoá. Test: `tests/test_giu_bang_chung_dem.py` (FFmpeg thật).
+có kết quả được đổi tên `<mã>__p<giây có thật>` thay vì xoá. Vòng 2–3: MỌI đường engine tự bỏ file đệm hỏi thêm lịch sử
+(`Engine._vi_pham_da_ghi` — video đã có vi phạm thì đổi tên giữ lại, cả khi «Giữ lại audio đã tải» tắt); lựa chọn dọn đệm
+theo bản ĐANG LƯU (nhiều tab, «Khôi phục mặc định»); siết luật khi tự dọn bật cũng phải tick đồng ý; `cli dung` dừng cả phần
+cắt giữ. Test: `tests/test_giu_bang_chung_dem.py` (FFmpeg thật).
 
 ## D-65 Đêm 24→25/11: khảo sát toàn dự án + 5 nhánh sửa nhỏ (người dùng cấp toàn quyền qua đêm, 2026-11-24)
 Người dùng nhờ Fable 5.2 (rồi Opus 5.5 khi hết hạn mức) khảo sát CHỈ ĐỌC toàn dự án: 18 mảng, 201 đề xuất, mỗi đề xuất

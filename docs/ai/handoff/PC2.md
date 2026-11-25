@@ -27,8 +27,9 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 ## Tiếp theo
 0o. 25/11 (đêm, toàn quyền): khảo sát 25 đề tài + 66 việc nhỏ (D-65; `C:\Dev\pc2_test_runs\2026-11-24_khao_sat_nang_cap`) + 5 nhánh đêm gộp ở `fix/pc2/gop-dem-2511`. Người dùng: thử theo `C:\Dev\Tool_Quet\BAO_CAO_SANG_25_11.md`;
     → 25/11 người dùng quyết (D-66): giữ đoạn quanh mốc; không sao lưu ngoài máy; giữ mặc định D-65; DT-02 → DT-04 → DT-03.
-0p. 25/11: luật giữ đệm D-66 (`feature/pc2/don-dem-bang-chung`): «🧹 Dọn đệm audio…» ở thanh bên + tự dọn sau lô (mặc định
-    tắt). Chờ người dùng duyệt gộp + DEV, rồi tự bấm dọn lần đầu (xem trước: ~88 GB). DT-04: `C:\Dev\pc2_test_runs\2026-11-25_dt04_ytdlp`.
+0p. 25/11: luật giữ đệm D-66 (`feature/pc2/don-dem-bang-chung`, 3 vòng review): GỘP + DEV (người dùng duyệt). Người dùng: mở
+    «🧹 Dọn đệm audio…» → xem trước (~88 GB) → tick → «Dọn ngay» (lần đầu ~20–30 phút, nền). DT-04 (yt-dlp + certifi CVE):
+    `C:\Dev\pc2_test_runs\2026-11-25_dt04_ytdlp\BAO_CAO_DT04.md` — chờ duyệt tải 2 wheel + 1 lượt YouTube thật.
 0n. 23/11: tra kho nhanh (`fix/pc2/tra-kho-nhanh`) — GỘP `f4629fb` (người dùng duyệt), DEV 20:57 (sao lưu
     `data_20261123_205731`), health ok, mở lại bằng icon. Người dùng: quét thử, bước so khớp phải nhanh hẳn. Đo thật 4 khúc video 1
     × kho Mr Ballen, 3 worker: 401 → 45 s, 800 dòng kết quả TRÙNG (`C:\Dev\pc2_test_runs\2026-11-23_tien_do_khop`).
@@ -73,7 +74,8 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
 ## Nhật ký
 ### 2026-11-25 — luật giữ đệm audio (D-66, nhánh feature/pc2/don-dem-bang-chung)
 - `trich_doan_dem.py` mới + `don_dep.don_kho_dem` xử lý theo `lichsu.db`; hộp «🧹 Dọn đệm audio» (xem trước → tick → nền);
-  `scan_jobs.tu_don_dem`; Watch/CLI cùng luật. Bằng chứng: `C:\Dev\pc2_test_runs\2026-11-25_don_dem`.
+  `scan_jobs.tu_don_dem`; Watch/CLI cùng luật; engine đổi tên bản cụt có vi phạm. Review 1 + 5 góc + 2 vòng nữa (27 lỗi
+  thật đã sửa, test đỏ→xanh). Nhanh 4565 = 4561/4/0, chậm 28/28. Bằng chứng: `C:\Dev\pc2_test_runs\2026-11-25_don_dem`.
 ### 2026-11-25 — đêm: khảo sát + cảnh báo kho/link, tiếng báo, ổ đầy, chống bấm nhầm, lọc kho, lưới test (D-65)
 - 5 agent song song (worktree TimClipPro_Dem A–E) → gộp, review độc lập (4 «nên sửa», đã sửa). Nhanh 4523 = 4519/4/0,
   chậm 28/28. Đo chỉ đọc DEV: đệm 850 file/100,3 GB, ổ C trống 54,6 GB (`dem_dem_audio.py` cùng thư mục khảo sát).
