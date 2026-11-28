@@ -26,7 +26,7 @@ sang `docs/ai/handoff/LICH_SU_PC2.md` (tạo khi cần). Không ghi bí mật, l
   tạm; dữ liệu thật chỉ dùng trong app DEV vận hành.
 
 ## Tiếp theo
-0r. 28/11: «🖼️ Tải kèm thumbnail» (D-68, `feature/pc2/tai-kem-thumbnail`) — chờ duyệt gộp + DEV; người dùng thử.
+0r. 28/11: «🖼️ Tải kèm thumbnail» (D-68, `feature/pc2/tai-kem-thumbnail`) — GỘP `3b55feb`, DEV 28/11 16:19 (sao lưu `data_20261128_161858`) — người dùng thử.
 0o. 25/11 (đêm, toàn quyền): khảo sát 25 đề tài + 66 việc nhỏ (D-65; `C:\Dev\pc2_test_runs\2026-11-24_khao_sat_nang_cap`) + 5 nhánh đêm gộp ở `fix/pc2/gop-dem-2511`. Người dùng: thử theo `C:\Dev\Tool_Quet\BAO_CAO_SANG_25_11.md`;
     → 25/11 người dùng quyết (D-66): giữ đoạn quanh mốc; không sao lưu ngoài máy; giữ mặc định D-65; DT-02 → DT-04 → DT-03.
 0q. 25/11: DT-04 yt-dlp 2026.11.23 + certifi 2026.11.20 — GỘP `e617240`, DEV 12:43 runtime mới (sao lưu `data_20261125_124307`). Người dùng: quét/tải YouTube như thường; lỗi lạ → báo Claude (lùi = 1 phút). DT-03 xong → D-67 (`feature/pc2/dt03-ap-dung`, nhanh 4589 = 4585/4/0, cao độ 18/18) — GỘP `be927dc`, DEV 25/11 19:59 (sao lưu `data_20261125_195851`, `toc_do_toi_da_thu` 6→8) — người dùng thử.
