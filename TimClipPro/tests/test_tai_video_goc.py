@@ -1133,3 +1133,62 @@ def test_ma_da_co_nhan_ten_moi_va_ten_cu(tmp_path):
     assert tv.ma_da_co(str(tmp_path)) == {"abcdefghij1", "abcdefghij2", "v123456"}
     assert tv.ma_da_co(str(tmp_path), chi_tieng=True) == {"abcdefghij3", "abcdefghij4"}
     assert tv.ma_da_co(str(tmp_path), anh=True) == {"abcdefghij6"}
+
+
+def test_kem_thumbnail_lay_anh_cua_video_tai_xong(gia, tmp_path):
+    """28/11: một lần bấm tải cả video lẫn thumbnail vào cùng thư mục; link lỗi không đi lấy ảnh."""
+    def hong(_opts):
+        raise DownloadError("ERROR: [youtube] abcdefghij1: Video unavailable. This video has been removed by the uploader")
+
+    gia.hanh_vi[URL1] = hong
+    tien_do = []
+    kq = tv.kem_thumbnail(tv.tai_nhieu, [URL1, URL2], str(tmp_path), progress=lambda p, m: tien_do.append(p))
+    assert [(k["url"], k["trang_thai"], bool(k.get("la_anh_kem"))) for k in kq] == [
+        (URL1, "loi", False), (URL2, "xong", False), (URL2, "xong", True)]
+    assert sorted(os.listdir(tmp_path)) == ["Tieu_de_abcdefghij2_abcdefghij2.mkv", "abcdefghij2.jpg"]
+    assert tien_do[-1] == 1.0 and tien_do == sorted(tien_do)
+    # Bấm lại: ảnh đã có thì bỏ qua, không ghi thêm bản «_2».
+    kq2 = tv.kem_thumbnail(tv.tai_nhieu, [URL2], str(tmp_path))
+    assert kq2[-1]["la_anh_kem"] and kq2[-1]["trang_thai"] == "bo_qua"
+    assert "abcdefghij2_2.jpg" not in os.listdir(tmp_path)
+
+
+def test_kem_thumbnail_khong_co_video_xong_thi_khong_lay_anh(gia, tmp_path):
+    goi = []
+    kq = tv.kem_thumbnail(lambda *a, **k: goi.append(1) or [{"url": URL1, "trang_thai": "loi"}], [URL1], str(tmp_path))
+    assert kq == [{"url": URL1, "trang_thai": "loi"}] and goi == [1] and gia.goi == []
+
+
+def test_tab_tai_kem_thumbnail(tmp_path, monkeypatch):
+    import time
+    from pathlib import Path
+
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setenv("TIMCLIP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("TIMCLIP_OUTPUT_DIR", str(tmp_path / "ketqua"))
+    goi = {}
+
+    def kem_gia(ham, links, thu_muc, cau_hinh_mang, *, progress, **kw):
+        goi.update(ham=ham, links=links, chat_luong=kw.get("chat_luong"))
+        return [{"url": URL1, "trang_thai": "xong", "duong_dan": thu_muc + "/A_abcdefghij1.mp4", "tieu_de": "A",
+                 "chat_luong": "720p", "ghi_chu": ""},
+                {"url": URL1, "trang_thai": "xong", "duong_dan": thu_muc + "/abcdefghij1.jpg", "tieu_de": "",
+                 "chat_luong": "ảnh JPG", "ghi_chu": "", "la_anh_kem": True}]
+
+    monkeypatch.setattr(tv, "kem_thumbnail", kem_gia)
+    at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=120).run()
+    assert not at.exception
+    next(t for t in at.text_area if t.label.startswith("Link video")).input(URL1).run()
+    next(t for t in at.text_input if t.label.startswith("Thư mục lưu")).input(str(tmp_path / "v")).run()
+    at.checkbox(key="kem_anh_tai").check().run()
+    at.button(key="bat_dau_tai_video").click().run()
+    for _ in range(50):
+        if goi and not at.session_state.job["running"]:
+            break
+        time.sleep(0.1)
+    at.run()
+    assert not at.exception
+    assert goi["ham"] is tv.tai_nhieu and goi["links"] == [URL1]
+    assert any("Đã tải 1/1" in s.value for s in at.success)       # ảnh kèm không đếm là video
+    assert any("ảnh JPG" in m.value for m in at.markdown)

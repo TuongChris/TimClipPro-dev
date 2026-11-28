@@ -15,6 +15,11 @@ rõ «thay D-xx», không sửa lịch sử. Đường dẫn `docs/…` không c
 - **P-7 Lịch sử có dòng «bóng»** (lượt quét trước D-27, kể cả dữ liệu THẬT của DEV PC2 từ 15/10): truy vấn CHỈ ĐỌC tìm job
   nhiều dòng cùng clip chồng vùng để kiểm lại tay — không quét lại tự động, không sửa dòng đã gửi Sheet.
 
+## D-68 «🖼️ Tải kèm thumbnail» ở trang «Tải video gốc» (người dùng, 2026-11-28)
+- Quyết định: một ô tick (tắt mặc định, nhớ trong phiên) — dán link, bấm tải là được video (hoặc audio / đoạn cắt) VÀ thumbnail vào cùng thư mục. Ảnh chỉ lấy cho link tải XONG; ảnh đã có thì bỏ qua; tên ảnh giữ như D-47 (`<mã>.jpg`).
+- Cách làm: `tai_video_goc.kem_thumbnail(ham, …)` bọc `tai_nhieu` / `cat_video_goc.tai_doan` rồi gọi lại `tai_nhieu(thumbnail=True, bo_qua_da_co=True)`; dòng ảnh mang `la_anh_kem` (không đếm là video). Không thêm đường tải mới.
+- Bằng chứng: `tests/test_tai_video_goc.py` (3 test mới), nhánh `feature/pc2/tai-kem-thumbnail`.
+
 ## D-67 Áp dụng DT-03: tinh chỉnh mốc BẬT mặc định, nhãn trạng thái mốc, lượt bù đổi cao độ, «Các clip khác tìm thấy» (người dùng, 2026-11-25) — thay «TẮT mặc định» của D-49
 Người dùng duyệt cả 5 đề xuất sau DT-03 (bộ đo + báo cáo: nhánh `feature/pc2/dt03-bo-do-dung`, `tools/do_do_dung/BAO_CAO_DT03_GD2.md`):
 (1) `Config.tinh_chinh_moc` mặc định True — đoạn 300–900 s mốc quét lệch trung vị ~32 s mỗi mép, tinh chỉnh 0,0 s, 0/147 ca

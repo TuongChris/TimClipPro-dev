@@ -1718,7 +1718,8 @@ def _ve_khu_tren() -> None:
             hien_ket_qua_nguon_chung(job["results"][0])
         elif job["kind"] == "tai_video":
             r = job["results"]
-            _r_tai = [k for k in r if not k.get("la_dong_ghep")]  # dòng «🎞️ Video ghép» không phải một video tải
+            # dòng «🎞️ Video ghép» và ảnh tải kèm không phải một video tải
+            _r_tai = [k for k in r if not (k.get("la_dong_ghep") or k.get("la_anh_kem"))]
             _dem = {t: sum(1 for k in _r_tai if k["trang_thai"] == t) for t in ("xong", "bo_qua", "loi")}
             _viec = "xử lý" if _r_tai and all(k.get("la_file_may") for k in _r_tai) else "tải"  # tab «Video trong máy»
             (st.success if not (_dem["loi"] or any(k["trang_thai"] == "loi" for k in r)) else st.warning)(
@@ -1955,6 +1956,9 @@ def _trang_tai_video() -> None:
                    f"({_den_s - _tu_s:g} giây, chính xác từng khung hình). Tải trọn video rồi cắt, xong thì xoá bản trọn.")
     st.caption("Link kênh/danh sách phát bị bỏ qua — tải cả kênh dùng trang «📺 Tải cả kênh».")
     _am_tai = st.checkbox(O_AM_LUONG, value=True, key="am_tai", help=GIAI_THICH_AM_LUONG, persist_state="session")
+    _kem_anh = st.checkbox("🖼️ Tải kèm thumbnail", key="kem_anh_tai", persist_state="session",
+                           help="Tải xong video thì lấy luôn ảnh thumbnail lớn nhất (.jpg, tên = mã video) vào cùng "
+                                "thư mục. Ảnh đã có trong thư mục thì bỏ qua.")
     with st.expander("🟣 Twitch: mở khoá bản 1440p (tuỳ chọn)"):
         st.caption("Twitch chỉ cho bản 1440p khi xem từ nước được mở VÀ có đăng nhập. Để trống = bản cho Việt Nam "
                    "(thường tối đa 720p). Link YouTube không bị ảnh hưởng.")
@@ -1985,12 +1989,13 @@ def _trang_tai_video() -> None:
     if st.button(f"{_nhan_tai} {len(_ds_link)} video" if _ds_link else f"{_nhan_tai} video", type="primary",
                  disabled=not (_ds_link and _thu_muc_tai) or bool(_loi_doan) or _chua_tai_duoc(),
                  key="bat_dau_tai_video"):
+        _goi = (lambda ham, *a, **k: _bat_dau_tai(tai_video_goc.kem_thumbnail, ham, *a, **k)) if _kem_anh else _bat_dau_tai
         if _co_doan:
-            _bat_dau_tai(cat_video_goc.tai_doan, _ds_link, _thu_muc_tai, tu_s=_tu_s, den_s=_den_s,
-                         ds_bo=_ds_bo_tai or None, ds_moc=_ds_moc_tai or None, chat_luong=_cl_tai, chuan_hoa_am=_am_tai, mo_khoa_twitch=_mo_khoa_tw)
+            _goi(cat_video_goc.tai_doan, _ds_link, _thu_muc_tai, tu_s=_tu_s, den_s=_den_s,
+                 ds_bo=_ds_bo_tai or None, ds_moc=_ds_moc_tai or None, chat_luong=_cl_tai, chuan_hoa_am=_am_tai, mo_khoa_twitch=_mo_khoa_tw)
         else:
-            _bat_dau_tai(tai_video_goc.tai_nhieu, _ds_link, _thu_muc_tai, chat_luong=_cl_tai, chuan_hoa_am=_am_tai,
-                         mo_khoa_twitch=_mo_khoa_tw)
+            _goi(tai_video_goc.tai_nhieu, _ds_link, _thu_muc_tai, chat_luong=_cl_tai, chuan_hoa_am=_am_tai,
+                 mo_khoa_twitch=_mo_khoa_tw)
 
 def _trang_thumbnail() -> None:
     st.subheader("Tải thumbnail của video YouTube")

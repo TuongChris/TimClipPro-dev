@@ -529,6 +529,22 @@ def tai_nhieu(
     return [asdict(k) for k in ket_qua]
 
 
+def kem_thumbnail(ham: Callable[..., list], links: list, thu_muc: str, cau_hinh_mang: Optional[CauHinhMang] = None,
+                  *, progress: Optional[Callable[[float, str], None]] = None,
+                  cancel_check: Optional[Callable[[], bool]] = None, **kw) -> list:
+    """Chạy ``ham`` (:func:`tai_nhieu` hoặc ``cat_video_goc.tai_doan``) rồi lấy thumbnail của các link tải XONG vào
+    cùng ``thu_muc`` (ảnh đã có thì bỏ qua). Dòng ảnh nối sau, mang ``la_anh_kem`` (giao diện không đếm là video)."""
+    bao = progress or (lambda _p, _m: None)
+    kq = ham(links, thu_muc, cau_hinh_mang, progress=lambda p, m: bao(p * 0.95, m), cancel_check=cancel_check, **kw)
+    xong = [k["url"] for k in kq if k["trang_thai"] == "xong"]
+    if not xong:
+        return kq
+    rieng = {k: kw[k] for k in ("player_clients", "phien", "mo_khoa_twitch") if k in kw}
+    anh = tai_nhieu(xong, thu_muc, cau_hinh_mang, progress=lambda p, m: bao(0.95 + p * 0.05, m),
+                    cancel_check=cancel_check, thumbnail=True, bo_qua_da_co=True, **rieng)
+    return kq + [{**a, "la_anh_kem": True} for a in anh]
+
+
 def tai_kenh(
     url_kenh: str,
     thu_muc: str,
